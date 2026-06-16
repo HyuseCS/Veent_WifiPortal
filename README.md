@@ -1,65 +1,74 @@
-# Svelte library
+# Veent WiFi Portal — monorepo
 
-Everything you need to build a Svelte library, powered by [`sv`](https://npmjs.com/package/sv).
+Two independent SvelteKit apps on one shared Postgres database, managed as a bun workspace.
 
-Read more about creating a library [in the docs](https://svelte.dev/docs/kit/packaging).
-
-## Creating a project
-
-If you're seeing this, you've probably already done this step. Congrats!
-
-```sh
-# create a new project in the current directory
-npx sv create
-
-# create a new project in my-app
-npx sv create my-app
+```
+apps/
+  customer/   veent-customer — captive portal for wifi end-users   (portal.veent.io)
+  admin/      veent-admin    — staff management dashboard           (admin.veent.io)
+packages/
+  db/         @veent/db      — shared Drizzle schema + client; the single migration source
+compose.yaml  shared Postgres for local dev
 ```
 
-To recreate this project with the same configuration:
+### Why it's split this way
+
+- **Two apps, deployed separately.** Each app has its own SvelteKit build, adapter and
+  `ORIGIN`, so they can ship to separate subdomains and scale independently.
+- **One database, one schema.** All tables live in `packages/db`. Only that package runs
+  migrations, so the customer and admin schemas can never drift apart.
+- **Separate auth domains.** Customers and staff are different populations. There are two
+  isolated better-auth instances: customer auth uses the `customer_*` tables with the
+  `veent-portal` cookie prefix; admin auth uses the `admin_*` tables with the `veent-admin`
+  cookie prefix. Each app also has its own `BETTER_AUTH_SECRET`, so a session from one app
+  is never valid in the other.
+
+## Setup
 
 ```sh
-# recreate this project
-bun x sv@0.16.1 create --template library --types ts --add prettier eslint tailwindcss="plugins:typography" mcp="ide:claude-code,vscode,gemini+setup:remote" sveltekit-adapter="adapter:auto" better-auth="demo:password" vitest="usages:unit,component" playwright drizzle="database:postgresql+postgresql:postgres.js+docker:yes" --install bun veent_wifiportal
+bun install                 # resolves the workspace, links @veent/db into each app
+
+cp packages/db/.env.example   packages/db/.env
+cp apps/customer/.env.example apps/customer/.env
+cp apps/admin/.env.example    apps/admin/.env
+# set a distinct BETTER_AUTH_SECRET in each app's .env
+
+bun run db:start            # start Postgres (docker compose)
+bun run db:push             # create customer_* and admin_* tables in the one database
 ```
 
-## Developing
-
-Once you've created a project and installed dependencies with `npm install` (or `pnpm install` or `yarn`), start a development server:
+## Develop
 
 ```sh
-npm run dev
-
-# or start the server and open the app in a new browser tab
-npm run dev -- --open
+bun run dev:customer        # http://localhost:5173
+bun run dev:admin           # http://localhost:5174
 ```
 
-Everything inside `src/lib` is part of your library, everything inside `src/routes` can be used as a showcase or preview app.
-
-## Building
-
-To build your library:
+## Database (run from the repo root — delegates to @veent/db)
 
 ```sh
-npm pack
+bun run db:generate         # generate SQL migrations from the schema
+bun run db:migrate          # apply migrations
+bun run db:push             # push schema directly (dev)
+bun run db:studio           # open Drizzle Studio
 ```
 
-To create a production version of your showcase app:
+The schema lives in `packages/db/src/schema`:
+`auth-customer.ts` / `auth-admin.ts` (better-auth tables via the prefixed factory),
+`customer.ts` / `admin.ts` (each module's domain tables).
+
+## Other
 
 ```sh
-npm run build
+bun run build               # build both apps
+bun run check               # svelte-check both apps
+bun run lint                # prettier + eslint across the workspace
+bun run format
 ```
 
-You can preview the production build with `npm run preview`.
+### Regenerating auth tables (optional)
 
-> To deploy your app, you may need to install an [adapter](https://svelte.dev/docs/kit/adapters) for your target environment.
-
-## Publishing
-
-Go into the `package.json` and give your package the desired name through the `"name"` option. Also consider adding a `"license"` field and point it to a `LICENSE` file which you can create from a template (one popular option is the [MIT license](https://opensource.org/license/mit/)).
-
-To publish your library to [npm](https://www.npmjs.com):
-
-```sh
-npm publish
-```
+The better-auth tables are hand-maintained in `packages/db`. If you change an app's auth
+config and want better-auth to emit the schema, run `bun run --filter veent-customer auth:schema`
+(or `veent-admin`) — it writes a `auth-*.generated.ts` you can reconcile into the prefixed
+factory.

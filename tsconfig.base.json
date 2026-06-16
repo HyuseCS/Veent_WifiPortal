@@ -1,0 +1,17 @@
+{
+	"compilerOptions": {
+		"allowJs": true,
+		"checkJs": true,
+		"esModuleInterop": true,
+		"forceConsistentCasingInFileNames": true,
+		"resolveJsonModule": true,
+		"skipLibCheck": true,
+		"sourceMap": true,
+		"strict": true,
+		"module": "esnext",
+		"moduleResolution": "bundler",
+		"target": "ES2022",
+		"verbatimModuleSyntax": true,
+		"isolatedModules": true
+	}
+}

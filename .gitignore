@@ -1,13 +1,13 @@
 node_modules
 
-# Output
+# Output (match in every workspace package, not just repo root)
 .output
 .vercel
 .netlify
 .wrangler
-/.svelte-kit
-/build
-/dist
+.svelte-kit
+build
+dist
 
 # OS
 .DS_Store
