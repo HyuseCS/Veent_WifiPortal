@@ -1,0 +1,77 @@
+@startuml wifi-portal-erd
+!pragma layout smetana
+skinparam dpi 200
+hide circle
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName Helvetica
+skinparam shadowing false
+skinparam linetype ortho
+skinparam entity {
+  BackgroundColor #F4F0FF
+  BorderColor #7C5CFF
+  FontColor #1A1A2E
+}
+
+title WiFi Portal — Entity Relationship Diagram
+
+entity "RateLimits" as rateLimits {
+  * id : int <<PK>>
+  --
+  mac_address : string
+  phone_number : string
+  attempts : int
+  last_attempt_at : timestamp
+}
+
+entity "Users" as users #4287F5 {
+  * id : int <<PK>>
+  --
+  name : string
+  role : string
+  phone_number_opt : string
+  email_opt : string
+  credit_balance : decimal
+  last_free_session_at : timestamp
+}
+
+entity "Packages" as packages {
+  * id : int <<PK>>
+  --
+  name : string
+  type : string
+  fiat_cost : float
+  credits_provided : int
+  credit_cost : int
+  duration_minutes : int
+  is_active : bool
+}
+
+entity "CreditLedger" as creditLedger {
+  * id : int <<PK>>
+  --
+  * user_id : int <<FK>>
+  * package_id : int <<FK>>
+  amount : float
+  type : string
+  external_transaction_id : string
+  created_at : timestamp
+}
+
+entity "NetworkSessions" as networkSessions {
+  * id : int <<PK>>
+  --
+  mac_address : string
+  * user_id : int <<FK>>
+  package_id_opt : int <<FK>>
+  status : string
+  started_at : timestamp
+  expires_at : timestamp
+}
+
+rateLimits ||--o| users           : "guards access for"
+users      ||--o{ creditLedger     : "has balance history in"
+packages   ||--o{ creditLedger     : "linked to"
+users      ||--o{ networkSessions  : "initiates"
+packages   ||--o{ networkSessions  : "defines"
+
+@enduml

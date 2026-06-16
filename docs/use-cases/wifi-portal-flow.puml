@@ -1,0 +1,72 @@
+@startuml wifi-portal-flow
+!pragma layout smetana
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName Helvetica
+skinparam shadowing false
+skinparam activity {
+  BackgroundColor #EEE6FF
+  BorderColor #7C5CFF
+  FontColor #1A1A2E
+  DiamondBackgroundColor #EEE6FF
+  DiamondBorderColor #7C5CFF
+  DiamondFontColor #1A1A2E
+  StartColor #7C5CFF
+  EndColor #7C5CFF
+  BarColor #7C5CFF
+}
+title WiFi Portal — End-to-End Access Flow
+
+start
+
+partition "Step 1 · Discovery & Network Trap" {
+  :User connects to WiFi;
+  :Router (default deny-all)\nintercepts all traffic;
+  :OS launches captive portal\n→ SvelteKit app;
+}
+
+partition "Step 2 · Identity & Eligibility" {
+  :Show landing page\n(service explanation);
+  :Log in / Register\nvia better-auth;
+  :Query PostgreSQL via Drizzle\n(credit_balance, last_free_session_at);
+}
+
+partition "Step 3 · Dashboard & Access Selection" {
+  repeat
+    :Show personalized dashboard\n(balance + Free Time eligibility);
+    if (Free Time eligible?) then (Option A · Free Window)
+      :Start free session;
+      :Log session_end in DB;
+      :Display countdown UI;
+    elseif (Enough credits?) then (Option B · Spend)
+      :Select continuous access tier;
+      :Deduct credits\n+ update credit_ledger;
+    else (Option C · Zero balance + Cooldown)
+      :Select credit bundle;
+      #FFE0B2:Grant 3-min Grace Period\n(lift firewall, limited speed)\nrate-limited: 3 attempts/hr,\n9 non-continuous min/hr;
+      :Redirect to payment gateway\n(PayMongo / Xendit);
+      note right: **Step 4 · Transaction & Verification**
+      :Gateway webhook → SvelteKit API\nconfirms payment;
+      :Drizzle adds credits\n+ updates credit_ledger;
+      :Redirect to /top-up/processing\n(poll DB until verified);
+    endif
+  repeat while (Selected Option C?) is (yes · back to dashboard) not (no · A/B chosen)
+}
+
+partition "Step 5 · Handoff, Cutoff & Cooldown" {
+  #C8F7C5:Release — redirect to router grant_url;
+  :Router drops firewall for MAC\n→ 100% open internet;
+  :Cron job / router timeout API\nmonitors the session;
+  if (Free Window / Grace Period expired?) then (yes)
+    :Backend commands router\nto revoke MAC access;
+    :Internet cut instantly;
+    :Router intercepts user → portal;
+    #FFCDD2:Display "Free time expired.\nWait 12h for next free session,\nor Top-Up now to continue";
+    :Enter Cooldown state;
+  else (still active)
+    :User keeps browsing\n(may top-up seamlessly);
+  endif
+}
+
+stop
+
+@enduml
