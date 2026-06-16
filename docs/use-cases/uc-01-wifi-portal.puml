@@ -1,0 +1,45 @@
+@startuml wifi-portal-use-case
+!pragma layout smetana
+left to right direction
+skinparam actorStyle awesome
+skinparam packageStyle rectangle
+title WiFi Portal — Use Case Diagram
+
+actor "WiFi Guest" as Guest
+actor "Network Router" as Router
+actor "Payment Gateway" as Gateway
+
+rectangle "WiFi Portal System" {
+  usecase "Authenticate Identity" as UC_Auth
+  usecase "View Dashboard" as UC_Dash
+  usecase "Query PostgreSQL\nvia Drizzle" as UC_Query
+  usecase "Spend Credits on Tier" as UC_Spend
+  usecase "Deduct Credits\n& Log Session" as UC_Deduct
+  usecase "Trigger grant_url\nRedirect" as UC_Grant
+  usecase "Top-Up Credit Bundle" as UC_TopUp
+  usecase "Generate Checkout\nSession" as UC_Checkout
+  usecase "Verify Webhook\nPayload" as UC_Verify
+  usecase "Add Credits to Balance" as UC_AddCredits
+}
+
+' Primary actor interactions
+Guest --> UC_Auth
+Guest --> UC_Dash
+Guest --> UC_Spend
+Guest --> UC_TopUp
+
+' Includes
+UC_Auth ..> UC_Query : <<include>>
+UC_Dash ..> UC_Query : <<include>>
+UC_Spend ..> UC_Deduct : <<include>>
+UC_Deduct ..> UC_Grant : <<include>>
+UC_TopUp ..> UC_Checkout : <<include>>
+UC_Checkout ..> UC_Verify : <<include>>
+UC_Verify ..> UC_AddCredits : <<include>>
+
+' Secondary actor interactions
+UC_Grant --> Router
+UC_Checkout --> Gateway
+Gateway --> UC_Verify
+
+@enduml
