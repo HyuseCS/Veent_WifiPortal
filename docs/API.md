@@ -48,10 +48,23 @@ Header `x-cron-secret: <CRON_SECRET>`. Revokes every active session past its
 `expiresAt` and re-blocks the MAC. → `{ ok, revoked: number }`. Run every minute.
 
 ### `POST /api/webhooks/payment` — gateway → us (the source of truth for credits)
-Raw body verified via `payments.verifyWebhook` (400 if invalid). On a `paid`
-event, credits `creditsProvided` for the package in `referenceId`
-(`"${userId}:${packageId}"`), idempotent on the gateway txn id.
+This is the **PayMaya payload-receiving service**: PayMaya (Maya Checkout) calls
+this endpoint server-to-server whenever a payment changes state, posting the
+transaction payload here rather than relying on the customer's browser redirect.
+
+Flow:
+1. Read the **raw** request body (needed for signature verification — do not parse first).
+2. Verify the payload via `payments.verifyWebhook` (HMAC against `MAYA_WEBHOOK_SECRET`); 400 if invalid.
+3. On a `paid` event, credit `creditsProvided` for the package in `referenceId`
+   (`"${userId}:${packageId}"`), idempotent on the gateway transaction id so a
+   re-delivered payload never double-credits.
+4. Non-`paid` events (e.g. `failed`, `expired`) are acknowledged with `200` but credit nothing.
+
 → `{ ok, credited: boolean, balance }`
+
+Always return `2xx` once the payload is accepted, even when no credit is applied —
+PayMaya retries on any non-2xx, so reserve error codes for genuinely unverifiable
+or malformed payloads.
 
 ### Form actions
 - `dashboard` → `startFreeTime`, `buyTier` (hidden `mac` field from the captive
