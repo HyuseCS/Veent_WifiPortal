@@ -94,25 +94,59 @@ CREATE TABLE "admin_verification" (
 	"updated_at" timestamp DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "wifi_session" (
+CREATE TABLE "credit_ledger" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"user_id" text NOT NULL,
-	"device_mac" text,
-	"granted_at" timestamp DEFAULT now() NOT NULL,
+	"package_id" integer,
+	"amount" double precision NOT NULL,
+	"type" text NOT NULL,
+	"external_transaction_id" text,
+	"created_at" timestamp DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "customer_profile" (
+	"user_id" text PRIMARY KEY NOT NULL,
+	"role" text DEFAULT 'user' NOT NULL,
+	"phone_number" text,
+	"credit_balance" numeric(12, 2) DEFAULT '0' NOT NULL,
+	"last_free_session_at" timestamp
+);
+--> statement-breakpoint
+CREATE TABLE "network_sessions" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"mac_address" text,
+	"user_id" text NOT NULL,
+	"package_id" integer,
+	"status" text NOT NULL,
+	"started_at" timestamp DEFAULT now() NOT NULL,
 	"expires_at" timestamp
 );
 --> statement-breakpoint
-CREATE TABLE "audit_log" (
+CREATE TABLE "packages" (
 	"id" serial PRIMARY KEY NOT NULL,
-	"actor_id" text,
-	"action" text NOT NULL,
-	"detail" text,
-	"created_at" timestamp DEFAULT now() NOT NULL
+	"name" text NOT NULL,
+	"type" text NOT NULL,
+	"fiat_cost" double precision,
+	"credits_provided" integer,
+	"credit_cost" integer,
+	"duration_minutes" integer,
+	"is_active" boolean DEFAULT true NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "rate_limits" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"mac_address" text,
+	"phone_number" text,
+	"attempts" integer DEFAULT 0 NOT NULL,
+	"last_attempt_at" timestamp DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
 ALTER TABLE "customer_account" ADD CONSTRAINT "customer_account_user_id_customer_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."customer_user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "customer_session" ADD CONSTRAINT "customer_session_user_id_customer_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."customer_user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "admin_account" ADD CONSTRAINT "admin_account_user_id_admin_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."admin_user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "admin_session" ADD CONSTRAINT "admin_session_user_id_admin_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."admin_user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "wifi_session" ADD CONSTRAINT "wifi_session_user_id_customer_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."customer_user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "audit_log" ADD CONSTRAINT "audit_log_actor_id_admin_user_id_fk" FOREIGN KEY ("actor_id") REFERENCES "public"."admin_user"("id") ON DELETE set null ON UPDATE no action;
+ALTER TABLE "credit_ledger" ADD CONSTRAINT "credit_ledger_user_id_customer_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."customer_user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "credit_ledger" ADD CONSTRAINT "credit_ledger_package_id_packages_id_fk" FOREIGN KEY ("package_id") REFERENCES "public"."packages"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "customer_profile" ADD CONSTRAINT "customer_profile_user_id_customer_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."customer_user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "network_sessions" ADD CONSTRAINT "network_sessions_user_id_customer_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."customer_user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "network_sessions" ADD CONSTRAINT "network_sessions_package_id_packages_id_fk" FOREIGN KEY ("package_id") REFERENCES "public"."packages"("id") ON DELETE set null ON UPDATE no action;
