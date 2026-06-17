@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
+	import type { SubmitFunction } from '@sveltejs/kit';
+	import { toasts } from '$lib/toast.svelte';
 	import type { PageServerData, ActionData } from './$types';
 
 	let { data, form }: { data: PageServerData; form: ActionData } = $props();
@@ -7,6 +9,28 @@
 	// In dev there's no captive-portal redirect to supply the device MAC, so fall
 	// back to a placeholder so the buttons are testable.
 	const mac = $derived(data.mac ?? 'DEV:00:00:00:00:01');
+
+	// Connection confirmations stay in-page: a toast announces success instead of
+	// navigating away to a separate page.
+	const startFreeTime: SubmitFunction = () => {
+		const minutes = data.freeTime.durationMinutes;
+		return async ({ result, update }) => {
+			if (result.type === 'success') {
+				toasts.show(`You're now connected. Enjoy your free ${minutes} minutes.`);
+			}
+			await update();
+		};
+	};
+
+	const buyTier = (tier: PageServerData['tiers'][number]): SubmitFunction => {
+		return () =>
+			async ({ result, update }) => {
+				if (result.type === 'success') {
+					toasts.show(`You're now connected with ${tier.name}. Enjoy your ${tier.durationMinutes} minutes.`);
+				}
+				await update();
+			};
+	};
 	const nextFree = $derived(
 		data.freeTime.nextEligibleAt ? new Date(data.freeTime.nextEligibleAt).toLocaleTimeString() : null
 	);
@@ -35,10 +59,10 @@
 				<p class="mt-1 text-sm text-gray-500">
 					You're eligible for {data.freeTime.durationMinutes} minutes of free access.
 				</p>
-				<form method="post" action="?/startFreeTime" use:enhance class="mt-3">
+				<form method="post" action="?/startFreeTime" use:enhance={startFreeTime} class="mt-3">
 					<input type="hidden" name="mac" value={mac} />
 					<button
-						class="min-h-[44px] w-full rounded-lg bg-rose-500 font-semibold text-white transition hover:bg-rose-600"
+						class="min-h-[44px] w-full rounded-lg bg-cta font-semibold text-white transition hover:bg-cta-hover"
 					>
 						Start {data.freeTime.durationMinutes}-min Free Access
 					</button>
@@ -56,7 +80,7 @@
 				<form
 					method="post"
 					action="?/buyTier"
-					use:enhance
+					use:enhance={buyTier(tier)}
 					class="flex items-center justify-between rounded-xl border border-gray-200 p-4"
 				>
 					<input type="hidden" name="mac" value={mac} />
@@ -66,8 +90,7 @@
 						<p class="text-xs text-gray-500">{tier.creditCost} credits · {tier.durationMinutes} min</p>
 					</div>
 					<button
-						disabled={data.balance < (tier.creditCost ?? 0)}
-						class="min-h-[44px] rounded-lg bg-gray-900 px-4 text-sm font-semibold text-white transition hover:bg-gray-800 disabled:opacity-40"
+						class="min-h-[44px] rounded-lg bg-cta px-4 text-sm font-semibold text-white transition hover:cursor-pointer hover:bg-cta-hover"
 					>
 						Buy
 					</button>
@@ -77,8 +100,16 @@
 			{/each}
 		</section>
 
-		<a href="/top-up" class="text-center text-sm font-medium text-rose-600 underline">
-			Top up credits
-		</a>
+		<section class="flex flex-row items-center gap-3">
+			<a href="/top-up" class="text-center text-sm font-medium text-cta hover:text-cta-hover underline">
+				Top up credits
+			</a>
+			<form method="post" action="?/signOut" use:enhance>
+				<button class="text-decoration-none text-center text-sm font-medium text-cta hover:text-cta-hover underline hover:cursor-pointer">
+					Sign out
+				</button>
+			</form>
+		</section>
+		
 	{/if}
 </main>

@@ -7,7 +7,7 @@ import { dev } from '$app/environment';
 
 export const load: PageServerLoad = (event) => {
 	if (event.locals.user) {
-		return redirect(302, '/connected');
+		return redirect(302, '/dashboard');
 	}
 	return {};
 };

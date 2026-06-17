@@ -5,6 +5,7 @@ import { getAccount, getFreeTimeStatus, startFreeSession, startSession, spendCre
 import { db } from '$lib/server/db';
 import { network } from '$lib/server/network';
 import type { Actions, PageServerLoad } from './$types';
+import { auth } from '$lib/server/auth';
 
 /**
  * The Hub. Renders balance, Free Time eligibility, and the access tiers. The
@@ -47,7 +48,7 @@ export const actions: Actions = {
 		if (!result.ok) {
 			return fail(429, { error: 'Free time not available yet', nextEligibleAt: result.nextEligibleAt });
 		}
-		return redirect(303, '/connected');
+		return { connected: true };
 	},
 
 	buyTier: async (event) => {
@@ -74,6 +75,11 @@ export const actions: Actions = {
 			packageId: pkg.id,
 			durationMinutes: pkg.durationMinutes ?? 0
 		});
-		return redirect(303, '/connected');
+		return { connected: true };
+	},
+
+	signOut: async (event) => {
+		await auth.api.signOut({ headers: event.request.headers });
+		return redirect(302, '/login');
 	}
 };
