@@ -11,7 +11,7 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
  *
  *   1. `sendOtp` — THE single SMS delivery seam (wired into the plugin's sendOTP).
  *   2. A signed, httpOnly "pending verification" cookie that remembers which
- *      phone/intent/name we're verifying across the redirect to /login/verify —
+ *      phone/intent/name we're verifying across the redirect to /auth/verify —
  *      so the number never rides in the URL and can't be swapped by the client.
  */
 
