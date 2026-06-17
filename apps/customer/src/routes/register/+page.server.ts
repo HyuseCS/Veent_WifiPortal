@@ -7,30 +7,38 @@ import { dev } from '$app/environment';
 
 export const load: PageServerLoad = (event) => {
 	if (event.locals.user) {
-		return redirect(302, '/dashboard');
+		return redirect(302, '/connected');
 	}
 	return {};
 };
 
 export const actions: Actions = {
-	// Login is phone-only: validate the number, confirm an account exists, text a
-	// one-time code, then hand off to /login/verify.
+	// Registration collects name + phone. Validate, ensure the number is new, text
+	// a one-time code, and carry the name to /login/verify (applied after verify).
 	default: async (event) => {
 		const formData = await event.request.formData();
+		const name = formData.get('name')?.toString().trim() ?? '';
 		const phoneRaw = formData.get('phone')?.toString() ?? '';
 		const phone = normalizePhone(phoneRaw);
 
-		if (!phone) {
-			return fail(400, { phone: phoneRaw, message: 'Enter a valid Philippine mobile number.' });
+		const errors: { name?: string; phone?: string } = {};
+		if (name.length < 2) errors.name = 'Enter your name.';
+		if (!phone) errors.phone = 'Enter a valid Philippine mobile number.';
+
+		if (errors.name || errors.phone || !phone) {
+			return fail(400, { name, phone: phoneRaw, errors });
 		}
 
-		if (!(await userExistsByPhone(phone))) {
-			return fail(404, { phone: phoneRaw, message: 'No account found for this number. Create one first.' });
+		if (await userExistsByPhone(phone)) {
+			const dupErrors: { name?: string; phone?: string } = {
+				phone: 'This number is already registered. Sign in instead.'
+			};
+			return fail(409, { name, phone: phoneRaw, errors: dupErrors });
 		}
 
 		await auth.api.sendPhoneNumberOTP({ body: { phoneNumber: phone } });
 
-		event.cookies.set(PENDING_COOKIE, serializePending({ phone, intent: 'login' }), {
+		event.cookies.set(PENDING_COOKIE, serializePending({ phone, intent: 'register', name }), {
 			path: '/',
 			httpOnly: true,
 			sameSite: 'lax',

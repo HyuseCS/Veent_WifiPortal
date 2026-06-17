@@ -30,7 +30,7 @@ export const customerProfile = pgTable('customer_profile', {
 		.primaryKey()
 		.references(() => customerUser.id, { onDelete: 'cascade' }),
 	role: text('role').notNull().default('user'),
-	phoneNumber: text('phone_number'),
+	// Phone lives on customer_user (better-auth phoneNumber plugin); no duplicate here.
 	creditBalance: numeric('credit_balance', { precision: 12, scale: 2 }).notNull().default('0'),
 	lastFreeSessionAt: timestamp('last_free_session_at'),
 	// Admin "block": when true, grant paths refuse to start sessions for this user.

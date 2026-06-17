@@ -22,6 +22,13 @@
       "when": 1781667524041,
       "tag": "0002_perpetual_shocker",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1781676292229,
+      "tag": "0003_broken_the_initiative",
+      "breakpoints": true
     }
   ]
 }
