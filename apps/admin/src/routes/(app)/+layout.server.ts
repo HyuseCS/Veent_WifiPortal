@@ -1,8 +1,10 @@
+import { redirect } from '@sveltejs/kit';
 import type { LayoutServerLoad } from './$types';
 
-// TEMP: auth guard bypassed for UI testing — restore before merge.
+/** Auth guard for every page in the (app) shell: only signed-in staff get in. */
 export const load: LayoutServerLoad = (event) => {
-	return {
-		user: event.locals.user ?? { id: 'mock', name: 'Test Operator', email: 'test@veent.io' }
-	};
+	if (!event.locals.user) {
+		return redirect(302, '/login');
+	}
+	return { user: event.locals.user };
 };
