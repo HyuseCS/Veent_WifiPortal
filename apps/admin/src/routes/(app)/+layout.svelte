@@ -1,8 +1,7 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
 	import { page } from '$app/state';
-	import Sidebar from '$lib/components/Sidebar.svelte';
-	import Topbar from '$lib/components/Topbar.svelte';
+	import { Sidebar, Topbar } from '$lib/components/layout';
 	import { nav } from '$lib/nav';
 	import type { LayoutData } from './$types';
 

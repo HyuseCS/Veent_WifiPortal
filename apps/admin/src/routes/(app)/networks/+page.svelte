@@ -1,5 +1,5 @@
 <script lang="ts">
-	import NetworkHealthCard from '$lib/components/NetworkHealthCard.svelte';
+	import { NetworkHealthCard } from '$lib/components/feature';
 	// MOCK: replace with load() data when backend lands.
 	import { networks } from '$lib/mocks';
 </script>
