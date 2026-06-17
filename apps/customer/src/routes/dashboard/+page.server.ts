@@ -4,6 +4,7 @@ import { packages } from '@veent/db';
 import { getAccount, getFreeTimeStatus, startFreeSession, startSession, spendCredits } from '@veent/core';
 import { db } from '$lib/server/db';
 import { network } from '$lib/server/network';
+import { getPortalContext } from '$lib/server/portal';
 import type { Actions, PageServerLoad } from './$types';
 import { auth } from '$lib/server/auth';
 
@@ -24,7 +25,7 @@ export const load: PageServerLoad = async (event) => {
 
 	return {
 		user,
-		mac: event.url.searchParams.get('mac'),
+		mac: getPortalContext(event)?.mac ?? null,
 		balance: account?.balance ?? 0,
 		blocked: account?.blocked ?? false,
 		freeTime: getFreeTimeStatus(account?.lastFreeSessionAt ?? null),
@@ -38,7 +39,7 @@ export const actions: Actions = {
 		if (!user) return redirect(302, '/login');
 
 		const form = await event.request.formData();
-		const mac = String(form.get('mac') ?? '');
+		const mac = String(form.get('mac') ?? '') || getPortalContext(event)?.mac || '';
 		if (!mac) return fail(400, { error: 'Missing device MAC' });
 
 		const account = await getAccount(db, user.id);
@@ -56,7 +57,7 @@ export const actions: Actions = {
 		if (!user) return redirect(302, '/login');
 
 		const form = await event.request.formData();
-		const mac = String(form.get('mac') ?? '');
+		const mac = String(form.get('mac') ?? '') || getPortalContext(event)?.mac || '';
 		const packageId = Number(form.get('packageId'));
 		if (!mac || !Number.isFinite(packageId)) return fail(400, { error: 'Missing device MAC or package' });
 
