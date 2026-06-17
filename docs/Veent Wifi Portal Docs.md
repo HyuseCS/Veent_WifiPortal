@@ -21,13 +21,12 @@ Stack: SvelteKit, TailwindCSS, Drizzle (postgresql), better-auth
 - User can register in the captive portal
 
 **ERD**
-
-![][image1]  
-**![][image2]**
+  
+**![WIFI Portal ERD](wifi-portal-erd.png)**
 
 **Use Case**
 
-**![][image3]**
+**![WIFI Portal Use case diagram](wifi-portal-flow.png)**
 
 ## **Descriptive Use Case Flow**
 

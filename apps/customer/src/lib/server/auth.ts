@@ -3,7 +3,7 @@ import { betterAuth } from 'better-auth/minimal';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 import { sveltekitCookies } from 'better-auth/svelte-kit';
 import { getRequestEvent } from '$app/server';
-import { customerAuthSchema } from '@veent/db';
+import { customerAuthSchema, customerProfile } from '@veent/db';
 import { db } from '$lib/server/db';
 
 // Customer (captive-portal) auth instance. Backed by the `customer_*` tables and
@@ -14,6 +14,18 @@ export const auth = betterAuth({
 	secret: env.BETTER_AUTH_SECRET,
 	database: drizzleAdapter(db, { provider: 'pg', schema: customerAuthSchema }),
 	emailAndPassword: { enabled: true },
+	// Every customer_user must have a 1:1 customer_profile (holds credit_balance,
+	// cooldown, etc.). Create it right after the auth user is committed so the
+	// portal can always read a profile. Idempotent: a retried hook is a no-op.
+	databaseHooks: {
+		user: {
+			create: {
+				after: async (user) => {
+					await db.insert(customerProfile).values({ userId: user.id }).onConflictDoNothing();
+				}
+			}
+		}
+	},
 	advanced: { cookiePrefix: 'veent-portal' },
 	plugins: [
 		sveltekitCookies(getRequestEvent) // make sure this is the last plugin in the array

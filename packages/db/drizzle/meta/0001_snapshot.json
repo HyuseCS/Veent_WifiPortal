@@ -1,6 +1,6 @@
 {
-  "id": "986fe9f6-e37a-4679-bbdb-3c5dcc75b9b8",
-  "prevId": "00000000-0000-0000-0000-000000000000",
+  "id": "5efa9f0b-825f-420d-b425-c35e92c0a293",
+  "prevId": "986fe9f6-e37a-4679-bbdb-3c5dcc75b9b8",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -670,7 +670,23 @@
           "default": "now()"
         }
       },
-      "indexes": {},
+      "indexes": {
+        "credit_ledger_user_id_idx": {
+          "name": "credit_ledger_user_id_idx",
+          "columns": [
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
       "foreignKeys": {
         "credit_ledger_user_id_customer_user_id_fk": {
           "name": "credit_ledger_user_id_customer_user_id_fk",
@@ -700,7 +716,15 @@
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
+      "uniqueConstraints": {
+        "credit_ledger_external_transaction_id_unique": {
+          "name": "credit_ledger_external_transaction_id_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "external_transaction_id"
+          ]
+        }
+      },
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
@@ -812,7 +836,59 @@
           "notNull": false
         }
       },
-      "indexes": {},
+      "indexes": {
+        "network_sessions_user_id_idx": {
+          "name": "network_sessions_user_id_idx",
+          "columns": [
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "network_sessions_mac_address_idx": {
+          "name": "network_sessions_mac_address_idx",
+          "columns": [
+            {
+              "expression": "mac_address",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "network_sessions_status_expires_at_idx": {
+          "name": "network_sessions_status_expires_at_idx",
+          "columns": [
+            {
+              "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "expires_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
       "foreignKeys": {
         "network_sessions_user_id_customer_user_id_fk": {
           "name": "network_sessions_user_id_customer_user_id_fk",
@@ -946,7 +1022,38 @@
           "default": "now()"
         }
       },
-      "indexes": {},
+      "indexes": {
+        "rate_limits_mac_address_idx": {
+          "name": "rate_limits_mac_address_idx",
+          "columns": [
+            {
+              "expression": "mac_address",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "rate_limits_phone_number_idx": {
+          "name": "rate_limits_phone_number_idx",
+          "columns": [
+            {
+              "expression": "phone_number",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
       "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
