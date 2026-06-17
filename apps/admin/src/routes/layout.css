@@ -1,2 +1,80 @@
 @import 'tailwindcss';
-@plugin '@tailwindcss/typography';
+
+/*
+ * Veent admin design tokens. Every color/type decision references these — see
+ * docs/DESIGN_GUIDELINES.md. Tailwind v4 turns each `--color-*` into a utility
+ * (`bg-brand`, `text-ink`, `bg-online/15`, …). Theme presets below override the
+ * brand/cta vars, so those utilities re-resolve live when `data-theme` changes.
+ */
+@theme {
+	/* Palette — default theme: teal + coral */
+	--color-brand: oklch(0.38 0.13 185);
+	--color-brand-hover: oklch(0.32 0.13 185);
+	--color-cta: oklch(0.62 0.18 28);
+	--color-cta-hover: oklch(0.56 0.18 28);
+
+	/* Surfaces */
+	--color-bg: oklch(1 0 0);
+	--color-surface: oklch(0.975 0.008 185);
+	--color-border: oklch(0.92 0.008 185);
+
+	/* Text */
+	--color-ink: oklch(0.14 0.02 190);
+	--color-muted: oklch(0.52 0.01 190);
+
+	/* Status — semantic, not themeable */
+	--color-online: oklch(0.5 0.15 155);
+	--color-warning: oklch(0.65 0.15 72);
+	--color-blocked: oklch(0.55 0.18 22);
+
+	/* Admin sidebar */
+	--color-sidebar: oklch(0.1 0.02 195);
+	--color-sidebar-text: oklch(0.75 0.01 195);
+	--color-sidebar-muted: oklch(0.48 0.008 195);
+
+	/* Type */
+	--font-sans: system-ui, -apple-system, 'Segoe UI', sans-serif;
+	--font-mono: ui-monospace, 'Cascadia Code', Menlo, monospace;
+}
+
+/*
+ * Theme presets — each overrides only brand + cta; the semantic structure
+ * (surfaces, text, status) stays constant. `:root[data-theme]` outranks the
+ * `:root` vars emitted by @theme, so the generated utilities pick these up.
+ */
+:root[data-theme='teal'] {
+	--color-brand: oklch(0.38 0.13 185);
+	--color-brand-hover: oklch(0.32 0.13 185);
+	--color-cta: oklch(0.62 0.18 28);
+	--color-cta-hover: oklch(0.56 0.18 28);
+}
+
+:root[data-theme='jade'] {
+	--color-brand: oklch(0.34 0.13 155);
+	--color-brand-hover: oklch(0.28 0.13 155);
+	--color-cta: oklch(0.72 0.17 72);
+	--color-cta-hover: oklch(0.65 0.17 72);
+}
+
+:root[data-theme='cobalt'] {
+	--color-brand: oklch(0.44 0.19 255);
+	--color-brand-hover: oklch(0.37 0.19 255);
+	--color-cta: oklch(0.78 0.165 135);
+	--color-cta-hover: oklch(0.72 0.165 135);
+}
+
+:root[data-theme='mono'] {
+	--color-brand: oklch(0.14 0.01 200);
+	--color-brand-hover: oklch(0.1 0.01 200);
+	--color-cta: oklch(0.55 0.15 182);
+	--color-cta-hover: oklch(0.48 0.15 182);
+}
+
+@media (prefers-reduced-motion: reduce) {
+	*,
+	*::before,
+	*::after {
+		animation-duration: 0.01ms !important;
+		transition-duration: 0.01ms !important;
+	}
+}

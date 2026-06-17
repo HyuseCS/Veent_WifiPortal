@@ -5,43 +5,56 @@
 	let { form }: { form: ActionData } = $props();
 </script>
 
-<main class="prose mx-auto p-8">
-	<h1>Sign in</h1>
-	<form method="post" action="?/signInEmail" use:enhance class="flex flex-col gap-3">
-		<label>
-			Email
-			<input
-				type="email"
-				name="email"
-				class="mt-1 rounded-md border border-gray-300 bg-white px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-			/>
-		</label>
-		<label>
-			Password
-			<input
-				type="password"
-				name="password"
-				class="mt-1 rounded-md border border-gray-300 bg-white px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-			/>
-		</label>
-		<label>
-			Name (for registration)
-			<input
-				name="name"
-				class="mt-1 rounded-md border border-gray-300 bg-white px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-			/>
-		</label>
-		<div class="flex gap-2">
-			<button class="rounded-md bg-blue-600 px-4 py-2 text-white transition hover:bg-blue-700">
-				Sign in
-			</button>
-			<button
-				formaction="?/signUpEmail"
-				class="rounded-md bg-gray-600 px-4 py-2 text-white transition hover:bg-gray-700"
-			>
-				Register
-			</button>
+<main class="flex min-h-screen items-center justify-center bg-surface px-5 py-10">
+	<div class="w-full max-w-sm space-y-6">
+		<div class="text-center">
+			<span class="text-xl font-semibold tracking-tight text-ink">
+				Veent <span class="text-muted">Admin</span>
+			</span>
+			<p class="mt-1 text-sm text-muted">Staff sign in</p>
 		</div>
-	</form>
-	<p class="text-red-500">{form?.message ?? ''}</p>
+
+		<form
+			method="post"
+			action="?/signInEmail"
+			use:enhance
+			class="space-y-4 rounded-xl border border-border bg-bg p-6 shadow-sm"
+		>
+			<div class="space-y-1.5">
+				<label for="email" class="block text-sm font-medium text-ink">Email</label>
+				<input
+					id="email"
+					name="email"
+					type="email"
+					autocomplete="email"
+					required
+					class="min-h-[44px] w-full rounded-lg border border-border bg-bg px-4 py-3 text-sm text-ink transition-colors focus:border-brand focus:ring-2 focus:ring-brand/20 focus:outline-none"
+				/>
+			</div>
+
+			<div class="space-y-1.5">
+				<label for="password" class="block text-sm font-medium text-ink">Password</label>
+				<input
+					id="password"
+					name="password"
+					type="password"
+					autocomplete="current-password"
+					required
+					class="min-h-[44px] w-full rounded-lg border border-border bg-bg px-4 py-3 text-sm text-ink transition-colors focus:border-brand focus:ring-2 focus:ring-brand/20 focus:outline-none"
+				/>
+			</div>
+
+			{#if form?.message}
+				<p class="text-xs text-blocked" role="alert">{form.message}</p>
+			{/if}
+
+			<button
+				class="min-h-[44px] w-full cursor-pointer rounded-lg bg-brand px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-brand-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+			>
+				Sign In
+			</button>
+		</form>
+
+		<p class="text-center text-xs text-muted">Access is restricted to authorized venue staff.</p>
+	</div>
 </main>
