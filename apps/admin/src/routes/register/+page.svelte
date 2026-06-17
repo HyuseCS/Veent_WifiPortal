@@ -1,12 +1,10 @@
 <script lang="ts">
-	import { page } from '$app/state';
+	// ⚠️ TEMPORARY dev-only registration UI. Remove with the /register route before prod.
 	import { enhance } from '$app/forms';
 	import { Button, Field } from '$lib/components/ui';
 	import type { ActionData } from './$types';
 
 	let { form }: { form: ActionData } = $props();
-	// Shown after a successful account activation (redirect from /activate).
-	const justActivated = $derived(page.url.searchParams.get('activated') === '1');
 </script>
 
 <main class="flex min-h-screen items-center justify-center bg-surface px-5 py-10">
@@ -15,30 +13,29 @@
 			<span class="text-xl font-semibold tracking-tight text-ink">
 				Veent <span class="text-muted">Admin</span>
 			</span>
-			<p class="mt-1 text-sm text-muted">Staff sign in</p>
+			<p class="mt-1 text-sm text-muted">Create an account</p>
 		</div>
 
-		{#if justActivated}
-			<p
-				class="rounded-lg border border-border bg-bg px-4 py-3 text-center text-sm text-online"
-				role="status"
-			>
-				Your account is active. Sign in below.
-			</p>
-		{/if}
+		<p
+			class="rounded-lg border border-warning/40 bg-warning/10 px-4 py-3 text-center text-xs text-warning"
+			role="status"
+		>
+			Temporary registration — for development only. Creates an active owner account.
+		</p>
 
 		<form
 			method="post"
-			action="?/signInEmail"
 			use:enhance
 			class="space-y-4 rounded-xl border border-border bg-bg p-6 shadow-sm"
 		>
+			<Field id="name" label="Name" autocomplete="name" required />
 			<Field id="email" label="Email" type="email" autocomplete="email" required />
 			<Field
 				id="password"
 				label="Password"
 				type="password"
-				autocomplete="current-password"
+				autocomplete="new-password"
+				minlength={8}
 				required
 			/>
 
@@ -46,16 +43,13 @@
 				<p class="text-xs text-blocked" role="alert">{form.message}</p>
 			{/if}
 
-			<Button type="submit" class="w-full py-2.5">Sign In</Button>
+			<Button type="submit" class="w-full py-2.5">Create Account</Button>
 		</form>
 
 		<p class="text-center text-xs text-muted">
-			Staff accounts are created by invitation. Contact the owner for access.
-		</p>
-
-		<!-- TEMP: remove with /register -->
-		<p class="text-center text-xs text-muted">
-			<a href="/register" class="font-medium text-brand hover:underline">Create an account</a>
+			Already have an account? <a href="/login" class="font-medium text-brand hover:underline"
+				>Back to sign in</a
+			>
 		</p>
 	</div>
 </main>
