@@ -32,7 +32,9 @@ export const customerProfile = pgTable('customer_profile', {
 	role: text('role').notNull().default('user'),
 	phoneNumber: text('phone_number'),
 	creditBalance: numeric('credit_balance', { precision: 12, scale: 2 }).notNull().default('0'),
-	lastFreeSessionAt: timestamp('last_free_session_at')
+	lastFreeSessionAt: timestamp('last_free_session_at'),
+	// Admin "block": when true, grant paths refuse to start sessions for this user.
+	blocked: boolean('blocked').notNull().default(false)
 });
 
 /** Purchasable credit bundles / access tiers, configured by admin (ERD "Packages"). */

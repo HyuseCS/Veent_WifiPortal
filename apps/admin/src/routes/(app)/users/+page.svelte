@@ -1,7 +1,9 @@
 <script lang="ts">
 	import { UsersTable } from '$lib/components/feature';
-	// MOCK: replace with load() data when backend lands.
-	import { users } from '$lib/mocks';
+	import type { PageData } from './$types';
+
+	let { data }: { data: PageData } = $props();
+	const users = $derived(data.users);
 </script>
 
 <div class="space-y-4">

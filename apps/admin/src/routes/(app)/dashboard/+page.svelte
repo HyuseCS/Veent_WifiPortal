@@ -1,8 +1,12 @@
 <script lang="ts">
 	import { Card, SectionHeading } from '$lib/components/ui';
 	import { KpiCard, RevenueChart, SessionsTable } from '$lib/components/feature';
-	// MOCK: replace these imports with `let { data } = $props()` when backend lands.
-	import { kpis, revenue, activeSessions } from '$lib/mocks';
+	import type { PageData } from './$types';
+
+	let { data }: { data: PageData } = $props();
+	const kpis = $derived(data.kpis);
+	const revenue = $derived(data.revenue);
+	const activeSessions = $derived(data.activeSessions);
 
 	const total = $derived(revenue.reduce((sum, p) => sum + p.amount, 0));
 </script>

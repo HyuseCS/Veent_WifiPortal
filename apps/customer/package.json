@@ -15,8 +15,10 @@
 		"auth:schema": "better-auth generate --config src/lib/server/auth.ts --output ../../packages/db/src/schema/auth-customer.generated.ts --yes"
 	},
 	"dependencies": {
+		"@veent/core": "workspace:*",
 		"@veent/db": "workspace:*",
-		"better-auth": "~1.4.21"
+		"better-auth": "~1.4.21",
+		"drizzle-orm": "^0.45.2"
 	},
 	"devDependencies": {
 		"@better-auth/cli": "~1.4.21",

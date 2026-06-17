@@ -20,9 +20,9 @@ export default defineConfig({
 		})
 	],
 
-	// @veent/db ships TypeScript source from the workspace; Vite externalizes
-	// dependencies for SSR by default, so opt it in for transpilation.
-	ssr: { noExternal: ['@veent/db'] },
+	// @veent/db and @veent/core ship TypeScript source from the workspace; Vite
+	// externalizes dependencies for SSR by default, so opt them in for transpilation.
+	ssr: { noExternal: ['@veent/db', '@veent/core'] },
 
 	test: {
 		expect: { requireAssertions: true },

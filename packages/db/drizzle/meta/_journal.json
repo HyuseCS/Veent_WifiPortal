@@ -15,6 +15,13 @@
       "when": 1781660748085,
       "tag": "0001_blue_night_nurse",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1781667524041,
+      "tag": "0002_perpetual_shocker",
+      "breakpoints": true
     }
   ]
 }

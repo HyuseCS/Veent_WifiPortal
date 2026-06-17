@@ -1,0 +1,1 @@
+ALTER TABLE "customer_profile" ADD COLUMN "blocked" boolean DEFAULT false NOT NULL;
