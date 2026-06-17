@@ -25,17 +25,38 @@ compose.yaml  shared Postgres for local dev
 
 ## Setup
 
+**Prerequisites:** [bun](https://bun.sh) and Docker (with `docker compose`). Postgres
+runs in a container — nothing to install on the host.
+
+Each developer sets up their own local environment; **`.env` files are never shared or
+committed** (they're gitignored). Only the `.env.example` templates live in git — copy
+them and fill in your own values.
+
 ```sh
 bun install                 # resolves the workspace, links @veent/db into each app
 
+# 1. Copy the env templates. The DB one works as-is (local Docker creds).
 cp packages/db/.env.example   packages/db/.env
 cp apps/customer/.env.example apps/customer/.env
 cp apps/admin/.env.example    apps/admin/.env
-# set a distinct BETTER_AUTH_SECRET in each app's .env
 
-bun run db:start            # start Postgres (docker compose)
-bun run db:push             # create customer_* and admin_* tables in the one database
+# 2. Set a DISTINCT BETTER_AUTH_SECRET in EACH app's .env (do not leave it empty).
+#    The two secrets must differ — that's what isolates the customer and admin
+#    auth domains. They do NOT need to match anyone else's machine.
+openssl rand -base64 32     # run once per app, paste each result into its .env
+
+# 3. Bring up the database.
+bun run db:start            # start Postgres (docker compose; runs in the foreground)
+bun run db:migrate          # apply the committed migrations → all tables
 ```
+
+> Run `db:migrate` (applies the migrations checked into `packages/db/drizzle`), **not**
+> `db:generate`. Only schema *authors* run `db:generate`, after editing
+> `packages/db/src/schema` — and they commit the generated SQL. See
+> [Database](#database-run-from-the-repo-root--delegates-to-veentdb) below.
+
+Each developer's `DATABASE_URL` is identical because it points at their **own** local
+Docker Postgres (`localhost:5432`), not a shared server.
 
 ## Develop
 
@@ -55,7 +76,10 @@ bun run db:studio           # open Drizzle Studio
 
 The schema lives in `packages/db/src/schema`:
 `auth-customer.ts` / `auth-admin.ts` (better-auth tables via the prefixed factory),
-`customer.ts` / `admin.ts` (each module's domain tables).
+`customer.ts` (the captive-portal domain tables — `customer_profile`, `packages`,
+`credit_ledger`, `network_sessions`, `rate_limits`, modeled from
+`docs/use-cases/wifi-portal-erd.puml`), and `admin.ts` (no admin-owned tables yet; the
+dashboard reads the shared customer tables).
 
 ## Other
 

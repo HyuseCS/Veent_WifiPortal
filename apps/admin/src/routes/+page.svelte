@@ -1,16 +1,6 @@
 <script lang="ts">
-	import type { PageServerData } from './$types';
-
-	let { data }: { data: PageServerData } = $props();
+	// This route always redirects to /dashboard in +page.server.ts; this page
+	// only renders if JS-side navigation reaches it before the redirect.
 </script>
 
-<main class="prose mx-auto p-8">
-	<h1>Veent Admin</h1>
-	{#if data.user}
-		<p>Signed in as {data.user.name}.</p>
-		<a href="/dashboard">Open dashboard</a>
-	{:else}
-		<p>Staff sign in required.</p>
-		<a href="/login">Sign in</a>
-	{/if}
-</main>
+<p class="p-8 text-sm text-muted">Redirecting…</p>
