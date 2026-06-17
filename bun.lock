@@ -21,8 +21,11 @@
       "name": "veent-admin",
       "version": "0.0.1",
       "dependencies": {
+        "@veent/core": "workspace:*",
         "@veent/db": "workspace:*",
         "better-auth": "~1.4.21",
+        "drizzle-orm": "^0.45.2",
+        "lucide-svelte": "^1.0.1",
       },
       "devDependencies": {
         "@better-auth/cli": "~1.4.21",
@@ -47,8 +50,10 @@
       "name": "veent-customer",
       "version": "0.0.1",
       "dependencies": {
+        "@veent/core": "workspace:*",
         "@veent/db": "workspace:*",
         "better-auth": "~1.4.21",
+        "drizzle-orm": "^0.45.2",
       },
       "devDependencies": {
         "@better-auth/cli": "~1.4.21",
@@ -67,6 +72,14 @@
         "vite": "^8.0.16",
         "vitest": "^4.1.8",
         "vitest-browser-svelte": "^2.1.1",
+      },
+    },
+    "packages/core": {
+      "name": "@veent/core",
+      "version": "0.0.1",
+      "dependencies": {
+        "@veent/db": "workspace:*",
+        "drizzle-orm": "^0.45.2",
       },
     },
     "packages/db": {
@@ -406,6 +419,8 @@
 
     "@typescript-eslint/visitor-keys": ["@typescript-eslint/visitor-keys@8.61.1", "", { "dependencies": { "@typescript-eslint/types": "8.61.1", "eslint-visitor-keys": "^5.0.0" } }, "sha512-6fJ9MHWtK14C1DSkiMlHUSOmrVebL7150xZJBlJiL62jjhIA4JmOq6flwBgDxIdBKKdoiZRel+dfPD5MLfny3w=="],
 
+    "@veent/core": ["@veent/core@workspace:packages/core"],
+
     "@veent/db": ["@veent/db@workspace:packages/db"],
 
     "@vitest/browser": ["@vitest/browser@4.1.9", "", { "dependencies": { "@blazediff/core": "1.9.1", "@vitest/mocker": "4.1.9", "@vitest/utils": "4.1.9", "magic-string": "^0.30.21", "pngjs": "^7.0.0", "sirv": "^3.0.2", "tinyrainbow": "^3.1.0", "ws": "^8.19.0" }, "peerDependencies": { "vitest": "4.1.9" } }, "sha512-j1BKtWmPcqpMhmx/L9EPLgAJpCb0zKfwoWLmqBbxaogCXHjOwHFSEoHCBfnGtx93xKQwilZ26m+UOsHqHMkRNg=="],
@@ -687,6 +702,8 @@
     "lodash": ["lodash@4.17.21", "", {}, "sha512-v2kDEe57lecTulaDIuNTPy3Ry4gLGJ6Z1O3vE1krgXZNrsQ+LFTGHVxVjcXPs17LhbZVGedAJv8XZ1tvj5FvSg=="],
 
     "lru-cache": ["lru-cache@5.1.1", "", { "dependencies": { "yallist": "^3.0.2" } }, "sha512-KpNARQA3Iwv+jTA0utUVVbrh+Jlrr1Fv0e56GGzAFOXN7dk/FviaDW8LHmK52DlcH4WP2n6gI8vN1aesBFgo9w=="],
+
+    "lucide-svelte": ["lucide-svelte@1.0.1", "", { "peerDependencies": { "svelte": "^3 || ^4 || ^5.0.0-next.42" } }, "sha512-WvzZgk0pqzgda+AErLvgWxHkfg/+GgUwqKMRHvzt0IqyMdmyEDzDCk3Z+Wo/3y753oIgx8u9Q4eUbWkghFa8Jg=="],
 
     "magic-string": ["magic-string@0.30.21", "", { "dependencies": { "@jridgewell/sourcemap-codec": "^1.5.5" } }, "sha512-vd2F4YUyEXKGcLHoq+TEyCjxueSeHnFxyyjNp80yg0XV4vUhnDer/lvvlqM/arB5bXQN5K2/3oinyCRyx8T2CQ=="],
 

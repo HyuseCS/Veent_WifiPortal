@@ -1,2 +1,96 @@
 @import 'tailwindcss';
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
 @plugin '@tailwindcss/typography';
+
+/*
+ * Veent customer-portal design tokens. Shares ONE unified theme with the admin
+ * dashboard — the palette, the four presets, and the data-theme mechanism are
+ * identical to apps/admin/src/routes/layout.css, so a given theme looks the same
+ * in both apps. The only intentional divergences are documented in
+ * docs/DESIGN_GUIDELINES.md: the portal uses the Plus Jakarta Sans web font
+ * (admin uses system-ui) and adds no sidebar tokens.
+ *
+ * Tailwind v4 turns each `--color-*` into a utility (`bg-brand`, `text-ink`,
+ * `bg-online/15`, …). The presets below override the brand/cta vars, so those
+ * utilities re-resolve live when `data-theme` changes.
+ */
+@theme {
+	/* Palette — default theme: teal + coral */
+	--color-brand: oklch(0.38 0.13 185);
+	--color-brand-hover: oklch(0.32 0.13 185);
+	--color-cta: oklch(0.62 0.18 28);
+	--color-cta-hover: oklch(0.56 0.18 28);
+
+	/* Surfaces */
+	--color-bg: oklch(1 0 0);
+	--color-surface: oklch(0.975 0.008 185);
+	--color-border: oklch(0.92 0.008 185);
+
+	/* Text */
+	--color-ink: oklch(0.14 0.02 190);
+	--color-muted: oklch(0.52 0.01 190);
+
+	/* Status — semantic, not themeable */
+	--color-online: oklch(0.5 0.15 155);
+	--color-warning: oklch(0.65 0.15 72);
+	--color-blocked: oklch(0.55 0.18 22);
+
+	/* Type — one web font for the whole portal, system-ui fallback */
+	--font-sans: 'Plus Jakarta Sans', system-ui, sans-serif;
+}
+
+/*
+ * Theme presets — each overrides only brand + cta; the semantic structure
+ * (surfaces, text, status) stays constant. `:root[data-theme]` outranks the
+ * `:root` vars emitted by @theme, so the generated utilities pick these up.
+ * Kept byte-for-byte in sync with the admin app for a unified look.
+ */
+:root[data-theme='teal'] {
+	--color-brand: oklch(0.38 0.13 185);
+	--color-brand-hover: oklch(0.32 0.13 185);
+	--color-cta: oklch(0.62 0.18 28);
+	--color-cta-hover: oklch(0.56 0.18 28);
+}
+
+:root[data-theme='jade'] {
+	--color-brand: oklch(0.34 0.13 155);
+	--color-brand-hover: oklch(0.28 0.13 155);
+	--color-cta: oklch(0.72 0.17 72);
+	--color-cta-hover: oklch(0.65 0.17 72);
+}
+
+:root[data-theme='cobalt'] {
+	--color-brand: oklch(0.44 0.19 255);
+	--color-brand-hover: oklch(0.37 0.19 255);
+	--color-cta: oklch(0.78 0.165 135);
+	--color-cta-hover: oklch(0.72 0.165 135);
+}
+
+:root[data-theme='mono'] {
+	--color-brand: oklch(0.14 0.01 200);
+	--color-brand-hover: oklch(0.1 0.01 200);
+	--color-cta: oklch(0.55 0.15 182);
+	--color-cta-hover: oklch(0.48 0.15 182);
+}
+
+@layer base {
+	/*
+	 * Captive-portal constraint: overscroll-behavior: contain stops accidental
+	 * pull-to-refresh on Android inside the portal mini-browser. Background + ink
+	 * set here so every page inherits the token surface without repeating it.
+	 */
+	html {
+		overscroll-behavior: contain;
+		background-color: var(--color-bg);
+		color: var(--color-ink);
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	*,
+	*::before,
+	*::after {
+		animation-duration: 0.01ms !important;
+		transition-duration: 0.01ms !important;
+	}
+}
