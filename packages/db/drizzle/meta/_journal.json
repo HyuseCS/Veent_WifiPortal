@@ -29,6 +29,13 @@
       "when": 1781676292229,
       "tag": "0003_broken_the_initiative",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1781677364758,
+      "tag": "0004_slim_baron_strucker",
+      "breakpoints": true
     }
   ]
 }

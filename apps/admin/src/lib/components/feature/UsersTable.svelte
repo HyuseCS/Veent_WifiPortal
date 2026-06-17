@@ -1,7 +1,9 @@
 <script lang="ts">
 	import Ban from 'lucide-svelte/icons/ban';
+	import ShieldCheck from 'lucide-svelte/icons/shield-check';
 	import WifiOff from 'lucide-svelte/icons/wifi-off';
 	import type { Component } from 'svelte';
+	import { enhance } from '$app/forms';
 	import type { AdminUserRow } from '$lib/types';
 	import { IconButton, StatusBadge, Table } from '$lib/components/ui';
 
@@ -29,17 +31,36 @@
 				<StatusBadge tone={user.tone} label={user.status} />
 			</td>
 			<td class="px-4 py-3">
-				<!-- Stub actions — wired to backend later. -->
 				<div class="flex items-center justify-end gap-1">
-					<IconButton
-						icon={WifiOff as unknown as Component}
-						label="Kick {user.name} off the network"
-					/>
-					<IconButton
-						icon={Ban as unknown as Component}
-						label="Block {user.name}"
-						tone="danger"
-					/>
+					{#if user.tone === 'blocked'}
+						<!-- Blocked users have no live session to kick; offer Unblock instead. -->
+						<form method="post" action="?/unblock" use:enhance>
+							<input type="hidden" name="userId" value={user.id} />
+							<IconButton
+								type="submit"
+								icon={ShieldCheck as unknown as Component}
+								label="Unblock {user.name}"
+							/>
+						</form>
+					{:else}
+						<form method="post" action="?/kick" use:enhance>
+							<input type="hidden" name="userId" value={user.id} />
+							<IconButton
+								type="submit"
+								icon={WifiOff as unknown as Component}
+								label="Kick {user.name} off the network"
+							/>
+						</form>
+						<form method="post" action="?/block" use:enhance>
+							<input type="hidden" name="userId" value={user.id} />
+							<IconButton
+								type="submit"
+								icon={Ban as unknown as Component}
+								label="Block {user.name}"
+								tone="danger"
+							/>
+						</form>
+					{/if}
 				</div>
 			</td>
 		</tr>

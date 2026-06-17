@@ -1,7 +1,9 @@
 <script lang="ts">
 	import { NetworkHealthCard } from '$lib/components/feature';
-	// MOCK: replace with load() data when backend lands.
-	import { networks } from '$lib/mocks';
+	import type { PageData } from './$types';
+
+	let { data }: { data: PageData } = $props();
+	const networks = $derived(data.networks);
 </script>
 
 <div class="space-y-4">

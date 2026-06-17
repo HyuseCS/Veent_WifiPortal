@@ -39,7 +39,13 @@ export const GET: RequestHandler = async (event) => {
 			event.request.signal.addEventListener('abort', () => {
 				closed = true;
 				clearInterval(timer);
-				controller.close();
+				// The controller may already be closed when the client disconnects;
+				// closing again throws ERR_INVALID_STATE and would crash the server.
+				try {
+					controller.close();
+				} catch {
+					// already closed — nothing to do
+				}
 			});
 		}
 	});
