@@ -15,6 +15,7 @@ import {
 	packages,
 	adminUser,
 	adminProfile,
+	adminRole,
 	networkHealth
 } from '@veent/db';
 import { SESSION_STATUS, LEDGER_TYPE } from '@veent/core';
@@ -187,11 +188,14 @@ export async function listStaff(db: DB): Promise<StaffMember[]> {
 			name: adminUser.name,
 			email: adminUser.email,
 			role: adminProfile.role,
+			roleLabel: adminRole.label,
 			status: adminProfile.status,
 			lastActiveAt: adminProfile.lastActiveAt
 		})
 		.from(adminUser)
 		.innerJoin(adminProfile, eq(adminProfile.userId, adminUser.id))
+		// Role display name is DB-driven (admin_role), not hardcoded in the view.
+		.innerJoin(adminRole, eq(adminRole.key, adminProfile.role))
 		// Owner first, then alphabetical — keeps the singular owner pinned to the top.
 		.orderBy(asc(adminProfile.role), asc(adminUser.name));
 
@@ -200,6 +204,7 @@ export async function listStaff(db: DB): Promise<StaffMember[]> {
 		name: r.name,
 		email: r.email,
 		role: r.role as StaffRole,
+		roleLabel: r.roleLabel,
 		status: r.status as StaffStatus,
 		lastActive: formatLastActive(r.lastActiveAt)
 	}));

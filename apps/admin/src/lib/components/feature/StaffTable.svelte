@@ -1,6 +1,7 @@
 <script lang="ts">
 	import Ban from 'lucide-svelte/icons/ban';
 	import Check from 'lucide-svelte/icons/check';
+	import Crown from 'lucide-svelte/icons/crown';
 	import RotateCcw from 'lucide-svelte/icons/rotate-ccw';
 	import Trash2 from 'lucide-svelte/icons/trash-2';
 	import X from 'lucide-svelte/icons/x';
@@ -10,12 +11,14 @@
 	import { IconButton, StatusBadge, Table } from '$lib/components/ui';
 
 	// Presentational table for the owner-only Staff page. Row actions post directly to
-	// the page's form actions (?/setStatus, ?/remove); the route enforces owner access.
-	// The owner row itself shows no actions (it can't be disabled or removed).
+	// the page's form actions (?/setStatus, ?/remove, ?/promote); the route enforces
+	// owner access. The owner row itself shows no actions (it can't be disabled,
+	// removed, or re-promoted).
 	let { staff }: { staff: StaffMember[] } = $props();
 
-	// Two-step inline confirm for removal — avoids needing a Modal primitive.
-	let confirmingId = $state<string | null>(null);
+	// Two-step inline confirm for the privileged actions — avoids a Modal primitive.
+	let confirmingId = $state<string | null>(null); // remove
+	let promotingId = $state<string | null>(null); // give owner role
 
 	const columns = [
 		{ label: 'Member' },
@@ -29,11 +32,6 @@
 		active: { tone: 'online', label: 'Active' },
 		pending: { tone: 'warning', label: 'Invitation sent' },
 		disabled: { tone: 'blocked', label: 'Disabled' }
-	};
-
-	const roleLabel: Record<StaffMember['role'], string> = {
-		owner: 'Owner',
-		admin: 'Admin'
 	};
 </script>
 
@@ -49,13 +47,13 @@
 					<span
 						class="inline-flex items-center rounded-full bg-brand/10 px-2.5 py-1 text-xs font-medium text-brand"
 					>
-						{roleLabel[member.role]}
+						{member.roleLabel}
 					</span>
 				{:else}
 					<span
 						class="inline-flex items-center rounded-full bg-surface px-2.5 py-1 text-xs font-medium text-ink"
 					>
-						{roleLabel[member.role]}
+						{member.roleLabel}
 					</span>
 				{/if}
 			</td>
@@ -86,8 +84,35 @@
 								onclick={() => (confirmingId = null)}
 							/>
 						</div>
+					{:else if promotingId === member.id}
+						<div class="flex items-center justify-end gap-1">
+							<span class="text-xs text-muted">Make {member.name} an owner?</span>
+							<form method="post" action="?/promote" use:enhance={() => async ({ update }) => {
+									promotingId = null;
+									await update();
+								}}>
+								<input type="hidden" name="userId" value={member.id} />
+								<IconButton
+									type="submit"
+									icon={Check as unknown as Component}
+									label="Confirm promoting {member.name} to owner"
+								/>
+							</form>
+							<IconButton
+								icon={X as unknown as Component}
+								label="Cancel"
+								onclick={() => (promotingId = null)}
+							/>
+						</div>
 					{:else}
 						<div class="flex items-center justify-end gap-1">
+							{#if member.role === 'admin' && member.status === 'active'}
+								<IconButton
+									icon={Crown as unknown as Component}
+									label="Give {member.name} the owner role"
+									onclick={() => (promotingId = member.id)}
+								/>
+							{/if}
 							{#if member.status === 'disabled'}
 								<form method="post" action="?/setStatus" use:enhance>
 									<input type="hidden" name="userId" value={member.id} />

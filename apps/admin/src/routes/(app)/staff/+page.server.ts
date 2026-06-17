@@ -1,5 +1,12 @@
 import { error, fail } from '@sveltejs/kit';
-import { getAdminRole, setStaffStatus, removeStaff, STAFF_ROLE, STAFF_STATUS } from '@veent/core';
+import {
+	getAdminRole,
+	setStaffStatus,
+	removeStaff,
+	promoteToOwner,
+	STAFF_ROLE,
+	STAFF_STATUS
+} from '@veent/core';
 import { adminProfile } from '@veent/db';
 import { auth, inviteSendFailures } from '$lib/server/auth';
 import { db } from '$lib/server/db';
@@ -109,5 +116,25 @@ export const actions: Actions = {
 		}
 		const removed = await removeStaff(db, userId);
 		return { ok: removed, action: 'remove' };
+	},
+
+	/**
+	 * Promote an existing active admin to owner. Owner-only. The service scopes the
+	 * change to active admins, so promoting an owner / pending / disabled row is a
+	 * no-op. (The "all owners must confirm" gate is deferred — direct for now.)
+	 */
+	promote: async (event) => {
+		const denied = await requireOwner(event.locals.user?.id);
+		if (denied) return denied;
+
+		const form = await event.request.formData();
+		const userId = String(form.get('userId') ?? '');
+		if (!userId) return fail(400, { error: 'Missing userId' });
+
+		const promoted = await promoteToOwner(db, userId);
+		if (!promoted) {
+			return fail(400, { error: 'Only an active admin can be promoted to owner.' });
+		}
+		return { ok: true, action: 'promote' };
 	}
 };

@@ -22,15 +22,39 @@ import {
 import { adminUser } from './auth-admin';
 
 /**
+ * Lookup table of staff roles — the single source of truth for what a role *is*.
+ * `admin_profile.role` is a foreign key into this table, so roles are DB-driven
+ * rather than hardcoded.
+ *   key              — the stored role value ('owner', 'admin', …); the FK target.
+ *   label            — human display name ('Owner', 'Admin').
+ *   assignable       — may this role be handed out through the app (vs. bootstrap
+ *                      only)? `owner` is false: it's reached by promotion, not invite.
+ *   requiresApproval — scaffold for the deferred "all owners must confirm" flow;
+ *                      true for `owner` so the future approval gate has its flag.
+ *   sortOrder        — display ordering.
+ */
+export const adminRole = pgTable('admin_role', {
+	key: text('key').primaryKey(),
+	label: text('label').notNull(),
+	description: text('description'),
+	assignable: boolean('assignable').notNull().default(true),
+	requiresApproval: boolean('requires_approval').notNull().default(false),
+	sortOrder: integer('sort_order').notNull().default(0)
+});
+
+/**
  * Staff-domain extension of the better-auth admin user (1:1).
- *   role   — 'owner' (singular bootstrap account) | 'admin' (everyone invited)
+ *   role   — FK into admin_role: 'owner' (bootstrap/promotion) | 'admin' (invited)
  *   status — 'pending' (invited, awaiting activation) | 'active' | 'disabled'
  */
 export const adminProfile = pgTable('admin_profile', {
 	userId: text('user_id')
 		.primaryKey()
 		.references(() => adminUser.id, { onDelete: 'cascade' }),
-	role: text('role').notNull().default('admin'),
+	role: text('role')
+		.notNull()
+		.default('admin')
+		.references(() => adminRole.key),
 	status: text('status').notNull().default('pending'),
 	lastActiveAt: timestamp('last_active_at')
 });

@@ -69,6 +69,30 @@ export async function removeStaff(db: DB, userId: string): Promise<boolean> {
 }
 
 /**
+ * Promotes an existing **active admin** to `owner`. Scoped tightly on purpose:
+ * the target must currently be an `admin` (never re-promote an owner) and `active`
+ * (no promoting a pending invitee or a disabled member). Returns true if a row was
+ * promoted, false if it didn't match (wrong role/status, or no such member).
+ *
+ * Note: the "all owners must confirm" gate is deferred — admin_role.requiresApproval
+ * flags `owner` for when that flow lands. For now an owner promotes directly.
+ */
+export async function promoteToOwner(db: DB, userId: string): Promise<boolean> {
+	const updated = await db
+		.update(adminProfile)
+		.set({ role: STAFF_ROLE.owner })
+		.where(
+			and(
+				eq(adminProfile.userId, userId),
+				eq(adminProfile.role, STAFF_ROLE.admin),
+				eq(adminProfile.status, STAFF_STATUS.active)
+			)
+		)
+		.returning({ userId: adminProfile.userId });
+	return updated.length > 0;
+}
+
+/**
  * Promotes a freshly-activated invitee `pending → active`. Scoped to `pending` on
  * purpose: this runs from the password-reset hook, so a *disabled* member can never
  * re-activate themselves by triggering a reset. No-op for active/disabled rows.
