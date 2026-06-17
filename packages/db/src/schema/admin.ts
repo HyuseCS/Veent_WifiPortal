@@ -1,15 +1,12 @@
-import { pgTable, serial, text, timestamp } from 'drizzle-orm/pg-core';
-import { adminUser } from './auth-admin';
-
 /**
  * Domain tables owned by the admin (management dashboard) module.
- * Placeholder: an audit-log entry recording a staff action.
- * Replace/extend with the real admin domain model.
+ *
+ * The ERD (docs/use-cases/wifi-portal-erd.puml) defines no admin-owned tables
+ * yet — the dashboard reads/writes the shared customer-domain tables in
+ * `./customer` (packages, credit_ledger, network_sessions, rate_limits).
+ *
+ * Add admin-only tables here when the docs call for them (e.g. an action audit
+ * log, AP/location mapping for "sales per location", network-health samples).
  */
-export const auditLog = pgTable('audit_log', {
-	id: serial('id').primaryKey(),
-	actorId: text('actor_id').references(() => adminUser.id, { onDelete: 'set null' }),
-	action: text('action').notNull(),
-	detail: text('detail'),
-	createdAt: timestamp('created_at').notNull().defaultNow()
-});
+
+export {};
