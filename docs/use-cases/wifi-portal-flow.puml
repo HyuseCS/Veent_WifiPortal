@@ -42,7 +42,7 @@ partition "Step 3 · Dashboard & Access Selection" {
       :Deduct credits\n+ update credit_ledger;
     else (Option C · Zero balance + Cooldown)
       :Select credit bundle;
-      #FFE0B2:Grant 3-min Grace Period\n(lift firewall, limited speed)\nrate-limited: 3 attempts/hr,\n9 non-continuous min/hr;
+      #FFE0B2:Reach checkout via Walled Garden\nwhitelist (payment gateways +\nbank/e-wallet redirect hosts)\nno firewall grant needed;
       :Redirect to payment gateway\n(PayMongo / Xendit);
       note right: **Step 4 · Transaction & Verification**
       :Gateway webhook → SvelteKit API\nconfirms payment;
@@ -56,7 +56,7 @@ partition "Step 5 · Handoff, Cutoff & Cooldown" {
   #C8F7C5:Release — redirect to router grant_url;
   :Router drops firewall for MAC\n→ 100% open internet;
   :Cron job / router timeout API\nmonitors the session;
-  if (Free Window / Grace Period expired?) then (yes)
+  if (Free Window expired?) then (yes)
     :Backend commands router\nto revoke MAC access;
     :Internet cut instantly;
     :Router intercepts user → portal;

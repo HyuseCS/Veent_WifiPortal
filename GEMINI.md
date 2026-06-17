@@ -50,7 +50,7 @@ packages/
 ### Core Business Rules
 
 1. Internet access granted only after credits deducted AND session logged → router `grant_url` redirect
-2. Grace Period: 3-minute temporary access when balance = 0 and free-time in cooldown (rate-limited to 3/hr)
+2. Payment Walled Garden: payment gateway domains (PayMongo, Xendit, bank/e-wallet redirect hosts) are permanently whitelisted in the router so checkout is always reachable without granting internet access (no payment grace period)
 3. Credits added ONLY after payment webhook verified (never on checkout creation)
 4. Free Time: 15 min per 12-hour cooldown window
 5. Use Server-Sent Events (SSE) for real-time connected-user updates — never poll DB every second

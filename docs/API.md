@@ -30,7 +30,7 @@ apps/admin   ──┼─→ @veent/core services ─┤
 | Free Time = 15 min / 12 h cooldown | `getFreeTimeStatus`, `startFreeSession` (atomic claim) |
 | Access granted only after session logged + firewall dropped | `startSession` (DB row first, then `network.grant`) |
 | SSE for connected users, never poll-per-second | `GET /api/connected` (admin) |
-| Grace period rate-limited (3/hr) | `consumeRateLimit` (wired for OTP/grace use) |
+| Payment gateways reachable via Walled Garden whitelist (no payment grace period) | Router-level allowlist of PayMongo/Xendit + bank/e-wallet redirect hosts |
 
 ---
 
