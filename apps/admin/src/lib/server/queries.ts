@@ -5,17 +5,30 @@
  *
  * These back the `load()` functions that replace `$lib/mocks`.
  */
-import { and, desc, eq, isNull, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, isNull, sql } from 'drizzle-orm';
 import {
 	type DB,
 	customerUser,
 	customerProfile,
 	networkSessions,
 	creditLedger,
-	packages
+	packages,
+	adminUser,
+	adminProfile,
+	networkHealth
 } from '@veent/db';
 import { SESSION_STATUS, LEDGER_TYPE } from '@veent/core';
-import type { ActiveSession, AdminUserRow, Kpi, RevenuePoint, StatusTone } from '$lib/types';
+import type {
+	ActiveSession,
+	AdminUserRow,
+	Kpi,
+	NetworkAp,
+	RevenuePoint,
+	StaffMember,
+	StaffRole,
+	StaffStatus,
+	StatusTone
+} from '$lib/types';
 
 const peso = (n: number) => `₱${Math.round(n).toLocaleString('en-PH')}`;
 
@@ -150,4 +163,72 @@ export async function revenueByDay(db: DB): Promise<RevenuePoint[]> {
 		.orderBy(sql`date_trunc('day', ${creditLedger.createdAt})`);
 
 	return rows.map((r) => ({ label: r.day, amount: r.amount }));
+}
+
+/** Coarse "Xs/m/h/d ago" label; "—" when never seen. */
+function formatLastActive(at: Date | null, now: Date = new Date()): string {
+	if (!at) return '—';
+	const secs = Math.max(0, Math.floor((now.getTime() - at.getTime()) / 1000));
+	if (secs < 60) return 'Just now';
+	const mins = Math.floor(secs / 60);
+	if (mins < 60) return `${mins}m ago`;
+	const hrs = Math.floor(mins / 60);
+	if (hrs < 24) return `${hrs}h ago`;
+	const days = Math.floor(hrs / 24);
+	if (days < 7) return `${days}d ago`;
+	return `${Math.floor(days / 7)}w ago`;
+}
+
+/** Staff-management table rows (admin_user joined to its admin_profile). */
+export async function listStaff(db: DB): Promise<StaffMember[]> {
+	const rows = await db
+		.select({
+			id: adminUser.id,
+			name: adminUser.name,
+			email: adminUser.email,
+			role: adminProfile.role,
+			status: adminProfile.status,
+			lastActiveAt: adminProfile.lastActiveAt
+		})
+		.from(adminUser)
+		.innerJoin(adminProfile, eq(adminProfile.userId, adminUser.id))
+		// Owner first, then alphabetical — keeps the singular owner pinned to the top.
+		.orderBy(asc(adminProfile.role), asc(adminUser.name));
+
+	return rows.map((r) => ({
+		id: r.id,
+		name: r.name,
+		email: r.email,
+		role: r.role as StaffRole,
+		status: r.status as StaffStatus,
+		lastActive: formatLastActive(r.lastActiveAt)
+	}));
+}
+
+/** Per-AP health cards. Raw metrics → display tone/labels (presentation lives here). */
+export async function listNetworkHealth(db: DB): Promise<NetworkAp[]> {
+	const rows = await db.select().from(networkHealth).orderBy(asc(networkHealth.name));
+
+	return rows.map((r) => {
+		const uptime = Number(r.uptimePct);
+		let tone: StatusTone = 'online';
+		let status = 'Healthy';
+		if (!r.online) {
+			tone = 'blocked';
+			status = 'Offline';
+		} else if (uptime < 99 || (r.latencyMs ?? 0) >= 40) {
+			tone = 'warning';
+			status = 'Degraded';
+		}
+		return {
+			id: String(r.id),
+			name: r.name,
+			tone,
+			status,
+			uptime: `${uptime.toFixed(1)}%`,
+			latency: r.latencyMs == null ? '—' : `${r.latencyMs}ms`,
+			users: r.users,
+			throughput: `${r.throughputMbps} Mbps`
+		};
+	});
 }

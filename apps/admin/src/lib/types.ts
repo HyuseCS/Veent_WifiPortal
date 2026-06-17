@@ -62,3 +62,29 @@ export interface AdminUserRow {
 	tone: StatusTone;
 	status: string;
 }
+
+/**
+ * Access level of an admin-side staff member.
+ * `owner` is the singular account holder — shown but never disabled or removed.
+ * Everyone provisioned by the owner is an `admin`; there is no other assignable role.
+ */
+export type StaffRole = 'owner' | 'admin';
+
+/**
+ * Lifecycle state of a staff member.
+ * `pending` = activation email sent, awaiting the member to activate their account.
+ * Maps to a `StatusTone` for badge coloring (active→online, pending→warning,
+ * disabled→blocked).
+ */
+export type StaffStatus = 'active' | 'pending' | 'disabled';
+
+/** A row in the staff-management table. */
+export interface StaffMember {
+	id: string;
+	name: string;
+	email: string;
+	role: StaffRole;
+	status: StaffStatus;
+	/** Last-active label, pre-formatted (e.g. "2h ago", "—"). */
+	lastActive: string;
+}

@@ -1,14 +1,32 @@
 <script lang="ts">
 	import { Card, SectionHeading } from '$lib/components/ui';
 	import { KpiCard, RevenueChart, SessionsTable } from '$lib/components/feature';
+	import type { ActiveSession } from '$lib/types';
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();
 	const kpis = $derived(data.kpis);
 	const revenue = $derived(data.revenue);
-	const activeSessions = $derived(data.activeSessions);
 
 	const total = $derived(revenue.reduce((sum, p) => sum + p.amount, 0));
+
+	// Live connected sessions: show the load() snapshot (SSR-friendly) until the SSE
+	// stream pushes its first frame, then follow the stream (business rule #5 — never
+	// poll the DB client-side).
+	let live = $state<ActiveSession[] | null>(null);
+	const activeSessions = $derived(live ?? data.activeSessions);
+
+	$effect(() => {
+		const es = new EventSource('/api/connected');
+		es.onmessage = (event) => {
+			try {
+				live = JSON.parse(event.data) as ActiveSession[];
+			} catch {
+				// ignore malformed frame; next tick replaces it
+			}
+		};
+		return () => es.close();
+	});
 </script>
 
 <div class="space-y-6">

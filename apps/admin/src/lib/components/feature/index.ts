@@ -7,3 +7,5 @@ export { default as RevenueChart } from './RevenueChart.svelte';
 export { default as SessionsTable } from './SessionsTable.svelte';
 export { default as NetworkHealthCard } from './NetworkHealthCard.svelte';
 export { default as UsersTable } from './UsersTable.svelte';
+export { default as AddStaffForm } from './AddStaffForm.svelte';
+export { default as StaffTable } from './StaffTable.svelte';

@@ -17,6 +17,22 @@ export const SESSION_STATUS = {
 } as const;
 export type SessionStatus = (typeof SESSION_STATUS)[keyof typeof SESSION_STATUS];
 
+/** Staff access levels (stored in admin_profile.role). `owner` is the singular
+ * bootstrap account; everyone invited is an `admin`. */
+export const STAFF_ROLE = {
+	owner: 'owner',
+	admin: 'admin'
+} as const;
+export type StaffRole = (typeof STAFF_ROLE)[keyof typeof STAFF_ROLE];
+
+/** Staff lifecycle (stored in admin_profile.status). Only `active` may sign in. */
+export const STAFF_STATUS = {
+	active: 'active',
+	pending: 'pending', // invited, awaiting activation
+	disabled: 'disabled'
+} as const;
+export type StaffStatus = (typeof STAFF_STATUS)[keyof typeof STAFF_STATUS];
+
 /** credit_ledger.type values. Positive amounts add, negative amounts spend. */
 export const LEDGER_TYPE = {
 	topup: 'topup', // credits bought via a verified payment webhook

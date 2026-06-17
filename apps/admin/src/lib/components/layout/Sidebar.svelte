@@ -2,6 +2,11 @@
 	import { page } from '$app/state';
 	import { nav } from '$lib/nav';
 	import ThemePicker from './ThemePicker.svelte';
+
+	// Owner-only entries (e.g. Staff) are hidden for non-owners. This is cosmetic —
+	// the routes themselves enforce access server-side.
+	let { role }: { role?: string | null } = $props();
+	const items = $derived(nav.filter((item) => !item.ownerOnly || role === 'owner'));
 </script>
 
 <aside class="flex w-60 shrink-0 flex-col bg-sidebar text-sidebar-text">
@@ -17,7 +22,7 @@
 	</div>
 
 	<nav class="flex-1 space-y-0.5 px-3 py-2">
-		{#each nav as item (item.href)}
+		{#each items as item (item.href)}
 			{@const Icon = item.icon}
 			{@const active =
 				page.url.pathname === item.href || page.url.pathname.startsWith(item.href + '/')}
