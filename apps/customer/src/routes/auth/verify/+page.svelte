@@ -87,7 +87,10 @@
 
 		<p class="text-center text-sm text-muted">
 			Wrong number?
-			<a href="/login" class="font-semibold text-brand hover:text-brand-hover">Start over</a>
+			<a
+				href={data.intent === 'register' ? '/register' : '/login'}
+				class="font-semibold text-brand hover:text-brand-hover">Start over</a
+			>
 		</p>
 	</div>
 </main>

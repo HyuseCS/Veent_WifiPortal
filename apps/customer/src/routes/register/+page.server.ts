@@ -14,7 +14,7 @@ export const load: PageServerLoad = (event) => {
 
 export const actions: Actions = {
 	// Registration collects name + phone. Validate, ensure the number is new, text
-	// a one-time code, and carry the name to /login/verify (applied after verify).
+	// a one-time code, and carry the name to /auth/verify (applied after verify).
 	default: async (event) => {
 		const formData = await event.request.formData();
 		const name = formData.get('name')?.toString().trim() ?? '';
@@ -46,6 +46,6 @@ export const actions: Actions = {
 			maxAge: PENDING_MAX_AGE
 		});
 
-		return redirect(303, '/login/verify');
+		return redirect(303, '/auth/verify');
 	}
 };

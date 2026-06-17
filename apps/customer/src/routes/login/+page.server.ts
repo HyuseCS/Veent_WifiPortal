@@ -14,7 +14,7 @@ export const load: PageServerLoad = (event) => {
 
 export const actions: Actions = {
 	// Login is phone-only: validate the number, confirm an account exists, text a
-	// one-time code, then hand off to /login/verify.
+	// one-time code, then hand off to /auth/verify.
 	default: async (event) => {
 		const formData = await event.request.formData();
 		const phoneRaw = formData.get('phone')?.toString() ?? '';
@@ -38,6 +38,6 @@ export const actions: Actions = {
 			maxAge: PENDING_MAX_AGE
 		});
 
-		return redirect(303, '/login/verify');
+		return redirect(303, '/auth/verify');
 	}
 };
