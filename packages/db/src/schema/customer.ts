@@ -6,7 +6,8 @@ import {
 	boolean,
 	numeric,
 	doublePrecision,
-	timestamp
+	timestamp,
+	index
 } from 'drizzle-orm/pg-core';
 import { customerUser } from './auth-customer';
 
@@ -47,43 +48,67 @@ export const packages = pgTable('packages', {
 });
 
 /** Append-only history of every credit movement (ERD "CreditLedger"). */
-export const creditLedger = pgTable('credit_ledger', {
-	id: serial('id').primaryKey(),
-	userId: text('user_id')
-		.notNull()
-		.references(() => customerUser.id, { onDelete: 'cascade' }),
-	// Nullable + set null on delete: refunds/promos may not map to a package, and
-	// removing a package config must not erase ledger history (deviates from the
-	// ERD's required FK on purpose).
-	packageId: integer('package_id').references(() => packages.id, { onDelete: 'set null' }),
-	amount: doublePrecision('amount').notNull(),
-	type: text('type').notNull(),
-	externalTransactionId: text('external_transaction_id'),
-	createdAt: timestamp('created_at').notNull().defaultNow()
-});
+export const creditLedger = pgTable(
+	'credit_ledger',
+	{
+		id: serial('id').primaryKey(),
+		userId: text('user_id')
+			.notNull()
+			.references(() => customerUser.id, { onDelete: 'cascade' }),
+		// Nullable + set null on delete: refunds/promos may not map to a package, and
+		// removing a package config must not erase ledger history (deviates from the
+		// ERD's required FK on purpose).
+		packageId: integer('package_id').references(() => packages.id, { onDelete: 'set null' }),
+		amount: doublePrecision('amount').notNull(),
+		type: text('type').notNull(),
+		// Unique so a retried payment webhook can't credit the balance twice
+		// (business rule #3). NULL for non-webhook entries (Postgres allows many
+		// NULLs under a unique constraint), so manual/promo credits don't collide.
+		externalTransactionId: text('external_transaction_id').unique(),
+		createdAt: timestamp('created_at').notNull().defaultNow()
+	},
+	(t) => [index('credit_ledger_user_id_idx').on(t.userId)]
+);
 
 /** A network access grant for a device MAC, tied to a user (ERD "NetworkSessions"). */
-export const networkSessions = pgTable('network_sessions', {
-	id: serial('id').primaryKey(),
-	macAddress: text('mac_address'),
-	userId: text('user_id')
-		.notNull()
-		.references(() => customerUser.id, { onDelete: 'cascade' }),
-	// "package_id_opt" in the ERD — free sessions / grace periods have no package.
-	packageId: integer('package_id').references(() => packages.id, { onDelete: 'set null' }),
-	status: text('status').notNull(),
-	startedAt: timestamp('started_at').notNull().defaultNow(),
-	expiresAt: timestamp('expires_at')
-});
+export const networkSessions = pgTable(
+	'network_sessions',
+	{
+		id: serial('id').primaryKey(),
+		macAddress: text('mac_address'),
+		userId: text('user_id')
+			.notNull()
+			.references(() => customerUser.id, { onDelete: 'cascade' }),
+		// "package_id_opt" in the ERD — free sessions / grace periods have no package.
+		packageId: integer('package_id').references(() => packages.id, { onDelete: 'set null' }),
+		status: text('status').notNull(),
+		startedAt: timestamp('started_at').notNull().defaultNow(),
+		expiresAt: timestamp('expires_at')
+	},
+	(t) => [
+		index('network_sessions_user_id_idx').on(t.userId),
+		index('network_sessions_mac_address_idx').on(t.macAddress),
+		// Drives the revoke cron: "find active sessions whose time is up".
+		index('network_sessions_status_expires_at_idx').on(t.status, t.expiresAt)
+	]
+);
 
 /**
  * Pre-auth OTP / request throttling, keyed by device MAC or phone number
  * (ERD "RateLimits"). No user FK: these guard requests before a user exists.
  */
-export const rateLimits = pgTable('rate_limits', {
-	id: serial('id').primaryKey(),
-	macAddress: text('mac_address'),
-	phoneNumber: text('phone_number'),
-	attempts: integer('attempts').notNull().default(0),
-	lastAttemptAt: timestamp('last_attempt_at').notNull().defaultNow()
-});
+export const rateLimits = pgTable(
+	'rate_limits',
+	{
+		id: serial('id').primaryKey(),
+		macAddress: text('mac_address'),
+		phoneNumber: text('phone_number'),
+		attempts: integer('attempts').notNull().default(0),
+		lastAttemptAt: timestamp('last_attempt_at').notNull().defaultNow()
+	},
+	// Looked up on every OTP request, by one identifier or the other.
+	(t) => [
+		index('rate_limits_mac_address_idx').on(t.macAddress),
+		index('rate_limits_phone_number_idx').on(t.phoneNumber)
+	]
+);
