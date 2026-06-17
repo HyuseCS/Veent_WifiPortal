@@ -1,6 +1,7 @@
 import { redirect, fail } from '@sveltejs/kit';
 import { and, eq } from 'drizzle-orm';
 import { packages } from '@veent/db';
+import { getAccount } from '@veent/core';
 import { db } from '$lib/server/db';
 import { payments } from '$lib/server/payments';
 import type { Actions, PageServerLoad } from './$types';
@@ -14,12 +15,13 @@ export const load: PageServerLoad = async (event) => {
 	const user = event.locals.user;
 	if (!user) return redirect(302, '/login');
 
+	const account = await getAccount(db, user.id);
 	const bundles = await db
 		.select()
 		.from(packages)
 		.where(and(eq(packages.type, 'bundle'), eq(packages.isActive, true)));
 
-	return { user, bundles };
+	return { user, balance: account?.balance ?? 0, bundles };
 };
 
 export const actions: Actions = {
