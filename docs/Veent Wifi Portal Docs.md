@@ -44,18 +44,18 @@ Stack: SvelteKit, TailwindCSS, Drizzle (postgresql), better-auth
 * **Action:** The user lands on a personalized dashboard showing their current balance and Free Time eligibility (e.g., "Eligible for 15 Minutes Free Access").  
 * **Option A (The Free Window):** If eligible, the user starts their free session. SvelteKit logs the session\_end time in the database and triggers **Step 5 (The Handoff)**. The portal UI displays a countdown warning them of the impending cutoff. During this window, they have 100% open internet to browse or seamlessly top-up their account.  
 * **Option B (Spend):** If they have enough credits, they select a continuous access tier. SvelteKit deducts the credits and triggers **Step 5 (The Handoff)** for uninterrupted access.  
-* **Option C (Top-Up via Grace Period):** If their balance is zero *and* their Free Time is in Cooldown, they must select a credit bundle. Because they currently have no internet, SvelteKit grants a temporary **3-Minute Grace Period** (rate limited to 3 attempts per hour, 9 non-continous minutes per hour in total with limited speed), temporarily lifting the firewall, when they reach the payment gateway/page. This triggers **Step 4**.
+* **Option C (Top-Up via Whitelisted Payment):** If their balance is zero *and* their Free Time is in Cooldown, they must select a credit bundle. Even though they have no open internet window, the payment gateway domains (PayMongo, Xendit, and the bank/e-wallet redirect hosts) are permanently **whitelisted in the router's Walled Garden**, so the user can always reach checkout and complete payment without any temporary firewall grant. This triggers **Step 4**.
 
 ### **Step 4: The Financial Transaction & Verification**
 
-* **Action:** With their open internet window active (either during their Free Time or the Grace Period), the user is redirected to the payment gateway (PayMongo, Xendit) to purchase the credit bundle. They can easily access bank OTPs or mobile wallet redirects without Walled Garden restrictions.  
+* **Action:** The user is redirected to the payment gateway (PayMongo, Xendit) to purchase the credit bundle. Because the gateway and bank/e-wallet redirect hosts are whitelisted in the Walled Garden, the user can reach checkout and access bank OTPs or mobile wallet redirects whether or not they currently have an open internet window.  
 * **The Webhook (Backend):** The external gateway asynchronously fires a webhook back to your SvelteKit API confirming the payment. Drizzle adds the credits to the credit\_balance and updates the credit\_ledger.  
 * **Redirection (The Waiting Room):** Upon completing the payment, the user is sent to a specific pending route (/top-up/processing). This screen polls the PostgreSQL database. Once verified, the application pushes the user back to **Step 3 (The Dashboard)** so they can execute Option B.
 
 ### **Step 5: The Handoff, The Cutoff & The Release**
 
-* **The Release (Granting Access):** When a user initiates a Free Window, a Grace Period, or spends credits, SvelteKit redirects the user to the router's grant\_url. The router drops the firewall for that MAC address, granting open internet access.  
-* **The Cutoff (Revoking Access):** SvelteKit runs a background Cron job (or utilizes the router's hardware timeout API). Once the Free Window or Grace Period expires, the backend explicitly commands the router to revoke the MAC address's access.  
+* **The Release (Granting Access):** When a user initiates a Free Window or spends credits, SvelteKit redirects the user to the router's grant\_url. The router drops the firewall for that MAC address, granting open internet access.  
+* **The Cutoff (Revoking Access):** SvelteKit runs a background Cron job (or utilizes the router's hardware timeout API). Once the Free Window expires, the backend explicitly commands the router to revoke the MAC address's access.  
 * **The Cooldown State:** The internet is instantly cut. If the user tries to load a page, the router intercepts them back to the SvelteKit portal, which now displays: *"Free time expired. Wait 12 hours for your next free session, or Top-Up now to continue."*  
 * 
 
@@ -82,7 +82,7 @@ Once logged in, all traffic should route here. These pages query PostgreSQL (via
   * **Logic:** This page dynamically renders options based on state. If they are eligible for free time, show a prominent "Start 15-Min Free Access" button. If they have credits, show the available internet tiers to purchase. If they are in a Cooldown and have 0 credits, restrict the UI to only allow a Top-Up.  
 * **src/routes/top-up/+page.svelte (The Storefront)**  
   * **Purpose:** Displays the credit bundles (e.g., "$5 for 50 Credits").  
-  * **Action (Crucial):** When the user selects a bundle, the associated \+page.server.ts action must execute the **5-Minute Grace Period**. It sends a temporary allow command to the router's grant\_url *before* redirecting the user to the PayMongo/Xendit checkout URL.
+  * **Action (Crucial):** When the user selects a bundle, the associated \+page.server.ts action creates the checkout session and redirects the user to the PayMongo/Xendit checkout URL. No temporary firewall grant is needed — the payment gateway and its redirect hosts are permanently whitelisted in the router's Walled Garden, so checkout is reachable even when the user has no open internet window.
 
 ### **3\. Transaction Resolution (The Safe Bridge)**
 

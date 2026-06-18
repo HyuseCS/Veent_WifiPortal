@@ -62,7 +62,7 @@
 				<form method="post" action="?/startFreeTime" use:enhance={startFreeTime} class="mt-3">
 					<input type="hidden" name="mac" value={mac} />
 					<button
-						class="min-h-[44px] w-full rounded-lg bg-cta font-semibold text-white transition hover:bg-cta-hover"
+						class="min-h-[44px] w-full rounded-lg bg-cta font-semibold text-white transition hover:bg-cta-hover hover:cursor-pointer"
 					>
 						Start {data.freeTime.durationMinutes}-min Free Access
 					</button>
