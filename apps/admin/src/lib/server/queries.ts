@@ -45,7 +45,7 @@ function formatTimeLeft(ms: number): string {
 }
 
 /** User-management table rows. */
-export async function listUsers(db: DB): Promise<AdminUserRow[]> {
+export async function listUsers(db: DB, now: Date = new Date()): Promise<AdminUserRow[]> {
 	const rows = await db
 		.select({
 			id: customerUser.id,
@@ -57,6 +57,26 @@ export async function listUsers(db: DB): Promise<AdminUserRow[]> {
 		.from(customerUser)
 		.leftJoin(customerProfile, eq(customerProfile.userId, customerUser.id))
 		.orderBy(customerUser.name);
+
+	// One pass over sessions (newest first) yields both signals: who's online now
+	// (active + unexpired) and each user's most recent device MAC.
+	const sessions = await db
+		.select({
+			userId: networkSessions.userId,
+			mac: networkSessions.macAddress,
+			status: networkSessions.status,
+			expiresAt: networkSessions.expiresAt
+		})
+		.from(networkSessions)
+		.orderBy(desc(networkSessions.startedAt));
+	const onlineUsers = new Set<string>();
+	const lastMacByUser = new Map<string, string>();
+	for (const s of sessions) {
+		if (s.mac && !lastMacByUser.has(s.userId)) lastMacByUser.set(s.userId, s.mac);
+		if (s.status === SESSION_STATUS.active && s.expiresAt && s.expiresAt.getTime() > now.getTime()) {
+			onlineUsers.add(s.userId);
+		}
+	}
 
 	return rows.map((r) => {
 		const balance = Number(r.balance ?? 0);
@@ -76,7 +96,9 @@ export async function listUsers(db: DB): Promise<AdminUserRow[]> {
 			balance,
 			usage: '—', // byte-level usage isn't tracked yet (needs accounting feed)
 			tone,
-			status
+			status,
+			online: onlineUsers.has(r.id),
+			lastMac: lastMacByUser.get(r.id) ?? null
 		};
 	});
 }

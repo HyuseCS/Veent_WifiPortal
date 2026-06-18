@@ -48,7 +48,10 @@ export const actions: Actions = {
 		}
 
 		event.cookies.delete(PENDING_COOKIE, { path: '/' });
-		return redirect(303, '/dashboard');
+		// Carry the device MAC into the dashboard URL so the grant works even if the
+		// captive browser dropped our cookie along the way.
+		const dest = pending.mac ? `/dashboard?mac=${encodeURIComponent(pending.mac)}` : '/dashboard';
+		return redirect(303, dest);
 	},
 
 	resend: async (event) => {
@@ -62,7 +65,7 @@ export const actions: Actions = {
 		// Refresh the pending-cookie window so it doesn't expire before the new code.
 		event.cookies.set(
 			PENDING_COOKIE,
-			serializePending({ phone: pending.phone, intent: pending.intent }),
+			serializePending({ phone: pending.phone, intent: pending.intent, mac: pending.mac }),
 			{
 				path: '/',
 				httpOnly: true,

@@ -103,6 +103,12 @@ export function createMikrotikController(config: MikrotikConfig): NetworkControl
 				const fromHost = hosts.find((r) => r['mac-address'])?.['mac-address'];
 				if (fromHost) return fromHost.toUpperCase();
 
+				// DHCP lease is the most reliable IP→MAC for a DHCP client (survives ARP
+				// aging and hotspot host-table churn).
+				const lease = await conn.write('/ip/dhcp-server/lease/print', [`?address=${ip}`]);
+				const fromLease = lease.find((r) => r['mac-address'])?.['mac-address'];
+				if (fromLease) return fromLease.toUpperCase();
+
 				const arp = await conn.write('/ip/arp/print', [`?address=${ip}`]);
 				const fromArp = arp.find((r) => r['mac-address'])?.['mac-address'];
 				return fromArp ? fromArp.toUpperCase() : null;
