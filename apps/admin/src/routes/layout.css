@@ -3,71 +3,77 @@
 /*
  * Veent admin design tokens. Every color/type decision references these — see
  * docs/DESIGN_GUIDELINES.md. Tailwind v4 turns each `--color-*` into a utility
- * (`bg-brand`, `text-ink`, `bg-online/15`, …). Theme presets below override the
- * brand/cta vars, so those utilities re-resolve live when `data-theme` changes.
+ * (`bg-brand`, `text-ink`, `bg-online/15`, …). @theme is the LIGHT base; the
+ * `:root[data-theme='dark']` block below overrides the surface/text/status vars,
+ * so every utility re-resolves live when `data-theme` flips. Components never
+ * need `dark:` variants — they read these semantic tokens.
+ *
+ * Identity: one red accent (brand/cta) + a constant-black sidebar. Danger uses a
+ * distinct oxblood red (--color-blocked) so it never reads as the accent.
  */
 @theme {
-	/* Palette — default theme: teal + coral */
-	--color-brand: oklch(0.38 0.13 185);
-	--color-brand-hover: oklch(0.32 0.13 185);
-	--color-cta: oklch(0.62 0.18 28);
-	--color-cta-hover: oklch(0.56 0.18 28);
+	/* Accent — single red. cta is an alias of brand (kept so the ~16 files that
+	 * use bg-cta/text-cta don't need editing). */
+	/* ponytail: cta == brand; collapse to one token only if a 2nd accent appears. */
+	--color-brand: oklch(0.52 0.21 25);
+	--color-brand-hover: oklch(0.46 0.21 25);
+	--color-cta: oklch(0.52 0.21 25);
+	--color-cta-hover: oklch(0.46 0.21 25);
 
-	/* Surfaces */
+	/* Surfaces — light */
 	--color-bg: oklch(1 0 0);
-	--color-surface: oklch(0.975 0.008 185);
-	--color-border: oklch(0.92 0.008 185);
+	--color-surface: oklch(0.975 0.006 25);
+	--color-border: oklch(0.91 0.006 25);
 
-	/* Text */
-	--color-ink: oklch(0.14 0.02 190);
-	--color-muted: oklch(0.52 0.01 190);
+	/* Text — light */
+	--color-ink: oklch(0.16 0.01 25);
+	--color-muted: oklch(0.5 0.01 25);
 
-	/* Status — semantic, not themeable */
-	--color-online: oklch(0.5 0.15 155);
-	--color-warning: oklch(0.65 0.15 72);
-	--color-blocked: oklch(0.55 0.18 22);
+	/* Status — semantic. blocked = oxblood danger, distinct from accent red. */
+	--color-online: oklch(0.52 0.15 150);
+	--color-warning: oklch(0.62 0.15 75);
+	--color-blocked: oklch(0.42 0.15 18);
 
-	/* Admin sidebar */
-	--color-sidebar: oklch(0.1 0.02 195);
-	--color-sidebar-text: oklch(0.75 0.01 195);
-	--color-sidebar-muted: oklch(0.48 0.008 195);
+	/* Admin sidebar — constant black in both modes */
+	--color-sidebar: oklch(0.13 0.006 25);
+	--color-sidebar-text: oklch(0.78 0.008 25);
+	--color-sidebar-muted: oklch(0.5 0.008 25);
 
 	/* Type */
 	--font-sans: system-ui, -apple-system, 'Segoe UI', sans-serif;
 	--font-mono: ui-monospace, 'Cascadia Code', Menlo, monospace;
 }
 
+/* Light is the base mode for native controls/scrollbars; dark overrides below. */
+:root {
+	color-scheme: light;
+}
+
 /*
- * Theme presets — each overrides only brand + cta; the semantic structure
- * (surfaces, text, status) stays constant. `:root[data-theme]` outranks the
- * `:root` vars emitted by @theme, so the generated utilities pick these up.
+ * Dark mode — overrides only what changes. Accent + status reds are lifted for
+ * AA on dark surfaces; hues stay put so the accent/danger distinction holds. The
+ * sidebar drops below the content bg so it still separates against dark content.
  */
-:root[data-theme='teal'] {
-	--color-brand: oklch(0.38 0.13 185);
-	--color-brand-hover: oklch(0.32 0.13 185);
-	--color-cta: oklch(0.62 0.18 28);
-	--color-cta-hover: oklch(0.56 0.18 28);
-}
+:root[data-theme='dark'] {
+	color-scheme: dark;
 
-:root[data-theme='jade'] {
-	--color-brand: oklch(0.34 0.13 155);
-	--color-brand-hover: oklch(0.28 0.13 155);
-	--color-cta: oklch(0.72 0.17 72);
-	--color-cta-hover: oklch(0.65 0.17 72);
-}
+	--color-brand: oklch(0.6 0.21 25);
+	--color-brand-hover: oklch(0.66 0.21 25);
+	--color-cta: oklch(0.6 0.21 25);
+	--color-cta-hover: oklch(0.66 0.21 25);
 
-:root[data-theme='cobalt'] {
-	--color-brand: oklch(0.44 0.19 255);
-	--color-brand-hover: oklch(0.37 0.19 255);
-	--color-cta: oklch(0.78 0.165 135);
-	--color-cta-hover: oklch(0.72 0.165 135);
-}
+	--color-bg: oklch(0.17 0.006 25);
+	--color-surface: oklch(0.21 0.008 25);
+	--color-border: oklch(0.3 0.008 25);
 
-:root[data-theme='mono'] {
-	--color-brand: oklch(0.14 0.01 200);
-	--color-brand-hover: oklch(0.1 0.01 200);
-	--color-cta: oklch(0.55 0.15 182);
-	--color-cta-hover: oklch(0.48 0.15 182);
+	--color-ink: oklch(0.95 0.005 25);
+	--color-muted: oklch(0.68 0.01 25);
+
+	--color-online: oklch(0.68 0.15 150);
+	--color-warning: oklch(0.74 0.14 75);
+	--color-blocked: oklch(0.6 0.16 18);
+
+	--color-sidebar: oklch(0.11 0.006 25);
 }
 
 @media (prefers-reduced-motion: reduce) {

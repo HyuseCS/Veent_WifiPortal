@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { page } from '$app/state';
 	import { nav } from '$lib/nav';
-	import ThemePicker from './ThemePicker.svelte';
+	import ModeToggle from './ModeToggle.svelte';
 
 	// Owner-only entries (e.g. Staff) are hidden for non-owners. This is cosmetic —
 	// the routes themselves enforce access server-side.
@@ -46,6 +46,6 @@
 	</nav>
 
 	<div class="border-t border-white/10 p-3">
-		<ThemePicker />
+		<ModeToggle />
 	</div>
 </aside>

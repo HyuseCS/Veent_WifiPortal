@@ -6,12 +6,14 @@
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
 		<meta name="text-scale" content="scale" />
 		<script>
-			// Apply the saved theme before first paint to avoid a color flash.
+			// Set light/dark before first paint to avoid a flash: saved choice wins,
+			// else follow the OS preference, else light.
 			try {
+				var saved = localStorage.getItem('veent-admin-theme');
 				document.documentElement.dataset.theme =
-					localStorage.getItem('veent-admin-theme') || 'teal';
+					saved || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
 			} catch (e) {
-				document.documentElement.dataset.theme = 'teal';
+				document.documentElement.dataset.theme = 'light';
 			}
 		</script>
 		%sveltekit.head%
