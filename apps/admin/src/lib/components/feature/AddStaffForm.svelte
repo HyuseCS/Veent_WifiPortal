@@ -7,6 +7,8 @@
 	// Invitees are always `admin` — there is no other assignable role — so no role input.
 	let error = $state('');
 	let notice = $state('');
+	// Disable the submit button while the invite is in flight (blocks double-submits).
+	let submitting = $state(false);
 </script>
 
 <Card>
@@ -15,8 +17,9 @@
 		class="space-y-4"
 		method="post"
 		action="?/invite"
-		use:enhance={() =>
-			async ({ result, update }) => {
+		use:enhance={() => {
+			submitting = true;
+			return async ({ result, update }) => {
 				if (result.type === 'success') {
 					const email = (result.data as { email?: string } | undefined)?.email;
 					notice = email ? `Activation email sent to ${email}.` : 'Invitation sent.';
@@ -30,8 +33,10 @@
 				} else {
 					await update();
 				}
-			}}
-	>
+				submitting = false;
+			};
+		}}
+		>
 		<div class="grid gap-4 sm:grid-cols-2">
 			<Field id="name" label="Full name" autocomplete="off" required />
 			<Field id="email" label="Email" type="email" autocomplete="off" required />
@@ -49,7 +54,7 @@
 		{/if}
 
 		<div class="flex justify-end">
-			<Button type="submit">Send invitation</Button>
+			<Button type="submit" loading={submitting}>Send invitation</Button>
 		</div>
 	</form>
 </Card>

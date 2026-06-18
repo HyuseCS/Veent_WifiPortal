@@ -5,6 +5,9 @@
 	import type { ActionData } from './$types';
 
 	let { form }: { form: ActionData } = $props();
+
+	// Disable the submit button while the request is in flight (blocks double-submits).
+	let submitting = $state(false);
 </script>
 
 <main class="flex min-h-screen items-center justify-center bg-surface px-5 py-10">
@@ -25,7 +28,13 @@
 
 		<form
 			method="post"
-			use:enhance
+			use:enhance={() => {
+				submitting = true;
+				return async ({ update }) => {
+					await update();
+					submitting = false;
+				};
+			}}
 			class="space-y-4 rounded-xl border border-border bg-bg p-6 shadow-sm"
 		>
 			<Field id="name" label="Name" autocomplete="name" required />
@@ -43,7 +52,7 @@
 				<p class="text-xs text-blocked" role="alert">{form.message}</p>
 			{/if}
 
-			<Button type="submit" class="w-full py-2.5">Create Account</Button>
+			<Button type="submit" loading={submitting} class="w-full py-2.5">Create Account</Button>
 		</form>
 
 		<p class="text-center text-xs text-muted">
