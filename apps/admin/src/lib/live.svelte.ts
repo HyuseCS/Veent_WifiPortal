@@ -1,13 +1,14 @@
 import { browser } from '$app/environment';
-import type { ActiveSession } from '$lib/types';
+import type { DashboardSnapshot } from '$lib/types';
 
 export type LiveStatus = 'connecting' | 'live' | 'offline';
 
 // Shared SSE connection (business rule #5). One EventSource for the whole app,
-// ref-counted so the topbar's status indicator and the dashboard's session table
-// share a single stream instead of opening one each.
+// ref-counted so the topbar's status indicator and the dashboard share a single
+// stream instead of opening one each. The stream carries the whole dashboard
+// snapshot, pushed event-driven by Postgres triggers (no polling).
 let status = $state<LiveStatus>('connecting');
-let sessions = $state<ActiveSession[] | null>(null);
+let snapshot = $state<DashboardSnapshot | null>(null);
 let es: EventSource | null = null;
 let refs = 0;
 
@@ -15,8 +16,8 @@ export const live = {
 	get status() {
 		return status;
 	},
-	get sessions() {
-		return sessions;
+	get snapshot() {
+		return snapshot;
 	}
 };
 
@@ -30,9 +31,9 @@ export function connectLive() {
 		es.onmessage = (event) => {
 			status = 'live';
 			try {
-				sessions = JSON.parse(event.data) as ActiveSession[];
+				snapshot = JSON.parse(event.data) as DashboardSnapshot;
 			} catch {
-				// ignore malformed frame; next tick replaces it
+				// ignore malformed frame; next push replaces it
 			}
 		};
 		// EventSource auto-reconnects: CLOSED means it gave up, else it's retrying.

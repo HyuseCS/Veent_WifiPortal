@@ -22,6 +22,7 @@ import { SESSION_STATUS, LEDGER_TYPE } from '@veent/core';
 import type {
 	ActiveSession,
 	AdminUserRow,
+	DashboardSnapshot,
 	Kpi,
 	NetworkAp,
 	RevenuePoint,
@@ -113,6 +114,19 @@ export async function listActiveSessions(db: DB, now: Date = new Date()): Promis
 			expiresAt: r.expiresAt ? r.expiresAt.toISOString() : null
 		};
 	});
+}
+
+/** The full dashboard in one frame: KPIs + revenue + active sessions + network
+ * health. Pure composition of the four queries below — seeds SSR and is what the
+ * live feed re-queries per DB notify. */
+export async function dashboardSnapshot(db: DB): Promise<DashboardSnapshot> {
+	const [kpis, revenue, activeSessions, networks] = await Promise.all([
+		dashboardKpis(db),
+		revenueByDay(db),
+		listActiveSessions(db),
+		listNetworkHealth(db)
+	]);
+	return { kpis, revenue, activeSessions, networks };
 }
 
 /** Headline KPIs. Deltas are omitted (no period-over-period baseline yet).

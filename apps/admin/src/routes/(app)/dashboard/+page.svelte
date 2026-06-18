@@ -7,15 +7,16 @@
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();
-	const kpis = $derived(data.kpis);
-	const revenue = $derived(data.revenue);
-	const total = $derived(revenue.reduce((sum, p) => sum + p.amount, 0));
 
-	// Live connected sessions: show the load() snapshot (SSR-friendly) until the shared
-	// SSE stream pushes its first frame, then follow the stream (business rule #5 — never
-	// poll the DB client-side).
+	// Whole dashboard is live: SSR `data` seeds first paint, then the shared SSE stream
+	// (event-driven by Postgres triggers — business rule #5, never poll client-side) takes
+	// over every panel. Each field falls back to its SSR seed until the first frame lands.
 	$effect(connectLive);
-	const activeSessions = $derived(live.sessions ?? data.activeSessions);
+	const kpis = $derived(live.snapshot?.kpis ?? data.kpis);
+	const revenue = $derived(live.snapshot?.revenue ?? data.revenue);
+	const activeSessions = $derived(live.snapshot?.activeSessions ?? data.activeSessions);
+	const networks = $derived(live.snapshot?.networks ?? data.networks);
+	const total = $derived(revenue.reduce((sum, p) => sum + p.amount, 0));
 
 	// Chosen arrangement comes from the header switcher via shared context (see (app)/+layout).
 	const layoutCtx = getContext<DashLayoutCtx>(DASH_LAYOUT_CTX);
@@ -27,8 +28,8 @@
 	const NET_CAP = 4;
 	const shownSessions = $derived(activeSessions.slice(0, SESSION_CAP));
 	const moreSessions = $derived(Math.max(0, activeSessions.length - SESSION_CAP));
-	const shownNetworks = $derived(data.networks.slice(0, NET_CAP));
-	const moreNetworks = $derived(Math.max(0, data.networks.length - NET_CAP));
+	const shownNetworks = $derived(networks.slice(0, NET_CAP));
+	const moreNetworks = $derived(Math.max(0, networks.length - NET_CAP));
 
 	const sessionCols = [
 		{ label: 'MAC Address' },
