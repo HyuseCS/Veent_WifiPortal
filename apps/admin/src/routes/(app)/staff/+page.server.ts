@@ -1,9 +1,14 @@
 import { error, fail } from '@sveltejs/kit';
-import { randomUUID } from 'node:crypto';
-import { APIError } from 'better-auth/api';
-import { getAdminRole, setStaffStatus, removeStaff, STAFF_ROLE, STAFF_STATUS } from '@veent/core';
+import {
+	getAdminRole,
+	setStaffStatus,
+	removeStaff,
+	promoteToOwner,
+	STAFF_ROLE,
+	STAFF_STATUS
+} from '@veent/core';
 import { adminProfile } from '@veent/db';
-import { auth } from '$lib/server/auth';
+import { auth, inviteSendFailures } from '$lib/server/auth';
 import { db } from '$lib/server/db';
 import { listStaff } from '$lib/server/queries';
 import type { Actions, PageServerLoad } from './$types';
@@ -46,29 +51,38 @@ export const actions: Actions = {
 		if (!name || !email) return fail(400, { error: 'Name and email are required.' });
 		if (!emailPattern.test(email)) return fail(400, { error: 'Enter a valid email address.' });
 
-		// Create the better-auth account with a throwaway password the invitee never
-		// learns; they set their real one on activation. Called server-side without
-		// forwarding cookies, so the owner's session is untouched.
-		let userId: string;
-		try {
-			const res = await auth.api.signUpEmail({
-				body: { name, email, password: randomUUID() + randomUUID() }
-			});
-			userId = res.user.id;
-		} catch (err) {
-			if (err instanceof APIError) {
-				return fail(400, { error: 'A staff member with that email already exists.' });
-			}
-			throw err;
+		// Create ONLY the user row, directly via better-auth's internal adapter. We
+		// deliberately do NOT use signUpEmail: it auto-signs-in the new account
+		// (autoSignIn is on by default) and the sveltekitCookies plugin would then
+		// write the invitee's session cookie onto the owner's response — logging the
+		// owner in as the freshly-invited member. No password or credential account is
+		// created here; the invitee has none until they set one on /activate, where
+		// better-auth's resetPassword creates the credential account on first use.
+		// `pending` status is the not-yet-activated flag (flips to active on reset).
+		const ctx = await auth.$context;
+		if (await ctx.internalAdapter.findUserByEmail(email)) {
+			return fail(400, { error: 'A staff member with that email already exists.' });
 		}
+		const user = await ctx.internalAdapter.createUser({ name, email, emailVerified: false });
+		const userId = user.id;
 
 		await db
 			.insert(adminProfile)
 			.values({ userId, role: STAFF_ROLE.admin, status: STAFF_STATUS.pending })
 			.onConflictDoNothing();
 
-		// Issues the reset token → fires sendResetPassword (stub-logs the link).
+		// Issues the reset token → fires sendResetPassword, which sends the activation
+		// email. better-auth awaits the callback but swallows a thrown error, so the
+		// send outcome is surfaced via inviteSendFailures (keyed by email) instead.
 		await auth.api.requestPasswordReset({ body: { email, redirectTo: '/activate' } });
+
+		// Atomic create+send: if the email didn't go out, roll the pending account back
+		// (cascades user + profile + account) so no orphaned invite is left behind.
+		if (inviteSendFailures.has(email)) {
+			inviteSendFailures.delete(email);
+			await removeStaff(db, userId);
+			return fail(502, { error: "Couldn't send the invitation email. Please try again." });
+		}
 
 		return { ok: true, action: 'invite', email };
 	},
@@ -102,5 +116,25 @@ export const actions: Actions = {
 		}
 		const removed = await removeStaff(db, userId);
 		return { ok: removed, action: 'remove' };
+	},
+
+	/**
+	 * Promote an existing active admin to owner. Owner-only. The service scopes the
+	 * change to active admins, so promoting an owner / pending / disabled row is a
+	 * no-op. (The "all owners must confirm" gate is deferred — direct for now.)
+	 */
+	promote: async (event) => {
+		const denied = await requireOwner(event.locals.user?.id);
+		if (denied) return denied;
+
+		const form = await event.request.formData();
+		const userId = String(form.get('userId') ?? '');
+		if (!userId) return fail(400, { error: 'Missing userId' });
+
+		const promoted = await promoteToOwner(db, userId);
+		if (!promoted) {
+			return fail(400, { error: 'Only an active admin can be promoted to owner.' });
+		}
+		return { ok: true, action: 'promote' };
 	}
 };
