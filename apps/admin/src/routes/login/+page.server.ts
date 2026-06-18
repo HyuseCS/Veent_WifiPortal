@@ -2,8 +2,9 @@ import { fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { auth } from '$lib/server/auth';
 import { APIError } from 'better-auth/api';
-import { getStaffStatus, STAFF_STATUS } from '@veent/core';
+import { getStaffStatus, STAFF_STATUS, grantAdminAccess, resolveDeviceMac } from '@veent/core';
 import { db } from '$lib/server/db';
+import { network } from '$lib/server/network';
 
 export const load: PageServerLoad = (event) => {
 	if (event.locals.user) {
@@ -39,6 +40,17 @@ export const actions: Actions = {
 					? 'Your account is not activated yet — check your activation email.'
 					: 'Your account is not active. Contact the owner.';
 			return fail(403, { message });
+		}
+
+		// Active staff get instant internet on their device: resolve the MAC from
+		// the LAN IP (the admin URL is walled-garden-whitelisted, so there's no
+		// captive-portal `?mac=` to read) and drop the firewall. Best-effort — a
+		// failed/​unsupported grant (e.g. dev stub) must never block sign-in.
+		try {
+			const mac = await resolveDeviceMac(network, event.getClientAddress());
+			if (mac) await grantAdminAccess(network, mac);
+		} catch (err) {
+			console.error('[admin] device internet grant on sign-in failed:', err);
 		}
 
 		return redirect(302, '/dashboard');

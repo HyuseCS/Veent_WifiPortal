@@ -1,5 +1,8 @@
-@import 'tailwindcss';
+/* Font @import MUST come before `@import 'tailwindcss'`: Tailwind v4 inlines its
+ * import into generated rules, which would push any @import after it past the
+ * "@import must precede all other statements" CSS rule (postcss errors otherwise). */
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
+@import 'tailwindcss';
 @plugin '@tailwindcss/typography';
 
 /*

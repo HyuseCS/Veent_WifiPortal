@@ -4,7 +4,13 @@ import { createMikrotikController, type MikrotikConfig } from './mikrotik';
 
 export * from './types';
 export { createStubNetworkController } from './stub';
-export { createMikrotikController, type MikrotikConfig } from './mikrotik';
+export {
+	createMikrotikController,
+	provisionWalledGarden,
+	type MikrotikConfig,
+	type WalledGardenInput,
+	type WalledGardenResult
+} from './mikrotik';
 
 export type NetworkConfig =
 	| { controller: 'stub' }

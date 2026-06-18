@@ -6,9 +6,12 @@
 
 	let { data, form }: { data: PageServerData; form: ActionData } = $props();
 
-	// In dev there's no captive-portal redirect to supply the device MAC, so fall
-	// back to a placeholder so the buttons are testable.
-	const mac = $derived(data.mac ?? 'DEV:00:00:00:00:01');
+	// The device MAC comes from the captive-portal redirect (`?mac=`), stashed in a
+	// cookie by hooks.server.ts. If it's absent the device didn't arrive through the
+	// portal (or is bypassed): we surface that instead of sending a fake MAC the
+	// router would reject.
+	const mac = $derived(data.mac ?? '');
+	const hasMac = $derived(!!data.mac);
 
 	// Connection confirmations stay in-page: a toast announces success instead of
 	// navigating away to a separate page.
@@ -53,6 +56,12 @@
 			Your account is blocked. Please contact venue staff.
 		</p>
 	{:else}
+		{#if !hasMac}
+			<p class="rounded-lg bg-amber-50 px-4 py-3 text-sm text-amber-800" role="alert">
+				Device not detected. Reconnect through the WiFi portal (don't open this page
+				directly) so we can get you online.
+			</p>
+		{/if}
 		<section class="rounded-xl border border-gray-200 p-4">
 			<h2 class="text-sm font-semibold text-gray-900">Free Time</h2>
 			{#if data.freeTime.eligible}
@@ -62,7 +71,8 @@
 				<form method="post" action="?/startFreeTime" use:enhance={startFreeTime} class="mt-3">
 					<input type="hidden" name="mac" value={mac} />
 					<button
-						class="min-h-[44px] w-full rounded-lg bg-cta font-semibold text-white transition hover:bg-cta-hover hover:cursor-pointer"
+						disabled={!hasMac}
+						class="min-h-[44px] w-full rounded-lg bg-cta font-semibold text-white transition hover:bg-cta-hover hover:cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
 					>
 						Start {data.freeTime.durationMinutes}-min Free Access
 					</button>
@@ -90,7 +100,8 @@
 						<p class="text-xs text-gray-500">{tier.creditCost} credits · {tier.durationMinutes} min</p>
 					</div>
 					<button
-						class="min-h-[44px] rounded-lg bg-cta px-4 text-sm font-semibold text-white transition hover:cursor-pointer hover:bg-cta-hover"
+						disabled={!hasMac}
+						class="min-h-[44px] rounded-lg bg-cta px-4 text-sm font-semibold text-white transition hover:cursor-pointer hover:bg-cta-hover disabled:cursor-not-allowed disabled:opacity-50"
 					>
 						Buy
 					</button>

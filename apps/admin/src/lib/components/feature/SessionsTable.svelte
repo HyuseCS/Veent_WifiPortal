@@ -13,7 +13,7 @@
 </script>
 
 <Table {columns}>
-	{#each sessions as session (session.mac)}
+	{#each sessions as session, i (i)}
 		<tr class="transition-colors hover:bg-surface">
 			<td class="px-4 py-3 font-mono text-xs text-ink">{session.mac}</td>
 			<td class="px-4 py-3 text-ink">{session.package}</td>
