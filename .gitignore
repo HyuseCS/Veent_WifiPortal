@@ -30,3 +30,5 @@ graphify-out/
 
 # Python venv (graphify tooling)
 .venv/
+
+start_db.sh
