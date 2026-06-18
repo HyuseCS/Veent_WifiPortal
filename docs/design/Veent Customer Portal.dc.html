@@ -310,8 +310,75 @@ body{margin:0;-webkit-font-smoothing:antialiased;}
       </div>
     </dc-import>
 
-    <!-- Dashboard cooldown -->
-    <dc-import name="PhoneFrame" label="Dashboard" tag="Free Time on cooldown" route="veent.ph/dashboard" primary="With Free Time spent, attention shifts to buying a tier; CTA stays orange on Top up." states="Free Time card disabled with next-eligible time + live countdown." hint-size="392px,1100px">
+    <!-- Dashboard Free Time active -->
+    <dc-import name="PhoneFrame" label="Dashboard" tag="Free Time running" route="veent.ph/dashboard" primary="The exact same session band as a paid session — only the label, duration and progress differ. Free or paid time both surface here." states="Proves the countdown section is shared: Free Time fills the identical band." hint-size="392px,1100px">
+      <div style="display:flex; flex-direction:column;">
+        <!-- balance header -->
+        <div style="background:var(--color-brand); padding:22px 20px 24px; color:#fff;">
+          <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:18px;">
+            <span style="font:500 14px 'Plus Jakarta Sans'; opacity:.85;">Hi, Maria</span>
+            <div style="display:flex; align-items:center; gap:6px;"><span style="width:7px; height:7px; border-radius:50%; background:color-mix(in oklch,var(--color-online) 70%,white);"></span><span style="font:500 12px 'Plus Jakarta Sans'; opacity:.9;">Online</span></div>
+          </div>
+          <div style="font:500 12.5px 'Plus Jakarta Sans'; opacity:.8; text-transform:uppercase; letter-spacing:.07em; margin-bottom:4px;">Balance</div>
+          <div style="display:flex; align-items:baseline; gap:8px;">
+            <span style="font:600 38px 'JetBrains Mono',monospace; letter-spacing:-.02em;">120</span>
+            <span style="font:500 16px 'Plus Jakarta Sans'; opacity:.85;">credits</span>
+          </div>
+        </div>
+
+        <div style="padding:18px 20px 20px;">
+          <!-- ACTIVE SESSION BAND (shared — Free Time variant) -->
+          <div style="background:var(--teal-tint-2); border:1px solid color-mix(in oklch,var(--color-brand) 22%,white); border-radius:16px; padding:17px; margin-bottom:24px;">
+            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:14px;">
+              <div style="display:flex; align-items:center; gap:11px;">
+                <div style="width:40px; height:40px; border-radius:11px; background:var(--color-brand); display:flex; align-items:center; justify-content:center;">
+                  <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15.5 13.5"/></svg>
+                </div>
+                <div>
+                  <div style="display:flex; align-items:center; gap:7px;"><span style="font:700 15px 'Plus Jakarta Sans'; color:var(--color-ink);">Free Time</span><span style="font:600 10px 'Plus Jakarta Sans'; text-transform:uppercase; letter-spacing:.05em; color:#fff; background:var(--color-online); padding:3px 8px; border-radius:20px;">Active</span></div>
+                  <div style="font:500 12px 'Plus Jakarta Sans'; color:var(--color-brand);">Ends at <strong>3:30 PM</strong></div>
+                </div>
+              </div>
+              <div style="text-align:right;">
+                <div style="font:600 22px 'JetBrains Mono',monospace; color:var(--color-ink); letter-spacing:-.01em;">0:11:42</div>
+                <div style="font:500 10.5px 'Plus Jakarta Sans'; text-transform:uppercase; letter-spacing:.06em; color:var(--color-muted);">left</div>
+              </div>
+            </div>
+            <!-- progress bar -->
+            <div style="height:7px; border-radius:5px; background:color-mix(in oklch,var(--color-brand) 14%,white); overflow:hidden; margin-bottom:0;">
+              <div style="width:78%; height:100%; border-radius:5px; background:var(--color-brand);"></div>
+            </div>
+          </div>
+
+          <!-- buy access -->
+          <div style="font:600 11px 'Plus Jakarta Sans'; text-transform:uppercase; letter-spacing:.08em; color:var(--color-muted); margin-bottom:10px;">Keep going &mdash; spend credits</div>
+          <div style="display:flex; flex-direction:column; gap:9px; margin-bottom:24px;">
+            <div style="display:flex; align-items:center; justify-content:space-between; border:1px solid var(--color-border); border-radius:13px; padding:12px 12px 12px 16px;">
+              <div><div style="font:600 15px 'Plus Jakarta Sans'; color:var(--color-ink);">1 Hour</div><div style="font:500 11.5px 'Plus Jakarta Sans'; color:var(--color-muted);">+60 min &middot; 20 cr</div></div>
+              <button style="height:42px; padding:0 20px; border-radius:11px; background:var(--color-brand); color:#fff; font:600 14px 'Plus Jakarta Sans'; border:none; cursor:pointer;">Buy</button>
+            </div>
+            <div style="display:flex; align-items:center; justify-content:space-between; border:1px solid var(--color-border); border-radius:13px; padding:12px 12px 12px 16px;">
+              <div><div style="font:600 15px 'Plus Jakarta Sans'; color:var(--color-ink);">3 Hours</div><div style="font:500 11.5px 'Plus Jakarta Sans'; color:var(--color-muted);">+180 min &middot; 50 cr</div></div>
+              <button style="height:42px; padding:0 20px; border-radius:11px; background:var(--color-brand); color:#fff; font:600 14px 'Plus Jakarta Sans'; border:none; cursor:pointer;">Buy</button>
+            </div>
+          </div>
+
+          <div style="display:flex; gap:10px;">
+            <button style="flex:1; display:flex; align-items:center; justify-content:center; gap:7px; height:48px; border-radius:12px; background:var(--color-surface); border:1px solid var(--color-border); color:var(--color-brand); font:600 14px 'Plus Jakarta Sans'; cursor:pointer;">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              Top up
+            </button>
+            <button style="flex:1; display:flex; align-items:center; justify-content:center; gap:7px; height:48px; border-radius:12px; background:var(--color-bg); border:1px solid var(--color-border); color:var(--color-muted); font:600 14px 'Plus Jakarta Sans'; cursor:pointer;">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+              Sign out
+            </button>
+          </div>
+        </div>
+      </div>
+    </dc-import>
+
+    <!-- Dashboard Free Time used (no time) -->
+    <dc-import name="PhoneFrame" label="Dashboard" tag="Free Time · no time left" route="veent.ph/dashboard" primary="Free counter, depleted: warning-toned band with a single reset countdown. One timer only — no duplicate 'next session' line." states="The other half of the free pair — cooldown until the 15 min refills." hint-size="392px,1100px">
       <div style="display:flex; flex-direction:column;">
         <div style="background:var(--color-brand); padding:22px 20px 24px; color:#fff;">
           <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:18px;">
@@ -326,22 +393,30 @@ body{margin:0;-webkit-font-smoothing:antialiased;}
         </div>
 
         <div style="padding:18px 20px 20px;">
-          <!-- free time used -->
+          <!-- FREE COUNTER — depleted (single reset timer) -->
           <div style="background:var(--color-surface); border:1px solid var(--color-border); border-radius:16px; padding:17px; margin-bottom:24px;">
-            <div style="display:flex; align-items:center; gap:11px; margin-bottom:12px;">
-              <div style="width:40px; height:40px; border-radius:11px; background:color-mix(in oklch,var(--color-warning) 16%,white); display:flex; align-items:center; justify-content:center;">
-                <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="var(--color-warning)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15.5 13.5"/></svg>
+            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:14px;">
+              <div style="display:flex; align-items:center; gap:11px;">
+                <div style="width:40px; height:40px; border-radius:11px; background:color-mix(in oklch,var(--color-warning) 16%,white); display:flex; align-items:center; justify-content:center;">
+                  <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="var(--color-warning)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15.5 13.5"/></svg>
+                </div>
+                <div>
+                  <div style="display:flex; align-items:center; gap:7px;"><span style="font:700 15px 'Plus Jakarta Sans'; color:var(--color-ink);">Free Time</span><span style="font:600 10px 'Plus Jakarta Sans'; text-transform:uppercase; letter-spacing:.05em; color:#fff; background:var(--color-warning); padding:3px 8px; border-radius:20px;">Cooldown</span></div>
+                  <div style="font:500 12px 'Plus Jakarta Sans'; color:var(--color-muted);">15 min &middot; once per 12 hrs</div>
+                </div>
               </div>
-              <div><div style="font:700 15px 'Plus Jakarta Sans'; color:var(--color-ink);">Free time used</div><div style="font:500 12px 'Plus Jakarta Sans'; color:var(--color-muted);">Next session at <strong style="color:var(--color-ink);">3:45 PM</strong></div></div>
+              <div style="text-align:right;">
+                <div style="font:600 22px 'JetBrains Mono',monospace; color:var(--color-ink); letter-spacing:-.01em;">2:14:08</div>
+                <div style="font:500 10.5px 'Plus Jakarta Sans'; text-transform:uppercase; letter-spacing:.06em; color:var(--color-muted);">until reset</div>
+              </div>
             </div>
-            <div style="display:flex; align-items:center; gap:8px; background:var(--color-bg); border:1px solid var(--color-border); border-radius:10px; padding:11px 14px;">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--color-muted)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15.5 13.5"/></svg>
-              <span style="font:500 12.5px 'Plus Jakarta Sans'; color:var(--color-muted);">Available again in</span>
-              <span style="font:600 14px 'JetBrains Mono',monospace; color:var(--color-ink); margin-left:auto;">2:14:08</span>
+            <!-- cooldown progress (filling toward refill) -->
+            <div style="height:7px; border-radius:5px; background:color-mix(in oklch,var(--color-warning) 14%,white); overflow:hidden;">
+              <div style="width:81%; height:100%; border-radius:5px; background:var(--color-warning);"></div>
             </div>
           </div>
 
-          <div style="font:600 11px 'Plus Jakarta Sans'; text-transform:uppercase; letter-spacing:.08em; color:var(--color-muted); margin-bottom:10px;">Buy access &mdash; spend credits</div>
+          <div style="font:600 11px 'Plus Jakarta Sans'; text-transform:uppercase; letter-spacing:.08em; color:var(--color-muted); margin-bottom:10px;">Can't wait? Buy access &mdash; spend credits</div>
           <div style="display:flex; flex-direction:column; gap:9px; margin-bottom:24px;">
             <div style="display:flex; align-items:center; justify-content:space-between; border:1px solid var(--color-border); border-radius:13px; padding:12px 12px 12px 16px;">
               <div><div style="font:600 15px 'Plus Jakarta Sans'; color:var(--color-ink);">1 Hour</div><div style="font:500 11.5px 'Plus Jakarta Sans'; color:var(--color-muted);">60 min &middot; 20 cr</div></div>
@@ -358,6 +433,138 @@ body{margin:0;-webkit-font-smoothing:antialiased;}
             Top up credits
           </button>
           <div style="text-align:center;"><span style="font:600 13px 'Plus Jakarta Sans'; color:var(--color-muted);">Sign out</span></div>
+        </div>
+      </div>
+    </dc-import>
+
+    <!-- Dashboard Paid time active (has time) -->
+    <dc-import name="PhoneFrame" label="Dashboard" tag="Paid time · running" route="veent.ph/dashboard" primary="Paid counter has its own identity — blue band (vs Free's teal/navy) so the two are never confused. Countdown + progress + end time." states="One half of the paid pair: a bought tier actively running." hint-size="392px,1100px">
+      <div style="display:flex; flex-direction:column;">
+        <!-- balance header -->
+        <div style="background:var(--color-brand); padding:22px 20px 24px; color:#fff;">
+          <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:18px;">
+            <span style="font:500 14px 'Plus Jakarta Sans'; opacity:.85;">Hi, Maria</span>
+            <div style="display:flex; align-items:center; gap:6px;"><span style="width:7px; height:7px; border-radius:50%; background:color-mix(in oklch,var(--color-online) 70%,white);"></span><span style="font:500 12px 'Plus Jakarta Sans'; opacity:.9;">Online</span></div>
+          </div>
+          <div style="font:500 12.5px 'Plus Jakarta Sans'; opacity:.8; text-transform:uppercase; letter-spacing:.07em; margin-bottom:4px;">Balance</div>
+          <div style="display:flex; align-items:baseline; gap:8px;">
+            <span style="font:600 38px 'JetBrains Mono',monospace; letter-spacing:-.02em;">70</span>
+            <span style="font:500 16px 'Plus Jakarta Sans'; opacity:.85;">credits</span>
+          </div>
+        </div>
+
+        <div style="padding:18px 20px 20px;">
+          <!-- PAID COUNTER — blue identity -->
+          <div style="background:var(--coral-tint); border:1px solid color-mix(in oklch,var(--color-cta) 26%,white); border-radius:16px; padding:17px; margin-bottom:24px;">
+            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:14px;">
+              <div style="display:flex; align-items:center; gap:11px;">
+                <div style="width:40px; height:40px; border-radius:11px; background:var(--color-cta); display:flex; align-items:center; justify-content:center;">
+                  <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15.5 13.5"/></svg>
+                </div>
+                <div>
+                  <div style="display:flex; align-items:center; gap:7px;"><span style="font:700 15px 'Plus Jakarta Sans'; color:var(--color-ink);">3 Hours</span><span style="font:600 10px 'Plus Jakarta Sans'; text-transform:uppercase; letter-spacing:.05em; color:#fff; background:var(--color-online); padding:3px 8px; border-radius:20px;">Active</span></div>
+                  <div style="font:500 12px 'Plus Jakarta Sans'; color:var(--color-cta);">Ends at <strong>5:18 PM</strong></div>
+                </div>
+              </div>
+              <div style="text-align:right;">
+                <div style="font:600 22px 'JetBrains Mono',monospace; color:var(--color-ink); letter-spacing:-.01em;">1:42:19</div>
+                <div style="font:500 10.5px 'Plus Jakarta Sans'; text-transform:uppercase; letter-spacing:.06em; color:var(--color-muted);">left</div>
+              </div>
+            </div>
+            <!-- progress bar -->
+            <div style="height:7px; border-radius:5px; background:color-mix(in oklch,var(--color-cta) 14%,white); overflow:hidden;">
+              <div style="width:57%; height:100%; border-radius:5px; background:var(--color-cta);"></div>
+            </div>
+          </div>
+
+          <!-- buy access -->
+          <div style="font:600 11px 'Plus Jakarta Sans'; text-transform:uppercase; letter-spacing:.08em; color:var(--color-muted); margin-bottom:10px;">Extend access &mdash; spend credits</div>
+          <div style="display:flex; flex-direction:column; gap:9px; margin-bottom:24px;">
+            <div style="display:flex; align-items:center; justify-content:space-between; border:1px solid var(--color-border); border-radius:13px; padding:12px 12px 12px 16px;">
+              <div><div style="font:600 15px 'Plus Jakarta Sans'; color:var(--color-ink);">1 Hour</div><div style="font:500 11.5px 'Plus Jakarta Sans'; color:var(--color-muted);">+60 min &middot; 20 cr</div></div>
+              <button style="height:42px; padding:0 20px; border-radius:11px; background:var(--color-brand); color:#fff; font:600 14px 'Plus Jakarta Sans'; border:none; cursor:pointer;">Buy</button>
+            </div>
+            <div style="display:flex; align-items:center; justify-content:space-between; border:1px solid var(--color-border); border-radius:13px; padding:12px 12px 12px 16px;">
+              <div><div style="font:600 15px 'Plus Jakarta Sans'; color:var(--color-ink);">3 Hours</div><div style="font:500 11.5px 'Plus Jakarta Sans'; color:var(--color-muted);">+180 min &middot; 50 cr</div></div>
+              <button style="height:42px; padding:0 20px; border-radius:11px; background:var(--color-brand); color:#fff; font:600 14px 'Plus Jakarta Sans'; border:none; cursor:pointer;">Buy</button>
+            </div>
+          </div>
+
+          <div style="display:flex; gap:10px;">
+            <button style="flex:1; display:flex; align-items:center; justify-content:center; gap:7px; height:48px; border-radius:12px; background:var(--color-surface); border:1px solid var(--color-border); color:var(--color-brand); font:600 14px 'Plus Jakarta Sans'; cursor:pointer;">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              Top up
+            </button>
+            <button style="flex:1; display:flex; align-items:center; justify-content:center; gap:7px; height:48px; border-radius:12px; background:var(--color-bg); border:1px solid var(--color-border); color:var(--color-muted); font:600 14px 'Plus Jakarta Sans'; cursor:pointer;">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+              Sign out
+            </button>
+          </div>
+        </div>
+      </div>
+    </dc-import>
+
+    <!-- Dashboard Paid time ended (no time) -->
+    <dc-import name="PhoneFrame" label="Dashboard" tag="Paid time · no time left" route="veent.ph/dashboard" primary="Paid counter, expired: countdown at 0:00:00, empty bar, ended time. Attention drops to buying another tier." states="The other half of the paid pair — a bought session that has run out." hint-size="392px,1100px">
+      <div style="display:flex; flex-direction:column;">
+        <div style="background:var(--color-brand); padding:22px 20px 24px; color:#fff;">
+          <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:18px;">
+            <span style="font:500 14px 'Plus Jakarta Sans'; opacity:.85;">Hi, Maria</span>
+            <div style="display:flex; align-items:center; gap:6px;"><span style="width:7px; height:7px; border-radius:50%; background:color-mix(in oklch,var(--color-warning) 75%,white);"></span><span style="font:500 12px 'Plus Jakarta Sans'; opacity:.9;">Limited</span></div>
+          </div>
+          <div style="font:500 12.5px 'Plus Jakarta Sans'; opacity:.8; text-transform:uppercase; letter-spacing:.07em; margin-bottom:4px;">Balance</div>
+          <div style="display:flex; align-items:baseline; gap:8px;">
+            <span style="font:600 38px 'JetBrains Mono',monospace; letter-spacing:-.02em;">70</span>
+            <span style="font:500 16px 'Plus Jakarta Sans'; opacity:.85;">credits</span>
+          </div>
+        </div>
+
+        <div style="padding:18px 20px 20px;">
+          <!-- PAID COUNTER — expired -->
+          <div style="background:var(--color-surface); border:1px solid var(--color-border); border-radius:16px; padding:17px; margin-bottom:24px;">
+            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:14px;">
+              <div style="display:flex; align-items:center; gap:11px;">
+                <div style="width:40px; height:40px; border-radius:11px; background:color-mix(in oklch,var(--color-blocked) 13%,white); display:flex; align-items:center; justify-content:center;">
+                  <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="var(--color-blocked)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15.5 13.5"/></svg>
+                </div>
+                <div>
+                  <div style="display:flex; align-items:center; gap:7px;"><span style="font:700 15px 'Plus Jakarta Sans'; color:var(--color-ink);">3 Hours</span><span style="font:600 10px 'Plus Jakarta Sans'; text-transform:uppercase; letter-spacing:.05em; color:#fff; background:var(--color-blocked); padding:3px 8px; border-radius:20px;">Ended</span></div>
+                  <div style="font:500 12px 'Plus Jakarta Sans'; color:var(--color-muted);">Ended at <strong style="color:var(--color-ink);">5:18 PM</strong></div>
+                </div>
+              </div>
+              <div style="text-align:right;">
+                <div style="font:600 22px 'JetBrains Mono',monospace; color:var(--color-muted); letter-spacing:-.01em;">0:00:00</div>
+                <div style="font:500 10.5px 'Plus Jakarta Sans'; text-transform:uppercase; letter-spacing:.06em; color:var(--color-muted);">time's up</div>
+              </div>
+            </div>
+            <!-- empty progress bar -->
+            <div style="height:7px; border-radius:5px; background:var(--color-border); overflow:hidden;">
+              <div style="width:0%; height:100%; border-radius:5px; background:var(--color-cta);"></div>
+            </div>
+          </div>
+
+          <div style="font:600 11px 'Plus Jakarta Sans'; text-transform:uppercase; letter-spacing:.08em; color:var(--color-muted); margin-bottom:10px;">Get back online &mdash; spend credits</div>
+          <div style="display:flex; flex-direction:column; gap:9px; margin-bottom:24px;">
+            <div style="display:flex; align-items:center; justify-content:space-between; border:1.5px solid var(--color-cta); border-radius:13px; padding:12px 12px 12px 16px; background:var(--coral-tint);">
+              <div><div style="font:600 15px 'Plus Jakarta Sans'; color:var(--color-ink);">3 Hours</div><div style="font:500 11.5px 'Plus Jakarta Sans'; color:var(--color-muted);">180 min &middot; 50 cr</div></div>
+              <button style="height:42px; padding:0 20px; border-radius:11px; background:var(--color-cta); color:#fff; font:600 14px 'Plus Jakarta Sans'; border:none; cursor:pointer;">Buy</button>
+            </div>
+            <div style="display:flex; align-items:center; justify-content:space-between; border:1px solid var(--color-border); border-radius:13px; padding:12px 12px 12px 16px;">
+              <div><div style="font:600 15px 'Plus Jakarta Sans'; color:var(--color-ink);">1 Hour</div><div style="font:500 11.5px 'Plus Jakarta Sans'; color:var(--color-muted);">60 min &middot; 20 cr</div></div>
+              <button style="height:42px; padding:0 20px; border-radius:11px; background:var(--color-brand); color:#fff; font:600 14px 'Plus Jakarta Sans'; border:none; cursor:pointer;">Buy</button>
+            </div>
+          </div>
+
+          <div style="display:flex; gap:10px;">
+            <button style="flex:1; display:flex; align-items:center; justify-content:center; gap:7px; height:48px; border-radius:12px; background:var(--color-surface); border:1px solid var(--color-border); color:var(--color-brand); font:600 14px 'Plus Jakarta Sans'; cursor:pointer;">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              Top up
+            </button>
+            <button style="flex:1; display:flex; align-items:center; justify-content:center; gap:7px; height:48px; border-radius:12px; background:var(--color-bg); border:1px solid var(--color-border); color:var(--color-muted); font:600 14px 'Plus Jakarta Sans'; cursor:pointer;">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+              Sign out
+            </button>
+          </div>
         </div>
       </div>
     </dc-import>
