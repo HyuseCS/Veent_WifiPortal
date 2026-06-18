@@ -7,6 +7,9 @@
 	let { form }: { form: ActionData } = $props();
 	// Shown after a successful account activation (redirect from /activate).
 	const justActivated = $derived(page.url.searchParams.get('activated') === '1');
+
+	// Disable the submit button while the request is in flight (blocks double-submits).
+	let submitting = $state(false);
 </script>
 
 <main class="flex min-h-screen items-center justify-center bg-surface px-5 py-10">
@@ -30,7 +33,13 @@
 		<form
 			method="post"
 			action="?/signInEmail"
-			use:enhance
+			use:enhance={() => {
+				submitting = true;
+				return async ({ update }) => {
+					await update();
+					submitting = false;
+				};
+			}}
 			class="space-y-4 rounded-xl border border-border bg-bg p-6 shadow-sm"
 		>
 			<Field id="email" label="Email" type="email" autocomplete="email" required />
@@ -46,7 +55,7 @@
 				<p class="text-xs text-blocked" role="alert">{form.message}</p>
 			{/if}
 
-			<Button type="submit" class="w-full py-2.5">Sign In</Button>
+			<Button type="submit" loading={submitting} class="w-full py-2.5">Sign In</Button>
 		</form>
 
 		<p class="text-center text-xs text-muted">
