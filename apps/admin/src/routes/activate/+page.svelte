@@ -6,6 +6,9 @@
 
 	let { data, form }: { data: PageData; form: ActionData } = $props();
 	const token = $derived(page.url.searchParams.get('token') ?? '');
+
+	// Disable the submit button while the request is in flight (blocks double-submits).
+	let submitting = $state(false);
 </script>
 
 <main class="flex min-h-screen items-center justify-center bg-surface px-5 py-10">
@@ -24,7 +27,13 @@
 		{:else}
 			<form
 				method="post"
-				use:enhance
+				use:enhance={() => {
+					submitting = true;
+					return async ({ update }) => {
+						await update();
+						submitting = false;
+					};
+				}}
 				class="space-y-4 rounded-xl border border-border bg-bg p-6 shadow-sm"
 			>
 				<input type="hidden" name="token" value={token} />
@@ -51,7 +60,7 @@
 					<p class="text-xs text-blocked" role="alert">{form.message}</p>
 				{/if}
 
-				<Button type="submit" class="w-full py-2.5">Activate account</Button>
+				<Button type="submit" loading={submitting} class="w-full py-2.5">Activate account</Button>
 			</form>
 		{/if}
 	</div>

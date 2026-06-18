@@ -15,9 +15,9 @@
 </script>
 
 <div class="flex h-screen overflow-hidden bg-bg">
-	<Sidebar role={data.user?.role} />
+	<Sidebar user={data.user} />
 	<div class="flex flex-1 flex-col overflow-hidden">
-		<Topbar {title} userName={data.user?.name} />
+		<Topbar {title} />
 		<main class="flex-1 overflow-y-auto p-6">
 			{@render children()}
 		</main>

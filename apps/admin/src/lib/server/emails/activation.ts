@@ -26,7 +26,7 @@ export function activationEmail({ url, name }: ActivationEmailInput): {
 } {
 	const safeName = escapeHtml(name.trim() || 'there');
 	const safeUrl = escapeHtml(url);
-	const brand = '#115e59'; // deep teal, brand primary
+	const brand = '#c41f2c'; // red accent (≈ oklch(0.52 0.21 25)); white button text clears AA
 
 	const subject = 'Activate your Veent Admin account';
 
