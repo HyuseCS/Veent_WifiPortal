@@ -3,6 +3,7 @@ import { packages } from '@veent/db';
 import { getAccount } from '@veent/core';
 import { db } from '$lib/server/db';
 import { maskPhone } from '$lib/server/otp';
+import { getPortalContext } from '$lib/server/portal';
 import type { PageServerLoad } from './$types';
 
 /**
@@ -13,6 +14,11 @@ import type { PageServerLoad } from './$types';
  */
 export const load: PageServerLoad = async (event) => {
 	const user = event.locals.user;
+
+	// Keep the captive-portal device MAC on every CTA so it threads into the
+	// login → OTP → dashboard flow even if the captive browser drops our cookie.
+	const ctx = getPortalContext(event);
+	const portalQuery = ctx?.mac ? `?mac=${encodeURIComponent(ctx.mac)}` : '';
 
 	const [bundles, tiers] = await Promise.all([
 		db
@@ -26,7 +32,7 @@ export const load: PageServerLoad = async (event) => {
 	]);
 
 	if (!user) {
-		return { loggedIn: false as const, bundles, tiers };
+		return { loggedIn: false as const, bundles, tiers, portalQuery };
 	}
 
 	const account = await getAccount(db, user.id);
@@ -37,6 +43,7 @@ export const load: PageServerLoad = async (event) => {
 		maskedPhone: phone ? maskPhone(phone) : null,
 		balance: account?.balance ?? 0,
 		bundles,
-		tiers
+		tiers,
+		portalQuery
 	};
 };

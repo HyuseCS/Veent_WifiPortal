@@ -10,12 +10,14 @@
 		label,
 		tone = 'default',
 		type = 'button',
+		disabled = false,
 		onclick
 	}: {
 		icon: Component;
 		label: string;
 		tone?: Tone;
 		type?: 'button' | 'submit';
+		disabled?: boolean;
 		onclick?: () => void;
 	} = $props();
 
@@ -29,11 +31,12 @@
 
 <button
 	{type}
+	{disabled}
 	aria-label={label}
 	{onclick}
-	class="flex h-11 w-11 cursor-pointer items-center justify-center rounded-md transition-colors {tones[
-		tone
-	]}"
+	class="flex h-11 w-11 items-center justify-center rounded-md transition-colors disabled:cursor-not-allowed disabled:opacity-40 {disabled
+		? 'text-muted'
+		: `cursor-pointer ${tones[tone]}`}"
 >
 	<Icon class="h-4 w-4" />
 </button>

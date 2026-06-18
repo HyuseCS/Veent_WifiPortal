@@ -54,7 +54,7 @@
 			</div>
 
 			<a
-				href="/dashboard"
+				href="/dashboard{data.portalQuery}"
 				class="flex h-[54px] w-full items-center justify-center gap-2 rounded-xl bg-cta text-base font-bold text-white transition-colors hover:bg-cta-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cta"
 			>
 				Go to dashboard
@@ -83,7 +83,7 @@
 				</div>
 			</div>
 			<a
-				href="/login"
+				href="/login{data.portalQuery}"
 				class="flex h-[54px] w-full items-center justify-center gap-2 rounded-xl bg-cta text-base font-bold text-white transition-colors hover:bg-cta-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cta"
 			>
 				Connect — get 15 min free
@@ -174,7 +174,7 @@
 		<!-- Footer CTA -->
 		<div class="mt-auto p-5 pt-6">
 			<a
-				href="/login"
+				href="/login{data.portalQuery}"
 				class="flex h-[54px] w-full items-center justify-center rounded-xl bg-cta text-base font-bold text-white transition-colors hover:bg-cta-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cta"
 			>
 				Log in to connect

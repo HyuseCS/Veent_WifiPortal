@@ -3,6 +3,7 @@ import type { Actions, PageServerLoad } from './$types';
 import { auth } from '$lib/server/auth';
 import { normalizePhone } from '$lib/phone';
 import { PENDING_COOKIE, PENDING_MAX_AGE, serializePending } from '$lib/server/otp';
+import { getPortalContext } from '$lib/server/portal';
 import { dev } from '$app/environment';
 
 export const load: PageServerLoad = (event) => {
@@ -29,7 +30,10 @@ export const actions: Actions = {
 
 		await auth.api.sendPhoneNumberOTP({ body: { phoneNumber: phone } });
 
-		event.cookies.set(PENDING_COOKIE, serializePending({ phone, intent: 'login' }), {
+		// Stash the captive-portal device MAC alongside the pending verification, so
+		// the dashboard can grant access after verify regardless of cookie survival.
+		const mac = getPortalContext(event)?.mac;
+		event.cookies.set(PENDING_COOKIE, serializePending({ phone, intent: 'login', mac }), {
 			path: '/',
 			httpOnly: true,
 			sameSite: 'lax',

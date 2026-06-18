@@ -24,6 +24,7 @@ export interface PendingVerification {
 	phone: string; // E.164, e.g. +639171234567
 	intent: OtpIntent;
 	name?: string; // carried from the register form
+	mac?: string; // captive-portal device MAC, carried through to the dashboard grant
 	exp: number; // epoch ms
 }
 
@@ -42,11 +43,13 @@ export function serializePending(input: {
 	phone: string;
 	intent: OtpIntent;
 	name?: string;
+	mac?: string;
 }): string {
 	const payload: PendingVerification = {
 		phone: input.phone,
 		intent: input.intent,
 		name: input.name,
+		mac: input.mac,
 		exp: Date.now() + PENDING_MAX_AGE * 1000
 	};
 	const data = Buffer.from(JSON.stringify(payload)).toString('base64url');

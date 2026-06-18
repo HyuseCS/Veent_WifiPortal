@@ -75,6 +75,11 @@ export interface AdminUserRow {
 	usage: string;
 	tone: StatusTone;
 	status: string;
+	/** Currently has an active, unexpired network session (live connectivity). */
+	online: boolean;
+	/** Most recent device MAC seen for this user, for the dev "Allow WiFi" grant.
+	 * Null if we've never recorded a session MAC for them. */
+	lastMac: string | null;
 }
 
 /**
