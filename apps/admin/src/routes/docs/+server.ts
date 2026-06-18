@@ -214,7 +214,8 @@ const spec = {
 					package: { type: 'string' },
 					timeLeft: { type: 'string', example: '14:52' },
 					tone: { type: 'string', enum: ['online', 'warning', 'blocked'] },
-					status: { type: 'string' }
+					status: { type: 'string' },
+					expiresAt: { type: 'string', format: 'date-time', nullable: true, example: '2026-06-18T09:55:00.000Z' }
 				}
 			}
 		}

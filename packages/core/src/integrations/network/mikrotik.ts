@@ -1,4 +1,4 @@
-import type { NetworkController, GrantInput } from './types';
+import type { NetworkController, GrantInput, NetworkApSample } from './types';
 
 export interface MikrotikConfig {
 	host: string;
@@ -106,6 +106,51 @@ export function createMikrotikController(config: MikrotikConfig): NetworkControl
 				const arp = await conn.write('/ip/arp/print', [`?address=${ip}`]);
 				const fromArp = arp.find((r) => r['mac-address'])?.['mac-address'];
 				return fromArp ? fromArp.toUpperCase() : null;
+			});
+		},
+
+		async sampleHealth(): Promise<NetworkApSample[]> {
+			return withConn(async (conn) => {
+				// Which interface carries the hotspot, and how many devices we've put
+				// online. Our model grants via bypassed ip-bindings (not hotspot logins),
+				// so that's the honest "connected users" count — attributed to the
+				// hotspot interface.
+				const hotspots = await conn.write('/ip/hotspot/print');
+				const hotspotIface = hotspots[0]?.interface;
+				const bypassed = await conn.write('/ip/hotspot/ip-binding/print', ['?type=bypassed']);
+				const connectedUsers = bypassed.length;
+
+				const ifaces = await conn.write('/interface/print');
+				const samples: NetworkApSample[] = [];
+				for (const i of ifaces) {
+					if (i.disabled === 'true' || i.type === 'loopback' || !i.name) continue;
+					const running = i.running === 'true';
+					// Only surface live links + the hotspot interface (even if down, so an
+					// outage is visible). Skips idle/unplugged ports (e.g. spare ethers).
+					if (!running && i.name !== hotspotIface) continue;
+					let throughputMbps = 0;
+					if (running) {
+						try {
+							// One-shot rate snapshot; `=once=` returns a single reply (no stream).
+							const t = await conn.write('/interface/monitor-traffic', [
+								`=interface=${i.name}`,
+								'=once='
+							]);
+							const rx = Number(t[0]?.['rx-bits-per-second'] ?? 0);
+							const tx = Number(t[0]?.['tx-bits-per-second'] ?? 0);
+							throughputMbps = Math.round((rx + tx) / 1_000_000);
+						} catch {
+							// throughput unavailable for this interface — leave 0, keep going
+						}
+					}
+					samples.push({
+						name: i.name,
+						online: running,
+						users: i.name === hotspotIface ? connectedUsers : 0,
+						throughputMbps
+					});
+				}
+				return samples;
 			});
 		}
 	};
