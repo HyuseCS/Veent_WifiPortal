@@ -13,6 +13,7 @@
 		"test:unit": "vitest",
 		"test:e2e": "playwright test",
 		"bootstrap:owner": "bun run scripts/bootstrap-owner.ts",
+		"setup:router": "bun run scripts/setup-router.ts",
 		"auth:schema": "better-auth generate --config src/lib/server/auth.ts --output ../../packages/db/src/schema/auth-admin.generated.ts --yes"
 	},
 	"dependencies": {

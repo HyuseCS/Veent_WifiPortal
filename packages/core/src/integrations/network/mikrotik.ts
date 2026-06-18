@@ -62,6 +62,9 @@ export function createMikrotikController(config: MikrotikConfig): NetworkControl
 
 		async grant(input: GrantInput): Promise<void> {
 			const mac = input.macAddress.toUpperCase();
+			// Callers may override the comment (e.g. admin bypasses tagged so the
+			// time-based revoke cron, which only touches session MACs, leaves them be).
+			const comment = input.tag ?? tag;
 			await withConn(async (conn) => {
 				const ids = await findBindingIds(conn, mac);
 				if (ids.length > 0) {
@@ -69,13 +72,13 @@ export function createMikrotikController(config: MikrotikConfig): NetworkControl
 					await conn.write('/ip/hotspot/ip-binding/set', [
 						`=.id=${ids[0]}`,
 						'=type=bypassed',
-						`=comment=${tag}`
+						`=comment=${comment}`
 					]);
 				} else {
 					await conn.write('/ip/hotspot/ip-binding/add', [
 						`=mac-address=${mac}`,
 						'=type=bypassed',
-						`=comment=${tag}`
+						`=comment=${comment}`
 					]);
 				}
 			});
@@ -88,6 +91,22 @@ export function createMikrotikController(config: MikrotikConfig): NetworkControl
 					await conn.write('/ip/hotspot/ip-binding/remove', [`=.id=${id}`]);
 				}
 			});
+		},
+
+		async resolveMacByIp(ipAddress: string): Promise<string | null> {
+			const ip = ipAddress.trim();
+			if (!ip) return null;
+			return withConn(async (conn) => {
+				// Prefer the hotspot host table (knows currently-seen clients), then
+				// fall back to the ARP table for statically-bound or non-hotspot LAN IPs.
+				const hosts = await conn.write('/ip/hotspot/host/print', [`?address=${ip}`]);
+				const fromHost = hosts.find((r) => r['mac-address'])?.['mac-address'];
+				if (fromHost) return fromHost.toUpperCase();
+
+				const arp = await conn.write('/ip/arp/print', [`?address=${ip}`]);
+				const fromArp = arp.find((r) => r['mac-address'])?.['mac-address'];
+				return fromArp ? fromArp.toUpperCase() : null;
+			});
 		}
 	};
 }
@@ -97,4 +116,88 @@ interface RosConn {
 	connect(): Promise<unknown>;
 	close(): void;
 	write(menu: string, params?: string[]): Promise<Array<Record<string, string>>>;
+}
+
+async function openConn(config: MikrotikConfig): Promise<RosConn> {
+	if (!config.host || !config.user) throw new Error('mikrotik: host/user not configured');
+	const port = config.port ?? (config.tls ? 8729 : 8728);
+	const mod = (await import('node-routeros')) as unknown as {
+		RouterOSAPI: new (opts: Record<string, unknown>) => RosConn;
+	};
+	const conn = new mod.RouterOSAPI({
+		host: config.host,
+		user: config.user,
+		password: config.password,
+		port,
+		tls: config.tls ? { rejectUnauthorized: !config.insecureTls } : undefined
+	});
+	await conn.connect();
+	return conn;
+}
+
+export interface WalledGardenInput {
+	/** DNS hostnames to allow pre-auth, e.g. `admin.veent.lan` (matched as `*host`). */
+	hosts?: string[];
+	/** LAN IPs/CIDRs to allow pre-auth at the IP layer, e.g. `10.5.50.1`. */
+	ips?: string[];
+	/** Comment on the entries we create, so a re-run updates rather than duplicates. */
+	tag?: string;
+}
+
+export interface WalledGardenResult {
+	hosts: { value: string; created: boolean }[];
+	ips: { value: string; created: boolean }[];
+}
+
+/**
+ * Idempotently opens holes in a MikroTik hotspot's walled garden so a device can
+ * reach the given hosts/IPs *before* authenticating — the same mechanism the
+ * payment gateways use, here pointed at the LAN-served admin dashboard.
+ *
+ *   hosts → /ip/hotspot/walled-garden        (HTTP-layer, dst-host)
+ *   ips   → /ip/hotspot/walled-garden/ip     (all protocols, dst-address)
+ *
+ * Re-running is safe: entries already carrying our tag are left in place.
+ */
+export async function provisionWalledGarden(
+	config: MikrotikConfig,
+	input: WalledGardenInput
+): Promise<WalledGardenResult> {
+	const tag = input.tag ?? 'veent-admin';
+	const result: WalledGardenResult = { hosts: [], ips: [] };
+	const conn = await openConn(config);
+	try {
+		for (const host of input.hosts ?? []) {
+			const existing = await conn.write('/ip/hotspot/walled-garden/print', [`?dst-host=${host}`]);
+			if (existing.length > 0) {
+				result.hosts.push({ value: host, created: false });
+				continue;
+			}
+			await conn.write('/ip/hotspot/walled-garden/add', [
+				'=action=allow',
+				`=dst-host=${host}`,
+				`=comment=${tag}`
+			]);
+			result.hosts.push({ value: host, created: true });
+		}
+
+		for (const ip of input.ips ?? []) {
+			const existing = await conn.write('/ip/hotspot/walled-garden/ip/print', [
+				`?dst-address=${ip}`
+			]);
+			if (existing.length > 0) {
+				result.ips.push({ value: ip, created: false });
+				continue;
+			}
+			await conn.write('/ip/hotspot/walled-garden/ip/add', [
+				'=action=accept',
+				`=dst-address=${ip}`,
+				`=comment=${tag}`
+			]);
+			result.ips.push({ value: ip, created: true });
+		}
+	} finally {
+		conn.close();
+	}
+	return result;
 }

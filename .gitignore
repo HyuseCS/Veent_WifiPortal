@@ -27,3 +27,6 @@ test-results
 
 # graphify (knowledge-graph build output)
 graphify-out/
+
+# Python venv (graphify tooling)
+.venv/

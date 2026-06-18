@@ -157,7 +157,10 @@ export async function revenueByDay(db: DB): Promise<RevenuePoint[]> {
 		.where(
 			and(
 				eq(creditLedger.type, LEDGER_TYPE.topup),
-				sql`${creditLedger.createdAt} >= now() - interval '7 days'`
+				// Start-of-day 6 days ago → today = exactly 7 distinct calendar days, so
+				// the weekday labels ('Dy') can't collide (a rolling 7×24h window spans 8
+				// dates and could yield two same-weekday buckets).
+				sql`${creditLedger.createdAt} >= date_trunc('day', now()) - interval '6 days'`
 			)
 		)
 		.groupBy(sql`date_trunc('day', ${creditLedger.createdAt})`)
