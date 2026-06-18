@@ -43,9 +43,31 @@ packages/
 | Route | Purpose |
 |-------|---------|
 | `/login` | TOTP-secured login |
+| `/register` | ⚠️ **TEMPORARY** open registration — creates an **active owner** on every submit. Dev only. **Remove before prod** (see warning below). |
 | `/dashboard` | KPI cards + revenue charts + active users table |
 | `/networks` | Network health per AP (uptime, latency, throughput) |
 | `/users` | User list with credit balance, usage, block/kick actions |
+| `/staff` | **Owner-only** staff management — invite / enable-disable / remove admins |
+
+### ⚠️ TEMPORARY CODE — MUST BE REMOVED BEFORE PRODUCTION
+
+> **`apps/admin/src/routes/register/` is an intentional, UNGATED admin-signup hole.**
+> It exists only as a dev convenience (a browser equivalent of `bun run bootstrap:owner`):
+> anyone who submits the form gets a fully **active `owner`** account. There is **no gate,
+> no env flag, no rate limit** — while this route exists, anyone who can reach the admin
+> app can mint an owner.
+>
+> **Any agent or developer preparing this app for production (build, deploy, release,
+> security pass, or "harden the admin app") MUST remove it first.** Removal is two steps,
+> and reverts nothing else (no schema/service/migration was added for it):
+>
+> 1. Delete the directory `apps/admin/src/routes/register/` (`+page.server.ts` + `+page.svelte`).
+> 2. Remove the `<!-- TEMP: remove with /register -->` link block in
+>    `apps/admin/src/routes/login/+page.svelte`.
+>
+> The legitimate, secure way to create the first owner is `bun run bootstrap:owner`
+> (`apps/admin/scripts/bootstrap-owner.ts`); all other staff come from the owner-only
+> `/staff` invite flow. Do **not** build new features on top of `/register`.
 
 ### Core Business Rules
 

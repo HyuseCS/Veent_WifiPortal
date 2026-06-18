@@ -12,5 +12,6 @@
 		"@veent/db": "workspace:*",
 		"drizzle-orm": "^0.45.2",
 		"node-routeros": "^1.6.9"
+		"resend": "^6.12.4"
 	}
 }

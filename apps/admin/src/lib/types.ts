@@ -65,8 +65,9 @@ export interface AdminUserRow {
 
 /**
  * Access level of an admin-side staff member.
- * `owner` is the singular account holder — shown but never disabled or removed.
- * Everyone provisioned by the owner is an `admin`; there is no other assignable role.
+ * `owner` holds full control and is never disabled or removed. Everyone provisioned
+ * by the owner starts as an `admin`; an active admin can be promoted to `owner`.
+ * Role *values* are DB-driven (admin_role); this union names the ones with behaviour.
  */
 export type StaffRole = 'owner' | 'admin';
 
@@ -84,6 +85,8 @@ export interface StaffMember {
 	name: string;
 	email: string;
 	role: StaffRole;
+	/** Human display name for the role, sourced from admin_role.label. */
+	roleLabel: string;
 	status: StaffStatus;
 	/** Last-active label, pre-formatted (e.g. "2h ago", "—"). */
 	lastActive: string;
