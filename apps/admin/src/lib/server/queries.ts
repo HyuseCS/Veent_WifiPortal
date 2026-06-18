@@ -247,7 +247,20 @@ export async function listNetworkHealth(db: DB): Promise<NetworkAp[]> {
 			uptime: `${uptime.toFixed(1)}%`,
 			latency: r.latencyMs == null ? '—' : `${r.latencyMs}ms`,
 			users: r.users,
-			throughput: `${r.throughputMbps} Mbps`
+			throughput: `${r.throughputMbps} Mbps`,
+			latitude: r.latitude,
+			longitude: r.longitude,
+			address: r.address
 		};
 	});
+}
+
+/** Set (or clear) an AP's map location. Coords are decimal-degree strings or null;
+ * powers the public locator map. */
+export async function setNetworkLocation(
+	db: DB,
+	id: number,
+	loc: { latitude: string | null; longitude: string | null; address: string | null }
+): Promise<void> {
+	await db.update(networkHealth).set(loc).where(eq(networkHealth.id, id));
 }

@@ -23,7 +23,13 @@ const seedPackages: SeedPackage[] = [
 
 	{ name: '₱20 — 50 Credits', type: 'bundle', fiatCost: 20, creditsProvided: 50, isActive: true },
 	{ name: '₱50 — 150 Credits', type: 'bundle', fiatCost: 50, creditsProvided: 150, isActive: true },
-	{ name: '₱100 — 350 Credits', type: 'bundle', fiatCost: 100, creditsProvided: 350, isActive: true },
+	{
+		name: '₱100 — 350 Credits',
+		type: 'bundle',
+		fiatCost: 100,
+		creditsProvided: 350,
+		isActive: true
+	},
 
 	{ name: '1 Hour', type: 'tier', creditCost: 20, durationMinutes: 60, isActive: true },
 	{ name: '3 Hours', type: 'tier', creditCost: 50, durationMinutes: 180, isActive: true },
@@ -32,6 +38,8 @@ const seedPackages: SeedPackage[] = [
 
 // SAMPLE per-AP health for the Networks page. Synthetic until a real router /
 // controller telemetry feed writes here — keep this honest, not "live".
+// No coordinates: the locator map starts empty; an operator sets each AP's
+// location from the admin Networks page.
 const seedNetworkHealth: SeedAp[] = [
 	{ name: 'AP — Ground Floor', online: true, uptimePct: '99.80', latencyMs: 12, users: 38, throughputMbps: 84 },
 	{ name: 'AP — Floor 2', online: true, uptimePct: '99.50', latencyMs: 15, users: 27, throughputMbps: 61 },
@@ -81,7 +89,9 @@ async function seed() {
 			console.log(`= ${ap.name} (exists, skipped)`);
 		}
 	}
-	console.log(`Network health: ${apsInserted} inserted, ${seedNetworkHealth.length - apsInserted} skipped.`);
+	console.log(
+		`Network health: ${apsInserted} inserted, ${seedNetworkHealth.length - apsInserted} skipped.`
+	);
 
 	console.log('\nSeed complete.');
 	process.exit(0);
