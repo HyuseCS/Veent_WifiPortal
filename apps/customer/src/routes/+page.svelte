@@ -8,9 +8,9 @@
 	<h1>Veent WiFi</h1>
 	{#if data.user}
 		<p>You're signed in as {data.user.name}. You're good to go.</p>
-		<a href="/dashboard">Go to your dashboard</a>
+		<a href="/dashboard{data.portalQuery}">Go to your dashboard</a>
 	{:else}
 		<p>Sign in to connect to the network.</p>
-		<a href="/login">Sign in / Register</a>
+		<a href="/login{data.portalQuery}">Sign in / Register</a>
 	{/if}
 </main>

@@ -1,8 +1,8 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
-	import type { ActionData } from './$types';
+	import type { ActionData, PageServerData } from './$types';
 
-	let { form }: { form: ActionData } = $props();
+	let { data, form }: { data: PageServerData; form: ActionData } = $props();
 </script>
 
 <svelte:head>
@@ -68,7 +68,9 @@
 
 		<p class="text-center text-sm text-muted">
 			Already have an account?
-			<a href="/login" class="font-semibold text-brand hover:text-brand-hover"> Sign in </a>
+			<a href="/login{data.portalQuery}" class="font-semibold text-brand hover:text-brand-hover">
+				Sign in
+			</a>
 		</p>
 	</div>
 </main>

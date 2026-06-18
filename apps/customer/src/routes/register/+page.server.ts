@@ -3,13 +3,15 @@ import type { Actions, PageServerLoad } from './$types';
 import { auth, userExistsByPhone } from '$lib/server/auth';
 import { normalizePhone } from '$lib/phone';
 import { PENDING_COOKIE, PENDING_MAX_AGE, serializePending } from '$lib/server/otp';
+import { getPortalContext } from '$lib/server/portal';
 import { dev } from '$app/environment';
 
 export const load: PageServerLoad = (event) => {
 	if (event.locals.user) {
 		return redirect(302, '/dashboard');
 	}
-	return {};
+	const ctx = getPortalContext(event);
+	return { portalQuery: ctx?.mac ? `?mac=${encodeURIComponent(ctx.mac)}` : '' };
 };
 
 export const actions: Actions = {
@@ -38,7 +40,8 @@ export const actions: Actions = {
 
 		await auth.api.sendPhoneNumberOTP({ body: { phoneNumber: phone } });
 
-		event.cookies.set(PENDING_COOKIE, serializePending({ phone, intent: 'register', name }), {
+		const mac = getPortalContext(event)?.mac;
+		event.cookies.set(PENDING_COOKIE, serializePending({ phone, intent: 'register', name, mac }), {
 			path: '/',
 			httpOnly: true,
 			sameSite: 'lax',

@@ -30,7 +30,13 @@ async function resolveMac(event: RequestEvent): Promise<string | null> {
 		// Strip the IPv4-mapped-IPv6 prefix (`::ffff:10.0.0.5`) so the router's
 		// `?address=` lookup matches the plain IPv4 the hotspot host table stores.
 		const ip = event.getClientAddress().replace(/^::ffff:/, '');
-		return await resolveDeviceMac(network, ip);
+		// Best-effort + time-boxed: never let a slow/unreachable router hang the
+		// dashboard. The captive-portal context above is the primary path; this lookup
+		// only helps for devices whose real IP the router sees (bypassed clients).
+		return await Promise.race([
+			resolveDeviceMac(network, ip),
+			new Promise<null>((resolve) => setTimeout(() => resolve(null), 2500))
+		]);
 	} catch {
 		return null;
 	}

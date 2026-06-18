@@ -3,13 +3,16 @@ import type { Actions, PageServerLoad } from './$types';
 import { auth, userExistsByPhone } from '$lib/server/auth';
 import { normalizePhone } from '$lib/phone';
 import { PENDING_COOKIE, PENDING_MAX_AGE, serializePending } from '$lib/server/otp';
+import { getPortalContext } from '$lib/server/portal';
 import { dev } from '$app/environment';
 
 export const load: PageServerLoad = (event) => {
 	if (event.locals.user) {
 		return redirect(302, '/dashboard');
 	}
-	return {};
+	// Keep the captive-portal MAC on the URL so the register cross-link keeps it too.
+	const ctx = getPortalContext(event);
+	return { portalQuery: ctx?.mac ? `?mac=${encodeURIComponent(ctx.mac)}` : '' };
 };
 
 export const actions: Actions = {
@@ -30,7 +33,10 @@ export const actions: Actions = {
 
 		await auth.api.sendPhoneNumberOTP({ body: { phoneNumber: phone } });
 
-		event.cookies.set(PENDING_COOKIE, serializePending({ phone, intent: 'login' }), {
+		// Carry the captive-portal device MAC through OTP so the dashboard can grant
+		// access after verify (the URL/cookie may not survive the captive browser).
+		const mac = getPortalContext(event)?.mac;
+		event.cookies.set(PENDING_COOKIE, serializePending({ phone, intent: 'login', mac }), {
 			path: '/',
 			httpOnly: true,
 			sameSite: 'lax',
