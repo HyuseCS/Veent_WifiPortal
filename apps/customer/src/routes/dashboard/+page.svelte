@@ -4,6 +4,7 @@
 	import type { SubmitFunction } from '@sveltejs/kit';
 	import { toasts } from '$lib/toast.svelte';
 	import Icon from '$lib/Icon.svelte';
+	import { resolve } from '$app/paths';
 	import type { PageServerData, ActionData } from './$types';
 
 	let { data, form }: { data: PageServerData; form: ActionData } = $props();
@@ -233,7 +234,7 @@
 			<!-- Footer actions -->
 			<div class="mt-auto flex gap-2.5">
 				<a
-					href="/top-up"
+					href={resolve('/top-up')}
 					class="flex h-12 flex-1 items-center justify-center gap-1.5 rounded-xl border border-border bg-surface text-sm font-semibold text-brand transition-colors hover:bg-brand-tint-2"
 				>
 					<Icon name="plus" size={17} />
@@ -331,7 +332,7 @@
 					</span>
 				</div>
 				<a
-					href="/top-up"
+					href={resolve('/top-up')}
 					class="mb-2.5 flex h-[52px] w-full items-center justify-center rounded-xl bg-cta text-base font-bold text-white transition-colors hover:bg-cta-hover"
 				>
 					Top up credits
