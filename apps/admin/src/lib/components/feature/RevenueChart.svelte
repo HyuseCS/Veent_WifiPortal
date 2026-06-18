@@ -31,8 +31,14 @@
 	);
 </script>
 
-<svg viewBox="0 0 {W} {height}" class="w-full" role="img" aria-label={label}>
-	{#each bars as bar, i (i)}
+<svg
+	viewBox="0 0 {W} {height}"
+	preserveAspectRatio="xMidYMax meet"
+	class="h-full max-h-full w-full"
+	role="img"
+	aria-label={label}
+>
+	{#each bars as bar (bar.key)}
 		<rect x={bar.x} y={bar.y} width={bar.bw} height={bar.h} rx="4" class="fill-brand" />
 		<text x={bar.cx} y={height - 8} text-anchor="middle" class="fill-muted text-[12px]">
 			{bar.label}

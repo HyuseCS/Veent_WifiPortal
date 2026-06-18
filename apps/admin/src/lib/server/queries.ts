@@ -115,13 +115,10 @@ export async function listActiveSessions(db: DB, now: Date = new Date()): Promis
 	});
 }
 
-/** Headline KPIs. Deltas are omitted (no period-over-period baseline yet). */
+/** Headline KPIs. Deltas are omitted (no period-over-period baseline yet).
+ * Active-session count is intentionally absent — the Active Sessions table covers it. */
 export async function dashboardKpis(db: DB): Promise<Kpi[]> {
-	const [[active], [free], [revenue], [avg]] = await Promise.all([
-		db
-			.select({ n: sql<number>`count(*)::int` })
-			.from(networkSessions)
-			.where(eq(networkSessions.status, SESSION_STATUS.active)),
+	const [[free], [revenue], [avg]] = await Promise.all([
 		db
 			.select({ n: sql<number>`count(*)::int` })
 			.from(networkSessions)
@@ -140,7 +137,6 @@ export async function dashboardKpis(db: DB): Promise<Kpi[]> {
 
 	return [
 		{ label: 'Gross Revenue', value: peso(revenue?.total ?? 0) },
-		{ label: 'Active Sessions', value: String(active?.n ?? 0) },
 		{ label: 'Free-Time Grants', value: String(free?.n ?? 0) },
 		{ label: 'Avg. Session', value: `${Math.round(avg?.mins ?? 0)}m` }
 	];
