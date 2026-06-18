@@ -1,8 +1,14 @@
 import { fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { APIError } from 'better-auth/api';
-import { auth, setUserName } from '$lib/server/auth';
-import { PENDING_COOKIE, PENDING_MAX_AGE, maskPhone, parsePending, serializePending } from '$lib/server/otp';
+import { auth } from '$lib/server/auth';
+import {
+	PENDING_COOKIE,
+	PENDING_MAX_AGE,
+	maskPhone,
+	parsePending,
+	serializePending
+} from '$lib/server/otp';
 import { dev } from '$app/environment';
 
 export const load: PageServerLoad = (event) => {
@@ -14,7 +20,7 @@ export const load: PageServerLoad = (event) => {
 		// No code in flight (expired or never started) — back to the start.
 		return redirect(303, '/login');
 	}
-	return { maskedPhone: maskPhone(pending.phone), intent: pending.intent };
+	return { maskedPhone: maskPhone(pending.phone) };
 };
 
 export const actions: Actions = {
@@ -41,12 +47,6 @@ export const actions: Actions = {
 			throw error;
 		}
 
-		// Apply the name captured at registration (signUpOnVerification seeds a
-		// temporary one).
-		if (pending.intent === 'register' && pending.name) {
-			await setUserName(pending.phone, pending.name);
-		}
-
 		event.cookies.delete(PENDING_COOKIE, { path: '/' });
 		return redirect(303, '/dashboard');
 	},
@@ -62,8 +62,14 @@ export const actions: Actions = {
 		// Refresh the pending-cookie window so it doesn't expire before the new code.
 		event.cookies.set(
 			PENDING_COOKIE,
-			serializePending({ phone: pending.phone, intent: pending.intent, name: pending.name }),
-			{ path: '/', httpOnly: true, sameSite: 'lax', secure: !dev, maxAge: PENDING_MAX_AGE }
+			serializePending({ phone: pending.phone, intent: pending.intent }),
+			{
+				path: '/',
+				httpOnly: true,
+				sameSite: 'lax',
+				secure: !dev,
+				maxAge: PENDING_MAX_AGE
+			}
 		);
 
 		return { resent: true };

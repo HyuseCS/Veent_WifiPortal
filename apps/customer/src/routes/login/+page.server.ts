@@ -1,6 +1,6 @@
 import { fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
-import { auth, userExistsByPhone } from '$lib/server/auth';
+import { auth } from '$lib/server/auth';
 import { normalizePhone } from '$lib/phone';
 import { PENDING_COOKIE, PENDING_MAX_AGE, serializePending } from '$lib/server/otp';
 import { dev } from '$app/environment';
@@ -13,8 +13,11 @@ export const load: PageServerLoad = (event) => {
 };
 
 export const actions: Actions = {
-	// Login is phone-only: validate the number, confirm an account exists, text a
-	// one-time code, then hand off to /auth/verify.
+	// One unified phone-only entry: validate the number, text a one-time code, then
+	// hand off to /auth/verify. There is no separate sign-up — a first-time number
+	// is created automatically on first successful verification
+	// (signUpOnVerification in $lib/server/auth), so we no longer gate on whether
+	// an account already exists.
 	default: async (event) => {
 		const formData = await event.request.formData();
 		const phoneRaw = formData.get('phone')?.toString() ?? '';
@@ -22,10 +25,6 @@ export const actions: Actions = {
 
 		if (!phone) {
 			return fail(400, { phone: phoneRaw, message: 'Enter a valid Philippine mobile number.' });
-		}
-
-		if (!(await userExistsByPhone(phone))) {
-			return fail(404, { phone: phoneRaw, message: 'No account found for this number. Create one first.' });
 		}
 
 		await auth.api.sendPhoneNumberOTP({ body: { phoneNumber: phone } });

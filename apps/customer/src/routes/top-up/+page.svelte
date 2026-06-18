@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
 	import type { SubmitFunction } from '@sveltejs/kit';
+	import Icon from '$lib/Icon.svelte';
 	import type { PageServerData, ActionData } from './$types';
 
 	let { data, form }: { data: PageServerData; form: ActionData } = $props();
@@ -42,35 +43,51 @@
 	};
 </script>
 
-<main class="mx-auto flex min-h-screen max-w-sm flex-col p-6">
-	<header class="space-y-1">
-		<h1 class="text-2xl font-bold tracking-tight text-ink">Top up credits</h1>
-		<p class="text-sm text-muted">Add credits to your balance to keep browsing.</p>
-	</header>
+<svelte:head>
+	<title>Top up · Veent WiFi</title>
+</svelte:head>
 
-	<div class="rounded-xl p-6">
-		<p class="text-sm font-medium opacity-75">Your balance</p>
-		<p class="mt-1 font-mono text-4xl font-bold">{data.balance} credits</p>
+<main class="mx-auto flex min-h-screen max-w-sm flex-col p-5">
+	<a
+		href="/dashboard"
+		class="mb-[22px] flex min-h-[44px] items-center gap-1.5 self-start text-[13px] font-medium text-muted hover:text-ink"
+	>
+		<Icon name="arrow-left" size={18} strokeWidth={2.2} />
+		Dashboard
+	</a>
+
+	<div
+		class="mb-6 flex items-center justify-between rounded-2xl border border-border bg-surface px-[18px] py-4"
+	>
+		<span class="text-[13px] font-medium text-muted">Current balance</span>
+		<div class="flex items-baseline gap-1.5">
+			<span class="font-mono text-2xl font-semibold text-ink">{data.balance}</span>
+			<span class="text-[13px] font-medium text-muted">cr</span>
+		</div>
 	</div>
 
 	{#if form?.error}
-		<p class="rounded-lg bg-blocked/10 px-4 py-3 text-sm text-blocked" role="alert">{form.error}</p>
+		<p class="mb-4 rounded-lg bg-blocked/10 px-4 py-3 text-sm text-blocked" role="alert">
+			{form.error}
+		</p>
 	{/if}
 
 	{#if data.bundles.length === 0}
-		<p class="rounded-xl border border-border bg-surface p-6 text-center text-sm text-muted">
+		<p class="rounded-2xl border border-border bg-surface p-6 text-center text-sm text-muted">
 			No credit bundles are available right now. Please check back soon.
 		</p>
 	{:else}
-		<form method="post" action="?/checkout" use:enhance={checkout} class="space-y-4">
-			<fieldset class="space-y-3">
-				<legend class="mb-3 text-sm font-semibold text-ink">Choose an amount</legend>
+		<h1 class="mb-3.5 text-[21px] font-bold tracking-tight text-ink">Choose a bundle</h1>
+
+		<form method="post" action="?/checkout" use:enhance={checkout}>
+			<fieldset class="mb-6 flex flex-col gap-2.5" disabled={pending}>
+				<legend class="sr-only">Choose a credit bundle</legend>
 				{#each data.bundles as bundle (bundle.id)}
 					{@const selected = selectedId === bundle.id}
 					<label
-						class="flex min-h-[44px] cursor-pointer items-center gap-3 rounded-xl border p-4 transition-colors duration-150 {selected
-							? 'border-neutral-400 bg-neutral-100'
-							: 'border-neutral-200 bg-bg hover:bg-neutral-50'}"
+						class="flex min-h-[44px] cursor-pointer items-center gap-3.5 rounded-xl p-4 transition-colors {selected
+							? 'border-2 border-brand bg-brand-tint-2'
+							: 'border-[1.5px] border-border bg-bg hover:bg-surface'}"
 					>
 						<input
 							type="radio"
@@ -81,26 +98,26 @@
 							class="sr-only"
 						/>
 						<span
-							class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 {selected
-								? 'border-neutral-700'
-								: 'border-neutral-300'}"
+							class="h-5 w-5 shrink-0 rounded-full {selected
+								? 'border-[6px] border-brand'
+								: 'border-2 border-border'}"
 							aria-hidden="true"
-						>
-							{#if selected}
-								<span class="h-2.5 w-2.5 rounded-full bg-neutral-700"></span>
+						></span>
+						<span class="flex flex-1 items-center gap-2">
+							<span class="font-mono text-lg font-bold text-ink">₱{bundle.fiatCost}</span>
+							{#if bundle.id === bestValueId}
+								<span
+									class="rounded-full bg-brand px-2 py-[3px] text-[9.5px] font-semibold tracking-wide text-white uppercase"
+								>
+									Best value
+								</span>
 							{/if}
 						</span>
-						<span class="flex-1">
-							<span class="block text-base font-semibold text-ink">₱{bundle.fiatCost}</span>
-							<span class="block text-sm text-muted">{bundle.creditsProvided} credits</span>
+						<span
+							class="font-mono text-[13px] font-semibold {selected ? 'text-brand' : 'text-muted'}"
+						>
+							{bundle.creditsProvided} credits
 						</span>
-						{#if bundle.id === bestValueId}
-							<span
-								class="rounded-full bg-warning/15 px-2.5 py-1 text-xs font-medium text-warning"
-							>
-								Best value
-							</span>
-						{/if}
 					</label>
 				{/each}
 			</fieldset>
@@ -108,27 +125,32 @@
 			<button
 				type="submit"
 				disabled={pending || selectedId === null}
-				class="flex min-h-[44px] w-full cursor-pointer items-center justify-center gap-2 rounded-lg bg-cta px-4 py-3 text-sm font-semibold text-white transition-[background-color,transform] duration-150 hover:bg-cta-hover active:scale-[0.98] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cta disabled:cursor-not-allowed disabled:opacity-40"
+				class="flex h-[54px] w-full items-center justify-center gap-2 rounded-xl bg-cta text-base font-bold text-white transition-colors hover:bg-cta-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cta disabled:cursor-not-allowed disabled:opacity-50"
 			>
 				{#if pending}
 					<span
-						class="inline-block h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"
+						class="inline-block h-[18px] w-[18px] animate-spin rounded-full border-[2.5px] border-white/40 border-t-white"
 						aria-hidden="true"
 					></span>
-					<span class="sr-only">Redirecting to payment…</span>
+					Redirecting to payment…
 				{:else}
 					Continue to payment
+					<Icon name="arrow-right" size={18} strokeWidth={2.4} />
 				{/if}
 			</button>
-
-			<p class="text-center text-xs text-muted">Secured by Maya · credits are added after payment</p>
 		</form>
-	{/if}
 
-	<a
-		href="/dashboard"
-		class="text-center text-sm font-medium text-muted transition-colors hover:text-ink pt-4"
-	>
-		Back to dashboard
-	</a>
+		{#if pending}
+			<p class="mt-3.5 text-center text-[11.5px] font-medium text-muted">
+				Taking you to Maya — don't close this window.
+			</p>
+		{:else}
+			<div class="mt-4 flex items-center justify-center gap-1.5">
+				<Icon name="lock" size={13} class="text-muted" />
+				<span class="text-[11.5px] font-medium text-muted">
+					Secured by Maya · credits added after payment
+				</span>
+			</div>
+		{/if}
+	{/if}
 </main>

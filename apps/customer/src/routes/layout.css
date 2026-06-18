@@ -1,79 +1,52 @@
 /* Font @import MUST come before `@import 'tailwindcss'`: Tailwind v4 inlines its
  * import into generated rules, which would push any @import after it past the
  * "@import must precede all other statements" CSS rule (postcss errors otherwise). */
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
 @import 'tailwindcss';
 @plugin '@tailwindcss/typography';
 
 /*
- * Veent customer-portal design tokens. Shares ONE unified theme with the admin
- * dashboard — the palette, the four presets, and the data-theme mechanism are
- * identical to apps/admin/src/routes/layout.css, so a given theme looks the same
- * in both apps. The only intentional divergences are documented in
- * docs/DESIGN_GUIDELINES.md: the portal uses the Plus Jakarta Sans web font
- * (admin uses system-ui) and adds no sidebar tokens.
+ * Veent customer-portal design tokens.
+ *
+ * NOTE: as of the Customer Portal overhaul the portal NO LONGER shares the admin
+ * app's unified teal/coral theme. Per the imported Claude Design ("Veent Customer
+ * Portal.dc.html", see docs/design/), guests get a dedicated navy + blue identity
+ * with JetBrains Mono for numeric data. This is an intentional, customer-only
+ * divergence — do NOT "re-sync" these tokens with apps/admin/src/routes/layout.css.
+ * Guests have no theme selector, so there is a single palette and no presets.
  *
  * Tailwind v4 turns each `--color-*` into a utility (`bg-brand`, `text-ink`,
- * `bg-online/15`, …). The presets below override the brand/cta vars, so those
- * utilities re-resolve live when `data-theme` changes.
+ * `bg-online/15`, `bg-brand-tint-2`, …) and `--font-mono` into `font-mono`.
  */
 @theme {
-	/* Palette — default theme: teal + coral */
-	--color-brand: oklch(0.38 0.13 185);
-	--color-brand-hover: oklch(0.32 0.13 185);
-	--color-cta: oklch(0.62 0.18 28);
-	--color-cta-hover: oklch(0.56 0.18 28);
+	/* Palette — navy brand + blue CTA */
+	--color-brand: rgb(0, 18, 107);
+	--color-brand-hover: rgb(0, 12, 78);
+	--color-cta: rgb(10, 98, 169);
+	--color-cta-hover: rgb(7, 75, 135);
+
+	/* Light brand-family tints — card / highlight backgrounds */
+	--color-brand-tint: color-mix(in srgb, rgb(135, 201, 254), white 52%);
+	--color-brand-tint-2: color-mix(in srgb, rgb(175, 219, 255), white 58%);
+	--color-cta-tint: color-mix(in srgb, rgb(10, 98, 169), white 86%);
 
 	/* Surfaces */
 	--color-bg: oklch(1 0 0);
-	--color-surface: oklch(0.975 0.008 185);
-	--color-border: oklch(0.92 0.008 185);
+	--color-surface: rgb(244, 249, 255);
+	--color-border: rgb(223, 234, 247);
 
 	/* Text */
-	--color-ink: oklch(0.14 0.02 190);
-	--color-muted: oklch(0.52 0.01 190);
+	--color-ink: rgb(12, 34, 58);
+	--color-muted: rgb(92, 112, 138);
 
-	/* Status — semantic, not themeable */
+	/* Status — semantic */
 	--color-online: oklch(0.5 0.15 155);
 	--color-warning: oklch(0.65 0.15 72);
 	--color-blocked: oklch(0.55 0.18 22);
 
-	/* Type — one web font for the whole portal, system-ui fallback */
+	/* Type — Plus Jakarta Sans for UI, JetBrains Mono for data fields */
 	--font-sans: 'Plus Jakarta Sans', system-ui, sans-serif;
-}
-
-/*
- * Theme presets — each overrides only brand + cta; the semantic structure
- * (surfaces, text, status) stays constant. `:root[data-theme]` outranks the
- * `:root` vars emitted by @theme, so the generated utilities pick these up.
- * Kept byte-for-byte in sync with the admin app for a unified look.
- */
-:root[data-theme='teal'] {
-	--color-brand: oklch(0.38 0.13 185);
-	--color-brand-hover: oklch(0.32 0.13 185);
-	--color-cta: oklch(0.62 0.18 28);
-	--color-cta-hover: oklch(0.56 0.18 28);
-}
-
-:root[data-theme='jade'] {
-	--color-brand: oklch(0.34 0.13 155);
-	--color-brand-hover: oklch(0.28 0.13 155);
-	--color-cta: oklch(0.72 0.17 72);
-	--color-cta-hover: oklch(0.65 0.17 72);
-}
-
-:root[data-theme='cobalt'] {
-	--color-brand: oklch(0.44 0.19 255);
-	--color-brand-hover: oklch(0.37 0.19 255);
-	--color-cta: oklch(0.78 0.165 135);
-	--color-cta-hover: oklch(0.72 0.165 135);
-}
-
-:root[data-theme='mono'] {
-	--color-brand: oklch(0.14 0.01 200);
-	--color-brand-hover: oklch(0.1 0.01 200);
-	--color-cta: oklch(0.55 0.15 182);
-	--color-cta-hover: oklch(0.48 0.15 182);
+	--font-mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', monospace;
 }
 
 @layer base {
@@ -86,6 +59,7 @@
 		overscroll-behavior: contain;
 		background-color: var(--color-bg);
 		color: var(--color-ink);
+		font-family: var(--font-sans);
 	}
 }
 

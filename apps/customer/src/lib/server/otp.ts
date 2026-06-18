@@ -38,7 +38,11 @@ function sign(data: string): string {
 }
 
 /** Build the signed cookie value for a pending verification. */
-export function serializePending(input: { phone: string; intent: OtpIntent; name?: string }): string {
+export function serializePending(input: {
+	phone: string;
+	intent: OtpIntent;
+	name?: string;
+}): string {
 	const payload: PendingVerification = {
 		phone: input.phone,
 		intent: input.intent,
@@ -63,7 +67,9 @@ export function parsePending(cookie: string | undefined): PendingVerification | 
 	if (sigBuf.length !== expectedBuf.length || !timingSafeEqual(sigBuf, expectedBuf)) return null;
 
 	try {
-		const payload = JSON.parse(Buffer.from(data, 'base64url').toString('utf8')) as PendingVerification;
+		const payload = JSON.parse(
+			Buffer.from(data, 'base64url').toString('utf8')
+		) as PendingVerification;
 		if (typeof payload.exp !== 'number' || payload.exp < Date.now()) return null;
 		return payload;
 	} catch {

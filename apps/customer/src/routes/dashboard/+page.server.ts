@@ -13,6 +13,7 @@ import { db } from '$lib/server/db';
 import { network } from '$lib/server/network';
 import { getPortalContext } from '$lib/server/portal';
 import type { RequestEvent } from '@sveltejs/kit';
+import { maskPhone } from '$lib/server/otp';
 import type { Actions, PageServerLoad } from './$types';
 import { auth } from '$lib/server/auth';
 
@@ -51,8 +52,10 @@ export const load: PageServerLoad = async (event) => {
 		.from(packages)
 		.where(and(eq(packages.type, 'tier'), eq(packages.isActive, true)));
 
+	const phone = (user as { phoneNumber?: string | null }).phoneNumber ?? null;
+
 	return {
-		user,
+		maskedPhone: phone ? maskPhone(phone) : null,
 		mac: await resolveMac(event),
 		balance: account?.balance ?? 0,
 		blocked: account?.blocked ?? false,
@@ -88,7 +91,10 @@ export const actions: Actions = {
 			return fail(502, { error: 'Could not reach the network controller. Please try again.' });
 		}
 		if (!result.ok) {
-			return fail(429, { error: 'Free time not available yet', nextEligibleAt: result.nextEligibleAt });
+			return fail(429, {
+				error: 'Free time not available yet',
+				nextEligibleAt: result.nextEligibleAt
+			});
 		}
 		return { connected: true };
 	},
@@ -100,7 +106,8 @@ export const actions: Actions = {
 		const form = await event.request.formData();
 		const mac = String(form.get('mac') ?? '') || (await resolveMac(event)) || '';
 		const packageId = Number(form.get('packageId'));
-		if (!Number.isFinite(packageId)) return fail(400, { error: 'Missing package' });
+		if (!Number.isFinite(packageId))
+			return fail(400, { error: 'Missing package' });
 		// Validate the device BEFORE spending credits — otherwise a bad MAC debits the
 		// user and then fails to grant, leaving them charged with no access.
 		if (!MAC_RE.test(mac)) return fail(400, { error: NO_DEVICE });
@@ -111,7 +118,11 @@ export const actions: Actions = {
 		const [pkg] = await db.select().from(packages).where(eq(packages.id, packageId)).limit(1);
 		if (!pkg || !pkg.isActive) return fail(404, { error: 'Package not found' });
 
-		const spend = await spendCredits(db, { userId: user.id, amount: pkg.creditCost ?? 0, packageId: pkg.id });
+		const spend = await spendCredits(db, {
+			userId: user.id,
+			amount: pkg.creditCost ?? 0,
+			packageId: pkg.id
+		});
 		if (!spend.ok) return fail(402, { error: 'Insufficient credit balance' });
 
 		try {
