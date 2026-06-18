@@ -109,7 +109,8 @@ export async function listActiveSessions(db: DB, now: Date = new Date()): Promis
 			package: r.packageName ?? 'Free Time',
 			timeLeft: formatTimeLeft(msLeft),
 			tone,
-			status
+			status,
+			expiresAt: r.expiresAt ? r.expiresAt.toISOString() : null
 		};
 	});
 }

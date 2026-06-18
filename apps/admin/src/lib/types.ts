@@ -32,10 +32,15 @@ export interface RevenuePoint {
 export interface ActiveSession {
 	mac: string;
 	package: string;
-	/** Remaining time, pre-formatted "MM:SS" or "H:MM". */
+	/** Remaining time, pre-formatted "MM:SS" or "H:MM" — the server's snapshot at
+	 * query time. The dashboard recomputes a live countdown from `expiresAt`; this
+	 * is the SSR/no-JS fallback. */
 	timeLeft: string;
 	tone: StatusTone;
 	status: string;
+	/** Session expiry as an ISO string, so the client can tick the countdown every
+	 * second instead of waiting on the 5s SSE snapshot. Null if no expiry recorded. */
+	expiresAt: string | null;
 }
 
 /** Health snapshot for one access point. */
