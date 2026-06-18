@@ -43,6 +43,32 @@
 		{ label: 'Uptime' },
 		{ label: 'Latency' }
 	];
+
+	// Chosen arrangement comes from the header switcher via shared context (see (app)/+layout).
+	const layoutCtx = getContext<DashLayoutCtx>(DASH_LAYOUT_CTX);
+
+	// Single-screen budget: cap the variable tables so nothing pushes the page past one
+	// viewport. Overflow rows collapse into a "+N more" / "View all" affordance instead of
+	// a scrollbar (panels are overflow-hidden; <main> scroll is only a last-resort net).
+	const SESSION_CAP = 6;
+	const NET_CAP = 4;
+	const shownSessions = $derived(activeSessions.slice(0, SESSION_CAP));
+	const moreSessions = $derived(Math.max(0, activeSessions.length - SESSION_CAP));
+	const shownNetworks = $derived(data.networks.slice(0, NET_CAP));
+	const moreNetworks = $derived(Math.max(0, data.networks.length - NET_CAP));
+
+	const sessionCols = [
+		{ label: 'MAC Address' },
+		{ label: 'Package' },
+		{ label: 'Time Left' },
+		{ label: 'Status' }
+	];
+	const netCols = [
+		{ label: 'Access Point' },
+		{ label: 'Status' },
+		{ label: 'Uptime' },
+		{ label: 'Latency' }
+	];
 </script>
 
 <div class="dash dash-{layoutCtx.current}">
