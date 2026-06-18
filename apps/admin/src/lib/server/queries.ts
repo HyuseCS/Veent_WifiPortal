@@ -22,6 +22,7 @@ import { SESSION_STATUS, LEDGER_TYPE } from '@veent/core';
 import type {
 	ActiveSession,
 	AdminUserRow,
+	DashboardSnapshot,
 	Kpi,
 	NetworkAp,
 	RevenuePoint,
@@ -115,13 +116,23 @@ export async function listActiveSessions(db: DB, now: Date = new Date()): Promis
 	});
 }
 
-/** Headline KPIs. Deltas are omitted (no period-over-period baseline yet). */
+/** The full dashboard in one frame: KPIs + revenue + active sessions + network
+ * health. Pure composition of the four queries below — seeds SSR and is what the
+ * live feed re-queries per DB notify. */
+export async function dashboardSnapshot(db: DB): Promise<DashboardSnapshot> {
+	const [kpis, revenue, activeSessions, networks] = await Promise.all([
+		dashboardKpis(db),
+		revenueByDay(db),
+		listActiveSessions(db),
+		listNetworkHealth(db)
+	]);
+	return { kpis, revenue, activeSessions, networks };
+}
+
+/** Headline KPIs. Deltas are omitted (no period-over-period baseline yet).
+ * Active-session count is intentionally absent — the Active Sessions table covers it. */
 export async function dashboardKpis(db: DB): Promise<Kpi[]> {
-	const [[active], [free], [revenue], [avg]] = await Promise.all([
-		db
-			.select({ n: sql<number>`count(*)::int` })
-			.from(networkSessions)
-			.where(eq(networkSessions.status, SESSION_STATUS.active)),
+	const [[free], [revenue], [avg]] = await Promise.all([
 		db
 			.select({ n: sql<number>`count(*)::int` })
 			.from(networkSessions)
@@ -140,7 +151,6 @@ export async function dashboardKpis(db: DB): Promise<Kpi[]> {
 
 	return [
 		{ label: 'Gross Revenue', value: peso(revenue?.total ?? 0) },
-		{ label: 'Active Sessions', value: String(active?.n ?? 0) },
 		{ label: 'Free-Time Grants', value: String(free?.n ?? 0) },
 		{ label: 'Avg. Session', value: `${Math.round(avg?.mins ?? 0)}m` }
 	];

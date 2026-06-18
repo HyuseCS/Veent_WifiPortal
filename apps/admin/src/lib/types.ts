@@ -43,6 +43,15 @@ export interface ActiveSession {
 	expiresAt: string | null;
 }
 
+/** The whole dashboard in one frame — what the live feed re-queries and pushes
+ * over SSE on each DB notify, and what `load()` seeds for SSR first paint. */
+export interface DashboardSnapshot {
+	kpis: Kpi[];
+	revenue: RevenuePoint[];
+	activeSessions: ActiveSession[];
+	networks: NetworkAp[];
+}
+
 /** Health snapshot for one access point. */
 export interface NetworkAp {
 	id: string;
