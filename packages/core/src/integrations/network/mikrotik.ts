@@ -1,4 +1,4 @@
-import type { NetworkController, GrantInput, NetworkApSample } from './types';
+import type { NetworkController, GrantInput, NetworkApSample, RouterLogEntry } from './types';
 
 export interface MikrotikConfig {
 	host: string;
@@ -112,6 +112,24 @@ export function createMikrotikController(config: MikrotikConfig): NetworkControl
 				const arp = await conn.write('/ip/arp/print', [`?address=${ip}`]);
 				const fromArp = arp.find((r) => r['mac-address'])?.['mac-address'];
 				return fromArp ? fromArp.toUpperCase() : null;
+			});
+		},
+
+		async listRouterLog(opts?: { limit?: number }): Promise<RouterLogEntry[]> {
+			const limit = opts?.limit ?? 60;
+			return withConn(async (conn) => {
+				// /log returns the whole buffer oldest→newest; we take the newest tail.
+				const rows = await conn.write('/log/print', []);
+				const entries = rows.map((r) => ({
+					time: r.time ?? '',
+					topics: r.topics ?? '',
+					message: r.message ?? ''
+				}));
+				// Hide our own API churn — we open a fresh connection per call, so the
+				// log fills with "<user> logged in/out … via api". That's noise, not
+				// guest activity, and would otherwise dominate the panel.
+				const guestRelevant = entries.filter((e) => !/logged (in|out).*via api/i.test(e.message));
+				return guestRelevant.slice(-limit).reverse();
 			});
 		},
 

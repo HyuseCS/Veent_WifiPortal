@@ -10,6 +10,7 @@
 	import ReceiptText from 'lucide-svelte/icons/receipt-text';
 	import { live, connectLive } from '$lib/live.svelte';
 	import { DASH_LAYOUT_CTX, type DashLayoutCtx } from '$lib/dashboard-layout';
+	import type { ActiveSession, StatusTone } from '$lib/types';
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();
@@ -24,6 +25,28 @@
 		'Free-Time Grants': { icon: icon(Gift), helper: 'Sessions on the house', period: 'All-time' },
 		'Avg. Session': { icon: icon(Timer), helper: 'Mean connected time', period: 'All-time' }
 	};
+
+	// Tick a clock every second so session countdowns run live between SSE snapshots
+	// (the snapshot only re-lands on DB writes — without this the timer looks frozen).
+	let now = $state(Date.now());
+	$effect(() => {
+		const id = setInterval(() => (now = Date.now()), 1000);
+		return () => clearInterval(id);
+	});
+
+	const pad = (n: number) => String(n).padStart(2, '0');
+	/** Live remaining-time + tone/status from `expiresAt`, mirroring the server's
+	 * formatting. Falls back to the snapshot values when there's no expiry. */
+	function liveTimer(s: ActiveSession, nowMs: number): { left: string; tone: StatusTone; status: string } {
+		if (!s.expiresAt) return { left: s.timeLeft, tone: s.tone, status: s.status };
+		const total = Math.max(0, Math.floor((new Date(s.expiresAt).getTime() - nowMs) / 1000));
+		const h = Math.floor(total / 3600);
+		const m = Math.floor((total % 3600) / 60);
+		const left = h > 0 ? `${h}:${pad(m)}:${pad(total % 60)}` : `${pad(m)}:${pad(total % 60)}`;
+		if (total <= 0) return { left, tone: 'blocked', status: 'Expired' };
+		if (total < 180) return { left, tone: 'warning', status: 'Low Time' };
+		return { left, tone: 'online', status: 'Online' };
+	}
 
 	// Whole dashboard is live: SSR `data` seeds first paint, then the shared SSE stream
 	// (event-driven by Postgres triggers — business rule #5, never poll client-side) takes
@@ -104,12 +127,13 @@
 	<section class="sessions flex min-h-0 flex-col">
 		<Table title="Active Sessions" columns={sessionCols} class="min-h-0 flex-1">
 			{#each shownSessions as session (session.mac)}
+				{@const t = liveTimer(session, now)}
 				<tr class="transition-colors hover:bg-surface">
 					<td class="px-4 py-3 font-mono text-xs text-ink">{session.mac}</td>
 					<td class="px-4 py-3 text-ink">{session.package}</td>
-					<td class="px-4 py-3 font-mono text-ink">{session.timeLeft}</td>
+					<td class="px-4 py-3 font-mono text-ink">{t.left}</td>
 					<td class="px-4 py-3">
-						<StatusBadge tone={session.tone} label={session.status} />
+						<StatusBadge tone={t.tone} label={t.status} />
 					</td>
 				</tr>
 			{/each}

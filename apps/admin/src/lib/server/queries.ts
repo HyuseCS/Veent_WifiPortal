@@ -5,7 +5,7 @@
  *
  * These back the `load()` functions that replace `$lib/mocks`.
  */
-import { and, asc, desc, eq, gt, gte, isNull, lte, sql, type SQL } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, gte, isNotNull, isNull, lte, sql, type SQL } from 'drizzle-orm';
 import {
 	type DB,
 	customerUser,
@@ -23,6 +23,7 @@ import { SESSION_STATUS, LEDGER_TYPE } from '@veent/core';
 import type {
 	ActiveSession,
 	AdminUserRow,
+	ConnectionLog,
 	DashboardSnapshot,
 	Kpi,
 	NetworkAp,
@@ -264,6 +265,39 @@ export async function listNetworkHealth(db: DB, now: Date = new Date()): Promise
 	const activeByNetwork = new Map<number, number>();
 	for (const c of counts) if (c.networkId != null) activeByNetwork.set(c.networkId, c.n);
 
+	// Recent connections per AP for the card log (newest first, capped per AP).
+	const LOGS_PER_AP = 15;
+	const logRows = await db
+		.select({
+			networkId: networkSessions.networkId,
+			mac: networkSessions.macAddress,
+			status: networkSessions.status,
+			startedAt: networkSessions.startedAt,
+			packageName: packages.name
+		})
+		.from(networkSessions)
+		.leftJoin(packages, eq(packages.id, networkSessions.packageId))
+		.where(isNotNull(networkSessions.networkId))
+		.orderBy(desc(networkSessions.startedAt))
+		.limit(400);
+	const logsByNetwork = new Map<number, ConnectionLog[]>();
+	for (const r of logRows) {
+		if (r.networkId == null) continue;
+		const list = logsByNetwork.get(r.networkId);
+		if (list && list.length >= LOGS_PER_AP) continue;
+		const online = r.status === SESSION_STATUS.active;
+		const expired = r.status === SESSION_STATUS.expired;
+		const entry: ConnectionLog = {
+			at: formatLastActive(r.startedAt, now),
+			mac: r.mac ?? '—',
+			package: r.packageName ?? 'Free Time',
+			status: online ? 'Online' : expired ? 'Expired' : 'Revoked',
+			tone: online ? 'online' : expired ? 'warning' : 'blocked'
+		};
+		if (list) list.push(entry);
+		else logsByNetwork.set(r.networkId, [entry]);
+	}
+
 	return rows.map((r) => {
 		const uptime = Number(r.uptimePct);
 		let tone: StatusTone = 'online';
@@ -287,7 +321,8 @@ export async function listNetworkHealth(db: DB, now: Date = new Date()): Promise
 			latitude: r.latitude,
 			longitude: r.longitude,
 			address: r.address,
-			interfaceName: r.interfaceName
+			interfaceName: r.interfaceName,
+			logs: logsByNetwork.get(r.id) ?? []
 		};
 	});
 }
