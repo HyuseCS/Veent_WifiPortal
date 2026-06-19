@@ -1,9 +1,11 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import Plus from 'lucide-svelte/icons/plus';
 	import 'leaflet/dist/leaflet.css';
 	import 'leaflet.markercluster/dist/MarkerCluster.css';
 	import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
 	import type { NetworkAp } from '$lib/types';
+	import AddPlaceDialog from './AddPlaceDialog.svelte';
 
 	let { networks }: { networks: NetworkAp[] } = $props();
 
@@ -13,6 +15,7 @@
 	let mapEl: HTMLDivElement;
 	let query = $state('');
 	let sidebarOpen = $state(true);
+	let addOpen = $state(false);
 
 	// APs that have both coordinates set — the only ones the map can render.
 	const placed = $derived(
@@ -27,9 +30,46 @@
 		})
 	);
 
+	let L: typeof import('leaflet') | undefined;
 	let mapInstance: import('leaflet').Map | undefined;
 	let clusterRef: import('leaflet').MarkerClusterGroup | undefined;
 	const markersById: Record<string, import('leaflet').Marker> = {};
+	let mapReady = $state(false);
+
+	// (Re)build pins from the placed APs. Runs on init and again whenever the placed
+	// set changes — e.g. right after the operator adds a location.
+	function renderMarkers() {
+		if (!L || !clusterRef) return;
+		clusterRef.clearLayers();
+		for (const id of Object.keys(markersById)) delete markersById[id];
+		for (const ap of placed) {
+			const color = ap.tone === 'online' ? 'var(--color-online)' : 'var(--color-blocked)';
+			const icon = L.divIcon({
+				className: 'radius-pin',
+				html: `<span style="background:${color}"></span>`,
+				iconSize: [18, 18],
+				iconAnchor: [9, 9]
+			});
+			const popup = `
+				<div class="radius-popup">
+					<strong>${escapeHtml(ap.name)}</strong>
+					${ap.address ? `<div class="radius-popup-addr">${escapeHtml(ap.address)}</div>` : ''}
+					<div class="radius-popup-status">
+						<span class="radius-dot" style="background:${color}"></span>${ap.status}
+					</div>
+				</div>`;
+			markersById[ap.id] = L.marker([Number(ap.latitude!), Number(ap.longitude!)], {
+				icon
+			}).bindPopup(popup);
+			markersById[ap.id].addTo(clusterRef);
+		}
+	}
+
+	// Keep pins in sync with the data once the map exists (picks up newly added places).
+	$effect(() => {
+		void placed;
+		if (mapReady) renderMarkers();
+	});
 
 	function selectAp(ap: NetworkAp) {
 		const marker = markersById[ap.id];
@@ -44,65 +84,47 @@
 		let cancelled = false;
 
 		(async () => {
-			const L = (await import('leaflet')).default;
+			const mod = await import('leaflet');
 			await import('leaflet.markercluster');
 			if (cancelled) return;
+			L = mod.default;
 
-			mapInstance = L.map(mapEl, { attributionControl: true, zoomControl: false }).setView(
+			// Locals keep TS's null-narrowing through the renderMarkers() call below
+			// (it can't prove the module-scoped refs aren't reassigned).
+			const map = L.map(mapEl, { attributionControl: true, zoomControl: false }).setView(
 				FALLBACK_CENTER,
 				11
 			);
-			L.control.zoom({ position: 'bottomright' }).addTo(mapInstance);
+			L.control.zoom({ position: 'bottomright' }).addTo(map);
 
 			// ponytail: OSM public tiles — swap for a dedicated provider before heavy prod load.
 			L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
 				maxZoom: 19,
 				attribution:
 					'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-			}).addTo(mapInstance);
+			}).addTo(map);
 
-			clusterRef = L.markerClusterGroup();
+			const cluster = L.markerClusterGroup();
+			map.addLayer(cluster);
+			mapInstance = map;
+			clusterRef = cluster;
+			renderMarkers();
+			mapReady = true;
 
-			for (const ap of placed) {
-				const color =
-					ap.tone === 'online' ? 'var(--color-online)' : 'var(--color-blocked)';
-				const icon = L.divIcon({
-					className: 'radius-pin',
-					html: `<span style="background:${color}"></span>`,
-					iconSize: [18, 18],
-					iconAnchor: [9, 9]
-				});
-				const popup = `
-					<div class="radius-popup">
-						<strong>${escapeHtml(ap.name)}</strong>
-						${ap.address ? `<div class="radius-popup-addr">${escapeHtml(ap.address)}</div>` : ''}
-						<div class="radius-popup-status">
-							<span class="radius-dot" style="background:${color}"></span>${ap.status}
-						</div>
-					</div>`;
-				markersById[ap.id] = L.marker([Number(ap.latitude!), Number(ap.longitude!)], {
-					icon
-				}).bindPopup(popup);
-				markersById[ap.id].addTo(clusterRef);
-			}
-
-			mapInstance.addLayer(clusterRef);
-
-			// Centre on the admin's country. Fallback: fit to placed APs, then Manila.
+			// Centre on the admin's current location. Fallback (denied/unavailable):
+			// fit to the placed APs, else the Manila default already set above.
 			if (navigator.geolocation) {
 				navigator.geolocation.getCurrentPosition(
 					(pos) => {
-						if (!cancelled)
-							mapInstance?.setView([pos.coords.latitude, pos.coords.longitude], 6);
+						if (!cancelled) map.setView([pos.coords.latitude, pos.coords.longitude], 15);
 					},
 					() => {
-						if (!cancelled && placed.length > 0)
-							mapInstance?.fitBounds(clusterRef!.getBounds().pad(0.2));
+						if (!cancelled && placed.length > 0) map.fitBounds(cluster.getBounds().pad(0.2));
 					},
 					{ enableHighAccuracy: false, timeout: 8000 }
 				);
 			} else if (placed.length > 0) {
-				mapInstance.fitBounds(clusterRef.getBounds().pad(0.2));
+				map.fitBounds(cluster.getBounds().pad(0.2));
 			}
 		})();
 
@@ -150,8 +172,8 @@
 			<div class="flex-1 overflow-y-auto">
 				{#if placed.length === 0}
 					<p class="px-4 py-6 text-center text-sm text-muted">
-						No APs have coordinates yet. Add them on the
-						<a href="/networks" class="text-brand underline">Networks page</a>.
+						No router locations yet. Use
+						<span class="font-medium text-ink">+ Add router location</span> below.
 					</p>
 				{:else if filtered.length === 0}
 					<p class="px-4 py-6 text-center text-sm text-muted">No match for "{query}".</p>
@@ -182,8 +204,17 @@
 				{/if}
 			</div>
 
-			<footer class="border-t border-border px-4 py-2 text-xs text-muted">
-				{placed.length} of {networks.length} AP{networks.length === 1 ? '' : 's'} placed
+			<footer class="space-y-2 border-t border-border px-3 py-2">
+				<!-- Admin-only "drop a router on the map" entry point. -->
+				<button
+					onclick={() => (addOpen = true)}
+					class="flex min-h-[44px] w-full items-center justify-center gap-2 rounded border border-dashed border-border text-sm font-medium text-brand hover:bg-surface"
+				>
+					<Plus class="h-4 w-4" aria-hidden="true" /> Add router location
+				</button>
+				<p class="px-1 text-xs text-muted">
+					{placed.length} of {networks.length} AP{networks.length === 1 ? '' : 's'} placed
+				</p>
 			</footer>
 		</aside>
 	{:else}
@@ -198,6 +229,8 @@
 	{/if}
 
 	<div bind:this={mapEl} class="h-full w-full"></div>
+
+	<AddPlaceDialog bind:open={addOpen} />
 </div>
 
 <style>
