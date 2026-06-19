@@ -1,4 +1,4 @@
-import { eq, notInArray } from 'drizzle-orm';
+import { and, eq, isNull, notInArray } from 'drizzle-orm';
 import { type DB, networkHealth } from '@veent/db';
 import type { NetworkController } from '../integrations/network';
 
@@ -42,10 +42,15 @@ export async function refreshNetworkHealth(
 		}
 	}
 
-	// Drop anything the router didn't report this round (e.g. the seeded sample APs).
+	// Drop auto-discovered rows the router didn't report this round (e.g. the seeded
+	// sample APs). Operator-placed pins (those with coordinates) are kept regardless —
+	// they're manually curated map locations, not live router interfaces, so the
+	// interface sweep must never delete them.
 	const names = samples.map((s) => s.name);
 	if (names.length > 0) {
-		await db.delete(networkHealth).where(notInArray(networkHealth.name, names));
+		await db
+			.delete(networkHealth)
+			.where(and(notInArray(networkHealth.name, names), isNull(networkHealth.latitude)));
 	}
 	return samples.length;
 }

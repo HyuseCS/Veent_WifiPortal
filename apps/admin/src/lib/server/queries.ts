@@ -462,4 +462,20 @@ export async function listTransactions(
 			createdAt: r.createdAt.toISOString()
 		}))
 	};
+/** Create a new operator-placed AP from the map ("a place where there is a router").
+ * Coordinates are required (it's a pin); health metrics default healthy until the
+ * router reports an interface of this name. Kept off the interface-sweep prune by
+ * its coordinates (see refreshNetworkHealth). */
+export async function createNetworkPlace(
+	db: DB,
+	place: { name: string; latitude: string; longitude: string; address: string | null }
+): Promise<void> {
+	await db.insert(networkHealth).values({
+		name: place.name,
+		latitude: place.latitude,
+		longitude: place.longitude,
+		address: place.address,
+		online: true,
+		uptimePct: '100.00'
+	});
 }

@@ -1,7 +1,9 @@
 <script lang="ts">
+	import MapPin from 'lucide-svelte/icons/map-pin';
 	import { enhance } from '$app/forms';
 	import type { NetworkAp } from '$lib/types';
 	import { Button, Card, Field, StatusBadge } from '$lib/components/ui';
+	import LocationPickerDialog from './LocationPickerDialog.svelte';
 
 	let { ap }: { ap: NetworkAp } = $props();
 
@@ -14,6 +16,19 @@
 	]);
 
 	const placed = $derived(ap.latitude != null && ap.longitude != null);
+
+	// Edits (typed or map-picked) override the saved value; null = show the saved
+	// coord. Cleared on a successful save so the field re-syncs to the fresh `ap`.
+	let editLat = $state<string | null>(null);
+	let editLng = $state<string | null>(null);
+	const latitude = $derived(editLat ?? ap.latitude ?? '');
+	const longitude = $derived(editLng ?? ap.longitude ?? '');
+	let pickerOpen = $state(false);
+
+	const toNum = (s: string): number | null => {
+		const n = Number(s);
+		return s.trim() !== '' && Number.isFinite(n) ? n : null;
+	};
 
 	let saving = $state(false);
 	let msg = $state<{ ok: boolean; text: string } | null>(null);
@@ -56,6 +71,9 @@
 					saving = false;
 					if (result.type === 'success') {
 						msg = { ok: true, text: 'Saved.' };
+						// Drop the local override so the fields re-sync to the saved `ap`.
+						editLat = null;
+						editLng = null;
 					} else if (result.type === 'failure') {
 						msg = { ok: false, text: String(result.data?.error ?? 'Could not save.') };
 					}
@@ -64,25 +82,39 @@
 			}}
 		>
 			<input type="hidden" name="id" value={ap.id} />
+			<button
+				type="button"
+				onclick={() => (pickerOpen = true)}
+				class="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-lg border border-border text-sm font-medium text-ink hover:bg-surface"
+			>
+				<MapPin class="h-4 w-4" aria-hidden="true" />
+				{placed ? 'Move on map' : 'Pick on map'}
+			</button>
 			<div class="grid grid-cols-2 gap-3">
-				<Field
-					id="lat-{ap.id}"
-					name="latitude"
-					label="Latitude"
-					type="text"
-					inputmode="decimal"
-					placeholder="14.5560"
-					value={ap.latitude ?? ''}
-				/>
-				<Field
-					id="lng-{ap.id}"
-					name="longitude"
-					label="Longitude"
-					type="text"
-					inputmode="decimal"
-					placeholder="121.0244"
-					value={ap.longitude ?? ''}
-				/>
+				<div class="space-y-1.5">
+					<label for="lat-{ap.id}" class="block text-sm font-medium text-ink">Latitude</label>
+					<input
+						id="lat-{ap.id}"
+						name="latitude"
+						value={latitude}
+						oninput={(e) => (editLat = e.currentTarget.value)}
+						inputmode="decimal"
+						placeholder="14.5560"
+						class="min-h-[44px] w-full rounded-lg border border-border bg-bg px-4 py-3 text-sm text-ink transition-colors focus:border-brand focus:ring-2 focus:ring-brand/20 focus:outline-none"
+					/>
+				</div>
+				<div class="space-y-1.5">
+					<label for="lng-{ap.id}" class="block text-sm font-medium text-ink">Longitude</label>
+					<input
+						id="lng-{ap.id}"
+						name="longitude"
+						value={longitude}
+						oninput={(e) => (editLng = e.currentTarget.value)}
+						inputmode="decimal"
+						placeholder="121.0244"
+						class="min-h-[44px] w-full rounded-lg border border-border bg-bg px-4 py-3 text-sm text-ink transition-colors focus:border-brand focus:ring-2 focus:ring-brand/20 focus:outline-none"
+					/>
+				</div>
 			</div>
 			<Field
 				id="addr-{ap.id}"
@@ -104,5 +136,16 @@
 				{/if}
 			</div>
 		</form>
+
+		<LocationPickerDialog
+			bind:open={pickerOpen}
+			title="Place {ap.name}"
+			initialLat={toNum(latitude)}
+			initialLng={toNum(longitude)}
+			onconfirm={(c) => {
+				editLat = String(c.lat);
+				editLng = String(c.lng);
+			}}
+		/>
 	</details>
 </Card>
