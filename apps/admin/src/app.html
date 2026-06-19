@@ -9,7 +9,7 @@
 			// Set light/dark before first paint to avoid a flash: saved choice wins,
 			// else follow the OS preference, else light.
 			try {
-				var saved = localStorage.getItem('veent-admin-theme');
+				var saved = localStorage.getItem('radius-admin-theme');
 				document.documentElement.dataset.theme =
 					saved || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
 			} catch (e) {

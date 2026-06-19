@@ -31,6 +31,7 @@
 		{ label: 'User' },
 		{ label: 'Balance' },
 		{ label: 'Usage' },
+		{ label: 'Last MAC' },
 		{ label: 'Status' },
 		{ label: 'Actions', srOnly: true }
 	];
@@ -94,6 +95,7 @@
 			</td>
 			<td class="px-4 py-3 font-mono text-ink">₱{user.balance.toFixed(2)}</td>
 			<td class="px-4 py-3 font-mono text-ink">{user.usage}</td>
+			<td class="px-4 py-3 font-mono text-xs text-muted">{user.lastMac ?? '—'}</td>
 			<td class="px-4 py-3">
 				<StatusBadge tone={user.tone} label={user.status} />
 			</td>

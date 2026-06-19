@@ -28,7 +28,7 @@ export function activationEmail({ url, name }: ActivationEmailInput): {
 	const safeUrl = escapeHtml(url);
 	const brand = '#c41f2c'; // red accent (≈ oklch(0.52 0.21 25)); white button text clears AA
 
-	const subject = 'Activate your Veent Admin account';
+	const subject = 'Activate your RADIUS Admin account';
 
 	const html = `<!doctype html>
 <html>
@@ -39,12 +39,12 @@ export function activationEmail({ url, name }: ActivationEmailInput): {
           <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:440px;background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;padding:32px;">
             <tr>
               <td style="font-size:18px;font-weight:600;color:#0f172a;padding-bottom:8px;">
-                Veent <span style="color:#64748b;font-weight:500;">Admin</span>
+                RADIUS <span style="color:#64748b;font-weight:500;">Admin</span>
               </td>
             </tr>
             <tr>
               <td style="font-size:14px;line-height:22px;color:#334155;padding:8px 0 24px;">
-                Hi ${safeName}, you've been invited to the Veent Admin dashboard.
+                Hi ${safeName}, you've been invited to the RADIUS Admin dashboard.
                 Set your password to activate your account.
               </td>
             </tr>
@@ -75,7 +75,7 @@ export function activationEmail({ url, name }: ActivationEmailInput): {
 
 	const text = `Hi ${name.trim() || 'there'},
 
-You've been invited to the Veent Admin dashboard. Set your password to activate your account:
+You've been invited to the RADIUS Admin dashboard. Set your password to activate your account:
 
 ${url}
 

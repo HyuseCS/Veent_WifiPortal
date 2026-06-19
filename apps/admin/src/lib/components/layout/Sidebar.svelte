@@ -23,11 +23,14 @@
 		<div
 			class="flex h-7 w-7 items-center justify-center rounded-md bg-cta text-sm font-bold text-white"
 		>
-			V
+			R
 		</div>
-		<span class="text-base font-semibold tracking-tight text-white">
-			Veent <span class="text-sidebar-muted">Admin</span>
-		</span>
+		<div class="flex flex-col leading-none">
+			<span class="text-base font-semibold tracking-tight text-white">
+				RADIUS <span class="text-sidebar-muted">Admin</span>
+			</span>
+			<span class="mt-0.5 text-[10px] font-medium text-sidebar-muted">by Parafiber</span>
+		</div>
 	</div>
 
 	<nav class="flex-1 space-y-0.5 px-3 py-2">

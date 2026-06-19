@@ -1,7 +1,7 @@
 /**
  * Bootstraps the first owner account for the admin dashboard.
  *
- *   OWNER_EMAIL=you@veent.io OWNER_PASSWORD=... OWNER_NAME="You" bun run bootstrap:owner
+ *   OWNER_EMAIL=you@example.com OWNER_PASSWORD=... OWNER_NAME="You" bun run bootstrap:owner
  *
  * (bun auto-loads apps/admin/.env, so DATABASE_URL / BETTER_AUTH_SECRET / ORIGIN
  * and the OWNER_* vars can live there instead of the command line.)
@@ -45,7 +45,7 @@ const auth = betterAuth({
 	secret: BETTER_AUTH_SECRET,
 	database: drizzleAdapter(db, { provider: 'pg', schema: adminAuthSchema }),
 	emailAndPassword: { enabled: true },
-	advanced: { cookiePrefix: 'veent-admin' }
+	advanced: { cookiePrefix: 'radius-admin' }
 });
 
 async function main() {

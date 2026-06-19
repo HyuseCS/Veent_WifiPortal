@@ -1,7 +1,7 @@
 @import 'tailwindcss';
 
 /*
- * Veent admin design tokens. Every color/type decision references these — see
+ * RADIUS admin design tokens. Every color/type decision references these — see
  * docs/DESIGN_GUIDELINES.md. Tailwind v4 turns each `--color-*` into a utility
  * (`bg-brand`, `text-ink`, `bg-online/15`, …). @theme is the LIGHT base; the
  * `:root[data-theme='dark']` block below overrides the surface/text/status vars,

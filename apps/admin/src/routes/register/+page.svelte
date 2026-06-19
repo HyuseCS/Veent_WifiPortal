@@ -14,8 +14,9 @@
 	<div class="w-full max-w-sm space-y-6">
 		<div class="text-center">
 			<span class="text-xl font-semibold tracking-tight text-ink">
-				Veent <span class="text-muted">Admin</span>
+				RADIUS <span class="text-muted">Admin</span>
 			</span>
+			<p class="text-xs text-muted">by Parafiber</p>
 			<p class="mt-1 text-sm text-muted">Create an account</p>
 		</div>
 

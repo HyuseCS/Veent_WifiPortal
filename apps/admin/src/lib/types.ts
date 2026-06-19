@@ -62,6 +62,11 @@ export interface NetworkAp {
 	latency: string;
 	users: number;
 	throughput: string;
+	/** Operator-entered location for the public locator map; null until set. Raw
+	 * numeric strings (decimal degrees), kept as-is for round-tripping into the form. */
+	latitude: string | null;
+	longitude: string | null;
+	address: string | null;
 }
 
 /** A row in the user-management table. */

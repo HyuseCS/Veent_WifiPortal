@@ -9,7 +9,7 @@ const config: EmailConfig = env.RESEND_API_KEY
 	? {
 			provider: 'resend',
 			apiKey: env.RESEND_API_KEY,
-			from: env.EMAIL_FROM ?? 'Veent <onboarding@resend.dev>'
+			from: env.EMAIL_FROM ?? 'RADIUS <onboarding@resend.dev>'
 		}
 	: { provider: 'stub' };
 

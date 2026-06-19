@@ -6,7 +6,7 @@
 export const DASH_LAYOUTS = ['bento', 'split', 'stacked'] as const;
 export type DashLayout = (typeof DASH_LAYOUTS)[number];
 
-export const DASH_LAYOUT_COOKIE = 'veent-dash-layout';
+export const DASH_LAYOUT_COOKIE = 'radius-dash-layout';
 
 /** Coerce an untrusted cookie value to a known layout (defaults to bento). */
 export function parseDashLayout(value: string | undefined): DashLayout {
