@@ -1,6 +1,6 @@
 import { json, error } from '@sveltejs/kit';
 import { env } from '$env/dynamic/private';
-import { expireDueSessions } from '@veent/core';
+import { expireDueSessions, reconcileGuestBindings } from '@veent/core';
 import { db } from '$lib/server/db';
 import { network } from '$lib/server/network';
 import type { RequestHandler } from './$types';
@@ -18,5 +18,7 @@ export const POST: RequestHandler = async (event) => {
 	if (!env.CRON_SECRET || secret !== env.CRON_SECRET) error(401, 'Unauthorized');
 
 	const revoked = await expireDueSessions(db, network);
-	return json({ ok: true, revoked });
+	// Then sweep router bindings the DB no longer backs (wipe/cascade/crash orphans).
+	const reconciled = await reconcileGuestBindings(db, network);
+	return json({ ok: true, revoked, reconciled });
 };

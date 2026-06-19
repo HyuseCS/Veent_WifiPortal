@@ -115,6 +115,60 @@ export function createMikrotikController(config: MikrotikConfig): NetworkControl
 			});
 		},
 
+		async listGuestBindings(): Promise<{ macAddress: string }[]> {
+			return withConn(async (conn) => {
+				const rows = await conn.write('/ip/hotspot/ip-binding/print', ['?type=bypassed']);
+				// Only our guest-tagged bindings — never admin bypasses or operator-added
+				// (untagged) ones. Filter in JS so we don't rely on RouterOS query AND-ing.
+				return rows
+					.filter((r) => r.comment === tag)
+					.map((r) => r['mac-address'])
+					.filter((m): m is string => Boolean(m))
+					.map((m) => ({ macAddress: m.toUpperCase() }));
+			});
+		},
+
+		async resolveApForMac(macAddress: string): Promise<string | null> {
+			const mac = macAddress.toUpperCase();
+			return withConn(async (conn) => {
+				// CAPsMAN first (multi-AP deployments report the managed AP interface),
+				// then the local wireless registration table. Each may be absent
+				// depending on the RouterOS package set — treat a query error as "n/a".
+				try {
+					const caps = await conn.write('/caps-man/registration-table/print', [
+						`?mac-address=${mac}`
+					]);
+					const iface = caps.find((r) => r.interface)?.interface;
+					if (iface) return iface;
+				} catch {
+					// CAPsMAN not installed/enabled — fall through.
+				}
+				try {
+					const reg = await conn.write('/interface/wireless/registration-table/print', [
+						`?mac-address=${mac}`
+					]);
+					const iface = reg.find((r) => r.interface)?.interface;
+					if (iface) return iface;
+				} catch {
+					// wireless package absent (e.g. CHR/x86) — fall through.
+				}
+				// Wired/VLAN deployments (third-party APs, no MikroTik radio): the ARP
+				// table maps the MAC to the interface/VLAN it's reachable on (e.g.
+				// "vlan70 hotspot"). Prefer a completed entry. This is per-VLAN, not
+				// per-physical-AP — the router can't see past a shared hotspot VLAN.
+				try {
+					const arp = await conn.write('/ip/arp/print', [`?mac-address=${mac}`]);
+					const iface =
+						arp.find((r) => r.interface && r.complete === 'true')?.interface ??
+						arp.find((r) => r.interface)?.interface;
+					if (iface) return iface;
+				} catch {
+					// ARP unavailable — give up.
+				}
+				return null;
+			});
+		},
+
 		async sampleHealth(): Promise<NetworkApSample[]> {
 			return withConn(async (conn) => {
 				// Which interface carries the hotspot, and how many devices we've put
