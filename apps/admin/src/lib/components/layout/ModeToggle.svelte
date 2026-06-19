@@ -14,7 +14,7 @@
 		current = id;
 		document.documentElement.dataset.theme = id;
 		try {
-			localStorage.setItem('veent-admin-theme', id);
+			localStorage.setItem('radius-admin-theme', id);
 		} catch {
 			// localStorage unavailable (private mode) — mode still applies for the session.
 		}

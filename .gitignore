@@ -32,3 +32,8 @@ graphify-out/
 .venv/
 
 start_db.sh
+
+# AI agent tooling — machine-local, not part of the app (vendored skills, configs)
+.agents/
+.claude/
+.gemini/

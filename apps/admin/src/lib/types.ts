@@ -62,6 +62,27 @@ export interface NetworkAp {
 	latency: string;
 	users: number;
 	throughput: string;
+	/** Operator-entered location for the public locator map; null until set. Raw
+	 * numeric strings (decimal degrees), kept as-is for round-tripping into the form. */
+	latitude: string | null;
+	longitude: string | null;
+	address: string | null;
+	/** Router AP/interface this pin's user count is bound to; null = unbound. */
+	interfaceName: string | null;
+	/** Recent connections attributed to this AP (newest first), for the card's log. */
+	logs: ConnectionLog[];
+}
+
+/** One device's connection through an AP — a row in the per-network log. */
+export interface ConnectionLog {
+	/** Short "x ago" label for when it started. */
+	at: string;
+	mac: string;
+	/** Tier name (e.g. "3 Hours") or "Free Time". */
+	package: string;
+	/** Display status: "Online" | "Expired" | "Revoked". */
+	status: string;
+	tone: StatusTone;
 }
 
 /** A row in the user-management table. */
@@ -109,4 +130,46 @@ export interface StaffMember {
 	status: StaffStatus;
 	/** Last-active label, pre-formatted (e.g. "2h ago", "—"). */
 	lastActive: string;
+}
+
+/** One slice of the Finance "revenue by payment method" donut. */
+export interface PaymentMethodSlice {
+	/** Raw fund source key, e.g. 'card' | 'gcash' | 'maya-wallet' | 'unknown'. */
+	type: string;
+	/** Display name (e.g. "GCash"). */
+	label: string;
+	/** Settled peso amount for this method. */
+	amount: number;
+	count: number;
+	/** Share of total settled amount, 0–100. */
+	pct: number;
+}
+
+/** A row in the Finance transactions table. */
+export interface TransactionRow {
+	id: string;
+	/** Raw gateway status (e.g. "PAYMENT_SUCCESS"). */
+	status: string;
+	/** Badge tone derived from status. */
+	statusTone: StatusTone;
+	/** Pre-formatted peso amount (e.g. "₱1,200"). */
+	amount: string;
+	fundSourceType: string;
+	fundSourceMasked: string | null;
+	receiptNo: string | null;
+	buyerName: string;
+	buyerEmail: string | null;
+	packageName: string | null;
+	/** ISO timestamp. */
+	createdAt: string;
+}
+
+/** The Finance page in one frame (KPIs + chart + breakdown + first page of rows). */
+export interface FinanceSnapshot {
+	kpis: Kpi[];
+	revenue: RevenuePoint[];
+	breakdown: PaymentMethodSlice[];
+	transactions: TransactionRow[];
+	/** Total rows matching the filter, for pagination. */
+	total: number;
 }

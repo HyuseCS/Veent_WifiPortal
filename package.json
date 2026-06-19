@@ -6,7 +6,8 @@
 	"workspaces": ["apps/*", "packages/*"],
 	"scripts": {
 		"dev:customer": "bun run --filter veent-customer dev",
-		"dev:admin": "bun run --filter veent-admin dev",
+		"dev:admin": "bun run --filter radius-admin dev",
+		"dev:locator": "bun run --filter veent-locator dev",
 		"build": "bun run --filter './apps/*' build",
 		"check": "bun run --filter './apps/*' check",
 		"lint": "prettier --check . && eslint .",

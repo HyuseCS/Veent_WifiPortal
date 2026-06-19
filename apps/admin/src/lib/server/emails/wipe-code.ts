@@ -28,7 +28,7 @@ export function wipeCodeEmail({ code, name }: WipeCodeEmailInput): {
 	const safeCode = escapeHtml(code);
 	const danger = '#c41f2c'; // red accent — matches the destructive action
 
-	const subject = 'Your Veent Admin wipe-confirmation code';
+	const subject = 'Your RADIUS Admin wipe-confirmation code';
 
 	const html = `<!doctype html>
 <html>
@@ -39,7 +39,7 @@ export function wipeCodeEmail({ code, name }: WipeCodeEmailInput): {
           <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:440px;background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;padding:32px;">
             <tr>
               <td style="font-size:18px;font-weight:600;color:#0f172a;padding-bottom:8px;">
-                Veent <span style="color:#64748b;font-weight:500;">Admin</span>
+                RADIUS <span style="color:#64748b;font-weight:500;">Admin</span>
               </td>
             </tr>
             <tr>

@@ -1,5 +1,10 @@
 import { db } from '$lib/server/db';
-import { dashboardSnapshot } from '$lib/server/queries';
+import {
+	dashboardKpis,
+	revenueByDay,
+	listActiveSessions,
+	listNetworkHealth
+} from '$lib/server/queries';
 import type { PageServerLoad } from './$types';
 
 /**
@@ -9,5 +14,12 @@ import type { PageServerLoad } from './$types';
  * from the (app) layout load, which also guards auth.
  */
 export const load: PageServerLoad = async () => {
-	return await dashboardSnapshot(db);
+	const [kpis, revenue, activeSessions, networks] = await Promise.all([
+		dashboardKpis(db),
+		revenueByDay(db),
+		listActiveSessions(db),
+		listNetworkHealth(db)
+	]);
+
+	return { kpis, revenue, activeSessions, networks };
 };

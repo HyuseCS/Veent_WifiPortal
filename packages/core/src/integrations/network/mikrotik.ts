@@ -1,4 +1,4 @@
-import type { NetworkController, GrantInput, NetworkApSample } from './types';
+import type { NetworkController, GrantInput, NetworkApSample, RouterLogEntry } from './types';
 
 export interface MikrotikConfig {
 	host: string;
@@ -115,25 +115,102 @@ export function createMikrotikController(config: MikrotikConfig): NetworkControl
 			});
 		},
 
+		async listRouterLog(opts?: { limit?: number }): Promise<RouterLogEntry[]> {
+			const limit = opts?.limit ?? 60;
+			return withConn(async (conn) => {
+				// /log returns the whole buffer oldest→newest; we take the newest tail.
+				const rows = await conn.write('/log/print', []);
+				const entries = rows.map((r) => ({
+					time: r.time ?? '',
+					topics: r.topics ?? '',
+					message: r.message ?? ''
+				}));
+				// Hide our own API churn — we open a fresh connection per call, so the
+				// log fills with "<user> logged in/out … via api". That's noise, not
+				// guest activity, and would otherwise dominate the panel.
+				const guestRelevant = entries.filter((e) => !/logged (in|out).*via api/i.test(e.message));
+				return guestRelevant.slice(-limit).reverse();
+			});
+		},
+
+		async listGuestBindings(): Promise<{ macAddress: string }[]> {
+			return withConn(async (conn) => {
+				const rows = await conn.write('/ip/hotspot/ip-binding/print', ['?type=bypassed']);
+				// Only our guest-tagged bindings — never admin bypasses or operator-added
+				// (untagged) ones. Filter in JS so we don't rely on RouterOS query AND-ing.
+				return rows
+					.filter((r) => r.comment === tag)
+					.map((r) => r['mac-address'])
+					.filter((m): m is string => Boolean(m))
+					.map((m) => ({ macAddress: m.toUpperCase() }));
+			});
+		},
+
+		async resolveApForMac(macAddress: string): Promise<string | null> {
+			const mac = macAddress.toUpperCase();
+			return withConn(async (conn) => {
+				// CAPsMAN first (multi-AP deployments report the managed AP interface),
+				// then the local wireless registration table. Each may be absent
+				// depending on the RouterOS package set — treat a query error as "n/a".
+				try {
+					const caps = await conn.write('/caps-man/registration-table/print', [
+						`?mac-address=${mac}`
+					]);
+					const iface = caps.find((r) => r.interface)?.interface;
+					if (iface) return iface;
+				} catch {
+					// CAPsMAN not installed/enabled — fall through.
+				}
+				try {
+					const reg = await conn.write('/interface/wireless/registration-table/print', [
+						`?mac-address=${mac}`
+					]);
+					const iface = reg.find((r) => r.interface)?.interface;
+					if (iface) return iface;
+				} catch {
+					// wireless package absent (e.g. CHR/x86) — fall through.
+				}
+				// Wired/VLAN deployments (third-party APs, no MikroTik radio): the ARP
+				// table maps the MAC to the interface/VLAN it's reachable on (e.g.
+				// "vlan70 hotspot"). Prefer a completed entry. This is per-VLAN, not
+				// per-physical-AP — the router can't see past a shared hotspot VLAN.
+				try {
+					const arp = await conn.write('/ip/arp/print', [`?mac-address=${mac}`]);
+					const iface =
+						arp.find((r) => r.interface && r.complete === 'true')?.interface ??
+						arp.find((r) => r.interface)?.interface;
+					if (iface) return iface;
+				} catch {
+					// ARP unavailable — give up.
+				}
+				return null;
+			});
+		},
+
 		async sampleHealth(): Promise<NetworkApSample[]> {
 			return withConn(async (conn) => {
-				// Which interface carries the hotspot, and how many devices we've put
-				// online. Our model grants via bypassed ip-bindings (not hotspot logins),
-				// so that's the honest "connected users" count — attributed to the
-				// hotspot interface.
+				// Only guest-serving interfaces belong on the Networks view: the
+				// interface(s) a hotspot server is bound to. Physical uplinks/ports and
+				// non-hotspot VLANs (e.g. a WAN transit VLAN) are router plumbing, not
+				// access networks, so we skip them entirely. Supports multiple hotspots.
 				const hotspots = await conn.write('/ip/hotspot/print');
-				const hotspotIface = hotspots[0]?.interface;
+				const hotspotIfaces = new Set(
+					hotspots.map((h) => h.interface).filter((n): n is string => Boolean(n))
+				);
+				if (hotspotIfaces.size === 0) return [];
+
+				// We grant via bypassed ip-bindings (not hotspot logins), so that's the
+				// coarse "connected" count. The live per-AP number is recomputed from
+				// sessions downstream — this is just the fallback.
 				const bypassed = await conn.write('/ip/hotspot/ip-binding/print', ['?type=bypassed']);
 				const connectedUsers = bypassed.length;
 
 				const ifaces = await conn.write('/interface/print');
 				const samples: NetworkApSample[] = [];
 				for (const i of ifaces) {
-					if (i.disabled === 'true' || i.type === 'loopback' || !i.name) continue;
+					// Surface a hotspot interface even when down, so an outage is visible.
+					if (!i.name || !hotspotIfaces.has(i.name)) continue;
 					const running = i.running === 'true';
-					// Only surface live links + the hotspot interface (even if down, so an
-					// outage is visible). Skips idle/unplugged ports (e.g. spare ethers).
-					if (!running && i.name !== hotspotIface) continue;
 					let throughputMbps = 0;
 					if (running) {
 						try {
@@ -149,12 +226,7 @@ export function createMikrotikController(config: MikrotikConfig): NetworkControl
 							// throughput unavailable for this interface — leave 0, keep going
 						}
 					}
-					samples.push({
-						name: i.name,
-						online: running,
-						users: i.name === hotspotIface ? connectedUsers : 0,
-						throughputMbps
-					});
+					samples.push({ name: i.name, online: running, users: connectedUsers, throughputMbps });
 				}
 				return samples;
 			});

@@ -1,5 +1,5 @@
 import { and, desc, eq, gt, lte } from 'drizzle-orm';
-import { type DB, customerProfile, networkSessions, packages } from '@veent/db';
+import { type DB, customerProfile, networkHealth, networkSessions, packages } from '@veent/db';
 import type { NetworkController } from '../integrations/network';
 import { SESSION_STATUS } from '../config';
 import { getFreeTimeStatus } from './freeTime';
@@ -48,6 +48,42 @@ export async function startSession(db: DB, network: NetworkController, input: St
 			.set({ status: SESSION_STATUS.revoked })
 			.where(eq(networkSessions.id, session.id));
 		throw err;
+	}
+
+	// Best-effort: tag the session with the AP the device is on, so the Networks
+	// view can count active users per AP. Never fails the grant — attribution is
+	// a reporting nicety, and many setups (wired clients, stub/dev) can't resolve it.
+	if (network.resolveApForMac) {
+		try {
+			const apName = await network.resolveApForMac(input.macAddress);
+			if (apName) {
+				// Prefer an explicit pin→interface binding (set on the Networks page);
+				// fall back to a name match for the auto-discovered interface row.
+				const [bound] = await db
+					.select({ id: networkHealth.id })
+					.from(networkHealth)
+					.where(eq(networkHealth.interfaceName, apName))
+					.limit(1);
+				const ap =
+					bound ??
+					(
+						await db
+							.select({ id: networkHealth.id })
+							.from(networkHealth)
+							.where(eq(networkHealth.name, apName))
+							.limit(1)
+					)[0];
+				if (ap) {
+					await db
+						.update(networkSessions)
+						.set({ networkId: ap.id })
+						.where(eq(networkSessions.id, session.id));
+					session.networkId = ap.id;
+				}
+			}
+		} catch {
+			// Non-critical: leave networkId null.
+		}
 	}
 
 	return session;
@@ -180,6 +216,43 @@ export async function expireDueSessions(
 			.set({ status: SESSION_STATUS.expired })
 			.where(eq(networkSessions.id, s.id));
 		revoked++;
+	}
+	return revoked;
+}
+
+/**
+ * Removes guest bypass bindings on the router that no longer map to an active
+ * session — self-heals DB↔router drift the row-based revoke cron can't catch:
+ * customer wipes (which cascade-delete sessions), crashed grants, or a manual DB
+ * delete. Without this, such a binding grants internet forever with no DB trace.
+ *
+ * Only touches our guest-tagged bindings; admin bypasses and operator-added
+ * bindings are left alone. Safe against live grants: startSession inserts the
+ * (active) session row *before* it creates the binding, so a binding the router
+ * reports always has its session row already committed. Returns the count removed.
+ */
+export async function reconcileGuestBindings(
+	db: DB,
+	network: NetworkController
+): Promise<number> {
+	if (!network.listGuestBindings) return 0;
+	const bindings = await network.listGuestBindings();
+	if (bindings.length === 0) return 0;
+
+	const activeRows = await db
+		.select({ mac: networkSessions.macAddress })
+		.from(networkSessions)
+		.where(eq(networkSessions.status, SESSION_STATUS.active));
+	const activeMacs = new Set(
+		activeRows.map((r) => r.mac?.toUpperCase()).filter((m): m is string => Boolean(m))
+	);
+
+	let revoked = 0;
+	for (const { macAddress } of bindings) {
+		if (!activeMacs.has(macAddress.toUpperCase())) {
+			await network.revoke(macAddress);
+			revoked++;
+		}
 	}
 	return revoked;
 }

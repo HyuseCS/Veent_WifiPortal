@@ -78,8 +78,59 @@ The schema lives in `packages/db/src/schema`:
 `auth-customer.ts` / `auth-admin.ts` (better-auth tables via the prefixed factory),
 `customer.ts` (the captive-portal domain tables — `customer_profile`, `packages`,
 `credit_ledger`, `network_sessions`, `rate_limits`, modeled from
-`docs/use-cases/wifi-portal-erd.puml`), and `admin.ts` (no admin-owned tables yet; the
-dashboard reads the shared customer tables).
+`docs/use-cases/wifi-portal-erd.puml`), and `admin.ts` (`network_health` + others; the
+dashboard also reads the shared customer tables).
+
+### Migration workflow (keep `db:migrate` unbreakable across machines)
+
+The golden rule: **the migrations in `packages/db/drizzle` are the single source of
+truth for the DB.** Everyone — every laptop, staging, prod — reaches the same schema by
+running the *same committed migrations* on a fresh-or-up-to-date database. Never change a
+database any other way, or it drifts and the next `db:migrate` breaks for that machine.
+
+**Changing the schema (authors only):**
+
+```sh
+# 1. Edit packages/db/src/schema/*.ts
+bun run db:generate         # writes a new packages/db/drizzle/NNNN_*.sql
+bun run db:migrate          # apply it to your own DB
+git add packages/db/drizzle # COMMIT the generated SQL with your schema change
+```
+
+**Everyone else, after `git pull`:** just `bun run db:migrate`. That's it.
+
+**Rules that keep it seamless:**
+
+- **Never hand-edit the database.** No `psql ALTER`, no `CREATE TABLE` by hand, and don't
+  run `db:push` against a database you migrate. `db:push` writes changes the migration
+  files don't know about → the next `db:migrate` tries to re-create them and dies with
+  `column/relation already exists`. Use `db:push` **only** on a throwaway DB you're happy
+  to reset.
+- **Write idempotent migrations.** Prefer `ADD COLUMN IF NOT EXISTS`,
+  `CREATE TABLE IF NOT EXISTS`, `CREATE INDEX IF NOT EXISTS`. They no-op safely if a column
+  already exists (drift) and are harmless on a fresh DB — so a half-drifted machine still
+  recovers. (Drizzle applies pending migrations in timestamp order and stops on the first
+  error, so one un-guarded statement blocks every later migration.)
+- **Always commit generated SQL** in the same commit as the schema change. An un-pushed
+  migration means teammates' DBs silently fall behind.
+
+**If `db:migrate` is already broken on a machine** (usually `… already exists` from past
+drift): the clean reset — destroys local data — is
+
+```sh
+psql "$DATABASE_URL" -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;' \
+  -c 'DROP SCHEMA IF EXISTS drizzle CASCADE;'
+bun run db:migrate          # rebuild from the committed migrations
+bun run db:seed             # optional: reseed packages/dev data
+```
+
+To sanity-check a fresh install works end-to-end, migrate a throwaway database:
+
+```sh
+psql "postgres://root:mysecretpassword@localhost:5432/postgres" -c 'CREATE DATABASE migrate_test;'
+DATABASE_URL="postgres://root:mysecretpassword@localhost:5432/migrate_test" bun run --filter @veent/db db:migrate
+psql "postgres://root:mysecretpassword@localhost:5432/postgres" -c 'DROP DATABASE migrate_test;'
+```
 
 ## Other
 

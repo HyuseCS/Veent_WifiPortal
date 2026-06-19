@@ -48,4 +48,31 @@ export interface NetworkController {
 	 * when unknown or unsupported (stub/dev). Optional: not every controller can.
 	 */
 	resolveMacByIp?(ipAddress: string): Promise<string | null>;
+	/**
+	 * Best-effort: which AP/interface the device (by MAC) is currently associated
+	 * with, for per-AP user attribution. Returns the interface/AP name as the router
+	 * knows it (match against `network_health.name`), or null when unknown. Optional:
+	 * controllers that can't tell (stub/dev) omit it.
+	 */
+	resolveApForMac?(macAddress: string): Promise<string | null>;
+	/**
+	 * Lists the *guest* bypass bindings this controller created (by our tag), so a
+	 * reconcile pass can drop ones that no longer map to an active session. Excludes
+	 * admin bypasses and any manually-added bindings. Optional: stub/dev omit it.
+	 */
+	listGuestBindings?(): Promise<{ macAddress: string }[]>;
+	/**
+	 * Recent entries from the router's own system log (newest first), for a live
+	 * admin view. Optional: stub/dev omit it.
+	 */
+	listRouterLog?(opts?: { limit?: number }): Promise<RouterLogEntry[]>;
+}
+
+/** One line of the router's system log (`/log` in MikroTik). */
+export interface RouterLogEntry {
+	/** Router-formatted time, e.g. `12:59:48` or `jun/19 12:59:48`. */
+	time: string;
+	/** Comma-joined topics, e.g. `hotspot,info,account`. */
+	topics: string;
+	message: string;
 }

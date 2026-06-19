@@ -10,15 +10,7 @@
  * a real router/controller telemetry feed exists it is seeded with sample rows;
  * the shape matches what a future feed would write.
  */
-import {
-	pgTable,
-	serial,
-	integer,
-	text,
-	boolean,
-	numeric,
-	timestamp
-} from 'drizzle-orm/pg-core';
+import { pgTable, serial, integer, text, boolean, numeric, timestamp } from 'drizzle-orm/pg-core';
 import { adminUser } from './auth-admin';
 
 /**
@@ -62,6 +54,10 @@ export const adminProfile = pgTable('admin_profile', {
 /**
  * Per-access-point health snapshot (ERD has none yet — admin-owned). Raw metrics
  * only; the app derives display tone/labels (like the other admin view mappers).
+ *
+ * Location columns (latitude/longitude/address) are operator-entered from the
+ * admin Networks page and power the public "Radius" locator map (apps/locator).
+ * Nullable: an AP with no coordinates simply isn't plotted on the map.
  */
 export const networkHealth = pgTable('network_health', {
 	id: serial('id').primaryKey(),
@@ -71,5 +67,12 @@ export const networkHealth = pgTable('network_health', {
 	latencyMs: integer('latency_ms'),
 	users: integer('users').notNull().default(0),
 	throughputMbps: integer('throughput_mbps').notNull().default(0),
-	lastSampleAt: timestamp('last_sample_at').notNull().defaultNow()
+	lastSampleAt: timestamp('last_sample_at').notNull().defaultNow(),
+	latitude: numeric('latitude', { precision: 9, scale: 6 }),
+	longitude: numeric('longitude', { precision: 9, scale: 6 }),
+	address: text('address'),
+	// Operator-set binding: the router AP/interface name whose connected clients
+	// count toward this pin (network_sessions attribution). Lets a map pin be named
+	// anything while still tracking a specific interface. Null = no binding.
+	interfaceName: text('interface_name')
 });

@@ -72,6 +72,41 @@ export const creditLedger = pgTable(
 	(t) => [index('credit_ledger_user_id_idx').on(t.userId)]
 );
 
+/**
+ * Full record of every payment-gateway webhook event (success AND failure),
+ * captured verbatim so the admin Finance page can report on the complete payment
+ * funnel. `credit_ledger` only records *successful, credited* top-ups; this table
+ * is the superset — failed/expired/cancelled attempts, fund source, receipt,
+ * buyer, and error detail. The PK is the gateway's own transaction id, so a
+ * resent or status-transitioning webhook upserts the same row.
+ */
+export const paymentTransactions = pgTable(
+	'payment_transactions',
+	{
+		id: text('id').primaryKey(), // Maya's tx id (payload.id)
+		status: text('status').notNull(), // PAYMENT_SUCCESS | PAYMENT_FAILED | PAYMENT_EXPIRED | PAYMENT_CANCELLED
+		amount: numeric('amount', { precision: 12, scale: 2 }).notNull(),
+		currency: text('currency').notNull().default('PHP'),
+		fundSourceType: text('fund_source_type'), // card | gcash | maya-wallet | shopeepay | qrph | null
+		fundSourceMasked: text('fund_source_masked'), // card last4 / wallet masked, nullable
+		receiptNo: text('receipt_no'),
+		referenceNo: text('reference_no'), // requestReferenceNumber (our referenceId echo)
+		errorCode: text('error_code'),
+		errorMessage: text('error_message'),
+		buyerName: text('buyer_name'),
+		buyerEmail: text('buyer_email'),
+		// Nullable: a failed event may carry no referenceId, so we can't always map it.
+		userId: text('user_id').references(() => customerUser.id, { onDelete: 'set null' }),
+		packageId: integer('package_id').references(() => packages.id, { onDelete: 'set null' }),
+		createdAt: timestamp('created_at').notNull().defaultNow()
+	},
+	(t) => [
+		index('payment_transactions_user_id_idx').on(t.userId),
+		index('payment_transactions_created_at_idx').on(t.createdAt),
+		index('payment_transactions_status_idx').on(t.status)
+	]
+);
+
 /** A network access grant for a device MAC, tied to a user (ERD "NetworkSessions"). */
 export const networkSessions = pgTable(
 	'network_sessions',
@@ -83,6 +118,11 @@ export const networkSessions = pgTable(
 			.references(() => customerUser.id, { onDelete: 'cascade' }),
 		// "package_id_opt" in the ERD — free sessions / grace periods have no package.
 		packageId: integer('package_id').references(() => packages.id, { onDelete: 'set null' }),
+		// Which AP/network the device was on at grant time (network_health.id), for
+		// per-AP active-user counts. Loose link (no FK): network_health rows are
+		// reconciled/pruned by the health sweep, so a hard reference would fight it.
+		// Null when the controller couldn't resolve an AP (stub/dev, wired client).
+		networkId: integer('network_id'),
 		status: text('status').notNull(),
 		startedAt: timestamp('started_at').notNull().defaultNow(),
 		expiresAt: timestamp('expires_at')
@@ -90,6 +130,8 @@ export const networkSessions = pgTable(
 	(t) => [
 		index('network_sessions_user_id_idx').on(t.userId),
 		index('network_sessions_mac_address_idx').on(t.macAddress),
+		// Per-AP active-user count: "active sessions grouped by network".
+		index('network_sessions_network_id_idx').on(t.networkId),
 		// Drives the revoke cron: "find active sessions whose time is up".
 		index('network_sessions_status_expires_at_idx').on(t.status, t.expiresAt)
 	]
