@@ -1,5 +1,5 @@
-import { and, eq, lte } from 'drizzle-orm';
-import { type DB, customerProfile, networkSessions } from '@veent/db';
+import { and, desc, eq, gt, lte } from 'drizzle-orm';
+import { type DB, customerProfile, networkSessions, packages } from '@veent/db';
 import type { NetworkController } from '../integrations/network';
 import { SESSION_STATUS } from '../config';
 import { getFreeTimeStatus } from './freeTime';
@@ -51,6 +51,60 @@ export async function startSession(db: DB, network: NetworkController, input: St
 	}
 
 	return session;
+}
+
+export interface ActiveSession {
+	id: number;
+	/** null for a Free Time session; set for a bought tier. */
+	packageId: number | null;
+	/** Tier name (e.g. "3 Hours"); null for Free Time. */
+	name: string | null;
+	startedAt: Date;
+	expiresAt: Date;
+	/** Convenience flag for the UI's free-vs-paid band styling. */
+	isFree: boolean;
+}
+
+/**
+ * The user's currently-running session, if any. `status = active` AND
+ * `expiresAt > now` — the time guard hides a session the revoke cron hasn't swept
+ * to `expired` yet, so the dashboard never shows a stale "active" band. Joins
+ * `packages` for the tier name; a null packageId means Free Time. Newest first.
+ */
+export async function getActiveSession(
+	db: DB,
+	userId: string,
+	now: Date = new Date()
+): Promise<ActiveSession | null> {
+	const [row] = await db
+		.select({
+			id: networkSessions.id,
+			packageId: networkSessions.packageId,
+			name: packages.name,
+			startedAt: networkSessions.startedAt,
+			expiresAt: networkSessions.expiresAt
+		})
+		.from(networkSessions)
+		.leftJoin(packages, eq(networkSessions.packageId, packages.id))
+		.where(
+			and(
+				eq(networkSessions.userId, userId),
+				eq(networkSessions.status, SESSION_STATUS.active),
+				gt(networkSessions.expiresAt, now)
+			)
+		)
+		.orderBy(desc(networkSessions.startedAt))
+		.limit(1);
+
+	if (!row?.expiresAt) return null;
+	return {
+		id: row.id,
+		packageId: row.packageId ?? null,
+		name: row.name ?? null,
+		startedAt: row.startedAt,
+		expiresAt: row.expiresAt,
+		isFree: row.packageId == null
+	};
 }
 
 export interface StartFreeSessionResult {

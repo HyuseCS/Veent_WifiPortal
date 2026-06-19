@@ -4,6 +4,7 @@
 	import Icon from '$lib/Icon.svelte';
 	import { resolve } from '$app/paths'
 	import type { ActionData } from './$types';
+	import logo from '$lib/assets/parafiber-logo.webp';
 
 	let { form }: { form: ActionData } = $props();
 
@@ -18,13 +19,16 @@
 </svelte:head>
 
 <main class="mx-auto flex min-h-screen max-w-sm flex-col p-5">
-	<a
-		href={resolve("/")}
-		class="mb-7 flex min-h-[44px] items-center gap-1.5 self-start text-[13px] font-medium text-muted hover:text-ink"
-	>
-		<Icon name="arrow-left" size={18} strokeWidth={2.2} />
-		Back
-	</a>
+	<div class="-mx-5 -mt-5 mb-7 flex items-center gap-3 bg-brand px-5 py-3">
+		<a
+			href={resolve('/')}
+			aria-label="Back"
+			class="flex min-h-8 min-w-8 items-center text-white hover:text-white/80"
+		>
+			<Icon name="arrow-left" size={20} strokeWidth={2.2} />
+		</a>
+		<img src={logo} alt="parafiber by parasat logo" class="h-8 w-auto" />
+	</div>
 
 	<h1 class="mb-2 text-[25px] font-bold tracking-tight text-ink">Log in to connect</h1>
 	<p class="mb-7 text-[14.5px] leading-relaxed text-muted">

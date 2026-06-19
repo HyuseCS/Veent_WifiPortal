@@ -4,6 +4,7 @@ import { and, eq } from 'drizzle-orm';
 import { packages } from '@veent/db';
 import {
 	getAccount,
+	getActiveSession,
 	getFreeTimeStatus,
 	startFreeSession,
 	startSession,
@@ -29,8 +30,12 @@ async function resolveMac(event: RequestEvent): Promise<string | null> {
 	const fromPortal = getPortalContext(event)?.mac;
 	if (fromPortal) return fromPortal;
 	// In dev there's no real router to answer the IP→MAC lookup, so resolveDeviceMac
-	// just blocks until it times out and stalls the dashboard load. Skip it.
-	if (dev) return null;
+	// just blocks until it times out and stalls the dashboard load. Return a
+	// locally-administered placeholder MAC instead of null so the dashboard's
+	// access buttons enable and the grant flow runs end-to-end against the stub
+	// controller. It passes MAC_RE; the stub `grant()` only logs, never dials a
+	// router. (Real device MACs still come from the captive-portal redirect.)
+	if (dev) return '02:00:00:00:00:01';
 	try {
 		// Strip the IPv4-mapped-IPv6 prefix (`::ffff:10.0.0.5`) so the router's
 		// `?address=` lookup matches the plain IPv4 the hotspot host table stores.
@@ -64,6 +69,7 @@ export const load: PageServerLoad = async (event) => {
 		balance: account?.balance ?? 0,
 		blocked: account?.blocked ?? false,
 		freeTime: getFreeTimeStatus(account?.lastFreeSessionAt ?? null),
+		activeSession: await getActiveSession(db, user.id),
 		tiers
 	};
 };

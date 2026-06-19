@@ -66,12 +66,9 @@ body{margin:0;-webkit-font-smoothing:antialiased;}
     <!-- Landing logged-out (HERO) -->
     <dc-import name="PhoneFrame" label="Landing" tag="logged-out · hero" route="veent.ph/" primary="Connect / get 15 min free (orange). Pricing below is view-only context; every CTA routes to login." states="Free Time as the hook; full pricing scheme visible before auth." hint-size="392px,1340px">
       <div style="display:flex; flex-direction:column;">
-        <div style="display:flex; align-items:center; justify-content:space-between; padding:17px 20px;">
-          <div style="display:flex; align-items:center; gap:8px;">
-            <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="var(--color-brand)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13a10 10 0 0 1 14 0"/><path d="M8.5 16.5a5 5 0 0 1 7 0"/><path d="M2 8.82a15 15 0 0 1 20 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg>
-            <span style="font:700 19px 'Plus Jakarta Sans'; color:var(--color-ink); letter-spacing:-.02em;">veent</span>
-          </div>
-          <span style="font:500 12px 'Plus Jakarta Sans'; color:var(--color-muted);">Guest WiFi</span>
+        <div style="display:flex; align-items:center; justify-content:space-between; padding:13px 20px; background:var(--color-brand);">
+          <img src="assets/parafiber-logo.png" alt="parafiber" style="height:22px; display:block;" />
+          <span style="font:500 12px 'Plus Jakarta Sans'; color:rgba(255,255,255,.8);">Guest WiFi</span>
         </div>
 
         <!-- FREE TIME HOOK CARD -->
@@ -163,12 +160,9 @@ body{margin:0;-webkit-font-smoothing:antialiased;}
     <!-- Landing logged-in -->
     <dc-import name="PhoneFrame" label="Landing" tag="logged-in variant" route="veent.ph/" primary="Brief 'you're good to go' confirmation with a link straight to the dashboard." states="Shown when an authenticated guest re-opens the portal." hint-size="392px,1340px">
       <div style="display:flex; flex-direction:column;">
-        <div style="display:flex; align-items:center; justify-content:space-between; padding:17px 20px;">
-          <div style="display:flex; align-items:center; gap:8px;">
-            <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="var(--color-brand)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13a10 10 0 0 1 14 0"/><path d="M8.5 16.5a5 5 0 0 1 7 0"/><path d="M2 8.82a15 15 0 0 1 20 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg>
-            <span style="font:700 19px 'Plus Jakarta Sans'; color:var(--color-ink); letter-spacing:-.02em;">veent</span>
-          </div>
-          <div style="display:flex; align-items:center; gap:6px;"><span style="width:7px; height:7px; border-radius:50%; background:var(--color-online);"></span><span style="font:500 12px 'Plus Jakarta Sans'; color:var(--color-online);">Online</span></div>
+        <div style="display:flex; align-items:center; justify-content:space-between; padding:13px 20px; background:var(--color-brand);">
+          <img src="assets/parafiber-logo.png" alt="parafiber" style="height:22px; display:block;" />
+          <div style="display:flex; align-items:center; gap:6px;"><span style="width:7px; height:7px; border-radius:50%; background:color-mix(in oklch,var(--color-online) 72%,white);"></span><span style="font:500 12px 'Plus Jakarta Sans'; color:#fff;">Online</span></div>
         </div>
 
         <div style="flex:1; display:flex; flex-direction:column; justify-content:center; align-items:center; text-align:center; padding:40px 24px;">
@@ -200,10 +194,12 @@ body{margin:0;-webkit-font-smoothing:antialiased;}
     <!-- Login -->
     <dc-import name="PhoneFrame" label="Log in" tag="phone entry" route="veent.ph/login" primary="Send code (orange). Minimum taps &mdash; this is the conversion moment." states="PH +63 phone format. First-time numbers are registered automatically on verify." hint-size="392px,940px">
       <div style="display:flex; flex-direction:column; padding:20px;">
-        <button style="display:flex; align-items:center; gap:6px; background:none; border:none; padding:0; margin-bottom:30px; cursor:pointer; color:var(--color-muted); font:500 13px 'Plus Jakarta Sans';">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
-          Back
-        </button>
+        <div style="display:flex; align-items:center; gap:12px; margin:-20px -20px 26px; padding:13px 20px; background:var(--color-brand);">
+          <button style="display:flex; align-items:center; background:none; border:none; padding:0; cursor:pointer; color:#fff;">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+          </button>
+          <img src="assets/parafiber-logo.png" alt="parafiber" style="height:22px; display:block;" />
+        </div>
         <h1 style="font:700 25px/1.15 'Plus Jakarta Sans'; color:var(--color-ink); letter-spacing:-.02em; margin:0 0 8px;">Log in to connect</h1>
         <p style="font:400 14.5px/1.5 'Plus Jakarta Sans'; color:var(--color-muted); margin:0 0 28px;">We'll text you a 6-digit code to verify your number.</p>
 
@@ -224,10 +220,12 @@ body{margin:0;-webkit-font-smoothing:antialiased;}
     <!-- OTP -->
     <dc-import name="PhoneFrame" label="Verify" tag="SMS OTP" route="veent.ph/verify" primary="Verify &amp; connect (orange). Six-box OTP input; auto-advances." states="Resend on a countdown, then tappable. Reusable OTP component." hint-size="392px,940px">
       <div style="display:flex; flex-direction:column; padding:20px;">
-        <button style="display:flex; align-items:center; gap:6px; background:none; border:none; padding:0; margin-bottom:30px; cursor:pointer; color:var(--color-muted); font:500 13px 'Plus Jakarta Sans';">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
-          Back
-        </button>
+        <div style="display:flex; align-items:center; gap:12px; margin:-20px -20px 26px; padding:13px 20px; background:var(--color-brand);">
+          <button style="display:flex; align-items:center; background:none; border:none; padding:0; cursor:pointer; color:#fff;">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+          </button>
+          <img src="assets/parafiber-logo.png" alt="parafiber" style="height:22px; display:block;" />
+        </div>
         <h1 style="font:700 25px/1.15 'Plus Jakarta Sans'; color:var(--color-ink); letter-spacing:-.02em; margin:0 0 8px;">Enter the code</h1>
         <p style="font:400 14.5px/1.5 'Plus Jakarta Sans'; color:var(--color-muted); margin:0 0 28px;">Sent to <strong style="color:var(--color-ink);">+63 917 ••• 4521</strong>.</p>
 
@@ -255,15 +253,17 @@ body{margin:0;-webkit-font-smoothing:antialiased;}
     <dc-import name="PhoneFrame" label="Dashboard" tag="Free Time eligible" route="veent.ph/dashboard" primary="Start 15-min Free Access (orange) &mdash; the hub's hero action when eligible." states="Tier cards 'Buy' with credits; links to top up &amp; sign out." hint-size="392px,1100px">
       <div style="display:flex; flex-direction:column;">
         <!-- balance header -->
-        <div style="background:var(--color-brand); padding:22px 20px 24px; color:#fff;">
-          <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:18px;">
-            <span style="font:500 14px 'Plus Jakarta Sans'; opacity:.85;">Hi, Maria</span>
-            <div style="display:flex; align-items:center; gap:6px;"><span style="width:7px; height:7px; border-radius:50%; background:color-mix(in oklch,var(--color-online) 70%,white);"></span><span style="font:500 12px 'Plus Jakarta Sans'; opacity:.9;">Online</span></div>
-          </div>
-          <div style="font:500 12.5px 'Plus Jakarta Sans'; opacity:.8; text-transform:uppercase; letter-spacing:.07em; margin-bottom:4px;">Balance</div>
-          <div style="display:flex; align-items:baseline; gap:8px;">
-            <span style="font:600 38px 'JetBrains Mono',monospace; letter-spacing:-.02em;">120</span>
-            <span style="font:500 16px 'Plus Jakarta Sans'; opacity:.85;">credits</span>
+        <div style="background:var(--color-brand); padding:16px 20px 22px; color:#fff;">
+          <img src="assets/parafiber-logo.png" alt="parafiber" style="height:20px; display:block; margin-bottom:20px;" />
+          <div style="display:flex; align-items:center; justify-content:space-between;">
+            <span style="font:600 17px 'Plus Jakarta Sans';">Hi, +63 917 ••• 4521</span>
+            <div style="text-align:right;">
+              <div style="display:flex; align-items:center; gap:6px; justify-content:flex-end; margin-bottom:8px;"><div style="display:flex; align-items:center; gap:6px;"><span style="width:7px; height:7px; border-radius:50%; background:color-mix(in oklch,var(--color-online) 70%,white);"></span><span style="font:500 12px 'Plus Jakarta Sans'; opacity:.9;">Online</span></div></div>
+              <div style="display:flex; align-items:baseline; gap:6px; justify-content:flex-end;">
+                <span style="font:600 26px 'JetBrains Mono',monospace; letter-spacing:-.02em;">120</span>
+                <span style="font:500 13px 'Plus Jakarta Sans'; opacity:.85;">cr</span>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -314,15 +314,17 @@ body{margin:0;-webkit-font-smoothing:antialiased;}
     <dc-import name="PhoneFrame" label="Dashboard" tag="Free Time running" route="veent.ph/dashboard" primary="The exact same session band as a paid session — only the label, duration and progress differ. Free or paid time both surface here." states="Proves the countdown section is shared: Free Time fills the identical band." hint-size="392px,1100px">
       <div style="display:flex; flex-direction:column;">
         <!-- balance header -->
-        <div style="background:var(--color-brand); padding:22px 20px 24px; color:#fff;">
-          <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:18px;">
-            <span style="font:500 14px 'Plus Jakarta Sans'; opacity:.85;">Hi, Maria</span>
-            <div style="display:flex; align-items:center; gap:6px;"><span style="width:7px; height:7px; border-radius:50%; background:color-mix(in oklch,var(--color-online) 70%,white);"></span><span style="font:500 12px 'Plus Jakarta Sans'; opacity:.9;">Online</span></div>
-          </div>
-          <div style="font:500 12.5px 'Plus Jakarta Sans'; opacity:.8; text-transform:uppercase; letter-spacing:.07em; margin-bottom:4px;">Balance</div>
-          <div style="display:flex; align-items:baseline; gap:8px;">
-            <span style="font:600 38px 'JetBrains Mono',monospace; letter-spacing:-.02em;">120</span>
-            <span style="font:500 16px 'Plus Jakarta Sans'; opacity:.85;">credits</span>
+        <div style="background:var(--color-brand); padding:16px 20px 22px; color:#fff;">
+          <img src="assets/parafiber-logo.png" alt="parafiber" style="height:20px; display:block; margin-bottom:20px;" />
+          <div style="display:flex; align-items:center; justify-content:space-between;">
+            <span style="font:600 17px 'Plus Jakarta Sans';">Hi, +63 917 ••• 4521</span>
+            <div style="text-align:right;">
+              <div style="display:flex; align-items:center; gap:6px; justify-content:flex-end; margin-bottom:8px;"><div style="display:flex; align-items:center; gap:6px;"><span style="width:7px; height:7px; border-radius:50%; background:color-mix(in oklch,var(--color-online) 70%,white);"></span><span style="font:500 12px 'Plus Jakarta Sans'; opacity:.9;">Online</span></div></div>
+              <div style="display:flex; align-items:baseline; gap:6px; justify-content:flex-end;">
+                <span style="font:600 26px 'JetBrains Mono',monospace; letter-spacing:-.02em;">120</span>
+                <span style="font:500 13px 'Plus Jakarta Sans'; opacity:.85;">cr</span>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -380,15 +382,17 @@ body{margin:0;-webkit-font-smoothing:antialiased;}
     <!-- Dashboard Free Time used (no time) -->
     <dc-import name="PhoneFrame" label="Dashboard" tag="Free Time · no time left" route="veent.ph/dashboard" primary="Free counter, depleted: warning-toned band with a single reset countdown. One timer only — no duplicate 'next session' line." states="The other half of the free pair — cooldown until the 15 min refills." hint-size="392px,1100px">
       <div style="display:flex; flex-direction:column;">
-        <div style="background:var(--color-brand); padding:22px 20px 24px; color:#fff;">
-          <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:18px;">
-            <span style="font:500 14px 'Plus Jakarta Sans'; opacity:.85;">Hi, Maria</span>
-            <div style="display:flex; align-items:center; gap:6px;"><span style="width:7px; height:7px; border-radius:50%; background:color-mix(in oklch,var(--color-online) 70%,white);"></span><span style="font:500 12px 'Plus Jakarta Sans'; opacity:.9;">Online</span></div>
-          </div>
-          <div style="font:500 12.5px 'Plus Jakarta Sans'; opacity:.8; text-transform:uppercase; letter-spacing:.07em; margin-bottom:4px;">Balance</div>
-          <div style="display:flex; align-items:baseline; gap:8px;">
-            <span style="font:600 38px 'JetBrains Mono',monospace; letter-spacing:-.02em;">120</span>
-            <span style="font:500 16px 'Plus Jakarta Sans'; opacity:.85;">credits</span>
+        <div style="background:var(--color-brand); padding:16px 20px 22px; color:#fff;">
+          <img src="assets/parafiber-logo.png" alt="parafiber" style="height:20px; display:block; margin-bottom:20px;" />
+          <div style="display:flex; align-items:center; justify-content:space-between;">
+            <span style="font:600 17px 'Plus Jakarta Sans';">Hi, +63 917 ••• 4521</span>
+            <div style="text-align:right;">
+              <div style="display:flex; align-items:center; gap:6px; justify-content:flex-end; margin-bottom:8px;"><div style="display:flex; align-items:center; gap:6px;"><span style="width:7px; height:7px; border-radius:50%; background:color-mix(in oklch,var(--color-online) 70%,white);"></span><span style="font:500 12px 'Plus Jakarta Sans'; opacity:.9;">Online</span></div></div>
+              <div style="display:flex; align-items:baseline; gap:6px; justify-content:flex-end;">
+                <span style="font:600 26px 'JetBrains Mono',monospace; letter-spacing:-.02em;">120</span>
+                <span style="font:500 13px 'Plus Jakarta Sans'; opacity:.85;">cr</span>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -441,15 +445,17 @@ body{margin:0;-webkit-font-smoothing:antialiased;}
     <dc-import name="PhoneFrame" label="Dashboard" tag="Paid time · running" route="veent.ph/dashboard" primary="Paid counter has its own identity — blue band (vs Free's teal/navy) so the two are never confused. Countdown + progress + end time." states="One half of the paid pair: a bought tier actively running." hint-size="392px,1100px">
       <div style="display:flex; flex-direction:column;">
         <!-- balance header -->
-        <div style="background:var(--color-brand); padding:22px 20px 24px; color:#fff;">
-          <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:18px;">
-            <span style="font:500 14px 'Plus Jakarta Sans'; opacity:.85;">Hi, Maria</span>
-            <div style="display:flex; align-items:center; gap:6px;"><span style="width:7px; height:7px; border-radius:50%; background:color-mix(in oklch,var(--color-online) 70%,white);"></span><span style="font:500 12px 'Plus Jakarta Sans'; opacity:.9;">Online</span></div>
-          </div>
-          <div style="font:500 12.5px 'Plus Jakarta Sans'; opacity:.8; text-transform:uppercase; letter-spacing:.07em; margin-bottom:4px;">Balance</div>
-          <div style="display:flex; align-items:baseline; gap:8px;">
-            <span style="font:600 38px 'JetBrains Mono',monospace; letter-spacing:-.02em;">70</span>
-            <span style="font:500 16px 'Plus Jakarta Sans'; opacity:.85;">credits</span>
+        <div style="background:var(--color-brand); padding:16px 20px 22px; color:#fff;">
+          <img src="assets/parafiber-logo.png" alt="parafiber" style="height:20px; display:block; margin-bottom:20px;" />
+          <div style="display:flex; align-items:center; justify-content:space-between;">
+            <span style="font:600 17px 'Plus Jakarta Sans';">Hi, +63 917 ••• 4521</span>
+            <div style="text-align:right;">
+              <div style="display:flex; align-items:center; gap:6px; justify-content:flex-end; margin-bottom:8px;"><div style="display:flex; align-items:center; gap:6px;"><span style="width:7px; height:7px; border-radius:50%; background:color-mix(in oklch,var(--color-online) 70%,white);"></span><span style="font:500 12px 'Plus Jakarta Sans'; opacity:.9;">Online</span></div></div>
+              <div style="display:flex; align-items:baseline; gap:6px; justify-content:flex-end;">
+                <span style="font:600 26px 'JetBrains Mono',monospace; letter-spacing:-.02em;">70</span>
+                <span style="font:500 13px 'Plus Jakarta Sans'; opacity:.85;">cr</span>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -507,15 +513,17 @@ body{margin:0;-webkit-font-smoothing:antialiased;}
     <!-- Dashboard Paid time ended (no time) -->
     <dc-import name="PhoneFrame" label="Dashboard" tag="Paid time · no time left" route="veent.ph/dashboard" primary="Paid counter, expired: countdown at 0:00:00, empty bar, ended time. Attention drops to buying another tier." states="The other half of the paid pair — a bought session that has run out." hint-size="392px,1100px">
       <div style="display:flex; flex-direction:column;">
-        <div style="background:var(--color-brand); padding:22px 20px 24px; color:#fff;">
-          <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:18px;">
-            <span style="font:500 14px 'Plus Jakarta Sans'; opacity:.85;">Hi, Maria</span>
-            <div style="display:flex; align-items:center; gap:6px;"><span style="width:7px; height:7px; border-radius:50%; background:color-mix(in oklch,var(--color-warning) 75%,white);"></span><span style="font:500 12px 'Plus Jakarta Sans'; opacity:.9;">Limited</span></div>
-          </div>
-          <div style="font:500 12.5px 'Plus Jakarta Sans'; opacity:.8; text-transform:uppercase; letter-spacing:.07em; margin-bottom:4px;">Balance</div>
-          <div style="display:flex; align-items:baseline; gap:8px;">
-            <span style="font:600 38px 'JetBrains Mono',monospace; letter-spacing:-.02em;">70</span>
-            <span style="font:500 16px 'Plus Jakarta Sans'; opacity:.85;">credits</span>
+        <div style="background:var(--color-brand); padding:16px 20px 22px; color:#fff;">
+          <img src="assets/parafiber-logo.png" alt="parafiber" style="height:20px; display:block; margin-bottom:20px;" />
+          <div style="display:flex; align-items:center; justify-content:space-between;">
+            <span style="font:600 17px 'Plus Jakarta Sans';">Hi, +63 917 ••• 4521</span>
+            <div style="text-align:right;">
+              <div style="display:flex; align-items:center; gap:6px; justify-content:flex-end; margin-bottom:8px;"><div style="display:flex; align-items:center; gap:6px;"><span style="width:7px; height:7px; border-radius:50%; background:color-mix(in oklch,var(--color-warning) 75%,white);"></span><span style="font:500 12px 'Plus Jakarta Sans'; opacity:.9;">Limited</span></div></div>
+              <div style="display:flex; align-items:baseline; gap:6px; justify-content:flex-end;">
+                <span style="font:600 26px 'JetBrains Mono',monospace; letter-spacing:-.02em;">70</span>
+                <span style="font:500 13px 'Plus Jakarta Sans'; opacity:.85;">cr</span>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -572,15 +580,17 @@ body{margin:0;-webkit-font-smoothing:antialiased;}
     <!-- Insufficient credits -->
     <dc-import name="PhoneFrame" label="Dashboard" tag="insufficient credits" route="veent.ph/dashboard" primary="Bottom sheet on a tier the guest can't afford &mdash; routes them to Top up (orange)." states="Shows shortfall: needs 150, has 120. Dismiss to stay on dashboard." hint-size="392px,1100px">
       <div style="display:flex; flex-direction:column; position:relative;">
-        <div style="background:var(--color-brand); padding:22px 20px 24px; color:#fff;">
-          <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:18px;">
-            <span style="font:500 14px 'Plus Jakarta Sans'; opacity:.85;">Hi, Maria</span>
-            <div style="display:flex; align-items:center; gap:6px;"><span style="width:7px; height:7px; border-radius:50%; background:color-mix(in oklch,var(--color-online) 70%,white);"></span><span style="font:500 12px 'Plus Jakarta Sans'; opacity:.9;">Online</span></div>
-          </div>
-          <div style="font:500 12.5px 'Plus Jakarta Sans'; opacity:.8; text-transform:uppercase; letter-spacing:.07em; margin-bottom:4px;">Balance</div>
-          <div style="display:flex; align-items:baseline; gap:8px;">
-            <span style="font:600 38px 'JetBrains Mono',monospace; letter-spacing:-.02em;">120</span>
-            <span style="font:500 16px 'Plus Jakarta Sans'; opacity:.85;">credits</span>
+        <div style="background:var(--color-brand); padding:16px 20px 22px; color:#fff;">
+          <img src="assets/parafiber-logo.png" alt="parafiber" style="height:20px; display:block; margin-bottom:20px;" />
+          <div style="display:flex; align-items:center; justify-content:space-between;">
+            <span style="font:600 17px 'Plus Jakarta Sans';">Hi, +63 917 ••• 4521</span>
+            <div style="text-align:right;">
+              <div style="display:flex; align-items:center; gap:6px; justify-content:flex-end; margin-bottom:8px;"><div style="display:flex; align-items:center; gap:6px;"><span style="width:7px; height:7px; border-radius:50%; background:color-mix(in oklch,var(--color-online) 70%,white);"></span><span style="font:500 12px 'Plus Jakarta Sans'; opacity:.9;">Online</span></div></div>
+              <div style="display:flex; align-items:baseline; gap:6px; justify-content:flex-end;">
+                <span style="font:600 26px 'JetBrains Mono',monospace; letter-spacing:-.02em;">120</span>
+                <span style="font:500 13px 'Plus Jakarta Sans'; opacity:.85;">cr</span>
+              </div>
+            </div>
           </div>
         </div>
         <div style="padding:18px 20px 20px;">
@@ -698,12 +708,8 @@ body{margin:0;-webkit-font-smoothing:antialiased;}
 
     <!-- Processing pending -->
     <dc-import name="PhoneFrame" label="Processing" tag="pending" route="veent.ph/top-up/processing" primary="Calm waiting state after returning from the gateway &mdash; no action needed." states="Resolves to success or failure; safe on slow networks." hint-size="392px,820px">
-      <div style="display:flex; flex-direction:column; min-height:704px; padding:20px;">
-        <div style="display:flex; align-items:center; gap:8px; padding:4px 0 0;">
-          <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="var(--color-brand)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13a10 10 0 0 1 14 0"/><path d="M8.5 16.5a5 5 0 0 1 7 0"/><path d="M2 8.82a15 15 0 0 1 20 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg>
-          <span style="font:700 17px 'Plus Jakarta Sans'; color:var(--color-ink); letter-spacing:-.02em;">veent</span>
-        </div>
-        <div style="flex:1; display:flex; flex-direction:column; justify-content:center; align-items:center; text-align:center;">
+      <div style="display:flex; flex-direction:column; min-height:704px;">
+        <div style="flex:1; display:flex; flex-direction:column; justify-content:center; align-items:center; text-align:center; padding:0 20px 20px;">
           <div style="position:relative; width:72px; height:72px; margin-bottom:26px;">
             <span style="position:absolute; inset:0; border:4px solid var(--color-border); border-radius:50%;"></span>
             <span style="position:absolute; inset:0; border:4px solid transparent; border-top-color:var(--color-brand); border-radius:50%; animation:spin .8s linear infinite;"></span>
@@ -724,12 +730,8 @@ body{margin:0;-webkit-font-smoothing:antialiased;}
 
     <!-- Processing success -->
     <dc-import name="PhoneFrame" label="Processing" tag="success" route="veent.ph/top-up/processing" primary="Back to dashboard (orange). Confirms credits added and shows the new balance." states="Auto-returns to dashboard after a moment." hint-size="392px,820px">
-      <div style="display:flex; flex-direction:column; min-height:704px; padding:20px;">
-        <div style="display:flex; align-items:center; gap:8px; padding:4px 0 0;">
-          <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="var(--color-brand)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13a10 10 0 0 1 14 0"/><path d="M8.5 16.5a5 5 0 0 1 7 0"/><path d="M2 8.82a15 15 0 0 1 20 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg>
-          <span style="font:700 17px 'Plus Jakarta Sans'; color:var(--color-ink); letter-spacing:-.02em;">veent</span>
-        </div>
-        <div style="flex:1; display:flex; flex-direction:column; justify-content:center; align-items:center; text-align:center;">
+      <div style="display:flex; flex-direction:column; min-height:704px;">
+        <div style="flex:1; display:flex; flex-direction:column; justify-content:center; align-items:center; text-align:center; padding:0 20px 20px;">
           <div style="width:74px; height:74px; border-radius:50%; background:color-mix(in oklch,var(--color-online) 14%,white); display:flex; align-items:center; justify-content:center; margin-bottom:24px;">
             <svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="var(--color-online)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
           </div>
@@ -750,12 +752,8 @@ body{margin:0;-webkit-font-smoothing:antialiased;}
 
     <!-- Processing failed -->
     <dc-import name="PhoneFrame" label="Processing" tag="failed / timeout" route="veent.ph/top-up/processing" primary="Try again (orange). Reassures no credits were charged; offers a way back." states="Covers gateway failure and confirmation timeout." hint-size="392px,820px">
-      <div style="display:flex; flex-direction:column; min-height:704px; padding:20px;">
-        <div style="display:flex; align-items:center; gap:8px; padding:4px 0 0;">
-          <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="var(--color-brand)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13a10 10 0 0 1 14 0"/><path d="M8.5 16.5a5 5 0 0 1 7 0"/><path d="M2 8.82a15 15 0 0 1 20 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg>
-          <span style="font:700 17px 'Plus Jakarta Sans'; color:var(--color-ink); letter-spacing:-.02em;">veent</span>
-        </div>
-        <div style="flex:1; display:flex; flex-direction:column; justify-content:center; align-items:center; text-align:center;">
+      <div style="display:flex; flex-direction:column; min-height:704px;">
+        <div style="flex:1; display:flex; flex-direction:column; justify-content:center; align-items:center; text-align:center; padding:0 20px 20px;">
           <div style="width:74px; height:74px; border-radius:50%; background:color-mix(in oklch,var(--color-blocked) 13%,white); display:flex; align-items:center; justify-content:center; margin-bottom:24px;">
             <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="var(--color-blocked)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
           </div>
@@ -780,12 +778,9 @@ body{margin:0;-webkit-font-smoothing:antialiased;}
     <!-- #1 Landing condensed -->
     <dc-import name="PhoneFrame" label="Landing" tag="#1 · CTA-first, pricing condensed" route="veent.ph/" primary="Hook + connect CTA sit above the fold; paid pricing is collapsed so it never out-weighs the connect tap." states="Bundles tucked behind login (view-only); only the 3 time tiers shown inline." hint-size="392px,1000px">
       <div style="display:flex; flex-direction:column;">
-        <div style="display:flex; align-items:center; justify-content:space-between; padding:17px 20px;">
-          <div style="display:flex; align-items:center; gap:8px;">
-            <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="var(--color-brand)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13a10 10 0 0 1 14 0"/><path d="M8.5 16.5a5 5 0 0 1 7 0"/><path d="M2 8.82a15 15 0 0 1 20 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg>
-            <span style="font:700 19px 'Plus Jakarta Sans'; color:var(--color-ink); letter-spacing:-.02em;">veent</span>
-          </div>
-          <span style="font:500 12px 'Plus Jakarta Sans'; color:var(--color-muted);">Guest WiFi</span>
+        <div style="display:flex; align-items:center; justify-content:space-between; padding:13px 20px; background:var(--color-brand);">
+          <img src="assets/parafiber-logo.png" alt="parafiber" style="height:22px; display:block;" />
+          <span style="font:500 12px 'Plus Jakarta Sans'; color:rgba(255,255,255,.8);">Guest WiFi</span>
         </div>
 
         <div style="margin:14px 20px 0; background:var(--teal-tint-2); border:1px solid color-mix(in oklch,var(--color-brand) 22%,white); border-radius:18px; padding:18px;">
@@ -852,10 +847,12 @@ body{margin:0;-webkit-font-smoothing:antialiased;}
     <!-- #2 + #3 Dashboard cooldown improved -->
     <dc-import name="PhoneFrame" label="Dashboard" tag="#2+#3 · ₱ context + cooldown fallback" route="veent.ph/dashboard" primary="Cooldown card offers the cheapest paid option inline &mdash; no dead-end wait. Tiers show ₱ equivalents." states="Reinforces money→credits→time mental model right where credits are spent." hint-size="392px,1040px">
       <div style="display:flex; flex-direction:column;">
-        <div style="background:var(--color-brand); padding:22px 20px 24px; color:#fff;">
-          <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:18px;">
-            <span style="font:500 14px 'Plus Jakarta Sans'; opacity:.85;">Hi, Maria</span>
-            <div style="display:flex; align-items:center; gap:6px;"><span style="width:7px; height:7px; border-radius:50%; background:color-mix(in oklch,var(--color-online) 70%,white);"></span><span style="font:500 12px 'Plus Jakarta Sans'; opacity:.9;">Online</span></div>
+        <div style="background:var(--color-brand); padding:16px 20px 22px; color:#fff;">
+          <img src="assets/parafiber-logo.png" alt="parafiber" style="height:20px; display:block; margin-bottom:20px;" />
+          <div style="display:flex; align-items:center; justify-content:space-between;">
+            <span style="font:600 17px 'Plus Jakarta Sans';">Hi, +63 917 ••• 4521</span>
+            <div style="text-align:right;">
+              <div style="display:flex; align-items:center; gap:6px; justify-content:flex-end; margin-bottom:8px;"><div style="display:flex; align-items:center; gap:6px;"><span style="width:7px; height:7px; border-radius:50%; background:color-mix(in oklch,var(--color-online) 70%,white);"></span><span style="font:500 12px 'Plus Jakarta Sans'; opacity:.9;">Online</span></div>
           </div>
           <div style="font:500 12.5px 'Plus Jakarta Sans'; opacity:.8; text-transform:uppercase; letter-spacing:.07em; margin-bottom:4px;">Balance</div>
           <div style="display:flex; align-items:baseline; gap:8px;">
@@ -905,13 +902,18 @@ body{margin:0;-webkit-font-smoothing:antialiased;}
     <!-- #4 Buy confirm -->
     <dc-import name="PhoneFrame" label="Buy access" tag="#4 · spend confirmation" route="veent.ph/dashboard" primary="A one-tap confirm before credits leave the balance &mdash; same care as the top-up flow." states="Shows before/after balance so the spend is never a surprise." hint-size="392px,1040px">
       <div style="display:flex; flex-direction:column; position:relative;">
-        <div style="background:var(--color-brand); padding:22px 20px 24px; color:#fff;">
-          <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:18px;">
-            <span style="font:500 14px 'Plus Jakarta Sans'; opacity:.85;">Hi, Maria</span>
-            <div style="display:flex; align-items:center; gap:6px;"><span style="width:7px; height:7px; border-radius:50%; background:color-mix(in oklch,var(--color-online) 70%,white);"></span><span style="font:500 12px 'Plus Jakarta Sans'; opacity:.9;">Online</span></div>
+        <div style="background:var(--color-brand); padding:16px 20px 22px; color:#fff;">
+          <img src="assets/parafiber-logo.png" alt="parafiber" style="height:20px; display:block; margin-bottom:20px;" />
+          <div style="display:flex; align-items:center; justify-content:space-between;">
+            <span style="font:600 17px 'Plus Jakarta Sans';">Hi, +63 917 ••• 4521</span>
+            <div style="text-align:right;">
+              <div style="display:flex; align-items:center; gap:6px; justify-content:flex-end; margin-bottom:8px;"><div style="display:flex; align-items:center; gap:6px;"><span style="width:7px; height:7px; border-radius:50%; background:color-mix(in oklch,var(--color-online) 70%,white);"></span><span style="font:500 12px 'Plus Jakarta Sans'; opacity:.9;">Online</span></div></div>
+              <div style="display:flex; align-items:baseline; gap:6px; justify-content:flex-end;">
+                <span style="font:600 26px 'JetBrains Mono',monospace; letter-spacing:-.02em;">120</span>
+                <span style="font:500 13px 'Plus Jakarta Sans'; opacity:.85;">cr</span>
+              </div>
+            </div>
           </div>
-          <div style="font:500 12.5px 'Plus Jakarta Sans'; opacity:.8; text-transform:uppercase; letter-spacing:.07em; margin-bottom:4px;">Balance</div>
-          <div style="display:flex; align-items:baseline; gap:8px;"><span style="font:600 38px 'JetBrains Mono',monospace; letter-spacing:-.02em;">120</span><span style="font:500 16px 'Plus Jakarta Sans'; opacity:.85;">credits</span></div>
         </div>
         <div style="padding:18px 20px 20px;">
           <div style="font:600 11px 'Plus Jakarta Sans'; text-transform:uppercase; letter-spacing:.08em; color:var(--color-muted); margin-bottom:10px;">Buy access &mdash; spend credits</div>
@@ -942,12 +944,11 @@ body{margin:0;-webkit-font-smoothing:antialiased;}
 
     <!-- #4 Buy success -->
     <dc-import name="PhoneFrame" label="Buy access" tag="#4 · spend success" route="veent.ph/dashboard" primary="Clear confirmation the time is live, with the session end-time and updated balance." states="Mirrors the payment-success pattern for consistency." hint-size="392px,1040px">
-      <div style="display:flex; flex-direction:column; min-height:704px; padding:20px;">
-        <div style="display:flex; align-items:center; gap:8px; padding:4px 0 0;">
-          <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="var(--color-brand)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13a10 10 0 0 1 14 0"/><path d="M8.5 16.5a5 5 0 0 1 7 0"/><path d="M2 8.82a15 15 0 0 1 20 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg>
-          <span style="font:700 17px 'Plus Jakarta Sans'; color:var(--color-ink); letter-spacing:-.02em;">veent</span>
+      <div style="display:flex; flex-direction:column; min-height:704px;">
+        <div style="display:flex; align-items:center; justify-content:space-between; padding:13px 20px; background:var(--color-brand);">
+          <img src="assets/parafiber-logo.png" alt="parafiber" style="height:22px; display:block;" />
         </div>
-        <div style="flex:1; display:flex; flex-direction:column; justify-content:center; align-items:center; text-align:center;">
+        <div style="flex:1; display:flex; flex-direction:column; justify-content:center; align-items:center; text-align:center; padding:0 20px 20px;">
           <div style="width:74px; height:74px; border-radius:50%; background:color-mix(in oklch,var(--color-online) 14%,white); display:flex; align-items:center; justify-content:center; margin-bottom:24px;">
             <svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="var(--color-online)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
           </div>
@@ -964,12 +965,8 @@ body{margin:0;-webkit-font-smoothing:antialiased;}
 
     <!-- #5 Payment failed precise -->
     <dc-import name="PhoneFrame" label="Processing" tag="#5 · failure keeps context" route="veent.ph/top-up/processing" primary="Retry names the exact amount and preserves the chosen bundle &mdash; no restart on a flaky network." states="Distinguishes retry-payment from re-pick-bundle." hint-size="392px,1040px">
-      <div style="display:flex; flex-direction:column; min-height:704px; padding:20px;">
-        <div style="display:flex; align-items:center; gap:8px; padding:4px 0 0;">
-          <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="var(--color-brand)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13a10 10 0 0 1 14 0"/><path d="M8.5 16.5a5 5 0 0 1 7 0"/><path d="M2 8.82a15 15 0 0 1 20 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg>
-          <span style="font:700 17px 'Plus Jakarta Sans'; color:var(--color-ink); letter-spacing:-.02em;">veent</span>
-        </div>
-        <div style="flex:1; display:flex; flex-direction:column; justify-content:center; align-items:center; text-align:center;">
+      <div style="display:flex; flex-direction:column; min-height:704px;">
+        <div style="flex:1; display:flex; flex-direction:column; justify-content:center; align-items:center; text-align:center; padding:0 20px 20px;">
           <div style="width:74px; height:74px; border-radius:50%; background:color-mix(in oklch,var(--color-blocked) 13%,white); display:flex; align-items:center; justify-content:center; margin-bottom:22px;">
             <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="var(--color-blocked)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
           </div>
@@ -989,10 +986,12 @@ body{margin:0;-webkit-font-smoothing:antialiased;}
     <!-- #5 OTP wrong code -->
     <dc-import name="PhoneFrame" label="Verify" tag="#5 · wrong-code error" route="veent.ph/verify" primary="Explicit error state for a bad code &mdash; not just a silent resend timer." states="Red input + guidance; resend stays reachable." hint-size="392px,1040px">
       <div style="display:flex; flex-direction:column; padding:20px;">
-        <button style="display:flex; align-items:center; gap:6px; background:none; border:none; padding:0; margin-bottom:30px; cursor:pointer; color:var(--color-muted); font:500 13px 'Plus Jakarta Sans';">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
-          Back
-        </button>
+        <div style="display:flex; align-items:center; gap:12px; margin:-20px -20px 26px; padding:13px 20px; background:var(--color-brand);">
+          <button style="display:flex; align-items:center; background:none; border:none; padding:0; cursor:pointer; color:#fff;">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+          </button>
+          <img src="assets/parafiber-logo.png" alt="parafiber" style="height:22px; display:block;" />
+        </div>
         <h1 style="font:700 25px/1.15 'Plus Jakarta Sans'; color:var(--color-ink); letter-spacing:-.02em; margin:0 0 8px;">Enter the code</h1>
         <p style="font:400 14.5px/1.5 'Plus Jakarta Sans'; color:var(--color-muted); margin:0 0 28px;">Sent to <strong style="color:var(--color-ink);">+63 917 ••• 4521</strong>.</p>
 
@@ -1012,6 +1011,181 @@ body{margin:0;-webkit-font-smoothing:antialiased;}
         <button style="display:flex; align-items:center; justify-content:center; gap:8px; width:100%; height:54px; border-radius:13px; background:var(--color-cta); color:#fff; font:700 16px 'Plus Jakarta Sans'; border:none; cursor:pointer; margin-bottom:20px;">Verify &amp; connect</button>
 
         <div style="text-align:center; font:400 13px 'Plus Jakarta Sans'; color:var(--color-muted);">Didn't get it? <span style="color:var(--color-brand); font-weight:600;">Resend code</span></div>
+      </div>
+    </dc-import>
+  </div>
+
+  <!-- ============ SECTION: DESKTOP ============ -->
+  <div style="font:700 13px 'Plus Jakarta Sans'; text-transform:uppercase; letter-spacing:.12em; color:#00126b; margin-bottom:6px;">04 · Desktop</div>
+  <p style="font:400 13.5px/1.55 'Plus Jakarta Sans'; color:#44506a; margin:0 0 20px; max-width:680px;">Same captive portal on a laptop browser. The single mobile column unfolds into a two-pane layout: status/action on the left, the pricing &amp; buy rail on the right. parafiber branding sits in a navy app bar (the logo's own navy matches the brand token, so it seats cleanly).</p>
+  <div style="display:flex; gap:40px; align-items:flex-start; margin-bottom:52px;">
+
+    <!-- Desktop landing -->
+    <dc-import name="DesktopFrame" label="Landing" tag="logged-out · hero" route="parafiber.veent.ph/" primary="Free Time hook on the left; full pricing (view-only) lives in the right rail so the value exchange is visible without scrolling." states="Every CTA resolves to one login/connect action." hint-size="1160px,1040px">
+      <div style="display:flex; flex-direction:column;">
+        <!-- app bar -->
+        <div style="display:flex; align-items:center; justify-content:space-between; padding:15px 32px; background:var(--color-brand);">
+          <img src="assets/parafiber-logo.png" alt="parafiber" style="height:30px; display:block;" />
+          <div style="display:flex; align-items:center; gap:18px;">
+            <span style="font:500 13px 'Plus Jakarta Sans'; color:rgba(255,255,255,.8);">Guest WiFi</span>
+            <span style="display:flex; align-items:center; gap:7px; font:600 13px 'Plus Jakarta Sans'; color:#fff; background:rgba(255,255,255,.12); padding:7px 14px; border-radius:20px;">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+              Log in
+            </span>
+          </div>
+        </div>
+
+        <!-- hero body -->
+        <div style="display:flex; gap:40px; align-items:flex-start; padding:48px 48px 40px;">
+          <!-- left: hook -->
+          <div style="flex:1.12;">
+            <h1 style="font:700 42px/1.1 'Plus Jakarta Sans'; color:var(--color-ink); letter-spacing:-.025em; margin:0 0 14px;">Fast WiFi,<br>on your terms.</h1>
+            <p style="font:400 16px/1.55 'Plus Jakarta Sans'; color:var(--color-muted); margin:0 0 28px; max-width:440px;">Start free, then buy exactly the time you need. No plans, no commitment &mdash; money becomes credits, credits become time online.</p>
+
+            <!-- free time card -->
+            <div style="background:var(--teal-tint-2); border:1px solid color-mix(in oklch,var(--color-brand) 22%,white); border-radius:18px; padding:22px; max-width:460px; margin-bottom:24px;">
+              <div style="display:flex; align-items:center; gap:13px; margin-bottom:18px;">
+                <div style="width:46px; height:46px; border-radius:12px; background:var(--color-brand); display:flex; align-items:center; justify-content:center;">
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15.5 13.5"/></svg>
+                </div>
+                <div>
+                  <div style="font:700 18px 'Plus Jakarta Sans'; color:var(--color-ink);">Free Time</div>
+                  <div style="font:500 13px 'Plus Jakarta Sans'; color:var(--color-brand);">15 min &middot; once every 12 hours</div>
+                </div>
+              </div>
+              <button style="display:flex; align-items:center; justify-content:center; gap:9px; width:100%; height:56px; border-radius:14px; background:var(--color-cta); color:#fff; font:700 16px 'Plus Jakarta Sans'; border:none; cursor:pointer;">
+                Connect &mdash; get 15 min free
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+              </button>
+              <div style="text-align:center; font:500 12px 'Plus Jakarta Sans'; color:var(--color-muted); margin-top:11px;">Phone number + SMS code &middot; about 10 seconds</div>
+            </div>
+
+            <!-- stepper -->
+            <div style="display:inline-flex; align-items:center; gap:11px; background:var(--color-surface); border:1px solid var(--color-border); border-radius:12px; padding:12px 18px;">
+              <span style="font:600 13px 'Plus Jakarta Sans'; color:var(--color-ink);">Money <span style="font-weight:500; color:var(--color-muted);">(&#8369;)</span></span>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-brand)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+              <span style="font:600 13px 'Plus Jakarta Sans'; color:var(--color-ink);">Credits</span>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-brand)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+              <span style="font:600 13px 'Plus Jakarta Sans'; color:var(--color-ink);">Time</span>
+            </div>
+          </div>
+
+          <!-- right: pricing rail -->
+          <div style="flex:.88; max-width:400px; border:1px solid var(--color-border); border-radius:18px; padding:24px; background:var(--color-bg);">
+            <div style="display:flex; align-items:baseline; justify-content:space-between; margin-bottom:16px;">
+              <h2 style="font:700 17px 'Plus Jakarta Sans'; color:var(--color-ink); margin:0;">What more time costs</h2>
+              <span style="font:500 12px 'Plus Jakarta Sans'; color:var(--color-muted);">view only</span>
+            </div>
+
+            <div style="font:600 11px 'Plus Jakarta Sans'; text-transform:uppercase; letter-spacing:.08em; color:var(--color-muted); margin-bottom:9px;">Credit bundles</div>
+            <div style="border:1px solid var(--color-border); border-radius:14px; overflow:hidden; margin-bottom:20px;">
+              <div style="display:flex; align-items:center; justify-content:space-between; padding:14px 16px; border-bottom:1px solid var(--color-border);">
+                <span style="font:700 17px 'JetBrains Mono',monospace; color:var(--color-ink);">&#8369;20</span>
+                <span style="font:600 13px 'JetBrains Mono',monospace; color:var(--color-muted);">50 credits</span>
+              </div>
+              <div style="display:flex; align-items:center; justify-content:space-between; padding:14px 16px; border-bottom:1px solid var(--color-border);">
+                <span style="font:700 17px 'JetBrains Mono',monospace; color:var(--color-ink);">&#8369;50</span>
+                <span style="font:600 13px 'JetBrains Mono',monospace; color:var(--color-muted);">150 credits</span>
+              </div>
+              <div style="display:flex; align-items:center; justify-content:space-between; padding:14px 16px; background:var(--teal-tint-2); border-left:3px solid var(--color-brand);">
+                <span style="display:flex; align-items:center; gap:9px;"><span style="font:700 17px 'JetBrains Mono',monospace; color:var(--color-ink);">&#8369;100</span><span style="font:600 10px 'Plus Jakarta Sans'; text-transform:uppercase; letter-spacing:.05em; color:#fff; background:var(--color-brand); padding:3px 8px; border-radius:20px;">Best value</span></span>
+                <span style="font:600 13px 'JetBrains Mono',monospace; color:var(--color-brand);">350 credits</span>
+              </div>
+            </div>
+
+            <div style="font:600 11px 'Plus Jakarta Sans'; text-transform:uppercase; letter-spacing:.08em; color:var(--color-muted); margin-bottom:9px;">Access tiers &mdash; spend credits</div>
+            <div style="display:flex; flex-direction:column; gap:8px;">
+              <div style="display:flex; align-items:center; justify-content:space-between; border:1px solid var(--color-border); border-radius:12px; padding:13px 15px;">
+                <div><div style="font:600 15px 'Plus Jakarta Sans'; color:var(--color-ink);">1 Hour</div><div style="font:500 11.5px 'Plus Jakarta Sans'; color:var(--color-muted);">60 minutes</div></div>
+                <div style="font:600 14px 'JetBrains Mono',monospace; color:var(--color-brand);">20 cr</div>
+              </div>
+              <div style="display:flex; align-items:center; justify-content:space-between; border:1px solid var(--color-border); border-radius:12px; padding:13px 15px;">
+                <div><div style="font:600 15px 'Plus Jakarta Sans'; color:var(--color-ink);">3 Hours</div><div style="font:500 11.5px 'Plus Jakarta Sans'; color:var(--color-muted);">180 minutes</div></div>
+                <div style="font:600 14px 'JetBrains Mono',monospace; color:var(--color-brand);">50 cr</div>
+              </div>
+              <div style="display:flex; align-items:center; justify-content:space-between; border:1px solid var(--color-border); border-radius:12px; padding:13px 15px;">
+                <div><div style="font:600 15px 'Plus Jakarta Sans'; color:var(--color-ink);">1 Day</div><div style="font:500 11.5px 'Plus Jakarta Sans'; color:var(--color-muted);">1440 minutes</div></div>
+                <div style="font:600 14px 'JetBrains Mono',monospace; color:var(--color-brand);">150 cr</div>
+              </div>
+            </div>
+            <div style="display:flex; align-items:center; gap:7px; margin-top:16px;">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--color-muted)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+              <span style="font:500 11.5px 'Plus Jakarta Sans'; color:var(--color-muted);">Payments secured by Maya</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </dc-import>
+
+    <!-- Desktop dashboard -->
+    <dc-import name="DesktopFrame" label="Dashboard" tag="paid session running" route="parafiber.veent.ph/dashboard" primary="The session counter is the left-pane hero; the buy rail stays docked right. Same shared countdown component as mobile, scaled up." states="Balance + Online status live in the app bar; paid time keeps its blue identity." hint-size="1160px,1040px">
+      <div style="display:flex; flex-direction:column;">
+        <!-- app bar -->
+        <div style="display:flex; align-items:center; justify-content:space-between; padding:13px 32px; background:var(--color-brand);">
+          <img src="assets/parafiber-logo.png" alt="parafiber" style="height:30px; display:block;" />
+          <div style="display:flex; align-items:center; gap:18px;">
+            <span style="display:flex; align-items:center; gap:7px; font:500 13px 'Plus Jakarta Sans'; color:#fff;"><span style="width:8px; height:8px; border-radius:50%; background:color-mix(in oklch,var(--color-online) 72%,white);"></span>Online</span>
+            <span style="display:flex; align-items:baseline; gap:7px; background:rgba(255,255,255,.12); padding:8px 15px; border-radius:20px;"><span style="font:500 12px 'Plus Jakarta Sans'; color:rgba(255,255,255,.78);">Balance</span><span style="font:600 15px 'JetBrains Mono',monospace; color:#fff;">70 cr</span></span>
+            <span style="display:flex; align-items:center; gap:9px;"><span style="width:34px; height:34px; border-radius:50%; background:rgba(255,255,255,.16); display:flex; align-items:center; justify-content:center; font:700 14px 'Plus Jakarta Sans'; color:#fff;">M</span><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.8)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></span>
+          </div>
+        </div>
+
+        <!-- body -->
+        <div style="display:flex; gap:40px; align-items:flex-start; padding:40px 48px 44px; background:var(--color-surface); flex:1;">
+          <!-- left: session hero -->
+          <div style="flex:1.15;">
+            <div style="font:500 15px 'Plus Jakarta Sans'; color:var(--color-muted); margin-bottom:4px;">Welcome back,</div>
+            <h1 style="font:700 30px 'Plus Jakarta Sans'; color:var(--color-ink); letter-spacing:-.02em; margin:0 0 22px;">Maria</h1>
+
+            <!-- PAID COUNTER — blue identity, scaled up -->
+            <div style="background:var(--coral-tint); border:1px solid color-mix(in oklch,var(--color-cta) 26%,white); border-radius:20px; padding:28px;">
+              <div style="display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:24px;">
+                <div style="display:flex; align-items:center; gap:14px;">
+                  <div style="width:52px; height:52px; border-radius:14px; background:var(--color-cta); display:flex; align-items:center; justify-content:center;">
+                    <svg width="27" height="27" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15.5 13.5"/></svg>
+                  </div>
+                  <div>
+                    <div style="display:flex; align-items:center; gap:9px; margin-bottom:3px;"><span style="font:700 19px 'Plus Jakarta Sans'; color:var(--color-ink);">3 Hours</span><span style="font:600 10px 'Plus Jakarta Sans'; text-transform:uppercase; letter-spacing:.05em; color:#fff; background:var(--color-online); padding:3px 9px; border-radius:20px;">Active</span></div>
+                    <div style="font:500 13.5px 'Plus Jakarta Sans'; color:var(--color-cta);">Ends at <strong>5:18 PM</strong></div>
+                  </div>
+                </div>
+                <div style="text-align:right;">
+                  <div style="font:600 44px 'JetBrains Mono',monospace; color:var(--color-ink); letter-spacing:-.02em; line-height:1;">1:42:19</div>
+                  <div style="font:500 11px 'Plus Jakarta Sans'; text-transform:uppercase; letter-spacing:.07em; color:var(--color-muted); margin-top:6px;">remaining</div>
+                </div>
+              </div>
+              <div style="height:9px; border-radius:6px; background:color-mix(in oklch,var(--color-cta) 14%,white); overflow:hidden;">
+                <div style="width:57%; height:100%; border-radius:6px; background:var(--color-cta);"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- right: buy rail -->
+          <div style="flex:.85; max-width:380px; border:1px solid var(--color-border); border-radius:18px; padding:24px; background:var(--color-bg);">
+            <div style="font:600 11px 'Plus Jakarta Sans'; text-transform:uppercase; letter-spacing:.08em; color:var(--color-muted); margin-bottom:10px;">Extend access &mdash; spend credits</div>
+            <div style="display:flex; flex-direction:column; gap:9px; margin-bottom:22px;">
+              <div style="display:flex; align-items:center; justify-content:space-between; border:1px solid var(--color-border); border-radius:13px; padding:12px 12px 12px 16px;">
+                <div><div style="font:600 15px 'Plus Jakarta Sans'; color:var(--color-ink);">1 Hour</div><div style="font:500 11.5px 'Plus Jakarta Sans'; color:var(--color-muted);">+60 min &middot; 20 cr</div></div>
+                <button style="height:42px; padding:0 22px; border-radius:11px; background:var(--color-brand); color:#fff; font:600 14px 'Plus Jakarta Sans'; border:none; cursor:pointer;">Buy</button>
+              </div>
+              <div style="display:flex; align-items:center; justify-content:space-between; border:1px solid var(--color-border); border-radius:13px; padding:12px 12px 12px 16px;">
+                <div><div style="font:600 15px 'Plus Jakarta Sans'; color:var(--color-ink);">3 Hours</div><div style="font:500 11.5px 'Plus Jakarta Sans'; color:var(--color-muted);">+180 min &middot; 50 cr</div></div>
+                <button style="height:42px; padding:0 22px; border-radius:11px; background:var(--color-brand); color:#fff; font:600 14px 'Plus Jakarta Sans'; border:none; cursor:pointer;">Buy</button>
+              </div>
+            </div>
+
+            <div style="font:600 11px 'Plus Jakarta Sans'; text-transform:uppercase; letter-spacing:.08em; color:var(--color-muted); margin-bottom:10px;">Top up credits</div>
+            <div style="border:1px solid var(--color-border); border-radius:14px; overflow:hidden; margin-bottom:22px;">
+              <div style="display:flex; align-items:center; justify-content:space-between; padding:13px 15px; border-bottom:1px solid var(--color-border);"><span style="font:700 16px 'JetBrains Mono',monospace; color:var(--color-ink);">&#8369;50</span><span style="font:600 12.5px 'JetBrains Mono',monospace; color:var(--color-muted);">150 credits</span></div>
+              <div style="display:flex; align-items:center; justify-content:space-between; padding:13px 15px; background:var(--teal-tint-2); border-left:3px solid var(--color-brand);"><span style="display:flex; align-items:center; gap:8px;"><span style="font:700 16px 'JetBrains Mono',monospace; color:var(--color-ink);">&#8369;100</span><span style="font:600 10px 'Plus Jakarta Sans'; text-transform:uppercase; letter-spacing:.05em; color:#fff; background:var(--color-brand); padding:3px 8px; border-radius:20px;">Best value</span></span><span style="font:600 12.5px 'JetBrains Mono',monospace; color:var(--color-brand);">350 credits</span></div>
+            </div>
+
+            <button style="display:flex; align-items:center; justify-content:center; gap:8px; width:100%; height:52px; border-radius:13px; background:var(--color-cta); color:#fff; font:700 15px 'Plus Jakarta Sans'; border:none; cursor:pointer;">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              Top up credits
+            </button>
+          </div>
+        </div>
       </div>
     </dc-import>
   </div>

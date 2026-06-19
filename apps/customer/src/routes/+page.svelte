@@ -2,6 +2,7 @@
 	import Icon from '$lib/Icon.svelte';
 	import { resolve } from '$app/paths';
 	import type { PageServerData } from './$types';
+	import logo from '$lib/assets/parafiber-logo.webp';
 
 	let { data }: { data: PageServerData } = $props();
 
@@ -23,14 +24,11 @@
 <main class="mx-auto flex min-h-screen max-w-sm flex-col">
 	{#if data.loggedIn}
 		<!-- ===== Logged-in: you're good to go ===== -->
-		<div class="flex items-center justify-between px-5 py-4">
-			<div class="flex items-center gap-2">
-				<Icon name="wifi" size={21} strokeWidth={2.2} class="text-brand" />
-				<span class="text-lg font-bold tracking-tight text-ink">veent</span>
-			</div>
+		<div class="flex items-center justify-between bg-brand px-5 py-3">
+			<img src={logo} alt="parafiber by parasat logo" class="h-8 w-auto" />
 			<div class="flex items-center gap-1.5">
 				<span class="h-1.5 w-1.5 rounded-full bg-online"></span>
-				<span class="text-xs font-medium text-online">Online</span>
+				<span class="text-xs font-medium text-white">Online</span>
 			</div>
 		</div>
 
@@ -55,7 +53,7 @@
 			</div>
 
 			<a
-				href={resolve(`/dashboard${data.portalQuery}`)}
+				href="{resolve('/dashboard')}{data.portalQuery}"
 				class="flex h-[54px] w-full items-center justify-center gap-2 rounded-xl bg-cta text-base font-bold text-white transition-colors hover:bg-cta-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cta"
 			>
 				Go to dashboard
@@ -64,12 +62,9 @@
 		</div>
 	{:else}
 		<!-- ===== Logged-out: Free Time hook + view-only pricing ===== -->
-		<div class="flex items-center justify-between px-5 py-4">
-			<div class="flex items-center gap-2">
-				<Icon name="wifi" size={21} strokeWidth={2.2} class="text-brand" />
-				<span class="text-lg font-bold tracking-tight text-ink">veent</span>
-			</div>
-			<span class="text-xs font-medium text-muted">Guest WiFi</span>
+		<div class="flex items-center justify-between bg-brand px-5 py-3">
+			<img src={logo} alt="parafiber by parasat logo" class="h-8 w-auto" />
+			<span class="text-xs font-medium text-white/80">Guest WiFi</span>
 		</div>
 
 		<!-- Free Time hook -->
@@ -84,7 +79,7 @@
 				</div>
 			</div>
 			<a
-				href={resolve(`/login${data.portalQuery}`)}
+				href="{resolve('/login')}{data.portalQuery}"
 				class="flex h-[54px] w-full items-center justify-center gap-2 rounded-xl bg-cta text-base font-bold text-white transition-colors hover:bg-cta-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cta"
 			>
 				Connect — get 15 min free
@@ -175,7 +170,7 @@
 		<!-- Footer CTA -->
 		<div class="mt-auto p-5 pt-6">
 			<a
-				href={resolve(`/login${data.portalQuery}`)}
+				href="{resolve('/login')}{data.portalQuery}"
 				class="flex h-[54px] w-full items-center justify-center rounded-xl bg-cta text-base font-bold text-white transition-colors hover:bg-cta-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cta"
 			>
 				Log in to connect
