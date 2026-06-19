@@ -74,5 +74,12 @@ export const networkHealth = pgTable('network_health', {
 	// Operator-set binding: the router AP/interface name whose connected clients
 	// count toward this pin (network_sessions attribution). Lets a map pin be named
 	// anything while still tracking a specific interface. Null = no binding.
-	interfaceName: text('interface_name')
+	interfaceName: text('interface_name'),
+	// Router/AP model id (catalog key in apps/admin/src/lib/router-models.ts). Drives
+	// the simulated coverage radius on the map. Null = use the default model's range.
+	model: text('model'),
+	// Operator-calibrated coverage radius in metres, overriding the model's advertised
+	// range to match real-world reach (walls, height, interference). Null = fall back to
+	// the model's catalog range.
+	rangeMeters: integer('range_meters')
 });

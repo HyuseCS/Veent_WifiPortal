@@ -2,8 +2,31 @@
 
 An RF **coverage-planning** tool: drop router/AP models on the admin map and see a
 simulated signal field around each. A planning/demo aid — **not** a survey-grade
-predictor. Lives inside the existing `/map` page behind a mode toggle, reuses the
-existing Leaflet + OSM stack, adds **no** new dependency.
+predictor. Reuses the existing Leaflet + OSM stack, adds **no** new dependency.
+
+> **Update (shipped) — the Live/Simulate toggle was removed.** `/map` is now a single
+> **always-simulate** map (`NetworkMap.svelte`): real APs always show coverage domes +
+> clustered live-count popups; **clicking the map** (or "Add router") drops a draggable
+> pin you can model/name/address and **Save to network**; clicking a real AP → **Edit on
+> map** lets you move / re-model / re-address / **Remove** it in place (server actions
+> `addPlace` / `updatePlace` / `deletePlace`). `CoverageSimulator.svelte` and
+> `AddPlaceDialog.svelte` were folded in and deleted; `MapPicker.svelte` stays (used by
+> `/networks`). The sections below describe the original design; §1's "Toggle UI" and the
+> two-component split are superseded by this unified map.
+>
+> **Calibrated range (shipped):** the dome radius is no longer locked to the catalog. Each
+> AP/pin has a **coverage-radius slider** (25–2000 m) that defaults to the model's
+> advertised range and is **persisted per AP** (`network_health.range_meters`, nullable,
+> migration `0011_*.sql`). Domes use `ap.rangeMeters ?? rangeFor(ap.model)`; switching
+> model resets the slider to that model's advertised figure. This lets operators tune each
+> AP to real-world reach (walls, height, interference) rather than the marketing number.
+>
+> **Address geocoding (shipped):** uses Nominatim (OSM, no key, CORS-enabled, hit only on
+> explicit submit — within its ~1 req/sec policy; `// ponytail` marks the upgrade path).
+> Two entry points: a **standalone "Find an address…" search** in the sidebar that
+> recenters the map and drops a new pin at the result; and a **Locate button + Enter** on
+> each pin's address field that moves that pin to the geocoded spot. Both recenter at
+> zoom 16 and report "Address not found" on a miss.
 
 ---
 
@@ -123,7 +146,10 @@ stored `model` isn't in the catalog falls back to the default model.
   `rangeFor(ap.model)` (null model → default). These are read-only context.
 - **Sim pins:** an "Add router" button drops a new **draggable** pin; each pin has its
   own model `<select>`. Dragging redraws that pin's bands live (`marker.on('drag', …)`).
-  Sim pins are **not** persisted (sandbox).
+  Sim pins are a sandbox by default, but each carries a **"Save to network"** form that
+  promotes the tested pin into a real AP (reuses `?/addPlace` with the pin's dragged
+  lat/lng + chosen model), then drops the sandbox pin and reloads so it returns as a
+  persisted dome. This is the simulate→commit path (Live mode has no test-first step).
 - **Stacking:** all bands are translucent discs added to a single `L.layerGroup`;
   overlaps just render on top of each other (no blend math, per decision).
 - **Control panel:** top-right card — mode is already toggled at page level; panel holds
@@ -164,3 +190,41 @@ stored `model` isn't in the catalog falls back to the default model.
 - **Range realism** — 500 m is unverified marketing-style input; domes are illustrative.
   Surface this in UI copy ("advertised / illustrative") so operators don't over-trust it.
 - **Scope creep toward 3D / physics** — explicitly parked in §7. Keep v1 flat + thirds.
+
+---
+
+## 10. Roadmap
+
+Each phase ships something testable on its own; do them in order. Check items off as
+they land.
+
+### Phase 0 — Catalog + range math (no UI, no DB) ✅
+- [x] `router-models.ts`: `RouterModel`, `routerModels[]` (Sancom AP3000G / 500 m),
+      `DEFAULT_MODEL_ID`, `rangeFor(modelId)` (§4).
+- [x] Unit check for `rangeFor()`: known id → range, unknown/null → default (§8).
+- **Gate:** `rangeFor` test passes. ✅ (`router-models.test.ts`, 2 passing)
+
+### Phase 1 — Schema + migration (DB) ✅
+- [x] Add `model: text('model')` to `networkHealth` (§3).
+- [x] `bun run db:generate` → `0010_normal_energizer.sql`; made `ADD COLUMN IF NOT EXISTS`.
+- [x] `bun run db:migrate` applied; SQL committed-ready.
+- **Gate:** idempotent additive nullable column. ✅
+
+### Phase 2 — Wire model through the data layer ✅
+- [x] `types.ts`: add `model: string | null` to `NetworkAp`.
+- [x] `listNetworkHealth`: map `model` (select already returns all columns).
+- [x] `createNetworkPlace`: accept + insert `model`.
+- [x] `map/+page.server.ts` `addPlace`: read `model`, validate vs catalog (→ default), pass through.
+- [x] `AddPlaceDialog`: model `<select>` (default `DEFAULT_MODEL_ID`) submitted as `model`.
+- **Gate:** model round-trips form → DB → `NetworkAp`. ✅ (type-checked)
+
+### Phase 3 — Coverage simulator ✅
+- [x] `CoverageSimulator.svelte`: Leaflet map, real-AP domes via `rangeFor(ap.model)`,
+      draggable sim pins with per-pin model `<select>`, 3-band discs, control panel (§5).
+- [x] Export from `components/feature/index.ts`.
+- [x] `map/+page.svelte`: top-right Live ↔ Simulate toggle; render the right component.
+- **Gate:** code complete + type-checked. Manual smoke test pending (run `bun run dev:admin`).
+
+### Phase 4 — Polish (optional, deferred)
+- [ ] MapPicker live coverage preview in AddPlaceDialog (§6) — skip if it adds friction.
+- [x] UI copy: "advertised / illustrative" disclaimer — done in simulator panel header.

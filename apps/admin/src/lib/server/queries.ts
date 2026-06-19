@@ -322,6 +322,8 @@ export async function listNetworkHealth(db: DB, now: Date = new Date()): Promise
 			longitude: r.longitude,
 			address: r.address,
 			interfaceName: r.interfaceName,
+			model: r.model,
+			rangeMeters: r.rangeMeters,
 			logs: logsByNetwork.get(r.id) ?? []
 		};
 	});
@@ -527,14 +529,56 @@ export async function listTransactions(
  * its coordinates (see refreshNetworkHealth). */
 export async function createNetworkPlace(
 	db: DB,
-	place: { name: string; latitude: string; longitude: string; address: string | null }
+	place: {
+		name: string;
+		latitude: string;
+		longitude: string;
+		address: string | null;
+		model: string | null;
+		rangeMeters: number | null;
+	}
 ): Promise<void> {
 	await db.insert(networkHealth).values({
 		name: place.name,
 		latitude: place.latitude,
 		longitude: place.longitude,
 		address: place.address,
+		model: place.model,
+		rangeMeters: place.rangeMeters,
 		online: true,
 		uptimePct: '100.00'
 	});
+}
+
+/** Update an operator-placed AP's editable fields (name, location, model) from the map.
+ * Distinct from `setNetworkLocation` (used by /networks) so that flow is left untouched. */
+export async function updateNetworkPlace(
+	db: DB,
+	id: number,
+	place: {
+		name: string;
+		latitude: string;
+		longitude: string;
+		address: string | null;
+		model: string | null;
+		rangeMeters: number | null;
+	}
+): Promise<void> {
+	await db
+		.update(networkHealth)
+		.set({
+			name: place.name,
+			latitude: place.latitude,
+			longitude: place.longitude,
+			address: place.address,
+			model: place.model,
+			rangeMeters: place.rangeMeters
+		})
+		.where(eq(networkHealth.id, id));
+}
+
+/** Delete an operator-placed AP. Safe: network_sessions.network_id is a loose link (no FK),
+ * so attributed sessions simply stop matching the per-AP count — no constraint to violate. */
+export async function deleteNetworkPlace(db: DB, id: number): Promise<void> {
+	await db.delete(networkHealth).where(eq(networkHealth.id, id));
 }

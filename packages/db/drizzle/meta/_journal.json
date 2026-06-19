@@ -71,6 +71,20 @@
       "when": 1781845516771,
       "tag": "0009_tough_ser_duncan",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1781857159712,
+      "tag": "0010_normal_energizer",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1781860341759,
+      "tag": "0011_bitter_madrox",
+      "breakpoints": true
     }
   ]
 }
