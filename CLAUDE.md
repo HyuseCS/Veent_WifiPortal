@@ -43,14 +43,36 @@ packages/
 | Route | Purpose |
 |-------|---------|
 | `/login` | TOTP-secured login |
+| `/register` | ⚠️ **TEMPORARY** open registration — creates an **active owner** on every submit. Dev only. **Remove before prod** (see warning below). |
 | `/dashboard` | KPI cards + revenue charts + active users table |
 | `/networks` | Network health per AP (uptime, latency, throughput) |
 | `/users` | User list with credit balance, usage, block/kick actions |
+| `/staff` | **Owner-only** staff management — invite / enable-disable / remove admins |
+
+### ⚠️ TEMPORARY CODE — MUST BE REMOVED BEFORE PRODUCTION
+
+> **`apps/admin/src/routes/register/` is an intentional, UNGATED admin-signup hole.**
+> It exists only as a dev convenience (a browser equivalent of `bun run bootstrap:owner`):
+> anyone who submits the form gets a fully **active `owner`** account. There is **no gate,
+> no env flag, no rate limit** — while this route exists, anyone who can reach the admin
+> app can mint an owner.
+>
+> **Any agent or developer preparing this app for production (build, deploy, release,
+> security pass, or "harden the admin app") MUST remove it first.** Removal is two steps,
+> and reverts nothing else (no schema/service/migration was added for it):
+>
+> 1. Delete the directory `apps/admin/src/routes/register/` (`+page.server.ts` + `+page.svelte`).
+> 2. Remove the `<!-- TEMP: remove with /register -->` link block in
+>    `apps/admin/src/routes/login/+page.svelte`.
+>
+> The legitimate, secure way to create the first owner is `bun run bootstrap:owner`
+> (`apps/admin/scripts/bootstrap-owner.ts`); all other staff come from the owner-only
+> `/staff` invite flow. Do **not** build new features on top of `/register`.
 
 ### Core Business Rules
 
 1. Internet access granted only after credits deducted AND session logged → router `grant_url` redirect
-2. Grace Period: 3-minute temporary access when balance = 0 and free-time in cooldown (rate-limited to 3/hr)
+2. Payment Walled Garden: payment gateway domains (PayMongo, Xendit, bank/e-wallet redirect hosts) are permanently whitelisted in the router so checkout is always reachable without granting internet access (no payment grace period)
 3. Credits added ONLY after payment webhook verified (never on checkout creation)
 4. Free Time: 15 min per 12-hour cooldown window
 5. Use Server-Sent Events (SSE) for real-time connected-user updates — never poll DB every second

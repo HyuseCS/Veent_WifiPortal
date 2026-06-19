@@ -1,47 +1,46 @@
 import { fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { auth } from '$lib/server/auth';
-import { APIError } from 'better-auth/api';
+import { normalizePhone } from '$lib/phone';
+import { PENDING_COOKIE, PENDING_MAX_AGE, serializePending } from '$lib/server/otp';
+import { getPortalContext } from '$lib/server/portal';
+import { dev } from '$app/environment';
 
 export const load: PageServerLoad = (event) => {
 	if (event.locals.user) {
-		return redirect(302, '/connected');
+		return redirect(302, '/dashboard');
 	}
 	return {};
 };
 
 export const actions: Actions = {
-	signInEmail: async (event) => {
+	// One unified phone-only entry: validate the number, text a one-time code, then
+	// hand off to /auth/verify. There is no separate sign-up — a first-time number
+	// is created automatically on first successful verification
+	// (signUpOnVerification in $lib/server/auth), so we no longer gate on whether
+	// an account already exists.
+	default: async (event) => {
 		const formData = await event.request.formData();
-		const email = formData.get('email')?.toString() ?? '';
-		const password = formData.get('password')?.toString() ?? '';
+		const phoneRaw = formData.get('phone')?.toString() ?? '';
+		const phone = normalizePhone(phoneRaw);
 
-		try {
-			await auth.api.signInEmail({ body: { email, password } });
-		} catch (error) {
-			if (error instanceof APIError) {
-				return fail(400, { message: error.message || 'Sign in failed' });
-			}
-			return fail(500, { message: 'Unexpected error' });
+		if (!phone) {
+			return fail(400, { phone: phoneRaw, message: 'Enter a valid Philippine mobile number.' });
 		}
 
-		return redirect(302, '/connected');
-	},
-	signUpEmail: async (event) => {
-		const formData = await event.request.formData();
-		const email = formData.get('email')?.toString() ?? '';
-		const password = formData.get('password')?.toString() ?? '';
-		const name = formData.get('name')?.toString() ?? '';
+		await auth.api.sendPhoneNumberOTP({ body: { phoneNumber: phone } });
 
-		try {
-			await auth.api.signUpEmail({ body: { email, password, name } });
-		} catch (error) {
-			if (error instanceof APIError) {
-				return fail(400, { message: error.message || 'Registration failed' });
-			}
-			return fail(500, { message: 'Unexpected error' });
-		}
+		// Stash the captive-portal device MAC alongside the pending verification, so
+		// the dashboard can grant access after verify regardless of cookie survival.
+		const mac = getPortalContext(event)?.mac;
+		event.cookies.set(PENDING_COOKIE, serializePending({ phone, intent: 'login', mac }), {
+			path: '/',
+			httpOnly: true,
+			sameSite: 'lax',
+			secure: !dev,
+			maxAge: PENDING_MAX_AGE
+		});
 
-		return redirect(302, '/connected');
+		return redirect(303, '/auth/verify');
 	}
 };

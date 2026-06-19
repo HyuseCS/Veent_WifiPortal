@@ -1,2 +1,73 @@
+/* Font @import MUST come before `@import 'tailwindcss'`: Tailwind v4 inlines its
+ * import into generated rules, which would push any @import after it past the
+ * "@import must precede all other statements" CSS rule (postcss errors otherwise). */
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
 @import 'tailwindcss';
 @plugin '@tailwindcss/typography';
+
+/*
+ * Veent customer-portal design tokens.
+ *
+ * NOTE: as of the Customer Portal overhaul the portal NO LONGER shares the admin
+ * app's unified teal/coral theme. Per the imported Claude Design ("Veent Customer
+ * Portal.dc.html", see docs/design/), guests get a dedicated navy + blue identity
+ * with JetBrains Mono for numeric data. This is an intentional, customer-only
+ * divergence — do NOT "re-sync" these tokens with apps/admin/src/routes/layout.css.
+ * Guests have no theme selector, so there is a single palette and no presets.
+ *
+ * Tailwind v4 turns each `--color-*` into a utility (`bg-brand`, `text-ink`,
+ * `bg-online/15`, `bg-brand-tint-2`, …) and `--font-mono` into `font-mono`.
+ */
+@theme {
+	/* Palette — navy brand + blue CTA */
+	--color-brand: rgb(0, 18, 107);
+	--color-brand-hover: rgb(0, 12, 78);
+	--color-cta: rgb(10, 98, 169);
+	--color-cta-hover: rgb(7, 75, 135);
+
+	/* Light brand-family tints — card / highlight backgrounds */
+	--color-brand-tint: color-mix(in srgb, rgb(135, 201, 254), white 52%);
+	--color-brand-tint-2: color-mix(in srgb, rgb(175, 219, 255), white 58%);
+	--color-cta-tint: color-mix(in srgb, rgb(10, 98, 169), white 86%);
+
+	/* Surfaces */
+	--color-bg: oklch(1 0 0);
+	--color-surface: rgb(244, 249, 255);
+	--color-border: rgb(223, 234, 247);
+
+	/* Text */
+	--color-ink: rgb(12, 34, 58);
+	--color-muted: rgb(92, 112, 138);
+
+	/* Status — semantic */
+	--color-online: oklch(0.5 0.15 155);
+	--color-warning: oklch(0.65 0.15 72);
+	--color-blocked: oklch(0.55 0.18 22);
+
+	/* Type — Plus Jakarta Sans for UI, JetBrains Mono for data fields */
+	--font-sans: 'Plus Jakarta Sans', system-ui, sans-serif;
+	--font-mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', monospace;
+}
+
+@layer base {
+	/*
+	 * Captive-portal constraint: overscroll-behavior: contain stops accidental
+	 * pull-to-refresh on Android inside the portal mini-browser. Background + ink
+	 * set here so every page inherits the token surface without repeating it.
+	 */
+	html {
+		overscroll-behavior: contain;
+		background-color: var(--color-bg);
+		color: var(--color-ink);
+		font-family: var(--font-sans);
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	*,
+	*::before,
+	*::after {
+		animation-duration: 0.01ms !important;
+		transition-duration: 0.01ms !important;
+	}
+}

@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, boolean } from 'drizzle-orm/pg-core';
+import { pgTable, text, timestamp, boolean, type PgColumnBuilderBase } from 'drizzle-orm/pg-core';
 
 /**
  * Builds the standard better-auth table set (user / session / account /
@@ -9,8 +9,15 @@ import { pgTable, text, timestamp, boolean } from 'drizzle-orm/pg-core';
  * The JS property keys (camelCase) match better-auth's field names; Drizzle maps
  * them to snake_case DB columns. Pass the returned object to the better-auth
  * drizzle adapter's `schema` option.
+ *
+ * `extraUserColumns` adds plugin-specific columns to the user table for one
+ * prefix only — the customer instance uses it for the phoneNumber plugin's
+ * `phone_number` / `phone_number_verified`, which the admin instance must not get.
  */
-export function authTables(prefix: string) {
+export function authTables<E extends Record<string, PgColumnBuilderBase>>(
+	prefix: string,
+	extraUserColumns: E = {} as E
+) {
 	const user = pgTable(`${prefix}_user`, {
 		id: text('id').primaryKey(),
 		name: text('name').notNull(),
@@ -18,7 +25,8 @@ export function authTables(prefix: string) {
 		emailVerified: boolean('email_verified').notNull().default(false),
 		image: text('image'),
 		createdAt: timestamp('created_at').notNull().defaultNow(),
-		updatedAt: timestamp('updated_at').notNull().defaultNow()
+		updatedAt: timestamp('updated_at').notNull().defaultNow(),
+		...extraUserColumns
 	});
 
 	const session = pgTable(`${prefix}_session`, {

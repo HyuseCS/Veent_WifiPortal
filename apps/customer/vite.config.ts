@@ -20,9 +20,13 @@ export default defineConfig({
 		})
 	],
 
-	// @veent/db ships TypeScript source from the workspace; Vite externalizes
-	// dependencies for SSR by default, so opt it in for transpilation.
-	ssr: { noExternal: ['@veent/db'] },
+	// @veent/db and @veent/core ship TypeScript source from the workspace; Vite
+	// externalizes dependencies for SSR by default, so opt them in for transpilation.
+	ssr: { noExternal: ['@veent/db', '@veent/core'] },
+
+	// Dev only: allow the dev server to be reached via a tunnel host (cloudflared
+	// / ngrok) for on-device captive-portal testing. Has no effect on the build.
+	server: { allowedHosts: true },
 
 	test: {
 		expect: { requireAssertions: true },

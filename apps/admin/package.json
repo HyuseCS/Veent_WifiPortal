@@ -12,12 +12,17 @@
 		"test": "vitest run",
 		"test:unit": "vitest",
 		"test:e2e": "playwright test",
+		"bootstrap:owner": "bun run scripts/bootstrap-owner.ts",
+		"setup:router": "bun run scripts/setup-router.ts",
 		"auth:schema": "better-auth generate --config src/lib/server/auth.ts --output ../../packages/db/src/schema/auth-admin.generated.ts --yes"
 	},
 	"dependencies": {
+		"@veent/core": "workspace:*",
 		"@veent/db": "workspace:*",
 		"better-auth": "~1.4.21",
-		"lucide-svelte": "^1.0.1"
+		"drizzle-orm": "^0.45.2",
+		"lucide-svelte": "^1.0.1",
+		"postgres": "^3.4.9"
 	},
 	"devDependencies": {
 		"@better-auth/cli": "~1.4.21",

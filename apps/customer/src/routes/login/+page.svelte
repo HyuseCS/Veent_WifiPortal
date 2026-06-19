@@ -1,47 +1,91 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import { enhance } from '$app/forms';
+	import Icon from '$lib/Icon.svelte';
+	import { resolve } from '$app/paths'
 	import type { ActionData } from './$types';
 
 	let { form }: { form: ActionData } = $props();
+
+	// Seed from a failed submit (no-JS fallback) — initial value only; the bound
+	// input owns it thereafter, so reading `form` here is deliberately untracked.
+	let phone = $state(untrack(() => form?.phone) ?? '');
+	let submitting = $state(false);
 </script>
 
-<main class="prose mx-auto p-8">
-	<h1>Sign in</h1>
-	<form method="post" action="?/signInEmail" use:enhance class="flex flex-col gap-3">
-		<label>
-			Email
-			<input
-				type="email"
-				name="email"
-				class="mt-1 rounded-md border border-gray-300 bg-white px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-			/>
-		</label>
-		<label>
-			Password
-			<input
-				type="password"
-				name="password"
-				class="mt-1 rounded-md border border-gray-300 bg-white px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-			/>
-		</label>
-		<label>
-			Name (for registration)
-			<input
-				name="name"
-				class="mt-1 rounded-md border border-gray-300 bg-white px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-			/>
-		</label>
-		<div class="flex gap-2">
-			<button class="rounded-md bg-blue-600 px-4 py-2 text-white transition hover:bg-blue-700">
-				Sign in
-			</button>
-			<button
-				formaction="?/signUpEmail"
-				class="rounded-md bg-gray-600 px-4 py-2 text-white transition hover:bg-gray-700"
+<svelte:head>
+	<title>Log in · Veent WiFi</title>
+</svelte:head>
+
+<main class="mx-auto flex min-h-screen max-w-sm flex-col p-5">
+	<a
+		href={resolve("/")}
+		class="mb-7 flex min-h-[44px] items-center gap-1.5 self-start text-[13px] font-medium text-muted hover:text-ink"
+	>
+		<Icon name="arrow-left" size={18} strokeWidth={2.2} />
+		Back
+	</a>
+
+	<h1 class="mb-2 text-[25px] font-bold tracking-tight text-ink">Log in to connect</h1>
+	<p class="mb-7 text-[14.5px] leading-relaxed text-muted">
+		We'll text you a 6-digit code to verify your number.
+	</p>
+
+	<form
+		method="post"
+		use:enhance={() => {
+			submitting = true;
+			return async ({ update }) => {
+				await update();
+				submitting = false;
+			};
+		}}
+	>
+		<label for="phone" class="mb-2 block text-xs font-semibold text-ink">Phone number</label>
+		<div
+			class="mb-6 flex h-[54px] items-center overflow-hidden rounded-xl border-[1.5px] border-border bg-bg transition-colors focus-within:border-brand focus-within:ring-2 focus-within:ring-brand/15"
+		>
+			<span
+				class="flex h-full items-center border-r border-border bg-surface px-3.5 font-mono text-[15px] font-semibold text-ink"
 			>
-				Register
-			</button>
+				+63
+			</span>
+			<input
+				id="phone"
+				name="phone"
+				type="tel"
+				inputmode="numeric"
+				autocomplete="tel-national"
+				required
+				bind:value={phone}
+				placeholder="917 654 4521"
+				aria-invalid={form?.message ? 'true' : undefined}
+				class="h-full flex-1 bg-transparent px-3.5 font-mono text-base text-ink placeholder:text-muted focus:outline-none"
+			/>
 		</div>
+
+		{#if form?.message}
+			<p class="mb-4 text-[13px] font-medium text-blocked" role="alert">{form.message}</p>
+		{/if}
+
+		<button
+			type="submit"
+			disabled={submitting}
+			class="flex h-[54px] w-full items-center justify-center gap-2 rounded-xl bg-cta text-base font-bold text-white transition-colors hover:bg-cta-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cta disabled:cursor-wait disabled:opacity-80"
+		>
+			{#if submitting}
+				<span
+					class="inline-block h-[18px] w-[18px] animate-spin rounded-full border-[2.5px] border-white/40 border-t-white"
+					aria-hidden="true"
+				></span>
+				<span class="sr-only">Sending code…</span>
+			{:else}
+				Send code
+			{/if}
+		</button>
 	</form>
-	<p class="text-red-500">{form?.message ?? ''}</p>
+
+	<p class="mt-5 text-center text-[12.5px] leading-relaxed text-muted">
+		New number? No sign-up needed — we'll set you up automatically.
+	</p>
 </main>
