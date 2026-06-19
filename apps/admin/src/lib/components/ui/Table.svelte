@@ -27,7 +27,9 @@
 	} = $props();
 </script>
 
-<div class="flex flex-col overflow-hidden rounded-lg border border-border bg-bg {klass}">
+<div
+	class="flex flex-col overflow-hidden rounded-xl border border-border bg-bg shadow-sm [&_tbody_tr]:transition-colors [&_tbody_tr]:duration-150 [&_tbody_tr:hover]:bg-surface {klass}"
+>
 	{#if title}
 		<!-- Reuse SectionHeading so panel titles match the rest of the dashboard exactly. -->
 		<div class="border-b border-border px-4 py-3">

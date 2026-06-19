@@ -10,4 +10,5 @@ export { default as UsersTable } from './UsersTable.svelte';
 export { default as AddStaffForm } from './AddStaffForm.svelte';
 export { default as StaffTable } from './StaffTable.svelte';
 export { default as NetworkMap } from './NetworkMap.svelte';
+export { default as CoverageMap } from './CoverageMap.svelte';
 export { default as RouterLogPanel } from './RouterLogPanel.svelte';

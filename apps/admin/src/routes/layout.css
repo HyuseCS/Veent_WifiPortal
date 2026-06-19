@@ -25,8 +25,11 @@
 	 * as a status. Distinct hue from --color-warning amber so the two don't blur. */
 	--color-highlight: oklch(0.86 0.18 98);
 
-	/* Surfaces — light */
+	/* Surfaces — light. `bg` is the raised card/panel; `canvas` is the recessed page
+	 * background behind cards (so white cards lift off a light-gray gutter); `surface`
+	 * is the in-card tint (table headers, hover, pills). */
 	--color-bg: oklch(1 0 0);
+	--color-canvas: oklch(0.972 0.007 264);
 	--color-surface: oklch(0.975 0.006 264);
 	--color-border: oklch(0.91 0.006 264);
 
@@ -85,6 +88,82 @@
 
 	/* Deep saturated brand navy, lifted above the content bg so it reads blue, not black. */
 	--color-sidebar: oklch(0.23 0.11 266);
+}
+
+/*
+ * Motion primitives — entrance + emphasis animations, CSS-only (no JS deps). Each one
+ * resolves to its FINAL (visible) state, so the prefers-reduced-motion block below — which
+ * collapses every duration to ~0 — simply lands them instantly rather than hiding anything.
+ * Durations: micro-interactions live in Tailwind utilities (120–220ms); entrance animations
+ * here run a touch longer but only once, on mount.
+ */
+@keyframes fade-in {
+	from {
+		opacity: 0;
+	}
+	to {
+		opacity: 1;
+	}
+}
+@keyframes fade-in-up {
+	from {
+		opacity: 0;
+		transform: translateY(6px);
+	}
+	to {
+		opacity: 1;
+		transform: none;
+	}
+}
+@keyframes draw-line {
+	from {
+		stroke-dashoffset: 1;
+	}
+	to {
+		stroke-dashoffset: 0;
+	}
+}
+/* Slow, low-contrast breathe for degraded/offline status dots — emphasis without alarm. */
+@keyframes status-pulse {
+	0%,
+	100% {
+		opacity: 1;
+	}
+	50% {
+		opacity: 0.4;
+	}
+}
+
+.animate-fade-in {
+	animation: fade-in 200ms ease-out both;
+}
+.animate-fade-in-up {
+	animation: fade-in-up 200ms ease-out both;
+}
+
+/* Revenue/line chart entrance: the path "draws" on (length-normalized via pathLength="1"),
+ * then the area fill, data dots, and peak callout settle in just behind it. Runs once on
+ * mount — Svelte updates the path `d` in place on live data pushes, so it never re-fires. */
+.chart-line {
+	stroke-dasharray: 1;
+	animation: draw-line 650ms ease-out both;
+}
+.chart-area {
+	animation: fade-in 600ms ease-out both;
+}
+.chart-dot {
+	animation: fade-in 280ms ease-out 380ms both;
+	transition: r 150ms ease-out;
+}
+.chart-dot:hover {
+	r: 5;
+}
+.chart-callout {
+	animation: fade-in 280ms ease-out 480ms both;
+}
+
+.status-pulse {
+	animation: status-pulse 2.4s ease-in-out infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {

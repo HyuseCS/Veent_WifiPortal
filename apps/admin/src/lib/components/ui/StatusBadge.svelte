@@ -1,7 +1,10 @@
 <script lang="ts">
 	import type { StatusTone } from '$lib/types';
 
-	let { tone, label }: { tone: StatusTone; label: string } = $props();
+	// `pulse` opts the dot into a slow breathe — used for degraded/offline network states so
+	// they draw the eye without alarm. Off by default so most badges stay calm.
+	let { tone, label, pulse = false }: { tone: StatusTone; label: string; pulse?: boolean } =
+		$props();
 
 	// Full class strings (not interpolated) so Tailwind's scanner sees them.
 	const fill: Record<StatusTone, string> = {
@@ -17,8 +20,11 @@
 </script>
 
 <span
-	class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium {fill[tone]}"
+	class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium transition-colors duration-150 {fill[
+		tone
+	]}"
 >
-	<span class="h-1.5 w-1.5 rounded-full {dot[tone]}" aria-hidden="true"></span>
+	<span class="h-1.5 w-1.5 rounded-full {dot[tone]} {pulse ? 'status-pulse' : ''}" aria-hidden="true"
+	></span>
 	{label}
 </span>

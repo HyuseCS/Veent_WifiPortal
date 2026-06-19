@@ -48,9 +48,9 @@
 		</p>
 
 		{#if error}
-			<p class="text-sm text-blocked" role="alert">{error}</p>
+			<p class="animate-fade-in-up text-sm text-blocked" role="alert">{error}</p>
 		{:else if notice}
-			<p class="text-sm text-online" role="status">{notice}</p>
+			<p class="animate-fade-in-up text-sm text-online" role="status">{notice}</p>
 		{/if}
 
 		<div class="flex justify-end">

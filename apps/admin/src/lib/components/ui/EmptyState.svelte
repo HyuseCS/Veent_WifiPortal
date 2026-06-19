@@ -26,7 +26,7 @@
 </script>
 
 <div
-	class="flex flex-col items-center justify-center text-center {compact
+	class="animate-fade-in flex flex-col items-center justify-center text-center {compact
 		? 'gap-2 p-6'
 		: 'gap-3 p-10'}"
 >

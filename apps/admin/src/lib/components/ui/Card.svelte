@@ -9,6 +9,8 @@
 	}: { padding?: string; class?: string; children: Snippet } = $props();
 </script>
 
-<div class="rounded-lg border border-border bg-bg {padding} {klass}">
+<div
+	class="rounded-xl border border-border bg-bg shadow-sm transition-[box-shadow,transform,border-color] duration-200 {padding} {klass}"
+>
 	{@render children()}
 </div>

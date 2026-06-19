@@ -48,6 +48,11 @@
 		return { left, tone: 'online', status: 'Online' };
 	}
 
+	// Time-left text picks up the session's tone so a low/expired countdown reads as urgent
+	// (amber/red) while healthy sessions stay neutral — mirrors the StatusBadge tone.
+	const timeClass = (tone: StatusTone) =>
+		tone === 'warning' ? 'text-warning' : tone === 'blocked' ? 'text-blocked' : 'text-ink';
+
 	// Whole dashboard is live: SSR `data` seeds first paint, then the shared SSE stream
 	// (event-driven by Postgres triggers — business rule #5, never poll client-side) takes
 	// over every panel. Each field falls back to its SSR seed until the first frame lands.
@@ -126,12 +131,26 @@
 	<!-- Active Sessions -->
 	<section class="sessions flex min-h-0 flex-col">
 		<Table title="Active Sessions" columns={sessionCols} class="min-h-0 flex-1">
+			{#snippet aside()}
+				{#if activeSessions.length > 0}
+					<span
+						class="inline-flex items-center gap-1.5 rounded-full bg-online/10 px-2.5 py-1 text-xs font-medium text-online"
+					>
+						<span class="h-1.5 w-1.5 rounded-full bg-online" aria-hidden="true"></span>
+						{activeSessions.length} connected
+					</span>
+				{/if}
+			{/snippet}
 			{#each shownSessions as session (session.mac)}
 				{@const t = liveTimer(session, now)}
 				<tr class="transition-colors hover:bg-surface">
 					<td class="px-4 py-3 font-mono text-xs text-ink">{session.mac}</td>
-					<td class="px-4 py-3 text-ink">{session.package}</td>
-					<td class="px-4 py-3 font-mono text-ink">{t.left}</td>
+					<td class="px-4 py-3">
+						<span class="inline-flex rounded-md bg-surface px-2 py-0.5 text-xs font-medium text-ink">
+							{session.package}
+						</span>
+					</td>
+					<td class="px-4 py-3 font-mono {timeClass(t.tone)}">{t.left}</td>
 					<td class="px-4 py-3">
 						<StatusBadge tone={t.tone} label={t.status} />
 					</td>
@@ -164,7 +183,9 @@
 			{#each shownNetworks as ap (ap.id)}
 				<tr class="transition-colors hover:bg-surface">
 					<td class="px-4 py-3 font-medium text-ink">{ap.name}</td>
-					<td class="px-4 py-3"><StatusBadge tone={ap.tone} label={ap.status} /></td>
+					<td class="px-4 py-3">
+						<StatusBadge tone={ap.tone} label={ap.status} pulse={ap.tone !== 'online'} />
+					</td>
 					<td class="px-4 py-3 font-mono text-ink">{ap.uptime}</td>
 					<td class="px-4 py-3 font-mono text-ink">{ap.latency}</td>
 				</tr>
@@ -231,10 +252,14 @@
 				'network sessions';
 		}
 
-		/* Stacked: single column — KPIs+revenue, then sessions and network split the rest. */
+		/* Stacked: single column — KPIs+revenue, then sessions and network split the rest.
+		   leftcol keeps a definite height (so the chart fills a known box, no aspect-ratio
+		   feedback loop) but with a min floor so KPIs + chart can't squeeze the chart to
+		   nothing on short viewports; on tall ones all three rows share the height equally.
+		   The tables shrink first, and <main> scrolls only if the floor outgrows the screen. */
 		.dash-stacked {
 			grid-template-columns: 1fr;
-			grid-template-rows: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr);
+			grid-template-rows: minmax(360px, 1fr) minmax(0, 1fr) minmax(0, 1fr);
 			grid-template-areas: 'leftcol' 'sessions' 'network';
 		}
 	}
