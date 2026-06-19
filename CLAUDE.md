@@ -159,6 +159,21 @@ See `docs/DESIGN_GUIDELINES.md` for the full design system. See `PRODUCT.md` for
 - Use `import { page } from '$app/stores'` — not `window.location`
 - Use `transition:fade` directive — not manual CSS class toggling
 
+### Database / Migrations (CRITICAL — keep `db:migrate` portable)
+
+The committed migrations in `packages/db/drizzle` are the **only** way the schema changes,
+on every machine. Drift breaks `db:migrate` for teammates.
+
+- **Never hand-edit the DB** to change schema — no `psql ALTER`/`CREATE TABLE`, and don't
+  `db:push` against a migrated DB. To change schema: edit `packages/db/src/schema/*.ts`,
+  run `bun run db:generate`, then `bun run db:migrate`, and **commit the generated SQL**.
+- If you must apply SQL by hand for a one-off (debugging), also generate + commit the
+  matching migration, and make it **idempotent** (`ADD COLUMN IF NOT EXISTS`,
+  `CREATE TABLE/INDEX IF NOT EXISTS`) so it no-ops over the already-applied change.
+- Drizzle applies pending migrations in timestamp order and **stops on the first error**,
+  so one un-guarded `ALTER` that hits "already exists" blocks every later migration.
+- Verify a change is shareable by migrating a throwaway DB (see README → Migration workflow).
+
 ---
 
 ## Svelte MCP Tools
