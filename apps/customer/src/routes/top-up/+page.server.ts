@@ -54,7 +54,7 @@ export const actions: Actions = {
 			});
 			redirectUrl = checkout.redirectUrl;
 		} catch (e) {
-			// Maya is stubbed — surface a clear message until it's wired.
+			// Gateway call failed (network, bad keys, Maya 4xx/5xx) — surface it.
 			return fail(503, { error: `Checkout unavailable: ${(e as Error).message}` });
 		}
 		// Outside the try: redirect() throws, and we must not catch that throw.
