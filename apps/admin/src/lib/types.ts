@@ -115,3 +115,45 @@ export interface StaffMember {
 	/** Last-active label, pre-formatted (e.g. "2h ago", "—"). */
 	lastActive: string;
 }
+
+/** One slice of the Finance "revenue by payment method" donut. */
+export interface PaymentMethodSlice {
+	/** Raw fund source key, e.g. 'card' | 'gcash' | 'maya-wallet' | 'unknown'. */
+	type: string;
+	/** Display name (e.g. "GCash"). */
+	label: string;
+	/** Settled peso amount for this method. */
+	amount: number;
+	count: number;
+	/** Share of total settled amount, 0–100. */
+	pct: number;
+}
+
+/** A row in the Finance transactions table. */
+export interface TransactionRow {
+	id: string;
+	/** Raw gateway status (e.g. "PAYMENT_SUCCESS"). */
+	status: string;
+	/** Badge tone derived from status. */
+	statusTone: StatusTone;
+	/** Pre-formatted peso amount (e.g. "₱1,200"). */
+	amount: string;
+	fundSourceType: string;
+	fundSourceMasked: string | null;
+	receiptNo: string | null;
+	buyerName: string;
+	buyerEmail: string | null;
+	packageName: string | null;
+	/** ISO timestamp. */
+	createdAt: string;
+}
+
+/** The Finance page in one frame (KPIs + chart + breakdown + first page of rows). */
+export interface FinanceSnapshot {
+	kpis: Kpi[];
+	revenue: RevenuePoint[];
+	breakdown: PaymentMethodSlice[];
+	transactions: TransactionRow[];
+	/** Total rows matching the filter, for pagination. */
+	total: number;
+}
