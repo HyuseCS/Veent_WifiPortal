@@ -6,6 +6,7 @@
 	import Icon from '$lib/Icon.svelte';
 	import { resolve } from '$app/paths';
 	import type { PageServerData, ActionData } from './$types';
+	import logo from '$lib/assets/parafiber-logo.webp';
 
 	let { data, form }: { data: PageServerData; form: ActionData } = $props();
 
@@ -98,19 +99,30 @@
 
 <main class="mx-auto flex min-h-screen max-w-sm flex-col">
 	<!-- Balance header -->
-	<header class="bg-brand px-5 pt-6 pb-7 text-white">
+	<header class="bg-brand px-5 py-5 text-white">
 		<div class="mb-5 flex items-center justify-between">
-			<span class="text-sm font-medium opacity-85">Hi, {data.maskedPhone ?? 'there'}</span>
+			<img src={logo} alt="parafiber by parasat logo" class="h-8 w-auto" />
 			<div class="flex items-center gap-1.5">
 				<span class="h-1.5 w-1.5 rounded-full bg-online/80"></span>
 				<span class="text-xs font-medium opacity-90">Online</span>
 			</div>
 		</div>
-		<div class="mb-1 text-[12.5px] font-medium tracking-wider uppercase opacity-80">Balance</div>
-		<div class="flex items-baseline gap-2">
-			<span class="font-mono text-[38px] leading-none font-semibold tracking-tight">{balance}</span>
-			<span class="text-base font-medium opacity-85">credits</span>
+		<div class="flex flex-col items-stretch justify-between pl-1.5">
+			<div class="flex justify-between gap-2">
+				<!-- <span class="text-sm font-medium opacity-85">Hi, {data.maskedPhone ?? 'there'}</span> -->
+				<span class="mb-1 text-[12.5px] font-medium tracking-wider uppercase opacity-80">Hi there,</span>
+				<span class="mb-1 text-[12.5px] font-medium tracking-wider uppercase opacity-80">Balance</span>
+			</div>
+			<div class="flex justify-between items-center gap-2">
+				<span class="font-mono text-[22px] leading-none font-semibold tracking-tight">{data.maskedPhone ?? 'Guest'}</span>
+
+				<div class="flex justify-end items-baseline gap-2">
+					<span class="font-mono text-[22px] leading-none font-semibold tracking-tight">{balance}</span>
+					<span class="text-base font-medium opacity-85">credits</span>
+				</div>
+			</div>
 		</div>
+		
 	</header>
 
 	<div class="flex flex-1 flex-col px-5 pt-[18px] pb-5">
