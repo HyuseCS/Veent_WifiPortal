@@ -2,6 +2,7 @@ import type { Component } from 'svelte';
 // lucide-svelte v1 dropped the named-export barrel; icons import per subpath.
 import LayoutDashboard from 'lucide-svelte/icons/layout-dashboard';
 import Router from 'lucide-svelte/icons/router';
+import MapPin from 'lucide-svelte/icons/map-pin';
 import UserCog from 'lucide-svelte/icons/user-cog';
 import Users from 'lucide-svelte/icons/users';
 
@@ -18,6 +19,7 @@ export interface NavItem {
 export const nav: NavItem[] = [
 	{ href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard as unknown as Component },
 	{ href: '/networks', label: 'Networks', icon: Router as unknown as Component },
+	{ href: '/map', label: 'Map', icon: MapPin as unknown as Component },
 	{ href: '/users', label: 'Users', icon: Users as unknown as Component },
 	{ href: '/staff', label: 'Staff', icon: UserCog as unknown as Component, ownerOnly: true }
 ];
