@@ -8,36 +8,41 @@
  * so every utility re-resolves live when `data-theme` flips. Components never
  * need `dark:` variants — they read these semantic tokens.
  *
- * Identity: one red accent (brand/cta) + a constant-black sidebar. Danger uses a
- * distinct oxblood red (--color-blocked) so it never reads as the accent.
+ * Identity: Parafiber royal-blue accent (brand/cta) + a deep-navy sidebar, with
+ * gold (--color-highlight) as a sparing highlight. Danger keeps a distinct oxblood
+ * red (--color-blocked) — now the only red, so it never reads as the accent.
  */
 @theme {
-	/* Accent — single red. cta is an alias of brand (kept so the ~16 files that
-	 * use bg-cta/text-cta don't need editing). */
+	/* Accent — Parafiber royal blue. cta is an alias of brand (kept so the ~16 files
+	 * that use bg-cta/text-cta don't need editing). */
 	/* ponytail: cta == brand; collapse to one token only if a 2nd accent appears. */
-	--color-brand: oklch(0.52 0.21 25);
-	--color-brand-hover: oklch(0.46 0.21 25);
-	--color-cta: oklch(0.52 0.21 25);
-	--color-cta-hover: oklch(0.46 0.21 25);
+	--color-brand: oklch(0.54 0.22 262);
+	--color-brand-hover: oklch(0.48 0.22 262);
+	--color-cta: oklch(0.54 0.22 262);
+	--color-cta-hover: oklch(0.48 0.22 262);
+
+	/* Highlight — bright Parafiber yellow. Used sparingly (e.g. the OWNER badge), never
+	 * as a status. Distinct hue from --color-warning amber so the two don't blur. */
+	--color-highlight: oklch(0.86 0.18 98);
 
 	/* Surfaces — light */
 	--color-bg: oklch(1 0 0);
-	--color-surface: oklch(0.975 0.006 25);
-	--color-border: oklch(0.91 0.006 25);
+	--color-surface: oklch(0.975 0.006 264);
+	--color-border: oklch(0.91 0.006 264);
 
 	/* Text — light */
-	--color-ink: oklch(0.16 0.01 25);
-	--color-muted: oklch(0.5 0.01 25);
+	--color-ink: oklch(0.16 0.01 264);
+	--color-muted: oklch(0.5 0.01 264);
 
-	/* Status — semantic. blocked = oxblood danger, distinct from accent red. */
+	/* Status — semantic. blocked = oxblood danger, distinct from the blue accent. */
 	--color-online: oklch(0.52 0.15 150);
 	--color-warning: oklch(0.62 0.15 75);
 	--color-blocked: oklch(0.42 0.15 18);
 
-	/* Admin sidebar — constant black in both modes */
-	--color-sidebar: oklch(0.13 0.006 25);
-	--color-sidebar-text: oklch(0.78 0.008 25);
-	--color-sidebar-muted: oklch(0.5 0.008 25);
+	/* Admin sidebar — deep saturated Parafiber navy (the brand header) in both modes. */
+	--color-sidebar: oklch(0.24 0.11 266);
+	--color-sidebar-text: oklch(0.86 0.05 264);
+	--color-sidebar-muted: oklch(0.67 0.06 264);
 
 	/* Type */
 	--font-sans: system-ui, -apple-system, 'Segoe UI', sans-serif;
@@ -50,30 +55,36 @@
 }
 
 /*
- * Dark mode — overrides only what changes. Accent + status reds are lifted for
- * AA on dark surfaces; hues stay put so the accent/danger distinction holds. The
- * sidebar drops below the content bg so it still separates against dark content.
+ * Dark mode — overrides only what changes. The blue accent, gold highlight, and
+ * status reds are lifted for AA on dark surfaces; hues stay put so the accent /
+ * highlight / danger distinctions hold. The navy sidebar deepens a touch so it
+ * still separates against the dark content bg.
  */
 :root[data-theme='dark'] {
 	color-scheme: dark;
 
-	--color-brand: oklch(0.6 0.21 25);
-	--color-brand-hover: oklch(0.66 0.21 25);
-	--color-cta: oklch(0.6 0.21 25);
-	--color-cta-hover: oklch(0.66 0.21 25);
+	--color-brand: oklch(0.64 0.2 262);
+	--color-brand-hover: oklch(0.7 0.19 262);
+	--color-cta: oklch(0.64 0.2 262);
+	--color-cta-hover: oklch(0.7 0.19 262);
 
-	--color-bg: oklch(0.17 0.006 25);
-	--color-surface: oklch(0.21 0.008 25);
-	--color-border: oklch(0.3 0.008 25);
+	--color-highlight: oklch(0.87 0.18 98);
 
-	--color-ink: oklch(0.95 0.005 25);
-	--color-muted: oklch(0.68 0.01 25);
+	/* Content canvas is a real dark navy (not near-black): enough blue chroma to read
+	 * blue, kept darker than the sidebar so the sidebar still frames it. */
+	--color-bg: oklch(0.18 0.055 264);
+	--color-surface: oklch(0.23 0.055 264);
+	--color-border: oklch(0.33 0.045 264);
+
+	--color-ink: oklch(0.95 0.005 264);
+	--color-muted: oklch(0.68 0.01 264);
 
 	--color-online: oklch(0.68 0.15 150);
 	--color-warning: oklch(0.74 0.14 75);
 	--color-blocked: oklch(0.6 0.16 18);
 
-	--color-sidebar: oklch(0.11 0.006 25);
+	/* Deep saturated brand navy, lifted above the content bg so it reads blue, not black. */
+	--color-sidebar: oklch(0.23 0.11 266);
 }
 
 @media (prefers-reduced-motion: reduce) {

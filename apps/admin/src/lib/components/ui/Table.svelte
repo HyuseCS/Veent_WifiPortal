@@ -30,17 +30,17 @@
 <div class="flex flex-col overflow-hidden rounded-lg border border-border bg-bg {klass}">
 	{#if title}
 		<!-- Reuse SectionHeading so panel titles match the rest of the dashboard exactly. -->
-		<div class="bg-muted/10 px-4 pt-2 pb-0">
+		<div class="border-b border-border px-4 py-3">
 			<SectionHeading {title} {aside} />
 		</div>
 	{/if}
-	<div class="min-h-0 flex-1 overflow-hidden">
+	<div class="min-h-0 flex-1 overflow-auto">
 		<table class="w-full text-sm">
-			<thead>
-				<tr class="border-b border-border bg-muted/10">
+			<thead class="sticky top-0 z-10">
+				<tr class="border-b border-border bg-surface">
 					{#each columns as col (col.label)}
 						<th
-							class="px-4 py-3 text-left text-xs font-semibold tracking-wide text-muted uppercase"
+							class="px-4 py-2.5 text-left text-[11px] font-semibold tracking-wider text-muted uppercase"
 						>
 							{#if col.srOnly}<span class="sr-only">{col.label}</span>{:else}{col.label}{/if}
 						</th>

@@ -14,9 +14,25 @@
 	let { children, data }: { children: Snippet; data: LayoutData } = $props();
 
 	const title = $derived(
-		nav.find(
-			(n) => page.url.pathname === n.href || page.url.pathname.startsWith(n.href + '/')
-		)?.label ?? 'Admin'
+		nav.find((n) => page.url.pathname === n.href || page.url.pathname.startsWith(n.href + '/'))
+			?.label ?? 'Admin'
+	);
+
+	// One-line context per section — purely descriptive header copy (no data).
+	const subtitles: Record<string, string> = {
+		'/dashboard': 'Live operations overview',
+		'/networks': 'Access point health & coverage',
+		'/map': 'Access point locations',
+		'/users': 'Guests, credits & sessions',
+		'/finance': 'Settled revenue & payments',
+		'/staff': 'Admin access management'
+	};
+	const subtitle = $derived(
+		subtitles[
+			Object.keys(subtitles).find(
+				(href) => page.url.pathname === href || page.url.pathname.startsWith(href + '/')
+			) ?? ''
+		]
 	);
 	const onDashboard = $derived(page.url.pathname === '/dashboard');
 
@@ -38,12 +54,12 @@
 <div class="flex h-screen overflow-hidden bg-bg">
 	<Sidebar user={data.user} />
 	<div class="flex flex-1 flex-col overflow-hidden">
-		<Topbar {title}>
+		<Topbar {title} {subtitle}>
 			{#snippet actions()}
 				{#if onDashboard}<LayoutSwitcher />{/if}
 			{/snippet}
 		</Topbar>
-		<main class="flex-1 overflow-y-auto p-6">
+		<main class="flex-1 overflow-y-auto p-4 sm:p-6">
 			{@render children()}
 		</main>
 	</div>

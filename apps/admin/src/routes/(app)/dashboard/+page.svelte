@@ -1,12 +1,29 @@
 <script lang="ts">
-	import { getContext } from 'svelte';
-	import { Card, SectionHeading, Table, StatusBadge } from '$lib/components/ui';
+	import { getContext, type Component } from 'svelte';
+	import { Card, SectionHeading, Table, StatusBadge, EmptyState } from '$lib/components/ui';
 	import { KpiCard, RevenueChart } from '$lib/components/feature';
+	import Wallet from 'lucide-svelte/icons/wallet';
+	import Gift from 'lucide-svelte/icons/gift';
+	import Timer from 'lucide-svelte/icons/timer';
+	import Wifi from 'lucide-svelte/icons/wifi';
+	import Router from 'lucide-svelte/icons/router';
+	import ReceiptText from 'lucide-svelte/icons/receipt-text';
 	import { live, connectLive } from '$lib/live.svelte';
 	import { DASH_LAYOUT_CTX, type DashLayoutCtx } from '$lib/dashboard-layout';
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();
+
+	// Presentation-only chrome for each headline metric — an icon, an honest caption for
+	// what the (real) value represents, and a period tag. Keyed by the KPI's stable label
+	// so it survives live-snapshot swaps. lucide types don't match Svelte's `Component`
+	// structurally; cast as nav.ts does.
+	const icon = (c: unknown) => c as Component;
+	const kpiMeta: Record<string, { icon: Component; helper: string; period: string }> = {
+		'Gross Revenue': { icon: icon(Wallet), helper: 'All-time top-ups', period: 'All-time' },
+		'Free-Time Grants': { icon: icon(Gift), helper: 'Sessions on the house', period: 'All-time' },
+		'Avg. Session': { icon: icon(Timer), helper: 'Mean connected time', period: 'All-time' }
+	};
 
 	// Whole dashboard is live: SSR `data` seeds first paint, then the shared SSE stream
 	// (event-driven by Postgres triggers — business rule #5, never poll client-side) takes
@@ -51,7 +68,12 @@
 	<div class="leftcol flex min-h-0 flex-col gap-4">
 		<section class="grid grid-cols-1 gap-4 sm:grid-cols-3">
 			{#each kpis as kpi (kpi.label)}
-				<KpiCard {kpi} />
+				<KpiCard
+					{kpi}
+					icon={kpiMeta[kpi.label]?.icon}
+					helper={kpiMeta[kpi.label]?.helper}
+					period={kpiMeta[kpi.label]?.period}
+				/>
 			{/each}
 		</section>
 
@@ -62,7 +84,18 @@
 				{/snippet}
 			</SectionHeading>
 			<div class="min-h-0 flex-1">
-				<RevenueChart data={revenue} />
+				{#if total > 0}
+					<RevenueChart data={revenue} />
+				{:else}
+					<div class="flex h-full min-h-[150px] items-center justify-center">
+						<EmptyState
+							icon={icon(ReceiptText)}
+							title="No revenue yet"
+							description="Revenue appears here once guests purchase credits. The last 7 days will chart automatically."
+							compact
+						/>
+					</div>
+				{/if}
 			</div>
 		</Card>
 	</div>
@@ -72,18 +105,23 @@
 		<Table title="Active Sessions" columns={sessionCols} class="min-h-0 flex-1">
 			{#each shownSessions as session (session.mac)}
 				<tr class="transition-colors hover:bg-surface">
-					<td class="px-4 py-2.5 font-mono text-xs text-ink">{session.mac}</td>
-					<td class="px-4 py-2.5 text-ink">{session.package}</td>
-					<td class="px-4 py-2.5 font-mono text-ink">{session.timeLeft}</td>
-					<td class="px-4 py-2.5">
+					<td class="px-4 py-3 font-mono text-xs text-ink">{session.mac}</td>
+					<td class="px-4 py-3 text-ink">{session.package}</td>
+					<td class="px-4 py-3 font-mono text-ink">{session.timeLeft}</td>
+					<td class="px-4 py-3">
 						<StatusBadge tone={session.tone} label={session.status} />
 					</td>
 				</tr>
 			{/each}
 			{#if shownSessions.length === 0}
 				<tr>
-					<td colspan={sessionCols.length} class="px-4 py-6 text-center text-sm text-muted">
-						No active sessions.
+					<td colspan={sessionCols.length} class="p-0">
+						<EmptyState
+							icon={icon(Wifi)}
+							title="No active sessions"
+							description="Connected guests appear here automatically as they come online — the list streams live, no refresh needed."
+							compact
+						/>
 					</td>
 				</tr>
 			{/if}
@@ -101,16 +139,21 @@
 			{/snippet}
 			{#each shownNetworks as ap (ap.id)}
 				<tr class="transition-colors hover:bg-surface">
-					<td class="px-4 py-2.5 text-ink">{ap.name}</td>
-					<td class="px-4 py-2.5"><StatusBadge tone={ap.tone} label={ap.status} /></td>
-					<td class="px-4 py-2.5 font-mono text-ink">{ap.uptime}</td>
-					<td class="px-4 py-2.5 font-mono text-ink">{ap.latency}</td>
+					<td class="px-4 py-3 font-medium text-ink">{ap.name}</td>
+					<td class="px-4 py-3"><StatusBadge tone={ap.tone} label={ap.status} /></td>
+					<td class="px-4 py-3 font-mono text-ink">{ap.uptime}</td>
+					<td class="px-4 py-3 font-mono text-ink">{ap.latency}</td>
 				</tr>
 			{/each}
 			{#if shownNetworks.length === 0}
 				<tr>
-					<td colspan={netCols.length} class="px-4 py-6 text-center text-sm text-muted">
-						No access points reporting.
+					<td colspan={netCols.length} class="p-0">
+						<EmptyState
+							icon={icon(Router)}
+							title="No access points reporting"
+							description="AP health appears here once your access points start reporting uptime and latency metrics."
+							compact
+						/>
 					</td>
 				</tr>
 			{/if}
