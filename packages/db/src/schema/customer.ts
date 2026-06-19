@@ -72,6 +72,41 @@ export const creditLedger = pgTable(
 	(t) => [index('credit_ledger_user_id_idx').on(t.userId)]
 );
 
+/**
+ * Full record of every payment-gateway webhook event (success AND failure),
+ * captured verbatim so the admin Finance page can report on the complete payment
+ * funnel. `credit_ledger` only records *successful, credited* top-ups; this table
+ * is the superset — failed/expired/cancelled attempts, fund source, receipt,
+ * buyer, and error detail. The PK is the gateway's own transaction id, so a
+ * resent or status-transitioning webhook upserts the same row.
+ */
+export const paymentTransactions = pgTable(
+	'payment_transactions',
+	{
+		id: text('id').primaryKey(), // Maya's tx id (payload.id)
+		status: text('status').notNull(), // PAYMENT_SUCCESS | PAYMENT_FAILED | PAYMENT_EXPIRED | PAYMENT_CANCELLED
+		amount: numeric('amount', { precision: 12, scale: 2 }).notNull(),
+		currency: text('currency').notNull().default('PHP'),
+		fundSourceType: text('fund_source_type'), // card | gcash | maya-wallet | shopeepay | qrph | null
+		fundSourceMasked: text('fund_source_masked'), // card last4 / wallet masked, nullable
+		receiptNo: text('receipt_no'),
+		referenceNo: text('reference_no'), // requestReferenceNumber (our referenceId echo)
+		errorCode: text('error_code'),
+		errorMessage: text('error_message'),
+		buyerName: text('buyer_name'),
+		buyerEmail: text('buyer_email'),
+		// Nullable: a failed event may carry no referenceId, so we can't always map it.
+		userId: text('user_id').references(() => customerUser.id, { onDelete: 'set null' }),
+		packageId: integer('package_id').references(() => packages.id, { onDelete: 'set null' }),
+		createdAt: timestamp('created_at').notNull().defaultNow()
+	},
+	(t) => [
+		index('payment_transactions_user_id_idx').on(t.userId),
+		index('payment_transactions_created_at_idx').on(t.createdAt),
+		index('payment_transactions_status_idx').on(t.status)
+	]
+);
+
 /** A network access grant for a device MAC, tied to a user (ERD "NetworkSessions"). */
 export const networkSessions = pgTable(
 	'network_sessions',

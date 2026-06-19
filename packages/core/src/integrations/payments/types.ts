@@ -29,11 +29,22 @@ export interface CreateCheckoutResult {
 export interface PaymentEvent {
 	/** The gateway's unique transaction id — stored as credit_ledger.external_transaction_id (idempotency key). */
 	externalTransactionId: string;
-	/** Our referenceId from checkout creation. */
+	/** Our referenceId from checkout creation. Always a string ('' when the gateway
+	 * omits it, e.g. on some failure events) so callers can safely `.split(':')`. */
 	referenceId: string;
-	status: 'paid' | 'failed' | 'expired' | 'pending';
+	status: 'paid' | 'failed' | 'expired' | 'cancelled' | 'pending';
 	amountMinor: number;
 	currency: string;
+	// Optional provider detail — populated by Maya, left undefined by other providers.
+	// Surfaced on the admin Finance page (payment_transactions); not used for crediting.
+	fundSourceType?: string;
+	fundSourceMasked?: string;
+	receiptNo?: string;
+	referenceNo?: string;
+	errorCode?: string;
+	errorMessage?: string;
+	buyerName?: string;
+	buyerEmail?: string;
 }
 
 export interface PaymentProvider {

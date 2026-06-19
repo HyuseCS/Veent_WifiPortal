@@ -5,7 +5,7 @@
  *
  * These back the `load()` functions that replace `$lib/mocks`.
  */
-import { and, asc, desc, eq, isNull, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, isNull, lte, sql, type SQL } from 'drizzle-orm';
 import {
 	type DB,
 	customerUser,
@@ -13,6 +13,7 @@ import {
 	networkSessions,
 	creditLedger,
 	packages,
+	paymentTransactions,
 	adminUser,
 	adminProfile,
 	adminRole,
@@ -25,11 +26,13 @@ import type {
 	DashboardSnapshot,
 	Kpi,
 	NetworkAp,
+	PaymentMethodSlice,
 	RevenuePoint,
 	StaffMember,
 	StaffRole,
 	StaffStatus,
-	StatusTone
+	StatusTone,
+	TransactionRow
 } from '$lib/types';
 
 const peso = (n: number) => `₱${Math.round(n).toLocaleString('en-PH')}`;
@@ -285,4 +288,178 @@ export async function setNetworkLocation(
 	loc: { latitude: string | null; longitude: string | null; address: string | null }
 ): Promise<void> {
 	await db.update(networkHealth).set(loc).where(eq(networkHealth.id, id));
+}
+
+// ───────────────────────────── Finance page ─────────────────────────────
+// Finance reads payment_transactions (the full webhook record), NOT credit_ledger.
+// "Revenue (settled)" here = money the gateway actually charged on PAYMENT_SUCCESS,
+// which can differ from the Dashboard's packages.fiatCost estimate by design.
+
+const SUCCESS = 'PAYMENT_SUCCESS';
+
+interface DateRange {
+	from?: Date;
+	to?: Date;
+}
+
+/** Build the created_at range predicate shared by every Finance query. */
+function rangeWhere(range: DateRange): SQL[] {
+	const conds: SQL[] = [];
+	if (range.from) conds.push(gte(paymentTransactions.createdAt, range.from));
+	if (range.to) conds.push(lte(paymentTransactions.createdAt, range.to));
+	return conds;
+}
+
+/** Human label for a fund source key; falls back to "Other". */
+function fundSourceLabel(type: string | null): string {
+	const map: Record<string, string> = {
+		card: 'Card',
+		gcash: 'GCash',
+		'maya-wallet': 'Maya Wallet',
+		shopeepay: 'ShopeePay',
+		qrph: 'QR Ph'
+	};
+	return type ? (map[type] ?? type) : 'Other';
+}
+
+/** Status badge tone from the raw gateway status. */
+function statusTone(status: string): StatusTone {
+	if (status === SUCCESS) return 'online';
+	if (status === 'PAYMENT_FAILED') return 'blocked';
+	return 'warning'; // expired / cancelled / pending
+}
+
+/** Headline Finance metrics over the range. Peso values pre-formatted with peso(). */
+export async function financeKpis(db: DB, range: DateRange = {}): Promise<Kpi[]> {
+	const [row] = await db
+		.select({
+			gross: sql<number>`coalesce(sum(${paymentTransactions.amount}) filter (where ${paymentTransactions.status} = ${SUCCESS}), 0)::float`,
+			txns: sql<number>`count(*)::int`,
+			avg: sql<number>`coalesce(avg(${paymentTransactions.amount}) filter (where ${paymentTransactions.status} = ${SUCCESS}), 0)::float`,
+			successRate: sql<number>`coalesce(count(*) filter (where ${paymentTransactions.status} = ${SUCCESS})::float / nullif(count(*), 0), 0)::float`
+		})
+		.from(paymentTransactions)
+		.where(and(...rangeWhere(range)));
+
+	return [
+		{ label: 'Gross Revenue (settled)', value: peso(row?.gross ?? 0) },
+		{ label: 'Transactions', value: String(row?.txns ?? 0) },
+		{ label: 'Success Rate', value: `${Math.round((row?.successRate ?? 0) * 100)}%` },
+		{ label: 'Avg. Transaction', value: peso(row?.avg ?? 0) }
+	];
+}
+
+/** Settled revenue grouped by period. Labels are collision-free per granularity. */
+export async function revenueByPeriod(
+	db: DB,
+	opts: DateRange & { granularity: 'day' | 'week' | 'month' }
+): Promise<RevenuePoint[]> {
+	// 'IYYY-IW' (ISO year-week) and the date formats avoid the weekday-collision
+	// problem revenueByDay has when a window spans more than 7 days.
+	const fmt =
+		opts.granularity === 'week' ? 'IYYY-IW' : opts.granularity === 'month' ? 'YYYY-MM' : 'MM-DD';
+	// Inline the granularity as a SQL literal (NOT a bind param). If it were a param,
+	// Drizzle would emit a *different* parameter marker in SELECT vs GROUP BY/ORDER BY,
+	// and Postgres matches grouped expressions structurally — distinct markers fail to
+	// match ("column must appear in the GROUP BY clause"). granularity is a validated
+	// enum here, so literal interpolation is safe. sql.raw keeps it param-free.
+	const trunc = sql.raw(`'${opts.granularity}'`);
+	const bucket = sql`date_trunc(${trunc}, ${paymentTransactions.createdAt})`;
+
+	const rows = await db
+		.select({
+			label: sql<string>`to_char(${bucket}, ${fmt})`,
+			amount: sql<number>`coalesce(sum(${paymentTransactions.amount}), 0)::float`
+		})
+		.from(paymentTransactions)
+		.where(and(eq(paymentTransactions.status, SUCCESS), ...rangeWhere(opts)))
+		.groupBy(bucket)
+		.orderBy(bucket);
+
+	return rows.map((r) => ({ label: r.label, amount: r.amount }));
+}
+
+/** Settled revenue split by fund source, with each slice's share of the total. */
+export async function paymentMethodBreakdown(
+	db: DB,
+	range: DateRange = {}
+): Promise<PaymentMethodSlice[]> {
+	const rows = await db
+		.select({
+			type: paymentTransactions.fundSourceType,
+			amount: sql<number>`coalesce(sum(${paymentTransactions.amount}), 0)::float`,
+			count: sql<number>`count(*)::int`
+		})
+		.from(paymentTransactions)
+		.where(and(eq(paymentTransactions.status, SUCCESS), ...rangeWhere(range)))
+		.groupBy(paymentTransactions.fundSourceType)
+		.orderBy(desc(sql`sum(${paymentTransactions.amount})`));
+
+	const total = rows.reduce((sum, r) => sum + r.amount, 0);
+	return rows.map((r) => ({
+		type: r.type ?? 'unknown',
+		label: fundSourceLabel(r.type),
+		amount: r.amount,
+		count: r.count,
+		pct: total > 0 ? Math.round((r.amount / total) * 100) : 0
+	}));
+}
+
+/** Paginated transaction list (newest first), with package name and buyer. */
+export async function listTransactions(
+	db: DB,
+	opts: DateRange & { status?: string; page?: number; pageSize?: number }
+): Promise<{ rows: TransactionRow[]; total: number }> {
+	const page = Math.max(1, opts.page ?? 1);
+	const pageSize = opts.pageSize ?? 50;
+
+	const conds = rangeWhere(opts);
+	if (opts.status) conds.push(eq(paymentTransactions.status, opts.status));
+	const where = conds.length ? and(...conds) : undefined;
+
+	const [[counted], rows] = await Promise.all([
+		db
+			.select({ n: sql<number>`count(*)::int` })
+			.from(paymentTransactions)
+			.where(where),
+		db
+			.select({
+				id: paymentTransactions.id,
+				status: paymentTransactions.status,
+				amount: paymentTransactions.amount,
+				fundSourceType: paymentTransactions.fundSourceType,
+				fundSourceMasked: paymentTransactions.fundSourceMasked,
+				receiptNo: paymentTransactions.receiptNo,
+				buyerName: paymentTransactions.buyerName,
+				buyerEmail: paymentTransactions.buyerEmail,
+				createdAt: paymentTransactions.createdAt,
+				userName: customerUser.name,
+				packageName: packages.name
+			})
+			.from(paymentTransactions)
+			.leftJoin(customerUser, eq(customerUser.id, paymentTransactions.userId))
+			.leftJoin(packages, eq(packages.id, paymentTransactions.packageId))
+			.where(where)
+			.orderBy(desc(paymentTransactions.createdAt))
+			.limit(pageSize)
+			.offset((page - 1) * pageSize)
+	]);
+
+	return {
+		total: counted?.n ?? 0,
+		rows: rows.map((r) => ({
+			id: r.id,
+			status: r.status,
+			statusTone: statusTone(r.status),
+			amount: peso(Number(r.amount)),
+			fundSourceType: fundSourceLabel(r.fundSourceType),
+			fundSourceMasked: r.fundSourceMasked,
+			receiptNo: r.receiptNo,
+			// Prefer the buyer captured on the gateway event; fall back to the linked user.
+			buyerName: r.buyerName || r.userName || '—',
+			buyerEmail: r.buyerEmail,
+			packageName: r.packageName,
+			createdAt: r.createdAt.toISOString()
+		}))
+	};
 }

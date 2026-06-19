@@ -47,6 +47,7 @@ packages/
 | `/dashboard` | KPI cards + revenue charts + active users table |
 | `/networks` | Network health per AP (uptime, latency, throughput) |
 | `/users` | User list with credit balance, usage, block/kick actions |
+| `/finance` | Payment reporting — settled-revenue KPIs, revenue-over-time chart, payment-method donut, transactions table, CSV export (see **Finance & Payment Reporting** below) |
 | `/staff` | **Owner-only** staff management — invite / enable-disable / remove admins |
 
 ### ⚠️ TEMPORARY CODE — MUST BE REMOVED BEFORE PRODUCTION
@@ -68,6 +69,61 @@ packages/
 > The legitimate, secure way to create the first owner is `bun run bootstrap:owner`
 > (`apps/admin/scripts/bootstrap-owner.ts`); all other staff come from the owner-only
 > `/staff` invite flow. Do **not** build new features on top of `/register`.
+
+### Finance & Payment Reporting
+
+The `/finance` admin page and its backing pieces capture and report on **every** payment-gateway
+webhook event — not just the successful, credited ones. This section documents what each new
+piece is and why it exists.
+
+**Why it exists:** before this, the only persisted trace of a payment was
+`credit_ledger.external_transaction_id`, written **only** on a successful top-up. Failed,
+expired, and cancelled attempts — plus all the gateway detail (fund source, receipt, buyer,
+error code) — were discarded. Operators had no way to see the full payment funnel, success
+rate, or why payments failed. The Finance feature adds a complete, queryable record.
+
+**`payment_transactions` table** (`packages/db/src/schema/customer.ts`)
+- The full record of every Maya webhook hit. PK is the gateway's own transaction id, so a
+  resent or status-transitioning webhook **upserts** the same row (see webhook handler).
+- Superset of `credit_ledger`: it holds `PAYMENT_SUCCESS` **and** `PAYMENT_FAILED` /
+  `PAYMENT_EXPIRED` / `PAYMENT_CANCELLED`, with `fund_source_type`/`fund_source_masked`,
+  `receipt_no`, `buyer_name`/`buyer_email`, and `error_code`/`error_message`.
+- `user_id` / `package_id` are **nullable** — a failed event may carry no `referenceId`, so
+  it's still recorded, just unattributed. Migration: `packages/db/drizzle/0008_*.sql`.
+
+**`maya.ts` `verifyWebhook`** (`packages/core/src/integrations/payments/maya.ts`)
+- Previously a throwing stub; now implemented. Verifies the webhook HMAC signature over the
+  raw body (throws on mismatch — never trusts an unverified payload), then maps the Maya
+  payload to the normalized `PaymentEvent`.
+- ⚠️ The signature scheme (HMAC-SHA256 hex in `paymaya-signature`/`x-signature`) is an
+  **assumption** flagged with a `ponytail:` comment — confirm the exact algorithm + header in
+  the Maya dashboard's webhook config before going live; if it differs, change it in that one
+  spot. `createCheckout` is still a stub (outbound checkout is out of scope for this feature).
+- `PaymentEvent` (`payments/types.ts`) gained a `'cancelled'` status and optional detail
+  fields (`fundSourceType`, `receiptNo`, `buyerName`, …) that only Maya populates.
+
+**Webhook handler** (`apps/customer/src/routes/api/webhooks/payment/+server.ts`)
+- After signature verification, records **every** event into `payment_transactions` via
+  `onConflictDoUpdate` (NOT `DoNothing`) — Maya can resend or send a later status transition
+  for the same tx id, and we must keep the latest state, not freeze the first.
+- Crediting is unchanged and still happens **only** for `paid` events; `addCredits` remains
+  idempotent on `external_transaction_id`, so recording-then-crediting never double-credits.
+
+**Admin queries** (`apps/admin/src/lib/server/queries.ts`): `financeKpis`, `revenueByPeriod`,
+`paymentMethodBreakdown`, `listTransactions` — all read `payment_transactions`, all accept a
+`{ from, to }` range. Period→range parsing is shared in `$lib/server/period.ts` (used by both
+the page `load` and the CSV endpoint).
+
+**Revenue source-of-truth (important):** Finance "Gross Revenue (settled)" = actual amount the
+gateway charged on `PAYMENT_SUCCESS`. This is intentionally a **different** number from the
+Dashboard's revenue, which estimates from `credit_ledger ⨝ packages.fiatCost` (package list
+price). They can legitimately diverge; the Finance KPI is labelled "(settled)" to make the
+distinction explicit. Do not "reconcile" them by accident.
+
+**CSV export** is a **GET endpoint** (`finance/export/+server.ts`), linked with a plain
+`<a download>` — a SvelteKit form `action` cannot return a downloadable `Response`. The donut
+is a no-dependency SVG (`$lib/components/feature/DonutChart.svelte`, same `stroke-dasharray`
+technique as `RevenueChart`).
 
 ### Core Business Rules
 
