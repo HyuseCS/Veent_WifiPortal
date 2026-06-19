@@ -1,0 +1,7 @@
+# Exclude AI agent tooling from GitHub Linguist language stats. These dirs hold
+# vendored agent skills (mostly .mjs) that aren't part of the application — without
+# this they dwarf the real TypeScript/Svelte source and the repo reads as JavaScript.
+# (They're also gitignored; this is a belt-and-suspenders guard if any get re-added.)
+.agents/**  linguist-vendored
+.claude/**  linguist-vendored
+.gemini/**  linguist-vendored
