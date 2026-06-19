@@ -1,8 +1,8 @@
 import { env } from '$env/dynamic/private';
 import { createPaymentProvider, type PaymentConfig } from '@veent/core';
 
-// Builds the configured payment provider from this app's env. Maya is stubbed —
-// fill MAYA_* in .env and complete packages/core/.../payments/maya.ts to go live.
+// Builds the configured payment provider from this app's env. Fill MAYA_* in
+// .env (public + secret keys, sandbox toggle) to point at your Maya account.
 const config: PaymentConfig = {
 	provider: 'maya',
 	publicKey: env.MAYA_PUBLIC_KEY || '',

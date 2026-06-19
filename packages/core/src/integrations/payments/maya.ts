@@ -8,8 +8,12 @@ import type {
 export interface MayaConfig {
 	publicKey: string;
 	secretKey: string;
-	/** Secret used to verify webhook signatures. */
-	webhookSecret: string;
+	/**
+	 * Optional. Maya Checkout webhooks are NOT HMAC-signed, so this is unused for
+	 * verification — authenticity is established by re-fetching the payment from
+	 * Maya with `secretKey` (see verifyWebhook). Kept for forward-compat / env parity.
+	 */
+	webhookSecret?: string;
 	/** Toggle the API host. */
 	sandbox?: boolean;
 }
@@ -17,55 +21,49 @@ export interface MayaConfig {
 const PROD_BASE = 'https://pg.paymaya.com';
 const SANDBOX_BASE = 'https://pg-sandbox.paymaya.com';
 
-/** Maya webhook status → normalized PaymentEvent status. */
-const STATUS_MAP: Record<string, PaymentEvent['status']> = {
-	PAYMENT_SUCCESS: 'paid',
-	PAYMENT_FAILED: 'failed',
-	PAYMENT_EXPIRED: 'expired',
-	PAYMENT_CANCELLED: 'cancelled',
-	COMPLETED: 'paid', // Checkout API uses 'COMPLETED' on the checkout object
-	EXPIRED: 'expired'
-};
-
-/** Hex HMAC of `body` keyed by `secret`. Algorithm configurable for the signature check. */
-async function hmacHex(body: string, secret: string, hash: 'SHA-256' | 'SHA-512'): Promise<string> {
-	const enc = new TextEncoder();
-	const key = await crypto.subtle.importKey(
-		'raw',
-		enc.encode(secret),
-		{ name: 'HMAC', hash },
-		false,
-		['sign']
-	);
-	const sig = await crypto.subtle.sign('HMAC', key, enc.encode(body));
-	return [...new Uint8Array(sig)].map((b) => b.toString(16).padStart(2, '0')).join('');
+/** Basic auth header for a Maya API key (key as username, blank password). */
+function basicAuth(key: string): string {
+	return `Basic ${Buffer.from(`${key}:`).toString('base64')}`;
 }
 
-/** Constant-time string compare (avoids leaking match progress via timing). */
-function timingSafeEqual(a: string, b: string): boolean {
-	if (a.length !== b.length) return false;
-	let diff = 0;
-	for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
-	return diff === 0;
+/** Split a display name into Maya's firstName/lastName fields. */
+function splitName(name?: string): { firstName?: string; lastName?: string } {
+	const trimmed = name?.trim();
+	if (!trimmed) return {};
+	const parts = trimmed.split(/\s+/);
+	if (parts.length === 1) return { firstName: parts[0] };
+	return { firstName: parts.slice(0, -1).join(' '), lastName: parts[parts.length - 1] };
 }
 
-/** Pull the first present value down a dotted path, e.g. pick(p, 'a.b.c'). */
-function pick(obj: unknown, path: string): unknown {
-	return path.split('.').reduce<unknown>((o, k) => (o as Record<string, unknown>)?.[k], obj);
+/**
+ * Map a Maya payment status to our normalized event status.
+ * Maya values: PAYMENT_SUCCESS, PAYMENT_FAILED, PAYMENT_EXPIRED, PAYMENT_CANCELLED,
+ * AUTHORIZED, CAPTURED, plus various pending/pre-payment states.
+ */
+function mapStatus(raw: string | undefined, isPaid: boolean): PaymentEvent['status'] {
+	if (isPaid) return 'paid';
+	switch (raw) {
+		case 'PAYMENT_SUCCESS':
+		case 'CAPTURED':
+			return 'paid';
+		case 'PAYMENT_FAILED':
+		case 'PAYMENT_CANCELLED':
+			return 'failed';
+		case 'PAYMENT_EXPIRED':
+			return 'expired';
+		default:
+			return 'pending';
+	}
 }
 
 /**
  * Maya (PayMaya) payment provider.
  *
- * STUB: the network calls and signature verification are marked with TODOs.
- * The contract (createCheckout / verifyWebhook) and the surrounding app wiring
- * are complete, so dropping in the real Maya Checkout API + webhook HMAC is an
- * isolated change here — no route or service code needs to move.
- *
- * Real integration notes:
  *  - Checkout: POST {base}/checkout/v1/checkouts with Basic auth (publicKey).
- *  - Webhook:  register at {base}/checkout/v1/webhooks; verify the signature
- *    header against `webhookSecret` before trusting the payload.
+ *  - Webhook:  Maya Checkout webhooks are unsigned, so we don't trust the POST
+ *    body. We re-fetch the payment from GET {base}/payments/v1/payments/{id}
+ *    with the secretKey and use THAT authoritative status — a spoofed webhook
+ *    can't produce a real paid payment id under our account.
  */
 export function createMayaProvider(config: MayaConfig): PaymentProvider {
 	const base = config.sandbox ? SANDBOX_BASE : PROD_BASE;
@@ -76,78 +74,101 @@ export function createMayaProvider(config: MayaConfig): PaymentProvider {
 		async createCheckout(input: CreateCheckoutInput): Promise<CreateCheckoutResult> {
 			if (!config.publicKey) throw new Error('maya: publicKey not configured');
 
-			// TODO(maya): replace stub with real Checkout API call:
-			//   const res = await fetch(`${base}/checkout/v1/checkouts`, {
-			//     method: 'POST',
-			//     headers: {
-			//       'content-type': 'application/json',
-			//       authorization: `Basic ${btoa(config.publicKey + ':')}`
-			//     },
-			//     body: JSON.stringify({
-			//       totalAmount: { value: input.amountMinor / 100, currency: input.currency },
-			//       requestReferenceNumber: input.referenceId,
-			//       redirectUrl: { success: input.successUrl, failure: input.cancelUrl, cancel: input.cancelUrl },
-			//       buyer: input.buyer
-			//     })
-			//   });
-			//   const data = await res.json();
-			//   return { checkoutId: data.checkoutId, redirectUrl: data.redirectUrl };
-			void base;
-			throw new Error('maya.createCheckout: not implemented (stub) — wire the Maya Checkout API');
-		},
+			const { firstName, lastName } = splitName(input.buyer?.name);
+			const buyer =
+				firstName || input.buyer?.email || input.buyer?.phone
+					? {
+							firstName,
+							lastName,
+							contact: { phone: input.buyer?.phone, email: input.buyer?.email }
+						}
+					: undefined;
 
-		async verifyWebhook(rawBody: string, headers: Headers): Promise<PaymentEvent> {
-			if (!config.webhookSecret) throw new Error('maya: webhookSecret not configured');
+			const res = await fetch(`${base}/checkout/v1/checkouts`, {
+				method: 'POST',
+				headers: {
+					'content-type': 'application/json',
+					authorization: basicAuth(config.publicKey)
+				},
+				body: JSON.stringify({
+					totalAmount: {
+						// Maya expects a major-unit decimal (pesos), not centavos.
+						value: input.amountMinor / 100,
+						currency: input.currency
+					},
+					buyer,
+					items: [
+						{
+							name: input.description,
+							quantity: 1,
+							totalAmount: { value: input.amountMinor / 100, currency: input.currency }
+						}
+					],
+					redirectUrl: {
+						success: input.successUrl,
+						failure: input.cancelUrl,
+						cancel: input.cancelUrl
+					},
+					requestReferenceNumber: input.referenceId
+				})
+			});
 
-			// Verify the signature over the RAW body, then THROW on mismatch — never trust
-			// an unverified payload.
-			// ponytail: assumes HMAC-SHA256 hex in `paymaya-signature`/`x-signature`. Maya's
-			// exact scheme (algo + header) must be confirmed in the Maya dashboard's webhook
-			// config; if it differs, change the hash arg / header name here only.
-			const signature = headers.get('paymaya-signature') ?? headers.get('x-signature') ?? '';
-			if (!signature) throw new Error('maya: missing webhook signature header');
-			const expected = await hmacHex(rawBody, config.webhookSecret, 'SHA-256');
-			if (!timingSafeEqual(signature.trim().toLowerCase(), expected)) {
-				throw new Error('maya: invalid webhook signature');
+			if (!res.ok) {
+				const detail = await res.text().catch(() => '');
+				throw new Error(`maya.createCheckout failed (${res.status}): ${detail}`);
 			}
 
-			const payload = JSON.parse(rawBody);
+			const data = (await res.json()) as { checkoutId?: string; redirectUrl?: string };
+			if (!data.redirectUrl || !data.checkoutId) {
+				throw new Error('maya.createCheckout: missing checkoutId/redirectUrl in response');
+			}
+			return { checkoutId: data.checkoutId, redirectUrl: data.redirectUrl };
+		},
 
-			const rawStatus = String(payload.paymentStatus ?? payload.status ?? '');
-			const status = STATUS_MAP[rawStatus];
-			if (!status) throw new Error(`maya: unrecognized payment status '${rawStatus}'`);
+		async verifyWebhook(rawBody: string, _headers: Headers): Promise<PaymentEvent> {
+			if (!config.secretKey) throw new Error('maya: secretKey not configured');
 
-			// Fund source shape differs between the Charges and Checkout payloads.
-			const fundSource = payload.fundSource ?? {};
-			const fundDetails = fundSource.details ?? {};
+			let payload: { id?: string; paymentId?: string };
+			try {
+				payload = JSON.parse(rawBody);
+			} catch {
+				throw new Error('maya: webhook body is not valid JSON');
+			}
 
-			const amountRaw = payload.totalAmount?.value ?? payload.amount;
+			// The webhook payload mirrors the GET Payment response; `id` is the payment id.
+			const paymentId = payload.id ?? payload.paymentId;
+			if (!paymentId) throw new Error('maya: webhook payload missing payment id');
+
+			// Authoritative re-fetch — this is what makes an unsigned webhook trustworthy.
+			const res = await fetch(`${base}/payments/v1/payments/${encodeURIComponent(paymentId)}`, {
+				headers: { authorization: basicAuth(config.secretKey) }
+			});
+			if (!res.ok) {
+				const detail = await res.text().catch(() => '');
+				throw new Error(`maya: payment lookup failed (${res.status}): ${detail}`);
+			}
+
+			const payment = (await res.json()) as {
+				id: string;
+				isPaid?: boolean;
+				status?: string;
+				paymentStatus?: string;
+				amount?: string | number;
+				currency?: string;
+				requestReferenceNumber?: string;
+			};
+
+			const status = mapStatus(payment.paymentStatus ?? payment.status, payment.isPaid === true);
+			if (!payment.requestReferenceNumber) {
+				throw new Error('maya: payment missing requestReferenceNumber');
+			}
 
 			return {
-				externalTransactionId: String(payload.id),
-				// Always a string ('' when omitted) so the webhook handler can `.split(':')`.
-				referenceId: String(payload.requestReferenceNumber ?? ''),
+				externalTransactionId: payment.id,
+				referenceId: payment.requestReferenceNumber,
 				status,
-				amountMinor: Math.round(Number(amountRaw) * 100),
-				currency: String(payload.currency ?? payload.totalAmount?.currency ?? 'PHP'),
-				fundSourceType: fundSource.type ?? payload.paymentScheme ?? undefined,
-				fundSourceMasked: fundDetails.masked ?? fundDetails.last4 ?? undefined,
-				receiptNo:
-					payload.receiptNumber ??
-					(pick(payload, 'paymentDetails.responses.efs.receipt.receiptNo') as string) ??
-					undefined,
-				referenceNo: payload.requestReferenceNumber ?? undefined,
-				errorCode:
-					(pick(payload, 'paymentDetails.responses.efs.unhandledError.0.code') as string) ??
-					payload.errorCode ??
-					undefined,
-				errorMessage:
-					(pick(payload, 'paymentDetails.responses.efs.unhandledError.0.message') as string) ??
-					payload.errorMessage ??
-					undefined,
-				buyerName:
-					[payload.buyer?.firstName, payload.buyer?.lastName].filter(Boolean).join(' ') || undefined,
-				buyerEmail: payload.buyer?.contact?.email ?? payload.buyer?.email ?? undefined
+				amountMinor: Math.round(Number(payment.amount ?? 0) * 100),
+				currency: payment.currency ?? 'PHP'
 			};
 		}
 	};
