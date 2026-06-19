@@ -62,6 +62,29 @@
 			: null
 	);
 
+	// Unified active-session band — the live remaining-time counter for whatever
+	// internet access is currently running (Free Time or a bought tier). Free vs
+	// paid only changes the band colour and label; the countdown is shared.
+	const active = $derived(data.activeSession);
+	// The server loaded this row as active (expiresAt > now at load). Once the live
+	// ticker crosses expiresAt, flip to the "ended" frame locally — the real access
+	// cut-off is enforced server-side by the revoke cron, so this is cosmetic.
+	const isExpired = $derived(!!active && now >= new Date(active.expiresAt).getTime());
+	const activeLabel = $derived(active ? (active.isFree ? 'Free Time' : (active.name ?? 'Access')) : '');
+	const activeRemaining = $derived(active ? formatHMS(new Date(active.expiresAt).getTime() - now) : '');
+	const activeEndsAt = $derived(
+		active
+			? new Date(active.expiresAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+			: ''
+	);
+	const activeProgress = $derived.by(() => {
+		if (!active) return 0;
+		const start = new Date(active.startedAt).getTime();
+		const total = new Date(active.expiresAt).getTime() - start;
+		if (total <= 0) return 100;
+		return Math.min(100, Math.max(0, ((now - start) / total) * 100));
+	});
+
 	const startFreeTime: SubmitFunction = () => {
 		const minutes = data.freeTime.durationMinutes;
 		return async ({ result, update }) => {
@@ -103,8 +126,13 @@
 		<div class="mb-5 flex items-center justify-between">
 			<img src={logo} alt="parafiber by parasat logo" class="h-8 w-auto" />
 			<div class="flex items-center gap-1.5">
-				<span class="h-1.5 w-1.5 rounded-full bg-online/80"></span>
-				<span class="text-xs font-medium opacity-90">Online</span>
+				{#if active && isExpired}
+					<span class="h-1.5 w-1.5 rounded-full bg-blocked"></span>
+					<span class="text-xs font-medium opacity-90">Offline</span>
+				{:else}
+					<span class="h-1.5 w-1.5 rounded-full bg-online/80"></span>
+					<span class="text-xs font-medium opacity-90">Online</span>
+				{/if}
 			</div>
 		</div>
 		<div class="flex flex-col items-stretch justify-between pl-1.5">
@@ -143,8 +171,86 @@
 				directly) so we can get you online.
 			</p>
 		{/if}
+			<!-- Active session — unified remaining-time band (Free Time or paid tier) -->
+			{#if active && isExpired}
+				<!-- Ended: timer hit zero locally; re-surface buying another block -->
+				<section class="mb-6 rounded-2xl border border-border bg-surface p-[17px]">
+					<div class="mb-3.5 flex items-center justify-between">
+						<div class="flex items-center gap-3">
+							<div class="flex h-10 w-10 items-center justify-center rounded-xl bg-blocked/[0.13]">
+								<Icon name="clock" size={21} class="text-blocked" />
+							</div>
+							<div>
+								<div class="flex items-center gap-2">
+									<span class="text-[15px] font-bold text-ink">{activeLabel}</span>
+									<span
+										class="rounded-full bg-blocked px-2 py-[3px] text-[10px] font-semibold tracking-wide text-white uppercase"
+									>
+										Ended
+									</span>
+								</div>
+								<div class="text-xs font-medium text-muted">
+									Ended at <strong class="text-ink">{activeEndsAt}</strong>
+								</div>
+							</div>
+						</div>
+						<div class="text-right">
+							<div class="font-mono text-[22px] font-semibold tracking-tight text-muted">0:00:00</div>
+							<div class="text-[10.5px] font-medium tracking-wide text-muted uppercase">
+								time's up
+							</div>
+						</div>
+					</div>
+					<div class="h-[7px] overflow-hidden rounded-full bg-border"></div>
+				</section>
+			{:else if active}
+				{@const isFree = active.isFree}
+				<section
+					class="mb-6 rounded-2xl border p-[17px] {isFree
+						? 'border-brand/20 bg-brand-tint-2'
+						: 'border-cta/25 bg-cta/10'}"
+				>
+					<div class="mb-3.5 flex items-center justify-between">
+						<div class="flex items-center gap-3">
+							<div
+								class="flex h-10 w-10 items-center justify-center rounded-xl {isFree
+									? 'bg-brand'
+									: 'bg-cta'}"
+							>
+								<Icon name="clock" size={21} class="text-white" />
+							</div>
+							<div>
+								<div class="flex items-center gap-2">
+									<span class="text-[15px] font-bold text-ink">{activeLabel}</span>
+									<span
+										class="rounded-full bg-online px-2 py-[3px] text-[10px] font-semibold tracking-wide text-white uppercase"
+									>
+										Active
+									</span>
+								</div>
+								<div class="text-xs font-medium {isFree ? 'text-brand' : 'text-cta'}">
+									Ends at <strong>{activeEndsAt}</strong>
+								</div>
+							</div>
+						</div>
+						<div class="text-right">
+							<div class="font-mono text-[22px] font-semibold tracking-tight text-ink">
+								{activeRemaining}
+							</div>
+							<div class="text-[10.5px] font-medium tracking-wide text-muted uppercase">left</div>
+						</div>
+					</div>
+					<div
+						class="h-[7px] overflow-hidden rounded-full {isFree ? 'bg-brand/15' : 'bg-cta/15'}"
+					>
+						<div
+							class="h-full rounded-full {isFree ? 'bg-brand' : 'bg-cta'}"
+							style="width:{activeProgress}%"
+						></div>
+					</div>
+				</section>
 			<!-- Free Time -->
-			{#if data.freeTime.eligible}
+			{:else if data.freeTime.eligible}
 				<section class="mb-6 rounded-2xl border border-brand/20 bg-brand-tint-2 p-[17px]">
 					<div class="mb-3.5 flex items-center gap-3">
 						<div class="flex h-10 w-10 items-center justify-center rounded-xl bg-brand">
@@ -208,7 +314,7 @@
 
 			<!-- Buy access -->
 			<div class="mb-2.5 text-[11px] font-semibold tracking-wider text-muted uppercase">
-				Buy access — spend credits
+				{#if isExpired}Get back online — spend credits{:else if active}Keep going — spend credits{:else}Buy access — spend credits{/if}
 			</div>
 			<section class="mb-6 flex flex-col gap-2.5">
 				{#each data.tiers as tier (tier.id)}

@@ -4,6 +4,7 @@ import { and, eq } from 'drizzle-orm';
 import { packages } from '@veent/db';
 import {
 	getAccount,
+	getActiveSession,
 	getFreeTimeStatus,
 	startFreeSession,
 	startSession,
@@ -68,6 +69,7 @@ export const load: PageServerLoad = async (event) => {
 		balance: account?.balance ?? 0,
 		blocked: account?.blocked ?? false,
 		freeTime: getFreeTimeStatus(account?.lastFreeSessionAt ?? null),
+		activeSession: await getActiveSession(db, user.id),
 		tiers
 	};
 };
