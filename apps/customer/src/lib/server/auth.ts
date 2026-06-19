@@ -22,6 +22,13 @@ export const auth = betterAuth({
 	secret: env.BETTER_AUTH_SECRET,
 	database: drizzleAdapter(db, { provider: 'pg', schema: customerAuthSchema }),
 	emailAndPassword: { enabled: true },
+	// Sessions expire a fixed 24h after login (was defaulting to 7 days). Refresh
+	// is disabled so the expiry is pinned to login time and never slides on
+	// activity — a guest who logs in today must re-authenticate ~24h later.
+	session: {
+		expiresIn: 60 * 60 * 24, // 24 hours
+		disableSessionRefresh: true
+	},
 	// Every customer_user must have a 1:1 customer_profile (holds credit_balance,
 	// cooldown, etc.). Create it right after the auth user is committed so the
 	// portal can always read a profile. Idempotent: a retried hook is a no-op.
