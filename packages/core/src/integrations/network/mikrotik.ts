@@ -189,23 +189,28 @@ export function createMikrotikController(config: MikrotikConfig): NetworkControl
 
 		async sampleHealth(): Promise<NetworkApSample[]> {
 			return withConn(async (conn) => {
-				// Which interface carries the hotspot, and how many devices we've put
-				// online. Our model grants via bypassed ip-bindings (not hotspot logins),
-				// so that's the honest "connected users" count — attributed to the
-				// hotspot interface.
+				// Only guest-serving interfaces belong on the Networks view: the
+				// interface(s) a hotspot server is bound to. Physical uplinks/ports and
+				// non-hotspot VLANs (e.g. a WAN transit VLAN) are router plumbing, not
+				// access networks, so we skip them entirely. Supports multiple hotspots.
 				const hotspots = await conn.write('/ip/hotspot/print');
-				const hotspotIface = hotspots[0]?.interface;
+				const hotspotIfaces = new Set(
+					hotspots.map((h) => h.interface).filter((n): n is string => Boolean(n))
+				);
+				if (hotspotIfaces.size === 0) return [];
+
+				// We grant via bypassed ip-bindings (not hotspot logins), so that's the
+				// coarse "connected" count. The live per-AP number is recomputed from
+				// sessions downstream — this is just the fallback.
 				const bypassed = await conn.write('/ip/hotspot/ip-binding/print', ['?type=bypassed']);
 				const connectedUsers = bypassed.length;
 
 				const ifaces = await conn.write('/interface/print');
 				const samples: NetworkApSample[] = [];
 				for (const i of ifaces) {
-					if (i.disabled === 'true' || i.type === 'loopback' || !i.name) continue;
+					// Surface a hotspot interface even when down, so an outage is visible.
+					if (!i.name || !hotspotIfaces.has(i.name)) continue;
 					const running = i.running === 'true';
-					// Only surface live links + the hotspot interface (even if down, so an
-					// outage is visible). Skips idle/unplugged ports (e.g. spare ethers).
-					if (!running && i.name !== hotspotIface) continue;
 					let throughputMbps = 0;
 					if (running) {
 						try {
@@ -221,12 +226,7 @@ export function createMikrotikController(config: MikrotikConfig): NetworkControl
 							// throughput unavailable for this interface — leave 0, keep going
 						}
 					}
-					samples.push({
-						name: i.name,
-						online: running,
-						users: i.name === hotspotIface ? connectedUsers : 0,
-						throughputMbps
-					});
+					samples.push({ name: i.name, online: running, users: connectedUsers, throughputMbps });
 				}
 				return samples;
 			});
