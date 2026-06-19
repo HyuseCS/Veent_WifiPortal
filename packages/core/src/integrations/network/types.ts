@@ -55,4 +55,10 @@ export interface NetworkController {
 	 * controllers that can't tell (stub/dev) omit it.
 	 */
 	resolveApForMac?(macAddress: string): Promise<string | null>;
+	/**
+	 * Lists the *guest* bypass bindings this controller created (by our tag), so a
+	 * reconcile pass can drop ones that no longer map to an active session. Excludes
+	 * admin bypasses and any manually-added bindings. Optional: stub/dev omit it.
+	 */
+	listGuestBindings?(): Promise<{ macAddress: string }[]>;
 }

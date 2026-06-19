@@ -115,6 +115,19 @@ export function createMikrotikController(config: MikrotikConfig): NetworkControl
 			});
 		},
 
+		async listGuestBindings(): Promise<{ macAddress: string }[]> {
+			return withConn(async (conn) => {
+				const rows = await conn.write('/ip/hotspot/ip-binding/print', ['?type=bypassed']);
+				// Only our guest-tagged bindings — never admin bypasses or operator-added
+				// (untagged) ones. Filter in JS so we don't rely on RouterOS query AND-ing.
+				return rows
+					.filter((r) => r.comment === tag)
+					.map((r) => r['mac-address'])
+					.filter((m): m is string => Boolean(m))
+					.map((m) => ({ macAddress: m.toUpperCase() }));
+			});
+		},
+
 		async resolveApForMac(macAddress: string): Promise<string | null> {
 			const mac = macAddress.toUpperCase();
 			return withConn(async (conn) => {

@@ -221,6 +221,43 @@ export async function expireDueSessions(
 }
 
 /**
+ * Removes guest bypass bindings on the router that no longer map to an active
+ * session — self-heals DB↔router drift the row-based revoke cron can't catch:
+ * customer wipes (which cascade-delete sessions), crashed grants, or a manual DB
+ * delete. Without this, such a binding grants internet forever with no DB trace.
+ *
+ * Only touches our guest-tagged bindings; admin bypasses and operator-added
+ * bindings are left alone. Safe against live grants: startSession inserts the
+ * (active) session row *before* it creates the binding, so a binding the router
+ * reports always has its session row already committed. Returns the count removed.
+ */
+export async function reconcileGuestBindings(
+	db: DB,
+	network: NetworkController
+): Promise<number> {
+	if (!network.listGuestBindings) return 0;
+	const bindings = await network.listGuestBindings();
+	if (bindings.length === 0) return 0;
+
+	const activeRows = await db
+		.select({ mac: networkSessions.macAddress })
+		.from(networkSessions)
+		.where(eq(networkSessions.status, SESSION_STATUS.active));
+	const activeMacs = new Set(
+		activeRows.map((r) => r.mac?.toUpperCase()).filter((m): m is string => Boolean(m))
+	);
+
+	let revoked = 0;
+	for (const { macAddress } of bindings) {
+		if (!activeMacs.has(macAddress.toUpperCase())) {
+			await network.revoke(macAddress);
+			revoked++;
+		}
+	}
+	return revoked;
+}
+
+/**
  * Immediately revokes all active sessions for one user (admin kick / block).
  * Re-blocks each MAC and marks the rows `revoked`. Returns the count.
  */
