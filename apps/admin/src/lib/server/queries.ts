@@ -5,7 +5,7 @@
  *
  * These back the `load()` functions that replace `$lib/mocks`.
  */
-import { and, asc, desc, eq, gte, isNull, lte, sql, type SQL } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, gte, isNull, lte, sql, type SQL } from 'drizzle-orm';
 import {
 	type DB,
 	customerUser,
@@ -249,9 +249,20 @@ export async function listStaff(db: DB): Promise<StaffMember[]> {
 	}));
 }
 
-/** Per-AP health cards. Raw metrics → display tone/labels (presentation lives here). */
-export async function listNetworkHealth(db: DB): Promise<NetworkAp[]> {
+/** Per-AP health cards. Raw metrics → display tone/labels (presentation lives here).
+ * `users` is the live count of active, unexpired sessions attributed to each AP
+ * (network_sessions.network_id), not the router's coarse per-interface sample. */
+export async function listNetworkHealth(db: DB, now: Date = new Date()): Promise<NetworkAp[]> {
 	const rows = await db.select().from(networkHealth).orderBy(asc(networkHealth.name));
+
+	// Active users per AP, in one grouped pass.
+	const counts = await db
+		.select({ networkId: networkSessions.networkId, n: sql<number>`count(*)::int` })
+		.from(networkSessions)
+		.where(and(eq(networkSessions.status, SESSION_STATUS.active), gt(networkSessions.expiresAt, now)))
+		.groupBy(networkSessions.networkId);
+	const activeByNetwork = new Map<number, number>();
+	for (const c of counts) if (c.networkId != null) activeByNetwork.set(c.networkId, c.n);
 
 	return rows.map((r) => {
 		const uptime = Number(r.uptimePct);
@@ -271,13 +282,24 @@ export async function listNetworkHealth(db: DB): Promise<NetworkAp[]> {
 			status,
 			uptime: `${uptime.toFixed(1)}%`,
 			latency: r.latencyMs == null ? '—' : `${r.latencyMs}ms`,
-			users: r.users,
+			users: activeByNetwork.get(r.id) ?? 0,
 			throughput: `${r.throughputMbps} Mbps`,
 			latitude: r.latitude,
 			longitude: r.longitude,
-			address: r.address
+			address: r.address,
+			interfaceName: r.interfaceName
 		};
 	});
+}
+
+/** Bind (or clear) the router AP/interface whose clients count toward this pin.
+ * Drives per-AP active-user attribution without relying on name-matching. */
+export async function setNetworkInterface(
+	db: DB,
+	id: number,
+	interfaceName: string | null
+): Promise<void> {
+	await db.update(networkHealth).set({ interfaceName }).where(eq(networkHealth.id, id));
 }
 
 /** Set (or clear) an AP's map location. Coords are decimal-degree strings or null;

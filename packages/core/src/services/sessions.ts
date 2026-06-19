@@ -1,5 +1,5 @@
 import { and, desc, eq, gt, lte } from 'drizzle-orm';
-import { type DB, customerProfile, networkSessions, packages } from '@veent/db';
+import { type DB, customerProfile, networkHealth, networkSessions, packages } from '@veent/db';
 import type { NetworkController } from '../integrations/network';
 import { SESSION_STATUS } from '../config';
 import { getFreeTimeStatus } from './freeTime';
@@ -48,6 +48,42 @@ export async function startSession(db: DB, network: NetworkController, input: St
 			.set({ status: SESSION_STATUS.revoked })
 			.where(eq(networkSessions.id, session.id));
 		throw err;
+	}
+
+	// Best-effort: tag the session with the AP the device is on, so the Networks
+	// view can count active users per AP. Never fails the grant — attribution is
+	// a reporting nicety, and many setups (wired clients, stub/dev) can't resolve it.
+	if (network.resolveApForMac) {
+		try {
+			const apName = await network.resolveApForMac(input.macAddress);
+			if (apName) {
+				// Prefer an explicit pin→interface binding (set on the Networks page);
+				// fall back to a name match for the auto-discovered interface row.
+				const [bound] = await db
+					.select({ id: networkHealth.id })
+					.from(networkHealth)
+					.where(eq(networkHealth.interfaceName, apName))
+					.limit(1);
+				const ap =
+					bound ??
+					(
+						await db
+							.select({ id: networkHealth.id })
+							.from(networkHealth)
+							.where(eq(networkHealth.name, apName))
+							.limit(1)
+					)[0];
+				if (ap) {
+					await db
+						.update(networkSessions)
+						.set({ networkId: ap.id })
+						.where(eq(networkSessions.id, session.id));
+					session.networkId = ap.id;
+				}
+			}
+		} catch {
+			// Non-critical: leave networkId null.
+		}
 	}
 
 	return session;

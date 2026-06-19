@@ -1,11 +1,23 @@
 <script lang="ts">
-	import MapPin from 'lucide-svelte/icons/map-pin';
 	import { enhance } from '$app/forms';
 	import type { NetworkAp } from '$lib/types';
 	import { Button, Card, Field, StatusBadge } from '$lib/components/ui';
-	import LocationPickerDialog from './LocationPickerDialog.svelte';
+	import MapPicker from './MapPicker.svelte';
 
-	let { ap }: { ap: NetworkAp } = $props();
+	// `showMap` is driven by the page-level "Show/Hide all maps" toggle.
+	// `interfaces` are the router-reported AP/interface names this pin can bind to.
+	let {
+		ap,
+		showMap = true,
+		interfaces = []
+	}: { ap: NetworkAp; showMap?: boolean; interfaces?: string[] } = $props();
+
+	// Keep the current binding selectable even if the router stopped reporting it.
+	const ifaceOptions = $derived(
+		ap.interfaceName && !interfaces.includes(ap.interfaceName)
+			? [ap.interfaceName, ...interfaces]
+			: interfaces
+	);
 
 	// Metric rows rendered from data so the markup stays a single <dl> loop.
 	const metrics = $derived([
@@ -23,7 +35,6 @@
 	let editLng = $state<string | null>(null);
 	const latitude = $derived(editLat ?? ap.latitude ?? '');
 	const longitude = $derived(editLng ?? ap.longitude ?? '');
-	let pickerOpen = $state(false);
 
 	const toNum = (s: string): number | null => {
 		const n = Number(s);
@@ -48,104 +59,120 @@
 		{/each}
 	</dl>
 
-	<details class="mt-4 border-t border-border pt-3">
-		<summary
-			class="flex min-h-[44px] cursor-pointer items-center gap-2 text-sm font-medium text-ink"
-		>
+	<div class="mt-4 border-t border-border pt-3">
+		<div class="flex min-h-[28px] items-center gap-2 text-sm font-medium text-ink">
 			<span
 				class="inline-block h-2 w-2 rounded-full"
 				style="background: {placed ? 'var(--color-online)' : 'var(--color-border)'}"
 			></span>
 			Map location
 			<span class="text-xs font-normal text-muted">{placed ? 'on map' : 'not placed'}</span>
-		</summary>
+		</div>
 
-		<form
-			method="POST"
-			action="?/setLocation"
-			class="mt-3 space-y-3"
-			use:enhance={() => {
-				saving = true;
-				msg = null;
-				return async ({ result, update }) => {
-					saving = false;
-					if (result.type === 'success') {
-						msg = { ok: true, text: 'Saved.' };
-						// Drop the local override so the fields re-sync to the saved `ap`.
-						editLat = null;
-						editLng = null;
-					} else if (result.type === 'failure') {
-						msg = { ok: false, text: String(result.data?.error ?? 'Could not save.') };
-					}
-					await update({ reset: false });
-				};
-			}}
-		>
+		<!-- Bind this pin to a router AP/interface so its connected clients count
+		     toward this pin's users — independent of the pin's display name. Always
+		     visible (the maps toggle only hides the map editor below). -->
+		<form method="POST" action="?/setInterface" class="mt-3 space-y-1.5" use:enhance>
 			<input type="hidden" name="id" value={ap.id} />
-			<button
-				type="button"
-				onclick={() => (pickerOpen = true)}
-				class="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-lg border border-border text-sm font-medium text-ink hover:bg-surface"
+			<label for="iface-{ap.id}" class="block text-sm font-medium text-ink">Tracks interface</label>
+			<select
+				id="iface-{ap.id}"
+				name="interfaceName"
+				value={ap.interfaceName ?? ''}
+				onchange={(e) => e.currentTarget.form?.requestSubmit()}
+				class="min-h-[44px] w-full rounded-lg border border-border bg-bg px-4 text-sm text-ink focus:border-brand focus:ring-2 focus:ring-brand/20 focus:outline-none"
 			>
-				<MapPin class="h-4 w-4" aria-hidden="true" />
-				{placed ? 'Move on map' : 'Pick on map'}
-			</button>
-			<div class="grid grid-cols-2 gap-3">
-				<div class="space-y-1.5">
-					<label for="lat-{ap.id}" class="block text-sm font-medium text-ink">Latitude</label>
-					<input
-						id="lat-{ap.id}"
-						name="latitude"
-						value={latitude}
-						oninput={(e) => (editLat = e.currentTarget.value)}
-						inputmode="decimal"
-						placeholder="14.5560"
-						class="min-h-[44px] w-full rounded-lg border border-border bg-bg px-4 py-3 text-sm text-ink transition-colors focus:border-brand focus:ring-2 focus:ring-brand/20 focus:outline-none"
-					/>
-				</div>
-				<div class="space-y-1.5">
-					<label for="lng-{ap.id}" class="block text-sm font-medium text-ink">Longitude</label>
-					<input
-						id="lng-{ap.id}"
-						name="longitude"
-						value={longitude}
-						oninput={(e) => (editLng = e.currentTarget.value)}
-						inputmode="decimal"
-						placeholder="121.0244"
-						class="min-h-[44px] w-full rounded-lg border border-border bg-bg px-4 py-3 text-sm text-ink transition-colors focus:border-brand focus:ring-2 focus:ring-brand/20 focus:outline-none"
-					/>
-				</div>
-			</div>
-			<Field
-				id="addr-{ap.id}"
-				name="address"
-				label="Address"
-				type="text"
-				placeholder="Venue, City"
-				value={ap.address ?? ''}
-			/>
-			<div class="flex items-center gap-3">
-				<Button type="submit" loading={saving}>Save location</Button>
-				{#if msg}
-					<span
-						class="text-xs"
-						style="color: {msg.ok ? 'var(--color-online)' : 'var(--color-blocked)'}"
-					>
-						{msg.text}
-					</span>
-				{/if}
-			</div>
+				<option value="">— None (count nothing) —</option>
+				{#each ifaceOptions as iface (iface)}
+					<option value={iface}>{iface}</option>
+				{/each}
+			</select>
+			<p class="text-xs text-muted">Connected clients on this AP count as this pin's users.</p>
 		</form>
 
-		<LocationPickerDialog
-			bind:open={pickerOpen}
-			title="Place {ap.name}"
-			initialLat={toNum(latitude)}
-			initialLng={toNum(longitude)}
-			onconfirm={(c) => {
-				editLat = String(c.lat);
-				editLng = String(c.lng);
-			}}
-		/>
-	</details>
+		{#if showMap}
+			<form
+				method="POST"
+				action="?/setLocation"
+				class="mt-3 space-y-3"
+				use:enhance={() => {
+					saving = true;
+					msg = null;
+					return async ({ result, update }) => {
+						saving = false;
+						if (result.type === 'success') {
+							msg = { ok: true, text: 'Saved.' };
+							// Drop the local override so the fields re-sync to the saved `ap`.
+							editLat = null;
+							editLng = null;
+						} else if (result.type === 'failure') {
+							msg = { ok: false, text: String(result.data?.error ?? 'Could not save.') };
+						}
+						await update({ reset: false });
+					};
+				}}
+			>
+				<input type="hidden" name="id" value={ap.id} />
+
+				<!-- Inline picker: click/drag to set this AP's location. Mounted only while
+				     shown so leaflet measures a laid-out container and re-seeds on toggle. -->
+				<MapPicker
+					height="h-40"
+					autolocate={false}
+					lat={toNum(latitude)}
+					lng={toNum(longitude)}
+					onpick={(c) => {
+						editLat = String(c.lat);
+						editLng = String(c.lng);
+					}}
+				/>
+
+				<div class="grid grid-cols-2 gap-3">
+					<div class="space-y-1.5">
+						<label for="lat-{ap.id}" class="block text-sm font-medium text-ink">Latitude</label>
+						<input
+							id="lat-{ap.id}"
+							name="latitude"
+							value={latitude}
+							oninput={(e) => (editLat = e.currentTarget.value)}
+							inputmode="decimal"
+							placeholder="14.5560"
+							class="min-h-[44px] w-full rounded-lg border border-border bg-bg px-4 py-3 text-sm text-ink transition-colors focus:border-brand focus:ring-2 focus:ring-brand/20 focus:outline-none"
+						/>
+					</div>
+					<div class="space-y-1.5">
+						<label for="lng-{ap.id}" class="block text-sm font-medium text-ink">Longitude</label>
+						<input
+							id="lng-{ap.id}"
+							name="longitude"
+							value={longitude}
+							oninput={(e) => (editLng = e.currentTarget.value)}
+							inputmode="decimal"
+							placeholder="121.0244"
+							class="min-h-[44px] w-full rounded-lg border border-border bg-bg px-4 py-3 text-sm text-ink transition-colors focus:border-brand focus:ring-2 focus:ring-brand/20 focus:outline-none"
+						/>
+					</div>
+				</div>
+				<Field
+					id="addr-{ap.id}"
+					name="address"
+					label="Address"
+					type="text"
+					placeholder="Venue, City"
+					value={ap.address ?? ''}
+				/>
+				<div class="flex items-center gap-3">
+					<Button type="submit" loading={saving}>Save location</Button>
+					{#if msg}
+						<span
+							class="text-xs"
+							style="color: {msg.ok ? 'var(--color-online)' : 'var(--color-blocked)'}"
+						>
+							{msg.text}
+						</span>
+					{/if}
+				</div>
+			</form>
+		{/if}
+	</div>
 </Card>

@@ -2,7 +2,7 @@ import { fail } from '@sveltejs/kit';
 import { db } from '$lib/server/db';
 import { network } from '$lib/server/network';
 import { refreshNetworkHealth } from '@veent/core';
-import { listNetworkHealth, setNetworkLocation } from '$lib/server/queries';
+import { listNetworkHealth, setNetworkInterface, setNetworkLocation } from '$lib/server/queries';
 import type { Actions, PageServerLoad } from './$types';
 
 /** Per-interface health for the Networks page. Pulls a live sample from the router
@@ -48,5 +48,16 @@ export const actions: Actions = {
 		const address = String(form.get('address') ?? '').trim() || null;
 		await setNetworkLocation(db, id, { latitude, longitude, address });
 		return { id, saved: true };
+	},
+
+	/** Bind this pin to a router AP/interface (or clear it) for user attribution. */
+	setInterface: async ({ request }) => {
+		const form = await request.formData();
+		const id = Number(form.get('id'));
+		if (!Number.isInteger(id)) return fail(400, { error: 'Invalid access point.' });
+
+		const interfaceName = String(form.get('interfaceName') ?? '').trim() || null;
+		await setNetworkInterface(db, id, interfaceName);
+		return { id, boundInterface: true };
 	}
 };

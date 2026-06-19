@@ -48,4 +48,11 @@ export interface NetworkController {
 	 * when unknown or unsupported (stub/dev). Optional: not every controller can.
 	 */
 	resolveMacByIp?(ipAddress: string): Promise<string | null>;
+	/**
+	 * Best-effort: which AP/interface the device (by MAC) is currently associated
+	 * with, for per-AP user attribution. Returns the interface/AP name as the router
+	 * knows it (match against `network_health.name`), or null when unknown. Optional:
+	 * controllers that can't tell (stub/dev) omit it.
+	 */
+	resolveApForMac?(macAddress: string): Promise<string | null>;
 }

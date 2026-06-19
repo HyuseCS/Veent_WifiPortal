@@ -67,6 +67,8 @@ export interface NetworkAp {
 	latitude: string | null;
 	longitude: string | null;
 	address: string | null;
+	/** Router AP/interface this pin's user count is bound to; null = unbound. */
+	interfaceName: string | null;
 }
 
 /** A row in the user-management table. */

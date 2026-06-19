@@ -8,8 +8,18 @@
 	let {
 		lat = $bindable(null),
 		lng = $bindable(null),
-		height = 'h-64'
-	}: { lat?: number | null; lng?: number | null; height?: string } = $props();
+		height = 'h-64',
+		autolocate = true,
+		onpick
+	}: {
+		lat?: number | null;
+		lng?: number | null;
+		height?: string;
+		/** Center on the operator's GPS for a fresh pick. Off for tiled mini-maps so
+		 *  N cards don't each fire a geolocation request. */
+		autolocate?: boolean;
+		onpick?: (coords: { lat: number; lng: number }) => void;
+	} = $props();
 
 	// Metro Manila fallback until geolocation (or a click) moves it.
 	const FALLBACK_CENTER: [number, number] = [14.5995, 120.9842];
@@ -39,6 +49,7 @@
 			const setPin = (la: number, lo: number) => {
 				lat = la;
 				lng = lo;
+				onpick?.({ lat: la, lng: lo });
 				if (marker) {
 					marker.setLatLng([la, lo]);
 				} else {
@@ -59,8 +70,8 @@
 			// runs — leaflet measured 0×0, so re-measure once it's visible.
 			setTimeout(() => map.invalidateSize(), 60);
 
-			// Only auto-locate when there's no existing pin to preserve.
-			if (!seeded && navigator.geolocation) {
+			// Only auto-locate when asked and there's no existing pin to preserve.
+			if (autolocate && !seeded && navigator.geolocation) {
 				navigator.geolocation.getCurrentPosition(
 					(pos) => {
 						if (!cancelled) map.setView([pos.coords.latitude, pos.coords.longitude], 15);

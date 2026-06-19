@@ -118,6 +118,11 @@ export const networkSessions = pgTable(
 			.references(() => customerUser.id, { onDelete: 'cascade' }),
 		// "package_id_opt" in the ERD — free sessions / grace periods have no package.
 		packageId: integer('package_id').references(() => packages.id, { onDelete: 'set null' }),
+		// Which AP/network the device was on at grant time (network_health.id), for
+		// per-AP active-user counts. Loose link (no FK): network_health rows are
+		// reconciled/pruned by the health sweep, so a hard reference would fight it.
+		// Null when the controller couldn't resolve an AP (stub/dev, wired client).
+		networkId: integer('network_id'),
 		status: text('status').notNull(),
 		startedAt: timestamp('started_at').notNull().defaultNow(),
 		expiresAt: timestamp('expires_at')
@@ -125,6 +130,8 @@ export const networkSessions = pgTable(
 	(t) => [
 		index('network_sessions_user_id_idx').on(t.userId),
 		index('network_sessions_mac_address_idx').on(t.macAddress),
+		// Per-AP active-user count: "active sessions grouped by network".
+		index('network_sessions_network_id_idx').on(t.networkId),
 		// Drives the revoke cron: "find active sessions whose time is up".
 		index('network_sessions_status_expires_at_idx').on(t.status, t.expiresAt)
 	]

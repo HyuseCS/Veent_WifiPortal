@@ -70,5 +70,9 @@ export const networkHealth = pgTable('network_health', {
 	lastSampleAt: timestamp('last_sample_at').notNull().defaultNow(),
 	latitude: numeric('latitude', { precision: 9, scale: 6 }),
 	longitude: numeric('longitude', { precision: 9, scale: 6 }),
-	address: text('address')
+	address: text('address'),
+	// Operator-set binding: the router AP/interface name whose connected clients
+	// count toward this pin (network_sessions attribution). Lets a map pin be named
+	// anything while still tracking a specific interface. Null = no binding.
+	interfaceName: text('interface_name')
 });

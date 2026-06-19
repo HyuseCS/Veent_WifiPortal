@@ -12,6 +12,9 @@
 	// Metro Manila fallback — shown when no APs have coordinates yet.
 	const FALLBACK_CENTER: [number, number] = [14.5995, 120.9842];
 
+	// Inline lucide "user" head — used in the dot's hover tooltip and click popup.
+	const HEAD_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>`;
+
 	let mapEl: HTMLDivElement;
 	let query = $state('');
 	let sidebarOpen = $state(true);
@@ -57,10 +60,13 @@
 					<div class="radius-popup-status">
 						<span class="radius-dot" style="background:${color}"></span>${ap.status}
 					</div>
+					<div class="radius-popup-users">${HEAD_ICON}${ap.users} active</div>
 				</div>`;
-			markersById[ap.id] = L.marker([Number(ap.latitude!), Number(ap.longitude!)], {
-				icon
-			}).bindPopup(popup);
+			// Hover tooltip: a small head + the live active-user count.
+			const tooltip = `<span class="radius-tip-inner">${HEAD_ICON}${ap.users}</span>`;
+			markersById[ap.id] = L.marker([Number(ap.latitude!), Number(ap.longitude!)], { icon })
+				.bindPopup(popup)
+				.bindTooltip(tooltip, { direction: 'top', offset: [0, -10], className: 'radius-tip' });
 			markersById[ap.id].addTo(clusterRef);
 		}
 	}
@@ -264,5 +270,24 @@
 		width: 0.5rem;
 		height: 0.5rem;
 		border-radius: 9999px;
+	}
+	:global(.radius-popup-users) {
+		margin-top: 0.375rem;
+		display: flex;
+		align-items: center;
+		gap: 0.375rem;
+		font-size: 0.8125rem;
+		font-weight: 600;
+		color: var(--color-ink);
+	}
+	/* Hover tooltip: a compact head + count chip. */
+	:global(.radius-tip .radius-tip-inner) {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.25rem;
+		font-family: var(--font-sans);
+		font-weight: 600;
+		font-size: 0.75rem;
+		color: var(--color-ink);
 	}
 </style>
