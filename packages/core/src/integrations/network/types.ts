@@ -61,4 +61,18 @@ export interface NetworkController {
 	 * admin bypasses and any manually-added bindings. Optional: stub/dev omit it.
 	 */
 	listGuestBindings?(): Promise<{ macAddress: string }[]>;
+	/**
+	 * Recent entries from the router's own system log (newest first), for a live
+	 * admin view. Optional: stub/dev omit it.
+	 */
+	listRouterLog?(opts?: { limit?: number }): Promise<RouterLogEntry[]>;
+}
+
+/** One line of the router's system log (`/log` in MikroTik). */
+export interface RouterLogEntry {
+	/** Router-formatted time, e.g. `12:59:48` or `jun/19 12:59:48`. */
+	time: string;
+	/** Comma-joined topics, e.g. `hotspot,info,account`. */
+	topics: string;
+	message: string;
 }

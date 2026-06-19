@@ -69,6 +69,20 @@ export interface NetworkAp {
 	address: string | null;
 	/** Router AP/interface this pin's user count is bound to; null = unbound. */
 	interfaceName: string | null;
+	/** Recent connections attributed to this AP (newest first), for the card's log. */
+	logs: ConnectionLog[];
+}
+
+/** One device's connection through an AP — a row in the per-network log. */
+export interface ConnectionLog {
+	/** Short "x ago" label for when it started. */
+	at: string;
+	mac: string;
+	/** Tier name (e.g. "3 Hours") or "Free Time". */
+	package: string;
+	/** Display status: "Online" | "Expired" | "Revoked". */
+	status: string;
+	tone: StatusTone;
 }
 
 /** A row in the user-management table. */
