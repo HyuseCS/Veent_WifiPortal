@@ -1,3 +1,4 @@
+/// <reference types="node" />
 /**
  * Register / inspect the Maya Checkout webhooks for this app.
  *
@@ -63,7 +64,7 @@ async function listWebhooks(): Promise<Webhook[]> {
 
 /** Turn a bare origin (or full URL) into the exact callback URL Maya should call. */
 function toCallbackUrl(input: string): string {
-	let url: URL;
+	let url: URL= new URL('');
 	try {
 		url = new URL(input);
 	} catch {
