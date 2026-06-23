@@ -13,6 +13,29 @@ you run with `node build`.
 
 ---
 
+## Automated path (recommended)
+
+Most of the steps below are scripted. From the repo root on the prod device:
+
+```sh
+bun run setup:prod --dry-run   # preview every action, change nothing
+bun run setup:prod             # do it
+```
+
+It's **cross-platform** (Linux/Windows/macOS) and **idempotent** (re-run it to update).
+It: checks prerequisites, provisions a local Postgres DB + role, writes the env files
+and **generates** `BETTER_AUTH_SECRET`/`CRON_SECRET`, installs deps, migrates, seeds,
+bootstraps the owner (if `OWNER_*` is set), builds, and writes OS-specific service +
+cron config under `./deploy/` (systemd units on Linux, NSSM script on Windows) with
+the exact privileged commands to finish. It never runs sudo/admin itself.
+
+It does **not** install system packages (bun/node/Postgres), fill external secrets
+(Maya/Semaphore/Resend/MikroTik/`OWNER_*`), configure the router, or set up TLS — do
+those by hand (the script prints the checklist). The manual walkthrough below documents
+every step the script performs, for when you want to understand or override it.
+
+---
+
 ## 0. Prerequisites on the device
 
 - **Bun** (build + tooling) and **Node** (to run `build/index.js`; `bun ./build` also works).
