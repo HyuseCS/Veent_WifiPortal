@@ -27,7 +27,7 @@ export async function refreshNetworkHealth(
 			users: s.users,
 			throughputMbps: s.throughputMbps,
 			uptimePct: s.online ? '100.00' : '0.00',
-			latencyMs: null,
+			latencyMs: s.latencyMs ?? null,
 			lastSampleAt: now
 		};
 		const [existing] = await db

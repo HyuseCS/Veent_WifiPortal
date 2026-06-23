@@ -111,6 +111,7 @@ export async function listUsers(db: DB, now: Date = new Date()): Promise<AdminUs
 export async function listActiveSessions(db: DB, now: Date = new Date()): Promise<ActiveSession[]> {
 	const rows = await db
 		.select({
+			id: networkSessions.id,
 			macAddress: networkSessions.macAddress,
 			expiresAt: networkSessions.expiresAt,
 			packageName: packages.name
@@ -132,6 +133,7 @@ export async function listActiveSessions(db: DB, now: Date = new Date()): Promis
 			status = 'Low Time';
 		}
 		return {
+			id: r.id,
 			mac: r.macAddress ?? '—',
 			package: r.packageName ?? 'Free Time',
 			timeLeft: formatTimeLeft(msLeft),

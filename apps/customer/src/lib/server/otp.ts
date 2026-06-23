@@ -29,9 +29,13 @@ export interface PendingVerification {
 }
 
 function secret(): string {
-	// BETTER_AUTH_SECRET is set in every environment; the fallback only keeps a
-	// misconfigured dev box from crashing.
-	return env.BETTER_AUTH_SECRET || 'veent-portal-dev-secret';
+	const configured = env.BETTER_AUTH_SECRET;
+	if (configured) return configured;
+	// In prod, a missing secret means cookies/OTP would be signed with a public
+	// default — every signature forgeable. Fail loudly instead of doing that.
+	if (!dev) throw new Error('BETTER_AUTH_SECRET is required in production');
+	// Dev-only convenience: keep a misconfigured dev box from crashing.
+	return 'veent-portal-dev-secret';
 }
 
 function sign(data: string): string {
