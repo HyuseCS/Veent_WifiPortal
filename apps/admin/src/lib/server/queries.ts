@@ -5,7 +5,7 @@
  *
  * These back the `load()` functions that replace `$lib/mocks`.
  */
-import { and, asc, desc, eq, gt, gte, isNotNull, isNull, lte, sql, type SQL } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, gte, inArray, isNotNull, isNull, lte, ne, sql, type SQL } from 'drizzle-orm';
 import {
 	type DB,
 	customerUser,
@@ -324,6 +324,9 @@ export async function listNetworkHealth(db: DB, now: Date = new Date()): Promise
 			longitude: r.longitude,
 			address: r.address,
 			interfaceName: r.interfaceName,
+			model: r.model,
+			rangeMeters: r.rangeMeters,
+			clusterName: r.clusterName,
 			logs: logsByNetwork.get(r.id) ?? []
 		};
 	});
@@ -339,14 +342,41 @@ export async function setNetworkInterface(
 	await db.update(networkHealth).set({ interfaceName }).where(eq(networkHealth.id, id));
 }
 
-/** Set (or clear) an AP's map location. Coords are decimal-degree strings or null;
- * powers the public locator map. */
-export async function setNetworkLocation(
+/** Placed members of a named cluster (for the coverage-reach assignment check), excluding the
+ * AP being assigned. Coords-only rows; the caller computes reach with distanceMeters + rangeFor. */
+export async function clusterMembers(
 	db: DB,
-	id: number,
-	loc: { latitude: string | null; longitude: string | null; address: string | null }
+	name: string,
+	excludeId: number | null
+): Promise<{ latitude: string | null; longitude: string | null; rangeMeters: number | null; model: string | null }[]> {
+	return db
+		.select({
+			latitude: networkHealth.latitude,
+			longitude: networkHealth.longitude,
+			rangeMeters: networkHealth.rangeMeters,
+			model: networkHealth.model
+		})
+		.from(networkHealth)
+		.where(
+			and(
+				eq(networkHealth.clusterName, name),
+				isNotNull(networkHealth.latitude),
+				isNotNull(networkHealth.longitude),
+				excludeId == null ? undefined : ne(networkHealth.id, excludeId)
+			)
+		);
+}
+
+/** Name (or clear) the overlap cluster: writes the same label to every current member.
+ * Clusters have no stable id — the name rides on the member rows (see schema). No-op on
+ * an empty id list. */
+export async function setClusterName(
+	db: DB,
+	ids: number[],
+	name: string | null
 ): Promise<void> {
-	await db.update(networkHealth).set(loc).where(eq(networkHealth.id, id));
+	if (ids.length === 0) return;
+	await db.update(networkHealth).set({ clusterName: name }).where(inArray(networkHealth.id, ids));
 }
 
 // ───────────────────────────── Finance page ─────────────────────────────
@@ -529,14 +559,60 @@ export async function listTransactions(
  * its coordinates (see refreshNetworkHealth). */
 export async function createNetworkPlace(
 	db: DB,
-	place: { name: string; latitude: string; longitude: string; address: string | null }
+	place: {
+		name: string;
+		latitude: string;
+		longitude: string;
+		address: string | null;
+		model: string | null;
+		rangeMeters: number | null;
+		clusterName: string | null;
+	}
 ): Promise<void> {
 	await db.insert(networkHealth).values({
 		name: place.name,
 		latitude: place.latitude,
 		longitude: place.longitude,
 		address: place.address,
+		model: place.model,
+		rangeMeters: place.rangeMeters,
+		clusterName: place.clusterName,
 		online: true,
 		uptimePct: '100.00'
 	});
+}
+
+/** Update an operator-placed AP's editable fields (name, location, model, range, cluster)
+ * from the map — the single editing path now that /networks deep-links here. */
+export async function updateNetworkPlace(
+	db: DB,
+	id: number,
+	place: {
+		name: string;
+		latitude: string;
+		longitude: string;
+		address: string | null;
+		model: string | null;
+		rangeMeters: number | null;
+		clusterName: string | null;
+	}
+): Promise<void> {
+	await db
+		.update(networkHealth)
+		.set({
+			name: place.name,
+			latitude: place.latitude,
+			longitude: place.longitude,
+			address: place.address,
+			model: place.model,
+			rangeMeters: place.rangeMeters,
+			clusterName: place.clusterName
+		})
+		.where(eq(networkHealth.id, id));
+}
+
+/** Delete an operator-placed AP. Safe: network_sessions.network_id is a loose link (no FK),
+ * so attributed sessions simply stop matching the per-AP count — no constraint to violate. */
+export async function deleteNetworkPlace(db: DB, id: number): Promise<void> {
+	await db.delete(networkHealth).where(eq(networkHealth.id, id));
 }
