@@ -77,22 +77,6 @@ export const POST: RequestHandler = async (event) => {
 	const attributedUserId = userExists ? refUserId : null;
 	const attributedPackageId = pkgExists ? refPackageId : null;
 
-	const userExists =
-		!!refUserId &&
-		(
-			await db
-				.select({ id: customerUser.id })
-				.from(customerUser)
-				.where(eq(customerUser.id, refUserId))
-				.limit(1)
-		).length > 0;
-	const pkgExists =
-		refPackageId !== null &&
-		(await db.select({ id: packages.id }).from(packages).where(eq(packages.id, refPackageId)).limit(1))
-			.length > 0;
-	const attributedUserId = userExists ? refUserId : null;
-	const attributedPackageId = pkgExists ? refPackageId : null;
-
 	// Record the event for Finance reporting. onConflictDoUpdate (NOT DoNothing): Maya
 	// can resend or send a later status transition for the same tx id, and we must keep
 	// the latest state, not freeze the first one seen.
