@@ -215,11 +215,13 @@
 		});
 	}
 
-	// (Re)draw the three concentric discs for one pin into its layer group. An offline AP
-	// drops to one muted class so its dome never reads as live coverage. interactive:false
-	// lets clicks fall through to the map/markers (else the fill swallows the click).
-	// Fills are opaque and rendered into the 'domes' pane (group-opacity 0.35): opaque discs
-	// composite top-over-bottom, so overlapping domes no longer compound into mud. An
+	// Draw the three concentric discs for one AP into `group`. Does NOT clear first — the
+	// caller owns clearing, because `realDomeGroup` is shared across every placed AP (clearing
+	// per-call would wipe all but the last). Per-pin callers clear their own group before redraw.
+	// An offline AP drops to one muted class so its dome never reads as live coverage.
+	// interactive:false lets clicks fall through to the map/markers (else the fill swallows the
+	// click). Fills are opaque and rendered into the 'domes' pane (group-opacity 0.35): opaque
+	// discs composite top-over-bottom, so overlapping domes no longer compound into mud. An
 	// overlapping AP gets a dashed warning ring on its outer disc.
 	function drawBands(
 		group: import('leaflet').LayerGroup,
@@ -229,7 +231,6 @@
 		online = true,
 		overlap = false
 	) {
-		group.clearLayers();
 		for (const b of BANDS) {
 			const outer = b.frac === 1.0;
 			const ring = overlap && outer;
@@ -313,6 +314,7 @@
 		marker.on('dragstart', () => (suppressClick = true));
 		marker.on('drag', () => {
 			const p = marker.getLatLng();
+			group.clearLayers();
 			drawBands(group, p.lat, p.lng, rangeOf(localId));
 		});
 		marker.on('dragend', () => {
@@ -567,6 +569,7 @@
 		const layer = pinLayers.get(localId);
 		if (layer) {
 			const p = layer.marker.getLatLng();
+			layer.group.clearLayers();
 			drawBands(layer.group, p.lat, p.lng, range);
 		}
 	}
