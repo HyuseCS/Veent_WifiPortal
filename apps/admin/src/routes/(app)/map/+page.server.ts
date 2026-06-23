@@ -1,12 +1,15 @@
 import { fail } from '@sveltejs/kit';
 import { db } from '$lib/server/db';
 import {
+	clusterMembers,
 	createNetworkPlace,
 	deleteNetworkPlace,
 	listNetworkHealth,
+	setClusterName,
 	updateNetworkPlace
 } from '$lib/server/queries';
-import { routerModels, DEFAULT_MODEL_ID } from '$lib/router-models';
+import { routerModels, rangeFor, DEFAULT_MODEL_ID } from '$lib/router-models';
+import { distanceMeters } from '$lib/geo';
 import type { Actions, PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async () => ({ networks: await listNetworkHealth(db) });
@@ -36,6 +39,26 @@ function rangeMeters(raw: FormDataEntryValue | null): number | null {
 	return Number.isFinite(n) && n >= 10 && n <= 5000 ? n : null;
 }
 
+/** Coverage-reach join guard: an AP at (lat,lng) with `range` may join cluster `name` only if
+ * some existing member's dome reaches it (domes overlap). Empty name or an unpopulated cluster
+ * (no other members yet) is always allowed — seeding a new group. */
+async function clusterReachable(
+	name: string | null,
+	lat: number,
+	lng: number,
+	range: number,
+	excludeId: number | null
+): Promise<boolean> {
+	if (!name) return true;
+	const members = await clusterMembers(db, name, excludeId);
+	if (members.length === 0) return true;
+	return members.some((m) => {
+		if (m.latitude == null || m.longitude == null) return false;
+		const memberRange = m.rangeMeters ?? rangeFor(m.model);
+		return distanceMeters(lat, lng, Number(m.latitude), Number(m.longitude)) < range + memberRange;
+	});
+}
+
 export const actions: Actions = {
 	/** Drop a new router location on the map (admin-only; the whole app is). */
 	addPlace: async ({ request }) => {
@@ -51,14 +74,21 @@ export const actions: Actions = {
 		}
 
 		const address = String(form.get('address') ?? '').trim() || null;
+		const model = modelId(form.get('model'));
+		const range = rangeMeters(form.get('range'));
+		const cluster = String(form.get('cluster') ?? '').trim() || null;
+		if (!(await clusterReachable(cluster, lat, lng, range ?? rangeFor(model), null))) {
+			return fail(400, { error: 'Too far from that cluster.' });
+		}
 		// Keep full precision from the map click; the column rounds to 6 decimals.
 		await createNetworkPlace(db, {
 			name,
 			latitude: String(lat),
 			longitude: String(lng),
 			address,
-			model: modelId(form.get('model')),
-			rangeMeters: rangeMeters(form.get('range'))
+			model,
+			rangeMeters: range,
+			clusterName: cluster
 		});
 		return { added: true };
 	},
@@ -80,15 +110,37 @@ export const actions: Actions = {
 		}
 
 		const address = String(form.get('address') ?? '').trim() || null;
+		const model = modelId(form.get('model'));
+		const range = rangeMeters(form.get('range'));
+		const cluster = String(form.get('cluster') ?? '').trim() || null;
+		if (!(await clusterReachable(cluster, lat, lng, range ?? rangeFor(model), id))) {
+			return fail(400, { error: 'Too far from that cluster.' });
+		}
 		await updateNetworkPlace(db, id, {
 			name,
 			latitude: String(lat),
 			longitude: String(lng),
 			address,
-			model: modelId(form.get('model')),
-			rangeMeters: rangeMeters(form.get('range'))
+			model,
+			rangeMeters: range,
+			clusterName: cluster
 		});
 		return { updated: true };
+	},
+
+	/** Name (or clear) an overlap cluster — mirrors the label across its current members. */
+	nameCluster: async ({ request }) => {
+		const form = await request.formData();
+
+		const ids = String(form.get('ids') ?? '')
+			.split(',')
+			.map((s) => apId(s))
+			.filter((n): n is number => n !== null);
+		if (ids.length === 0) return fail(400, { error: 'No cluster members.' });
+
+		const name = String(form.get('name') ?? '').trim() || null;
+		await setClusterName(db, ids, name);
+		return { named: true };
 	},
 
 	/** Remove an operator-placed AP. Safe — network_id is a loose link with no FK. */

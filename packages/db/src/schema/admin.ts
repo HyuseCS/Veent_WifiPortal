@@ -81,5 +81,10 @@ export const networkHealth = pgTable('network_health', {
 	// Operator-calibrated coverage radius in metres, overriding the model's advertised
 	// range to match real-world reach (walls, height, interference). Null = fall back to
 	// the model's catalog range.
-	rangeMeters: integer('range_meters')
+	rangeMeters: integer('range_meters'),
+	// Operator label for the overlap cluster this AP belongs to. Clusters are computed live
+	// from coverage overlap (no stable id), so the name rides on the members: renaming a
+	// cluster mirrors this value across all its current members. Null = unnamed (shown as
+	// "Cluster N" in the UI).
+	clusterName: text('cluster_name')
 });

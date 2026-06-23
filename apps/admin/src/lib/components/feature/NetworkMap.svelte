@@ -6,12 +6,16 @@
 	import Trash2 from 'lucide-svelte/icons/trash-2';
 	import Search from 'lucide-svelte/icons/search';
 	import MapPin from 'lucide-svelte/icons/map-pin';
+	import TriangleAlert from 'lucide-svelte/icons/triangle-alert';
+	import ChevronDown from 'lucide-svelte/icons/chevron-down';
+	import Pencil from 'lucide-svelte/icons/pencil';
 	import 'leaflet/dist/leaflet.css';
 	import 'leaflet.markercluster/dist/MarkerCluster.css';
 	import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
 	import type { SubmitFunction } from '@sveltejs/kit';
 	import type { NetworkAp } from '$lib/types';
 	import { routerModels, rangeFor, DEFAULT_MODEL_ID } from '$lib/router-models';
+	import { distanceMeters } from '$lib/geo';
 
 	let { networks }: { networks: NetworkAp[] } = $props();
 
@@ -20,6 +24,13 @@
 
 	// Inline lucide "user" head — used in the marker hover tooltip and click popup.
 	const HEAD_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>`;
+
+	// Inline lucide "locate-fixed" — the re-center control's glyph (Leaflet controls are
+	// raw HTML, so it can't be a Svelte component).
+	const LOCATE_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="2" x2="5" y1="12" y2="12"/><line x1="19" x2="22" y1="12" y2="12"/><line x1="12" x2="12" y1="2" y2="5"/><line x1="12" x2="12" y1="19" y2="22"/><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="3"/></svg>`;
+
+	// Inline lucide "layers" — the coverage-toggle control's glyph.
+	const LAYERS_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z"/><path d="m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65"/><path d="m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65"/></svg>`;
 
 	// Coverage bands at equal-distance thirds, drawn outer→inner so the strong inner
 	// band sits on top.
@@ -47,6 +58,9 @@
 		address: string;
 		lat: number;
 		lng: number;
+		/** Operator-assigned cluster name (null = unassigned). Only named clusters within
+		 * coverage reach are offered; the server re-checks reach on save. */
+		cluster: string | null;
 	}
 	let pins = $state<Pin[]>([]);
 	let nextLocalId = 0;
@@ -57,6 +71,9 @@
 	let query = $state('');
 	let sidebarOpen = $state(true);
 	let mapReady = $state(false);
+	// Coverage domes on/off (the Leaflet toggle control). Real-AP domes only — sandbox
+	// placement pins keep their bands regardless.
+	let coverageVisible = $state(true);
 
 	// Standalone address search (drops a new pin); per-pin lookups report status by localId.
 	let addrQuery = $state('');
@@ -86,13 +103,98 @@
 	let suppressClick = false;
 
 	const placed = $derived(networks.filter((ap) => ap.latitude != null && ap.longitude != null));
-	const filtered = $derived(
-		placed.filter((ap) => {
-			const q = query.trim().toLowerCase();
-			if (!q) return true;
-			return ap.name.toLowerCase().includes(q) || (ap.address ?? '').toLowerCase().includes(q);
-		})
+
+	interface Cluster {
+		/** Stable key = smallest-placed-order member's id. */
+		key: string;
+		name: string;
+		/** True if any member carries a stored clusterName (vs. the auto-number fallback). */
+		named: boolean;
+		members: NetworkAp[];
+	}
+
+	// Connected components of the coverage-overlap graph: two APs are linked when their domes
+	// overlap (centres closer than the sum of radii). Components of ≥2 APs become named
+	// clusters; lone APs stay ungrouped. The displayed name is the first member's stored
+	// clusterName (mirrored across members on rename), else an auto-number.
+	// ponytail: O(n²) pair scan + union-find — fine for tens of APs; swap for a spatial grid
+	// only at hundreds.
+	const clustering = $derived.by(() => {
+		const aps = placed.map((ap) => ({
+			ap,
+			lat: Number(ap.latitude),
+			lng: Number(ap.longitude),
+			r: ap.rangeMeters ?? rangeFor(ap.model)
+		}));
+		const parent = aps.map((_, i) => i);
+		const find = (x: number): number => (parent[x] === x ? x : (parent[x] = find(parent[x])));
+		for (let i = 0; i < aps.length; i++) {
+			for (let j = i + 1; j < aps.length; j++) {
+				if (distanceMeters(aps[i].lat, aps[i].lng, aps[j].lat, aps[j].lng) < aps[i].r + aps[j].r) {
+					parent[find(i)] = find(j);
+				}
+			}
+		}
+		// Manual edges: APs the operator hand-assigned to the same named cluster are unioned too,
+		// even if their domes don't directly overlap (hybrid auto + manual).
+		const byName = new Map<string, number>();
+		for (let i = 0; i < aps.length; i++) {
+			const name = aps[i].ap.clusterName;
+			if (!name) continue;
+			const first = byName.get(name);
+			if (first === undefined) byName.set(name, i);
+			else parent[find(i)] = find(first);
+		}
+		// Group member indices by root, preserving placed order for stable labels.
+		const groups = new Map<number, number[]>();
+		for (let i = 0; i < aps.length; i++) {
+			const root = find(i);
+			const g = groups.get(root);
+			if (g) g.push(i);
+			else groups.set(root, [i]);
+		}
+		const clusters: Cluster[] = [];
+		const clusteredIds = new Set<string>();
+		let n = 0;
+		for (const idxs of groups.values()) {
+			const members = idxs.map((i) => aps[i].ap);
+			const stored = members.find((m) => m.clusterName)?.clusterName ?? null;
+			// A lone AP is a cluster only if the operator named it (an existing DB cluster);
+			// otherwise it's just an ungrouped singleton.
+			if (idxs.length < 2 && !stored) continue;
+			n++;
+			clusters.push({
+				key: members[0].id,
+				name: stored ?? `Cluster ${n}`,
+				named: stored !== null,
+				members
+			});
+			for (const m of members) clusteredIds.add(m.id);
+		}
+		return { clusters, clusteredIds };
+	});
+	const clusters = $derived(clustering.clusters);
+	const clusteredIds = $derived(clustering.clusteredIds);
+
+	function matchesQuery(ap: NetworkAp): boolean {
+		const q = query.trim().toLowerCase();
+		if (!q) return true;
+		return ap.name.toLowerCase().includes(q) || (ap.address ?? '').toLowerCase().includes(q);
+	}
+	// Clusters with at least one member matching the filter (members narrowed to the matches).
+	const visibleClusters = $derived(
+		clusters
+			.map((c) => ({ ...c, members: c.members.filter(matchesQuery) }))
+			.filter((c) => c.members.length > 0)
 	);
+	// Placed APs not in any cluster, matching the filter — the flat rows.
+	const singletons = $derived(
+		placed.filter((ap) => !clusteredIds.has(ap.id) && matchesQuery(ap))
+	);
+
+	// Collapsed-by-key (default expanded) + which cluster's name is being edited.
+	let collapsed = $state<Record<string, boolean>>({});
+	let editingCluster = $state<string | null>(null);
 
 	function pinIcon(bg: string) {
 		return L!.divIcon({
@@ -103,15 +205,33 @@
 		});
 	}
 
-	// (Re)draw the three concentric discs for one pin into its layer group.
-	function drawBands(group: import('leaflet').LayerGroup, lat: number, lng: number, range: number) {
+	// (Re)draw the three concentric discs for one pin into its layer group. An offline AP
+	// drops to one muted class so its dome never reads as live coverage. interactive:false
+	// lets clicks fall through to the map/markers (else the fill swallows the click).
+	// Fills are opaque and rendered into the 'domes' pane (group-opacity 0.35): opaque discs
+	// composite top-over-bottom, so overlapping domes no longer compound into mud. An
+	// overlapping AP gets a dashed warning ring on its outer disc.
+	function drawBands(
+		group: import('leaflet').LayerGroup,
+		lat: number,
+		lng: number,
+		range: number,
+		online = true,
+		overlap = false
+	) {
 		group.clearLayers();
 		for (const b of BANDS) {
+			const outer = b.frac === 1.0;
+			const ring = overlap && outer;
 			L!.circle([lat, lng], {
 				radius: range * b.frac,
-				stroke: false,
-				className: b.cls,
-				fillOpacity: 0.35
+				pane: 'domes',
+				stroke: ring,
+				weight: 2,
+				dashArray: '4',
+				className: (online ? b.cls : 'cov-offline') + (ring ? ' cov-overlap' : ''),
+				fillOpacity: 1,
+				interactive: false
 			}).addTo(group);
 		}
 	}
@@ -131,7 +251,10 @@
 			const lng = Number(ap.longitude);
 			const color = ap.tone === 'online' ? 'var(--color-online)' : 'var(--color-blocked)';
 
-			drawBands(realDomeGroup, lat, lng, ap.rangeMeters ?? rangeFor(ap.model));
+			if (coverageVisible) {
+				const range = ap.rangeMeters ?? rangeFor(ap.model);
+				drawBands(realDomeGroup, lat, lng, range, ap.tone === 'online', clusteredIds.has(ap.id));
+			}
 
 			const popup = `
 				<div class="radius-popup">
@@ -163,6 +286,8 @@
 	$effect(() => {
 		void placed;
 		void editingApId;
+		void coverageVisible;
+		void clusteredIds;
 		if (mapReady) renderReal();
 	});
 
@@ -200,17 +325,24 @@
 		pins = [...pins, { localId, ...init }];
 	}
 
-	// Drop a fresh AP pin (map click or the "Add router" button).
+	// Drop a fresh AP pin (map click or the "Add router" button). If it lands within reach of a
+	// cluster, pre-assign it to the nearest one and expand that group so its fields show there.
 	function addPin(lat: number, lng: number) {
+		const range = rangeFor(DEFAULT_MODEL_ID);
+		const host = nearestCluster(lat, lng, range, null);
 		spawnPin({
 			apId: null,
 			model: DEFAULT_MODEL_ID,
-			range: rangeFor(DEFAULT_MODEL_ID),
+			range,
 			name: '',
 			address: '',
 			lat,
-			lng
+			lng,
+			// Only a named cluster is an assignable target; an unnamed auto cluster still hosts the
+			// pin visually (hostCluster) and hybrid auto-overlap groups it on save.
+			cluster: host?.named ? host.name : null
 		});
+		if (host) collapsed = { ...collapsed, [host.key]: false };
 	}
 
 	// Start editing a real AP in place: hide its marker/dome, drop a pre-filled edit pin.
@@ -227,8 +359,19 @@
 			name: ap.name,
 			address: ap.address ?? '',
 			lat: Number(ap.latitude),
-			lng: Number(ap.longitude)
+			lng: Number(ap.longitude),
+			cluster: ap.clusterName
 		});
+		// Expand the cluster the edit panel will nest under so it's visible.
+		const host =
+			(ap.clusterName ? clusters.find((c) => c.name === ap.clusterName) : null) ??
+			nearestCluster(
+				Number(ap.latitude),
+				Number(ap.longitude),
+				ap.rangeMeters ?? rangeFor(ap.model),
+				ap.id
+			);
+		if (host) collapsed = { ...collapsed, [host.key]: false };
 	}
 
 	function rangeOf(localId: number): number {
@@ -246,6 +389,84 @@
 	function setRange(localId: number, range: number) {
 		pins = pins.map((p) => (p.localId === localId ? { ...p, range } : p));
 		redrawPin(localId, range);
+	}
+
+	function setCluster(localId: number, cluster: string | null) {
+		pins = pins.map((p) => (p.localId === localId ? { ...p, cluster } : p));
+	}
+
+	// Per-pin "+ New cluster…" mode (operator typing a fresh name vs picking an existing one).
+	let creatingCluster = $state<Record<number, boolean>>({});
+	function onClusterSelect(localId: number, value: string) {
+		if (value === '__new__') {
+			creatingCluster = { ...creatingCluster, [localId]: true };
+			setCluster(localId, '');
+		} else {
+			creatingCluster = { ...creatingCluster, [localId]: false };
+			setCluster(localId, value || null);
+		}
+	}
+
+	// Every named cluster that exists in the DB (distinct cluster_name across placed APs), sorted.
+	// The assignment dropdown lists them all; out-of-reach ones are shown disabled.
+	const allClusterNames = $derived(
+		[...new Set(placed.map((ap) => ap.clusterName).filter((n): n is string => !!n))].sort()
+	);
+
+	// Is `name` a join target for this pin? True when a member of that cluster (other than the pin
+	// itself) is within coverage reach, or when the cluster has no other members yet (seeding).
+	// Mirrors the server's clusterReachable check.
+	function isNameReachable(pin: Pin, name: string): boolean {
+		const others = placed.filter(
+			(m) => m.clusterName === name && m.id !== pin.apId && m.latitude != null && m.longitude != null
+		);
+		if (others.length === 0) return true;
+		return others.some(
+			(m) =>
+				distanceMeters(pin.lat, pin.lng, Number(m.latitude), Number(m.longitude)) <
+				pin.range + (m.rangeMeters ?? rangeFor(m.model))
+		);
+	}
+
+	// Nearest existing cluster (named OR auto) whose coverage a point reaches; null = none in
+	// range. Used for sidebar nesting + the auto-pick on add.
+	function nearestCluster(
+		lat: number,
+		lng: number,
+		range: number,
+		excludeApId: string | null
+	): Cluster | null {
+		let best: Cluster | null = null;
+		let bestGap = 0;
+		for (const c of clusters) {
+			for (const m of c.members) {
+				if (m.id === excludeApId || m.latitude == null || m.longitude == null) continue;
+				const gap =
+					distanceMeters(lat, lng, Number(m.latitude), Number(m.longitude)) -
+					(range + (m.rangeMeters ?? rangeFor(m.model)));
+				if (gap < 0 && (best === null || gap < bestGap)) {
+					bestGap = gap;
+					best = c;
+				}
+			}
+		}
+		return best;
+	}
+
+	// Which cluster group a pin shows under: its explicit (named) assignment if that cluster
+	// exists, else the nearest cluster it reaches (so a new pin within range of an *unnamed*
+	// auto cluster still nests there). null = the top workspace.
+	function hostCluster(pin: Pin): Cluster | null {
+		if (pin.cluster) {
+			const c = clusters.find((x) => x.name === pin.cluster);
+			if (c) return c;
+		}
+		return nearestCluster(pin.lat, pin.lng, pin.range, pin.apId);
+	}
+
+	const loosePins = $derived(pins.filter((p) => hostCluster(p) === null));
+	function clusterPins(key: string): Pin[] {
+		return pins.filter((p) => hostCluster(p)?.key === key);
 	}
 
 	function redrawPin(localId: number, range: number) {
@@ -292,7 +513,8 @@
 			name: '',
 			address: hit.label,
 			lat: hit.lat,
-			lng: hit.lng
+			lng: hit.lng,
+			cluster: null
 		});
 		addrQuery = '';
 	}
@@ -364,6 +586,25 @@
 			};
 	}
 
+	// Persist a cluster name (mirrored across members server-side), then close the editor.
+	function nameClusterEnhance(): SubmitFunction {
+		return () =>
+			async ({ result }) => {
+				if (result.type !== 'success') return;
+				editingCluster = null;
+				await invalidateAll();
+			};
+	}
+
+	// Fit the map to a cluster's members — its general location.
+	function focusCluster(cluster: Cluster) {
+		if (!L || !mapInstance) return;
+		const pts = cluster.members.map(
+			(m) => [Number(m.latitude), Number(m.longitude)] as [number, number]
+		);
+		mapInstance.fitBounds(L.latLngBounds(pts).pad(0.3), { maxZoom: 17 });
+	}
+
 	function selectAp(ap: NetworkAp) {
 		const marker = markersById[ap.id];
 		if (clusterRef && marker) {
@@ -386,7 +627,55 @@
 				FALLBACK_CENTER,
 				11
 			);
+			// Dedicated dome pane at group-opacity: opaque fills composite top-over-bottom inside
+			// it, so overlapping domes don't darken (see drawBands). zIndex defaults to 400 —
+			// above tiles (200), below markers (600).
+			map.createPane('domes').style.opacity = '0.35';
+
 			L.control.zoom({ position: 'bottomright' }).addTo(map);
+
+			// Re-center on the admin's location. Added after zoom so it stacks just below it
+			// (Leaflet lays controls out in add order within a corner).
+			const Recenter = mod.default.Control.extend({
+				onAdd() {
+					const bar = mod.default.DomUtil.create('div', 'leaflet-bar');
+					const a = mod.default.DomUtil.create('a', 'radius-locate', bar);
+					a.href = '#';
+					a.title = 'My location';
+					a.setAttribute('role', 'button');
+					a.innerHTML = LOCATE_ICON;
+					mod.default.DomEvent.on(a, 'click', mod.default.DomEvent.stop).on(a, 'click', () => {
+						if (!navigator.geolocation) return;
+						navigator.geolocation.getCurrentPosition(
+							(pos) => map.setView([pos.coords.latitude, pos.coords.longitude], 15),
+							() => {},
+							{ enableHighAccuracy: false, timeout: 8000 }
+						);
+					});
+					return bar;
+				}
+			});
+			new Recenter({ position: 'bottomright' }).addTo(map);
+
+			// Toggle the real-AP coverage domes. Stacks below re-center (same add-order rule).
+			const CoverageToggle = mod.default.Control.extend({
+				onAdd() {
+					const bar = mod.default.DomUtil.create('div', 'leaflet-bar');
+					const a = mod.default.DomUtil.create('a', 'radius-locate radius-toggle is-active', bar);
+					a.href = '#';
+					a.title = 'Toggle coverage';
+					a.setAttribute('role', 'button');
+					a.setAttribute('aria-pressed', 'true');
+					a.innerHTML = LAYERS_ICON;
+					mod.default.DomEvent.on(a, 'click', mod.default.DomEvent.stop).on(a, 'click', () => {
+						coverageVisible = !coverageVisible;
+						a.classList.toggle('is-active', coverageVisible);
+						a.setAttribute('aria-pressed', String(coverageVisible));
+					});
+					return bar;
+				}
+			});
+			new CoverageToggle({ position: 'bottomright' }).addTo(map);
 
 			// ponytail: OSM public tiles — swap for a dedicated provider before heavy prod load.
 			L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -500,11 +789,9 @@
 			</div>
 
 			<div class="flex-1 overflow-y-auto">
-				<!-- Active pins (new + edit) — the simulate/commit workspace. -->
-				{#if pins.length > 0}
-					<ul class="space-y-2 border-b border-border p-3">
-						{#each pins as pin (pin.localId)}
-							<li class="rounded border border-border bg-surface p-2">
+				<!-- New/edit pin panel — reused in the top workspace and inside a cluster group. -->
+				{#snippet pinPanel(pin: Pin)}
+					<div class="rounded border border-border bg-surface p-2">
 								<div class="flex items-center justify-between gap-2">
 									<span class="text-xs font-medium text-ink">
 										{pin.apId ? `Editing: ${pin.name || 'AP'}` : 'New router'}
@@ -545,6 +832,32 @@
 									/>
 								</label>
 
+								<label class="mt-1.5 block text-xs text-muted">
+									<span>Cluster</span>
+									<select
+										value={creatingCluster[pin.localId] ? '__new__' : (pin.cluster ?? '')}
+										onchange={(e) => onClusterSelect(pin.localId, e.currentTarget.value)}
+										class="mt-1 w-full rounded border border-border bg-bg px-2 py-1.5 text-xs text-ink"
+									>
+										<option value="">None</option>
+										{#each allClusterNames as name (name)}
+											{@const reachable = isNameReachable(pin, name)}
+											<option value={name} disabled={!reachable && name !== pin.cluster}>
+												{name}{reachable ? '' : ' (out of reach)'}
+											</option>
+										{/each}
+										<option value="__new__">+ New cluster…</option>
+									</select>
+								</label>
+								{#if creatingCluster[pin.localId]}
+									<input
+										value={pin.cluster ?? ''}
+										oninput={(e) => setCluster(pin.localId, e.currentTarget.value)}
+										placeholder="New cluster name"
+										class="mt-1.5 w-full rounded border border-border bg-bg px-2 py-1.5 text-xs text-ink"
+									/>
+								{/if}
+
 								<form
 									method="post"
 									action={pin.apId ? '?/updatePlace' : '?/addPlace'}
@@ -556,6 +869,7 @@
 									<input type="hidden" name="longitude" value={pin.lng} />
 									<input type="hidden" name="model" value={pin.model} />
 									<input type="hidden" name="range" value={pin.range} />
+									<input type="hidden" name="cluster" value={pin.cluster ?? ''} />
 									<input
 										name="name"
 										bind:value={pin.name}
@@ -608,42 +922,131 @@
 										Remove AP
 									</button>
 								{/if}
-							</li>
+					</div>
+				{/snippet}
+
+				<!-- Active pins not tied to an existing cluster — the simulate/commit workspace.
+				     A pin assigned to a cluster renders inside that cluster's group below. -->
+				{#if loosePins.length > 0}
+					<ul class="space-y-2 border-b border-border p-3">
+						{#each loosePins as pin (pin.localId)}
+							<li>{@render pinPanel(pin)}</li>
 						{/each}
 					</ul>
 				{/if}
+
+				{#snippet apRow(ap: NetworkAp)}
+					<button
+						onclick={() => selectAp(ap)}
+						class="flex min-h-[44px] w-full items-start gap-3 px-4 py-2.5 text-left hover:bg-surface"
+					>
+						<span
+							class="mt-1.5 inline-block h-2 w-2 shrink-0 rounded-full"
+							style="background: {ap.tone === 'online'
+								? 'var(--color-online)'
+								: 'var(--color-blocked)'}"
+						></span>
+						<span class="min-w-0">
+							<span class="block truncate text-sm font-medium text-ink">{ap.name}</span>
+							{#if ap.address}
+								<span class="block truncate text-xs text-muted">{ap.address}</span>
+							{/if}
+						</span>
+					</button>
+				{/snippet}
 
 				{#if placed.length === 0}
 					<p class="px-4 py-6 text-center text-sm text-muted">
 						No router locations yet. Click the map or use
 						<span class="font-medium text-ink">+ Add router</span> below.
 					</p>
-				{:else if filtered.length === 0}
+				{:else if visibleClusters.length === 0 && singletons.length === 0}
 					<p class="px-4 py-6 text-center text-sm text-muted">No match for "{query}".</p>
 				{:else}
-					<ul class="divide-y divide-border">
-						{#each filtered as ap (ap.id)}
-							<li>
-								<button
-									onclick={() => selectAp(ap)}
-									class="flex min-h-[44px] w-full items-start gap-3 px-4 py-2.5 text-left hover:bg-surface"
+					<!-- Overlap clusters: collapsible, operator-renamable groups. -->
+					{#each visibleClusters as cluster (cluster.key)}
+						<div class="border-b border-border">
+							{#if editingCluster === cluster.key}
+								<form
+									method="post"
+									action="?/nameCluster"
+									use:enhance={nameClusterEnhance()}
+									class="flex items-center gap-1.5 px-2 py-1.5"
 								>
-									<span
-										class="mt-1.5 inline-block h-2 w-2 shrink-0 rounded-full"
-										style="background: {ap.tone === 'online'
-											? 'var(--color-online)'
-											: 'var(--color-blocked)'}"
-									></span>
-									<span class="min-w-0">
-										<span class="block truncate text-sm font-medium text-ink">{ap.name}</span>
-										{#if ap.address}
-											<span class="block truncate text-xs text-muted">{ap.address}</span>
-										{/if}
-									</span>
-								</button>
-							</li>
-						{/each}
-					</ul>
+									<input type="hidden" name="ids" value={cluster.members.map((m) => m.id).join(',')} />
+									<input
+										name="name"
+										value={cluster.named ? cluster.name : ''}
+										placeholder="Name this cluster"
+										class="min-w-0 flex-1 rounded border border-border bg-bg px-2 py-1 text-sm text-ink"
+									/>
+									<button
+										type="submit"
+										class="min-h-[32px] shrink-0 rounded bg-brand px-2.5 text-xs font-medium text-white"
+									>
+										Save
+									</button>
+									<button
+										type="button"
+										onclick={() => (editingCluster = null)}
+										class="min-h-[32px] shrink-0 rounded border border-border px-2 text-xs text-muted hover:text-ink"
+									>
+										Cancel
+									</button>
+								</form>
+							{:else}
+								<div class="flex items-center gap-1 px-2">
+									<button
+										type="button"
+										onclick={() => (collapsed[cluster.key] = !collapsed[cluster.key])}
+										class="flex h-7 w-7 shrink-0 items-center justify-center rounded text-muted hover:bg-surface hover:text-ink"
+										aria-label={collapsed[cluster.key] ? 'Expand cluster' : 'Collapse cluster'}
+										aria-expanded={!collapsed[cluster.key]}
+									>
+										<ChevronDown
+											class="h-4 w-4 transition-transform {collapsed[cluster.key] ? '-rotate-90' : ''}"
+											aria-hidden="true"
+										/>
+									</button>
+									<button
+										type="button"
+										onclick={() => focusCluster(cluster)}
+										class="flex min-h-[40px] flex-1 items-center gap-1.5 text-left"
+										title="Go to this cluster on the map"
+									>
+										<span class="truncate text-sm font-semibold text-ink">{cluster.name}</span>
+										<span class="shrink-0 text-xs text-muted">{cluster.members.length}</span>
+									</button>
+									<button
+										type="button"
+										onclick={() => (editingCluster = cluster.key)}
+										class="flex h-7 w-7 shrink-0 items-center justify-center rounded text-muted hover:bg-surface hover:text-ink"
+										aria-label="Rename cluster"
+									>
+										<Pencil class="h-3.5 w-3.5" aria-hidden="true" />
+									</button>
+								</div>
+							{/if}
+							{#if !collapsed[cluster.key]}
+								{#each clusterPins(cluster.key) as pin (pin.localId)}
+									<div class="border-t border-border p-2">{@render pinPanel(pin)}</div>
+								{/each}
+								<ul class="divide-y divide-border border-t border-border">
+									{#each cluster.members as ap (ap.id)}
+										<li>{@render apRow(ap)}</li>
+									{/each}
+								</ul>
+							{/if}
+						</div>
+					{/each}
+					<!-- Ungrouped APs. -->
+					{#if singletons.length > 0}
+						<ul class="divide-y divide-border">
+							{#each singletons as ap (ap.id)}
+								<li>{@render apRow(ap)}</li>
+							{/each}
+						</ul>
+					{/if}
 				{/if}
 			</div>
 
@@ -652,6 +1055,7 @@
 					<span class="flex items-center gap-1.5"><span class="swatch" style="background: var(--color-online)"></span>Good</span>
 					<span class="flex items-center gap-1.5"><span class="swatch" style="background: var(--color-warning)"></span>Fair</span>
 					<span class="flex items-center gap-1.5"><span class="swatch" style="background: var(--color-blocked)"></span>Weak</span>
+					<span class="flex items-center gap-1.5"><span class="swatch" style="background: var(--color-muted)"></span>Offline</span>
 				</div>
 				<button
 					onclick={() => mapInstance && addPin(mapInstance.getCenter().lat, mapInstance.getCenter().lng)}
@@ -660,6 +1064,12 @@
 				>
 					<Plus class="h-4 w-4" aria-hidden="true" /> Add router
 				</button>
+				{#if clusters.length > 0}
+					<p class="flex items-center gap-1.5 px-1 text-xs font-medium text-warning">
+						<TriangleAlert class="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+						{clusters.length} overlap cluster{clusters.length === 1 ? '' : 's'}
+					</p>
+				{/if}
 				<p class="px-1 text-xs text-muted">
 					{placed.length} of {networks.length} AP{networks.length === 1 ? '' : 's'} placed · click map to add
 				</p>
@@ -733,6 +1143,23 @@
 	}
 	:global(.cov-weak) {
 		fill: var(--color-blocked);
+	}
+	:global(.cov-offline) {
+		fill: var(--color-muted);
+	}
+	/* Overlap ring: stroke via CSS for the same reason as fill — Leaflet writes stroke to the
+	   SVG attribute where var() won't resolve. */
+	:global(.cov-overlap) {
+		stroke: var(--color-warning);
+	}
+	:global(.leaflet-bar a.radius-locate) {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+	}
+	/* Coverage toggle: muted when domes are hidden, inked when shown. */
+	:global(.leaflet-bar a.radius-toggle:not(.is-active)) {
+		color: var(--color-muted);
 	}
 	.swatch {
 		display: inline-block;

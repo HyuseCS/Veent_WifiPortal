@@ -75,6 +75,9 @@ export interface NetworkAp {
 	/** Operator-calibrated coverage radius in metres, overriding the model's advertised
 	 * range. Null = fall back to the model's catalog range. */
 	rangeMeters: number | null;
+	/** Operator label for the overlap cluster this AP belongs to (mirrored across the
+	 * cluster's members on rename). Null = unnamed; the UI shows "Cluster N". */
+	clusterName: string | null;
 	/** Recent connections attributed to this AP (newest first), for the card's log. */
 	logs: ConnectionLog[];
 }

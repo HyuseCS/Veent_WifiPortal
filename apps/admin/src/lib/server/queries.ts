@@ -5,7 +5,7 @@
  *
  * These back the `load()` functions that replace `$lib/mocks`.
  */
-import { and, asc, desc, eq, gt, gte, isNotNull, isNull, lte, sql, type SQL } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, gte, inArray, isNotNull, isNull, lte, ne, sql, type SQL } from 'drizzle-orm';
 import {
 	type DB,
 	customerUser,
@@ -324,6 +324,7 @@ export async function listNetworkHealth(db: DB, now: Date = new Date()): Promise
 			interfaceName: r.interfaceName,
 			model: r.model,
 			rangeMeters: r.rangeMeters,
+			clusterName: r.clusterName,
 			logs: logsByNetwork.get(r.id) ?? []
 		};
 	});
@@ -337,6 +338,43 @@ export async function setNetworkInterface(
 	interfaceName: string | null
 ): Promise<void> {
 	await db.update(networkHealth).set({ interfaceName }).where(eq(networkHealth.id, id));
+}
+
+/** Placed members of a named cluster (for the coverage-reach assignment check), excluding the
+ * AP being assigned. Coords-only rows; the caller computes reach with distanceMeters + rangeFor. */
+export async function clusterMembers(
+	db: DB,
+	name: string,
+	excludeId: number | null
+): Promise<{ latitude: string | null; longitude: string | null; rangeMeters: number | null; model: string | null }[]> {
+	return db
+		.select({
+			latitude: networkHealth.latitude,
+			longitude: networkHealth.longitude,
+			rangeMeters: networkHealth.rangeMeters,
+			model: networkHealth.model
+		})
+		.from(networkHealth)
+		.where(
+			and(
+				eq(networkHealth.clusterName, name),
+				isNotNull(networkHealth.latitude),
+				isNotNull(networkHealth.longitude),
+				excludeId == null ? undefined : ne(networkHealth.id, excludeId)
+			)
+		);
+}
+
+/** Name (or clear) the overlap cluster: writes the same label to every current member.
+ * Clusters have no stable id — the name rides on the member rows (see schema). No-op on
+ * an empty id list. */
+export async function setClusterName(
+	db: DB,
+	ids: number[],
+	name: string | null
+): Promise<void> {
+	if (ids.length === 0) return;
+	await db.update(networkHealth).set({ clusterName: name }).where(inArray(networkHealth.id, ids));
 }
 
 /** Set (or clear) an AP's map location. Coords are decimal-degree strings or null;
@@ -536,6 +574,7 @@ export async function createNetworkPlace(
 		address: string | null;
 		model: string | null;
 		rangeMeters: number | null;
+		clusterName: string | null;
 	}
 ): Promise<void> {
 	await db.insert(networkHealth).values({
@@ -545,6 +584,7 @@ export async function createNetworkPlace(
 		address: place.address,
 		model: place.model,
 		rangeMeters: place.rangeMeters,
+		clusterName: place.clusterName,
 		online: true,
 		uptimePct: '100.00'
 	});
@@ -562,6 +602,7 @@ export async function updateNetworkPlace(
 		address: string | null;
 		model: string | null;
 		rangeMeters: number | null;
+		clusterName: string | null;
 	}
 ): Promise<void> {
 	await db
@@ -572,7 +613,8 @@ export async function updateNetworkPlace(
 			longitude: place.longitude,
 			address: place.address,
 			model: place.model,
-			rangeMeters: place.rangeMeters
+			rangeMeters: place.rangeMeters,
+			clusterName: place.clusterName
 		})
 		.where(eq(networkHealth.id, id));
 }
