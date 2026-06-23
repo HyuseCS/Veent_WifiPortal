@@ -75,6 +75,91 @@ git config core.hooksPath .githooks
 
 Bypass a single push (e.g. a WIP branch) with `git push --no-verify`.
 
+## Payments — Maya (PayMaya) sandbox testing
+
+Top-ups go through Maya Checkout. Credits are **never** added when checkout is created —
+they're added only when Maya calls our webhook (`POST /api/webhooks/payment`) and we
+re-confirm the payment with Maya's API. To exercise this end-to-end locally you need
+sandbox API keys **and** a public URL Maya can reach (ngrok), because the webhook is an
+inbound call from Maya's servers to your laptop.
+
+### 1. Get sandbox API keys
+
+Create a sandbox account at the [Maya Developer Portal](https://developers.maya.ph) and
+copy your **sandbox** public + secret keys (public starts with `pk-…`, secret with `sk-…`).
+Maya also publishes shared generic sandbox keys in its docs if you just want to try the
+flow. Put them in `apps/customer/.env`:
+
+```sh
+MAYA_PUBLIC_KEY="pk-...your sandbox public key..."   # used to CREATE checkouts
+MAYA_SECRET_KEY="sk-...your sandbox secret key..."   # used to VERIFY webhooks (re-fetch payment)
+MAYA_SANDBOX="true"                                   # "true" = pg-sandbox.paymaya.com, "false" = production
+```
+
+> Both keys must belong to the **same** environment. `MAYA_SANDBOX="true"` points every call
+> at `https://pg-sandbox.paymaya.com`; using a production secret key against the sandbox host
+> (or vice-versa) makes webhook verification fail with `401`. Restart `dev:customer` after
+> editing `.env`.
+
+### 2. Expose your local server with ngrok
+
+Maya can't reach `localhost`. Start the customer app, then tunnel it:
+
+```sh
+bun run dev:customer                    # http://localhost:5173
+ngrok http 5173                         # in a second terminal
+```
+
+ngrok prints a public URL like `https://abc123.ngrok-free.app`. Your webhook endpoint is
+that URL + `/api/webhooks/payment`. Open the ngrok inspector at **http://127.0.0.1:4040**
+to watch every webhook hit (request body + your response code) — this is your best
+debugging tool.
+
+> ⚠️ **Free ngrok gives a NEW URL every restart.** If you restart ngrok you must
+> re-register the webhook (step 3) with the new URL, or Maya will keep POSTing to the old
+> dead address and nothing will arrive. A reserved/static ngrok domain avoids this.
+
+### 3. Point Maya's webhooks at your tunnel
+
+Tell Maya where to send payment notifications. Webhooks live **per Maya account**, so this
+is a one-time setup you only repeat when your public URL changes:
+
+```sh
+cd apps/customer
+bun run maya:webhooks register https://abc123.ngrok-free.app
+```
+
+This registers the `PAYMENT_SUCCESS` / `PAYMENT_FAILED` / `PAYMENT_EXPIRED` events against
+`<url>/api/webhooks/payment` (the path is appended for you) using `MAYA_SECRET_KEY` /
+`MAYA_SANDBOX` from `.env`. It's idempotent — re-running replaces any stale registration, so
+just run it again with the new URL after an ngrok restart. Inspect or remove with
+`bun run maya:webhooks list` and `bun run maya:webhooks clear`.
+
+### 4. Make a test payment
+
+1. Log into the customer app, go to **/top-up**, pick a bundle, **Continue to payment**.
+2. On Maya's hosted page, pay with a Maya **sandbox test card** (numbers are on Maya's
+   [Testing and Validating](https://developers.maya.ph/reference/testing-and-validating-your-maya-checkout-integration)
+   page — never use a real card in sandbox).
+3. **Complete the payment promptly.** A Maya checkout **expires after ~1 hour**; if you let
+   it lapse you get a `PAYMENT_EXPIRED` webhook with no underlying payment, and re-fetching
+   it returns `PY0009 "Payment does not exist"` — that's expected for an unpaid checkout, not
+   a bug. Only a *completed* payment fires `PAYMENT_SUCCESS` and credits the balance.
+
+On success you should see, in order: a `POST /api/webhooks/payment` → `200` in the ngrok
+inspector, a new `topup` row in `credit_ledger`, the balance updated on `/dashboard`, and a
+`PAYMENT_SUCCESS` row on the admin **/finance** page.
+
+### Troubleshooting
+
+| Symptom | Likely cause |
+|---|---|
+| No `POST /api/webhooks/payment` in the ngrok inspector after paying | Webhook not registered, or pointing at a **stale ngrok URL** — re-run `bun run maya:webhooks register <url>` (check with `maya:webhooks list`) |
+| Webhook arrives but responds `400 … verification failed` | Signature verification failed: `MAYA_SECRET_KEY` empty/wrong, or sandbox↔production key mismatch (Maya's re-fetch returns `401`) |
+| Webhook arrives but responds `400 … verification failed` after a checkout sat unpaid | The checkout **expired** before payment — Maya's re-fetch returns `PY0009 "Payment does not exist"` (expected for an unpaid/expired checkout) |
+| Checkout page (Maya) errors on **Continue to payment** | `MAYA_PUBLIC_KEY` empty/wrong |
+| Webhook `200` but balance unchanged | The event wasn't `PAYMENT_SUCCESS` (e.g. expired/failed) — credits are added only on a confirmed paid payment |
+
 ## Database (run from the repo root — delegates to @veent/db)
 
 ```sh
@@ -103,9 +188,17 @@ database any other way, or it drifts and the next `db:migrate` breaks for that m
 ```sh
 # 1. Edit packages/db/src/schema/*.ts
 bun run db:generate         # writes a new packages/db/drizzle/NNNN_*.sql
+bun run db:idempotent       # rewrite the new SQL to IF NOT EXISTS / guarded forms
 bun run db:migrate          # apply it to your own DB
 git add packages/db/drizzle # COMMIT the generated SQL with your schema change
 ```
+
+`db:idempotent` (`scripts/idempotent-migrations.ts`) makes every migration safe to
+re-run over an existing/drifted schema — `CREATE TABLE/INDEX IF NOT EXISTS`,
+`ADD COLUMN IF NOT EXISTS`, guarded `ADD CONSTRAINT` (catches `duplicate_object`/
+`duplicate_table`), `DROP ... IF EXISTS`, `DROP TRIGGER IF EXISTS` before `CREATE
+TRIGGER`. Run it after every `db:generate`. Drizzle gates by journal timestamp, so
+editing the generated SQL never re-runs it where already applied.
 
 **Everyone else, after `git pull`:** just `bun run db:migrate`. That's it.
 
