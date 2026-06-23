@@ -1,6 +1,6 @@
 {
-  "id": "58c69462-7cc1-40df-9102-fca799678cc3",
-  "prevId": "11926066-0a77-4a80-a050-ca139bac3984",
+  "id": "28a5eede-cf00-4578-b7f3-bba040a466e2",
+  "prevId": "58c69462-7cc1-40df-9102-fca799678cc3",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -1027,147 +1027,6 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.payment_checkouts": {
-      "name": "payment_checkouts",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "user_id": {
-          "name": "user_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "package_id": {
-          "name": "package_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "reference_id": {
-          "name": "reference_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "amount": {
-          "name": "amount",
-          "type": "numeric(12, 2)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "status": {
-          "name": "status",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'pending'"
-        },
-        "external_transaction_id": {
-          "name": "external_transaction_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "last_polled_at": {
-          "name": "last_polled_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "settled_at": {
-          "name": "settled_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false
-        }
-      },
-      "indexes": {
-        "payment_checkouts_status_idx": {
-          "name": "payment_checkouts_status_idx",
-          "columns": [
-            {
-              "expression": "status",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "payment_checkouts_created_at_idx": {
-          "name": "payment_checkouts_created_at_idx",
-          "columns": [
-            {
-              "expression": "created_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "payment_checkouts_user_id_customer_user_id_fk": {
-          "name": "payment_checkouts_user_id_customer_user_id_fk",
-          "tableFrom": "payment_checkouts",
-          "tableTo": "customer_user",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "payment_checkouts_package_id_packages_id_fk": {
-          "name": "payment_checkouts_package_id_packages_id_fk",
-          "tableFrom": "payment_checkouts",
-          "tableTo": "packages",
-          "columnsFrom": [
-            "package_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "payment_checkouts_reference_id_unique": {
-          "name": "payment_checkouts_reference_id_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "reference_id"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
     "public.payment_transactions": {
       "name": "payment_transactions",
       "schema": "",
@@ -1624,6 +1483,12 @@
         "model": {
           "name": "model",
           "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "range_meters": {
+          "name": "range_meters",
+          "type": "integer",
           "primaryKey": false,
           "notNull": false
         }

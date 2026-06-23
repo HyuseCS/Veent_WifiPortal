@@ -31,7 +31,8 @@ export const auth = betterAuth({
 		enabled: true,
 		// Staff invites reuse the password-reset token machinery: the owner invites a
 		// member, we issue a reset token, and the member sets their password on the
-		// /activate page. Until SMTP lands, "sending" the email just logs the link.
+		// /activate page. The token URL is emailed via the Resend mailer (stub-logs
+		// subject + recipient locally when RESEND_API_KEY is unset).
 		resetPasswordTokenExpiresIn: 60 * 60 * 24, // 24h, generous for an invite
 		sendResetPassword: async ({ user, token }) => {
 			const url = `${env.ORIGIN}/activate?token=${token}`;

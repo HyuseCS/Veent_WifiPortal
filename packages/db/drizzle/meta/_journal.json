@@ -75,8 +75,22 @@
     {
       "idx": 10,
       "version": "7",
-      "when": 1782191608724,
-      "tag": "0010_low_inhumans",
+      "when": 1781857159712,
+      "tag": "0010_normal_energizer",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1781860341759,
+      "tag": "0011_bitter_madrox",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1782175689834,
+      "tag": "0012_tranquil_iron_monger",
       "breakpoints": true
     }
   ]
