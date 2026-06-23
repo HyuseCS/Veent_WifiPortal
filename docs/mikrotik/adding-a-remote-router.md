@@ -136,6 +136,60 @@ Then:
 
 ---
 
+## Recommended: a central database over Tailscale (one admin, all sites)
+
+The simplest way to get **one admin that sees every site's networks** is *not* to make
+one app reach every router — it's to keep Option A (an instance per site, each on its
+**local** router) and point them all at **one shared database**. The central admin just
+**reads that DB**, so it sees every site's sessions, revenue, and network health without
+ever touching a remote router.
+
+The only thing that needs solving is making that shared database reachable from each site
+**privately**. That's where a mesh VPN like **Tailscale** fits.
+
+**What Tailscale is (and isn't) for here:** it's the *transport* — a private WireGuard
+mesh so each site's app reaches the central Postgres over the internet without exposing it
+publicly. It does **not** make the app multi-router-aware. Two separate concerns:
+
+- **Seeing all networks (monitoring): works today, no code.** Central DB + Tailscale to
+  reach it + one instance per site + a `site_id` label (below).
+- **Managing remote routers from the center (grant/revoke): still needs the
+  multi-controller code** — see [Option B](#what-centralized-multi-site-option-b-would-require--not-built).
+  Tailscale gives the network path; it doesn't change the single-`MIKROTIK_HOST` app.
+
+**Shape:**
+
+```
+   site A app ─┐
+   site B app ─┼─ Tailscale tailnet ──▶ central Postgres (HQ or cloud)
+   site C app ─┘                              ▲
+                                      central admin reads it → sees all sites
+```
+
+Each site's `.env` then points the DB at the tailnet address:
+
+```ini
+DATABASE_URL="postgres://veent:<pw>@<central-db-tailscale-ip>:5432/veent"
+```
+
+**MikroTik caveat:** RouterOS — especially **v6.x** — can't run the Tailscale client, and
+v6 has no WireGuard. So you don't put Tailscale *on* the router. You only need it on the
+hosts that talk to the **database** (the per-site app boxes + the DB host). If you later
+go to Option B and need the *central* server to reach each *router's API*, put a small
+**Tailscale subnet-router** box (Pi / mini-PC / Linux VM) at each site advertising the
+router's management subnet, and reach the MikroTik through it. (RouterOS 7 adds native
+WireGuard if you upgrade — but that's plain WireGuard, not Tailscale.)
+
+**Don't forget the `site_id`:** with a shared DB, two sites each reporting a
+`vlan70 hotspot` collide. Add a per-site label so the aggregate dashboard separates them —
+see [Per-site attribution](#per-site-attribution--where-they-connected).
+
+Tailscale is the easiest option (NAT traversal + ACLs out of the box); ZeroTier, Nebula,
+plain site-to-site WireGuard, or a managed cloud Postgres (TLS + IP allowlist) all work
+the same way.
+
+---
+
 ## Connectivity & security for a far site
 
 The portal server must reach the router's API (`8728`/`8729`). Across the internet:

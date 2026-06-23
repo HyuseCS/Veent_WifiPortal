@@ -12,7 +12,13 @@ function buildConfig(): NetworkConfig {
 			password: env.MIKROTIK_PASSWORD || '',
 			port: env.MIKROTIK_PORT ? Number(env.MIKROTIK_PORT) : undefined,
 			tls: env.MIKROTIK_TLS === 'true',
-			insecureTls: env.MIKROTIK_TLS_INSECURE === 'true'
+			insecureTls: env.MIKROTIK_TLS_INSECURE === 'true',
+			// Comma-separated router interfaces to hide from the Networks view / map
+			// (e.g. a wired `ether2` that isn't a guest AP).
+			excludeInterfaces: (env.HEALTH_EXCLUDE_INTERFACES ?? '')
+				.split(',')
+				.map((s) => s.trim())
+				.filter(Boolean)
 		};
 	}
 	return { controller: 'stub' };

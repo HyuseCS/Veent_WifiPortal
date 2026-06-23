@@ -1,7 +1,7 @@
 import { redirect, fail } from '@sveltejs/kit';
 import { and, eq } from 'drizzle-orm';
 import { packages } from '@veent/db';
-import { getAccount } from '@veent/core';
+import { getAccount, getLatestLedgerId } from '@veent/core';
 import { db } from '$lib/server/db';
 import { payments } from '$lib/server/payments';
 import type { Actions, PageServerLoad } from './$types';
@@ -37,6 +37,9 @@ export const actions: Actions = {
 		if (!pkg || !pkg.isActive) return fail(404, { error: 'Bundle not found' });
 
 		const origin = event.url.origin;
+		// Watermark the ledger now; the processing page polls for a topup row above
+		// this id to know THIS payment's credit landed (gateway txn id is unknown here).
+		const since = await getLatestLedgerId(db, user.id);
 		let redirectUrl: string;
 		try {
 			const checkout = await payments.createCheckout({
@@ -45,13 +48,13 @@ export const actions: Actions = {
 				amountMinor: Math.round((pkg.fiatCost ?? 0) * 100),
 				currency: 'PHP',
 				description: pkg.name,
-				successUrl: `${origin}/top-up/processing`,
+				successUrl: `${origin}/top-up/processing?since=${since}&pkg=${pkg.id}`,
 				cancelUrl: `${origin}/top-up`,
 				buyer: { name: user.name, email: user.email }
 			});
 			redirectUrl = checkout.redirectUrl;
 		} catch (e) {
-			// Maya is stubbed — surface a clear message until it's wired.
+			// Gateway call failed (network, bad keys, Maya 4xx/5xx) — surface it.
 			return fail(503, { error: `Checkout unavailable: ${(e as Error).message}` });
 		}
 		// Outside the try: redirect() throws, and we must not catch that throw.

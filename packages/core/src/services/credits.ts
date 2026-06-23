@@ -1,6 +1,60 @@
-import { and, eq, sql } from 'drizzle-orm';
+import { and, desc, eq, gt, sql } from 'drizzle-orm';
 import { type DB, customerProfile, creditLedger } from '@veent/db';
 import { LEDGER_TYPE, type LedgerType } from '../config';
+
+/**
+ * The id of the user's most recent ledger entry (0 if none). Captured right
+ * before a checkout redirect as a watermark: the payment webhook later inserts a
+ * `topup` row with a higher id, so the waiting room can detect *this* payment's
+ * credit landing (`getTopupSince`) without knowing the gateway transaction id.
+ */
+export async function getLatestLedgerId(db: DB, userId: string): Promise<number> {
+	const [row] = await db
+		.select({ id: creditLedger.id })
+		.from(creditLedger)
+		.where(eq(creditLedger.userId, userId))
+		.orderBy(desc(creditLedger.id))
+		.limit(1);
+	return row?.id ?? 0;
+}
+
+export interface TopupSettlement {
+	/** A verified-payment credit has landed since the watermark. */
+	settled: boolean;
+	/** Credits added by that topup (0 until settled). */
+	creditsAdded: number;
+	/** Current balance, for the success screen. */
+	balance: number;
+}
+
+/**
+ * Has a `topup` credit landed for this user since `sinceLedgerId`? The waiting
+ * room polls this after the user returns from the gateway; it flips to settled
+ * the moment the verified webhook inserts the credit (business rule #3).
+ */
+export async function getTopupSince(
+	db: DB,
+	userId: string,
+	sinceLedgerId: number
+): Promise<TopupSettlement> {
+	const [row] = await db
+		.select({ amount: creditLedger.amount })
+		.from(creditLedger)
+		.where(
+			and(
+				eq(creditLedger.userId, userId),
+				eq(creditLedger.type, LEDGER_TYPE.topup),
+				gt(creditLedger.id, sinceLedgerId)
+			)
+		)
+		.orderBy(desc(creditLedger.id))
+		.limit(1);
+	return {
+		settled: !!row,
+		creditsAdded: row ? Number(row.amount) : 0,
+		balance: await getBalance(db, userId)
+	};
+}
 
 /** Current credit balance for a user (0 if no profile row yet). */
 export async function getBalance(db: DB, userId: string): Promise<number> {

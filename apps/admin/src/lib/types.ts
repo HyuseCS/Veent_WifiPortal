@@ -30,6 +30,10 @@ export interface RevenuePoint {
 
 /** A currently-connected device/session shown on the dashboard. */
 export interface ActiveSession {
+	/** Session row id — the stable, unique key for list rendering. MAC is NOT unique
+	 * (multiple grants can share a MAC, e.g. the dev placeholder), so keying a Svelte
+	 * each on it throws a duplicate-key error and crashes the dashboard. */
+	id: number;
 	mac: string;
 	package: string;
 	/** Remaining time, pre-formatted "MM:SS" or "H:MM" — the server's snapshot at

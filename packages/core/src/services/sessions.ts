@@ -24,17 +24,49 @@ export interface StartSessionInput {
  */
 export async function startSession(db: DB, network: NetworkController, input: StartSessionInput) {
 	const now = new Date();
-	const [session] = await db
-		.insert(networkSessions)
-		.values({
-			userId: input.userId,
-			macAddress: input.macAddress,
-			packageId: input.packageId,
-			status: SESSION_STATUS.active,
-			startedAt: now,
-			expiresAt: expiry(input.durationMinutes, now)
-		})
-		.returning();
+
+	// Stack onto a running session for the SAME device instead of opening a parallel
+	// one: bought time ACCUMULATES (new expiry = current remaining + this duration).
+	// Parallel sessions per MAC would each run their own clock and — worse — the revoke
+	// cron would re-block the shared MAC the moment the FIRST expires, cutting access the
+	// others still cover. One row per device keeps both the countdown and the cron correct.
+	const [existing] = await db
+		.select({ id: networkSessions.id, expiresAt: networkSessions.expiresAt })
+		.from(networkSessions)
+		.where(
+			and(
+				eq(networkSessions.userId, input.userId),
+				eq(networkSessions.macAddress, input.macAddress),
+				eq(networkSessions.status, SESSION_STATUS.active),
+				gt(networkSessions.expiresAt, now)
+			)
+		)
+		.orderBy(desc(networkSessions.expiresAt))
+		.limit(1);
+
+	const previousExpiry = existing?.expiresAt ?? null;
+	let session;
+	if (existing && previousExpiry) {
+		// Extend from the current expiry so no remaining time is lost. packageId tracks
+		// the latest grant so the dashboard names the most recent tier.
+		[session] = await db
+			.update(networkSessions)
+			.set({ expiresAt: expiry(input.durationMinutes, previousExpiry), packageId: input.packageId })
+			.where(eq(networkSessions.id, existing.id))
+			.returning();
+	} else {
+		[session] = await db
+			.insert(networkSessions)
+			.values({
+				userId: input.userId,
+				macAddress: input.macAddress,
+				packageId: input.packageId,
+				status: SESSION_STATUS.active,
+				startedAt: now,
+				expiresAt: expiry(input.durationMinutes, now)
+			})
+			.returning();
+	}
 
 	try {
 		await network.grant({
@@ -43,10 +75,18 @@ export async function startSession(db: DB, network: NetworkController, input: St
 			bandwidthMbps: input.bandwidthMbps
 		});
 	} catch (err) {
-		await db
-			.update(networkSessions)
-			.set({ status: SESSION_STATUS.revoked })
-			.where(eq(networkSessions.id, session.id));
+		if (previousExpiry) {
+			// Restore the prior expiry — a failed extend must not forfeit already-granted time.
+			await db
+				.update(networkSessions)
+				.set({ expiresAt: previousExpiry })
+				.where(eq(networkSessions.id, session.id));
+		} else {
+			await db
+				.update(networkSessions)
+				.set({ status: SESSION_STATUS.revoked })
+				.where(eq(networkSessions.id, session.id));
+		}
 		throw err;
 	}
 
