@@ -21,7 +21,7 @@
 	} = $props();
 
 	const pill =
-		'flex min-h-9 cursor-pointer items-center gap-1.5 rounded-lg px-3 text-xs font-bold transition-colors duration-150';
+		'flex min-h-[44px] cursor-pointer items-center gap-1.5 rounded-lg px-3 text-xs font-bold transition-colors duration-150';
 	const toneFor = (key: T) =>
 		active === key ? 'bg-brand text-white' : 'text-muted hover:text-ink';
 </script>

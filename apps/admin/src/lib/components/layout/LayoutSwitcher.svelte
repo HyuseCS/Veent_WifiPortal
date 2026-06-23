@@ -36,7 +36,7 @@
 		onclick={() => (open = !open)}
 		aria-haspopup="menu"
 		aria-expanded={open}
-		class="flex h-9 cursor-pointer items-center gap-2 rounded-md border border-border bg-bg px-3 text-sm font-medium text-ink outline-none transition-[background-color,color,transform,border-color] duration-150 hover:border-brand/40 hover:bg-surface focus-visible:ring-2 focus-visible:ring-brand/40 active:scale-95"
+		class="flex min-h-[44px] cursor-pointer items-center gap-2 rounded-md border border-border bg-bg px-3 text-sm font-medium text-ink outline-none transition-[background-color,color,transform,border-color] duration-150 hover:border-brand/40 hover:bg-surface focus-visible:ring-2 focus-visible:ring-brand/40 active:scale-95"
 	>
 		<TriggerIcon class="h-4 w-4 text-muted" aria-hidden="true" />
 		<span class="hidden sm:inline">{currentOption.label}</span>
@@ -61,7 +61,7 @@
 					type="button"
 					role="menuitemradio"
 					aria-checked={ctx.current === opt.value}
-					class="flex w-full cursor-pointer items-center gap-2.5 px-3 py-2 text-sm text-ink outline-none transition-colors duration-150 hover:bg-surface focus-visible:bg-surface"
+					class="flex min-h-[44px] w-full cursor-pointer items-center gap-2.5 px-3 py-2 text-sm text-ink outline-none transition-colors duration-150 hover:bg-surface focus-visible:bg-surface"
 					onclick={() => choose(opt.value)}
 				>
 					<Icon class="h-4 w-4 text-muted" aria-hidden="true" />

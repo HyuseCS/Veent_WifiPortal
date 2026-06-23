@@ -269,7 +269,7 @@
 					class="chart-hit"
 					cx={p.x}
 					cy={p.y}
-					r="16"
+					r="22"
 					fill="transparent"
 					role="button"
 					tabindex="0"

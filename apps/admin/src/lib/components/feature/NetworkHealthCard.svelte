@@ -104,6 +104,8 @@
 		onfocus?.(ap.id);
 	}}
 	onkeydown={(e) => {
+		// Don't hijack keys (esp. Space) bubbling up from the nested location form's inputs.
+		if ((e.target as HTMLElement).closest('form')) return;
 		if (e.key === 'Enter' || e.key === ' ') {
 			e.preventDefault();
 			onfocus?.(ap.id);
@@ -165,7 +167,7 @@
 				e.stopPropagation();
 				onedit?.(editing ? null : ap.id);
 			}}
-			class="flex h-8 shrink-0 cursor-pointer items-center gap-1.5 rounded-lg border border-border px-3 text-xs font-semibold text-muted transition-colors duration-150 hover:border-brand/40 hover:text-ink"
+			class="flex min-h-[44px] shrink-0 cursor-pointer items-center gap-1.5 rounded-lg border border-border px-3 text-xs font-semibold text-muted transition-colors duration-150 hover:border-brand/40 hover:text-ink"
 		>
 			<Pencil class="h-3.5 w-3.5" aria-hidden="true" />
 			Edit

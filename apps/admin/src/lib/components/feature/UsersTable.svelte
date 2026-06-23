@@ -281,7 +281,7 @@
 			<input type="hidden" name="userIds" value={[...selected].join(',')} />
 			<button
 				type="submit"
-				class="inline-flex min-h-9 cursor-pointer items-center gap-2 rounded-lg bg-blocked px-3 text-sm font-semibold text-white transition-[filter] duration-150 hover:brightness-110"
+				class="inline-flex min-h-[44px] cursor-pointer items-center gap-2 rounded-lg bg-blocked px-3 text-sm font-semibold text-white transition-[filter] duration-150 hover:brightness-110"
 			>
 				<Trash2 class="h-4 w-4" aria-hidden="true" />
 				Delete
@@ -291,7 +291,7 @@
 			type="button"
 			onclick={() => selected.clear()}
 			aria-label="Clear selection"
-			class="flex h-9 w-9 cursor-pointer items-center justify-center rounded-lg text-sidebar-muted transition-colors duration-150 hover:text-sidebar-text"
+			class="flex h-11 w-11 cursor-pointer items-center justify-center rounded-lg text-sidebar-muted transition-colors duration-150 hover:text-sidebar-text"
 		>
 			<X class="h-4 w-4" aria-hidden="true" />
 		</button>

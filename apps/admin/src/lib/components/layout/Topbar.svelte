@@ -67,7 +67,7 @@
 			onclick={refresh}
 			disabled={refreshing}
 			aria-label="Refresh data"
-			class="flex h-9 w-9 cursor-pointer items-center justify-center rounded-md border border-border bg-bg text-muted outline-none transition-[background-color,color,transform,border-color] duration-150 hover:border-brand/40 hover:bg-surface hover:text-ink focus-visible:ring-2 focus-visible:ring-brand/40 active:scale-95 disabled:cursor-not-allowed disabled:opacity-60"
+			class="flex h-11 w-11 cursor-pointer items-center justify-center rounded-md border border-border bg-bg text-muted outline-none transition-[background-color,color,transform,border-color] duration-150 hover:border-brand/40 hover:bg-surface hover:text-ink focus-visible:ring-2 focus-visible:ring-brand/40 active:scale-95 disabled:cursor-not-allowed disabled:opacity-60"
 		>
 			<RefreshCw class="h-4 w-4 {refreshing ? 'animate-spin' : ''}" aria-hidden="true" />
 		</button>

@@ -19,6 +19,8 @@
 </script>
 
 <span
+	role="status"
+	aria-live="polite"
 	class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium {meta.fill}"
 >
 	<span class="relative flex h-1.5 w-1.5" aria-hidden="true">

@@ -105,7 +105,7 @@
 				<button
 					type="button"
 					onclick={load}
-					class="flex min-h-9 cursor-pointer items-center gap-2 rounded-lg border border-border px-4 text-sm font-semibold text-ink transition-colors duration-150 hover:border-brand/40 hover:text-brand"
+					class="flex min-h-[44px] cursor-pointer items-center gap-2 rounded-lg border border-border px-4 text-sm font-semibold text-ink transition-colors duration-150 hover:border-brand/40 hover:text-brand"
 				>
 					<RefreshCw class="h-3.5 w-3.5" aria-hidden="true" />
 					Reconnect
