@@ -155,7 +155,8 @@ inspector, a new `topup` row in `credit_ledger`, the balance updated on `/dashbo
 | Symptom | Likely cause |
 |---|---|
 | No `POST /api/webhooks/payment` in the ngrok inspector after paying | Webhook not registered, or pointing at a **stale ngrok URL** — re-run `bun run maya:webhooks register <url>` (check with `maya:webhooks list`) |
-| Webhook arrives but responds `400 … verification failed` | `MAYA_SECRET_KEY` empty/wrong, or sandbox↔production mismatch (`401`); or the checkout **expired** before payment (`PY0009`, expected for unpaid) |
+| Webhook arrives but responds `400 … verification failed` | Signature verification failed: `MAYA_SECRET_KEY` empty/wrong, or sandbox↔production key mismatch (Maya's re-fetch returns `401`) |
+| Webhook arrives but responds `400 … verification failed` after a checkout sat unpaid | The checkout **expired** before payment — Maya's re-fetch returns `PY0009 "Payment does not exist"` (expected for an unpaid/expired checkout) |
 | Checkout page (Maya) errors on **Continue to payment** | `MAYA_PUBLIC_KEY` empty/wrong |
 | Webhook `200` but balance unchanged | The event wasn't `PAYMENT_SUCCESS` (e.g. expired/failed) — credits are added only on a confirmed paid payment |
 
