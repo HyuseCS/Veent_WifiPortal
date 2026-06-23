@@ -133,10 +133,11 @@
 			if (cancelled) return;
 			L = mod.default;
 
-			const m = L.map(mapEl, { zoomControl: true, scrollWheelZoom: false }).setView(
+			const m = L.map(mapEl, { zoomControl: false, scrollWheelZoom: false }).setView(
 				FALLBACK_CENTER,
 				15
 			);
+			L.control.zoom({ position: 'bottomright' }).addTo(m);
 			map = m;
 			tile = L.tileLayer(tileUrl(), {
 				maxZoom: 19,

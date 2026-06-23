@@ -142,7 +142,7 @@
 			{#if !panelOpen}
 				<button
 					onclick={() => (panelOpen = true)}
-					class="absolute top-4 left-4 z-10 flex h-9 items-center gap-2 rounded-lg border border-border bg-bg/90 px-3 text-sm font-semibold text-ink shadow-sm backdrop-blur-sm transition-colors hover:border-brand/40 hover:text-brand"
+					class="absolute top-4 left-4 z-1001 flex h-9 items-center gap-2 rounded-lg border border-border bg-bg/90 px-3 text-sm font-semibold text-ink shadow-sm backdrop-blur-sm transition-colors hover:border-brand/40 hover:text-brand"
 				>
 					<List class="h-4 w-4" aria-hidden="true" />
 					Access Points
@@ -151,7 +151,7 @@
 
 			<!-- Status legend (top-right) -->
 			<div
-				class="absolute top-4 right-4 z-10 flex gap-3.5 rounded-xl border border-border bg-bg/90 px-3.5 py-2 shadow-sm backdrop-blur-sm"
+				class="absolute top-4 right-4 z-1001 flex gap-3.5 rounded-xl border border-border bg-bg/90 px-3.5 py-2 shadow-sm backdrop-blur-sm"
 			>
 				<span class="flex items-center gap-1.5 text-xs font-semibold text-muted">
 					<span class="h-2 w-2 rounded-full bg-online"></span>Healthy
