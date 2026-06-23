@@ -147,6 +147,8 @@ export function createMayaProvider(config: MayaConfig): PaymentProvider {
 				const detail = await res.text().catch(() => '');
 				throw new Error(`maya: payment lookup failed (${res.status}): ${detail}`);
 			}
+			return { checkoutId: data.checkoutId, redirectUrl: data.redirectUrl };
+		},
 
 			const payment = (await res.json()) as {
 				id: string;
@@ -169,6 +171,44 @@ export function createMayaProvider(config: MayaConfig): PaymentProvider {
 				status,
 				amountMinor: Math.round(Number(payment.amount ?? 0) * 100),
 				currency: payment.currency ?? 'PHP'
+			};
+		},
+
+		async getCheckoutStatus(checkoutId: string): Promise<PaymentEvent | null> {
+			if (!config.secretKey) throw new Error('maya: secretKey not configured');
+
+			// Outbound read of the checkout's current state — the reconcile safety net.
+			const res = await fetch(`${base}/checkout/v1/checkouts/${encodeURIComponent(checkoutId)}`, {
+				headers: { authorization: basicAuth(config.secretKey) }
+			});
+			if (res.status === 404) return null; // gateway has no record (yet)
+			if (!res.ok) {
+				const detail = await res.text().catch(() => '');
+				throw new Error(`maya: checkout lookup failed (${res.status}): ${detail}`);
+			}
+
+			const c = (await res.json()) as {
+				id: string;
+				paymentStatus?: string;
+				status?: string;
+				isPaid?: boolean;
+				totalAmount?: { value?: string | number } | string | number;
+				requestReferenceNumber?: string;
+				// ponytail: a paid checkout exposes its payment id; field name confirmed in
+				// the Maya dashboard. Falls back to the checkout id — only used for tracing,
+				// not for credit idempotency (the payment_checkouts claim guards that).
+				payments?: { id?: string }[];
+			};
+
+			const status = mapStatus(c.paymentStatus ?? c.status, c.isPaid === true);
+			const amount =
+				typeof c.totalAmount === 'object' ? Number(c.totalAmount?.value ?? 0) : Number(c.totalAmount ?? 0);
+			return {
+				externalTransactionId: c.payments?.[0]?.id ?? c.id ?? checkoutId,
+				referenceId: c.requestReferenceNumber ?? '',
+				status,
+				amountMinor: Math.round(amount * 100),
+				currency: 'PHP'
 			};
 		}
 	};

@@ -1,1 +1,1 @@
-ALTER TABLE "customer_profile" ADD COLUMN "blocked" boolean DEFAULT false NOT NULL;
+ALTER TABLE "customer_profile" ADD COLUMN IF NOT EXISTS "blocked" boolean DEFAULT false NOT NULL;

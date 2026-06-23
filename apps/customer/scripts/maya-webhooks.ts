@@ -1,3 +1,4 @@
+/// <reference types="node" />
 /**
  * Register / inspect the Maya Checkout webhooks for this app.
  *

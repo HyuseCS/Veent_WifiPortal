@@ -57,4 +57,11 @@ export interface PaymentProvider {
 	 * error as "reject the webhook".
 	 */
 	verifyWebhook(rawBody: string, headers: Headers): Promise<PaymentEvent>;
+	/**
+	 * Reconciliation: fetch a checkout's CURRENT status straight from the gateway
+	 * (outbound request — works behind NAT, needs no inbound webhook). The safety net
+	 * behind a missed webhook. Returns a normalized event, or null if the gateway has
+	 * no payment for it yet. Optional: providers that can't poll omit it.
+	 */
+	getCheckoutStatus?(checkoutId: string): Promise<PaymentEvent | null>;
 }

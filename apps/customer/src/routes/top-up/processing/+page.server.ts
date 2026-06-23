@@ -1,8 +1,9 @@
 import { redirect } from '@sveltejs/kit';
 import { eq } from 'drizzle-orm';
 import { packages } from '@veent/db';
-import { getTopupSince } from '@veent/core';
+import { getTopupSince, reconcileCheckout } from '@veent/core';
 import { db } from '$lib/server/db';
+import { payments } from '$lib/server/payments';
 import type { PageServerLoad } from './$types';
 
 /**
@@ -20,6 +21,19 @@ export const load: PageServerLoad = async (event) => {
 
 	const since = Number(event.url.searchParams.get('since') ?? 0);
 	const pkgId = Number(event.url.searchParams.get('pkg') ?? 0);
+	const attempt = event.url.searchParams.get('attempt');
+
+	// On-return safety net: if the webhook hasn't credited yet, ask Maya directly for
+	// THIS checkout's status and credit on the spot (throttled + idempotent). Means a
+	// missed webhook self-heals while the buyer waits, instead of spinning forever.
+	// `attempt` IS the checkout's referenceId token.
+	if (attempt) {
+		try {
+			await reconcileCheckout(db, payments, attempt);
+		} catch {
+			// best-effort — the cron and webhook still cover it
+		}
+	}
 
 	const { settled, creditsAdded, balance } = await getTopupSince(db, user.id, since);
 
