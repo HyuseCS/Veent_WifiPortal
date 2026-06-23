@@ -57,6 +57,32 @@ export function createMikrotikController(config: MikrotikConfig): NetworkControl
 		return rows.map((r) => r['.id']).filter((id): id is string => Boolean(id));
 	}
 
+	/**
+	 * Drop the device's lingering hotspot host entry so a freshly-added bypass takes
+	 * effect immediately. Without this, RouterOS keeps applying the hotspot's DNS
+	 * hijack + HTTP redirect to the host's EXISTING tracked connections until they age
+	 * out — the device has access but is painfully slow for minutes, and the OS captive
+	 * check only flips to "connected" once it happens to re-probe. Removing the host
+	 * forces a clean re-evaluation, and since the bypass binding is already in place the
+	 * device re-appears bypassed. Best-effort: a grant must never fail over this cleanup.
+	 */
+	async function flushHotspotHost(conn: RosConn, mac: string): Promise<void> {
+		try {
+			const hosts = await conn.write('/ip/hotspot/host/print', [`?mac-address=${mac}`]);
+			for (const h of hosts) {
+				const id = h['.id'];
+				if (!id) continue;
+				try {
+					await conn.write('/ip/hotspot/host/remove', [`=.id=${id}`]);
+				} catch {
+					// Host entry already gone / dynamic refresh — ignore.
+				}
+			}
+		} catch {
+			// Host table unavailable — the bypass alone still works, just slower to settle.
+		}
+	}
+
 	return {
 		name: 'mikrotik',
 
@@ -81,6 +107,9 @@ export function createMikrotikController(config: MikrotikConfig): NetworkControl
 						`=comment=${comment}`
 					]);
 				}
+				// Clear the stale captured host so the bypass applies right away, not after
+				// the device's old intercepted connections time out (the "slow for 5 min" bug).
+				await flushHotspotHost(conn, mac);
 			});
 		},
 
