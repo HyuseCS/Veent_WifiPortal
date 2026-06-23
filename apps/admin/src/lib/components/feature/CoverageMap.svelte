@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import 'leaflet/dist/leaflet.css';
 	import type { NetworkAp } from '$lib/types';
+	import { FALLBACK_CENTER, tileUrl, TILE_SUBDOMAINS, TILE_ATTRIBUTION } from '$lib/map';
 
 	// Read-only coverage map of every placed access point, status-coloured. Clicking a
 	// pin (or selecting a card on the page) focuses that AP. Pins/centre derive purely
@@ -15,9 +16,6 @@
 		selectedId?: string | null;
 		onselect?: (id: string) => void;
 	} = $props();
-
-	// Metro Manila fallback — shown when no APs have coordinates yet.
-	const FALLBACK_CENTER: [number, number] = [14.5995, 120.9842];
 
 	// tone → status pin colour (token-backed, so it re-resolves on theme flip).
 	const toneColor: Record<string, string> = {
@@ -62,14 +60,6 @@
 	let tile: import('leaflet').TileLayer | undefined;
 	const markers: Record<string, import('leaflet').Marker> = {};
 	let ready = $state(false);
-
-	// CARTO basemap, themed to the admin's light/dark mode.
-	function tileUrl(): string {
-		const dark = document.documentElement.dataset.theme === 'dark';
-		return dark
-			? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png'
-			: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png';
-	}
 
 	function pinHtml(ap: NetworkAp): string {
 		const color = toneColor[ap.tone] ?? 'var(--color-online)';
@@ -141,8 +131,8 @@
 			map = m;
 			tile = L.tileLayer(tileUrl(), {
 				maxZoom: 19,
-				subdomains: 'abcd',
-				attribution: '&copy; OpenStreetMap, &copy; CARTO'
+				subdomains: TILE_SUBDOMAINS,
+				attribution: TILE_ATTRIBUTION
 			}).addTo(m);
 			renderMarkers();
 			ready = true;
@@ -164,39 +154,3 @@
 
 <div bind:this={mapEl} class="h-full w-full"></div>
 
-<style>
-	/* Teardrop pin, coloured per status via the inline --c custom property. */
-	:global(.vpin) {
-		width: 22px;
-		height: 22px;
-		border-radius: 50% 50% 50% 0;
-		transform: rotate(-45deg);
-		background: var(--c, var(--color-online));
-		border: 2.5px solid #fff;
-		box-shadow: 0 2px 7px rgba(10, 21, 80, 0.45);
-		position: relative;
-		transition: transform 0.15s ease;
-	}
-	:global(.vpin span) {
-		position: absolute;
-		inset: 0;
-		margin: auto;
-		width: 7px;
-		height: 7px;
-		background: #fff;
-		border-radius: 50%;
-		transform: rotate(45deg);
-	}
-	:global(.vpin.sel) {
-		transform: rotate(-45deg) scale(1.7);
-		z-index: 1000 !important;
-		box-shadow: 0 5px 18px rgba(10, 21, 80, 0.6);
-	}
-	:global(.leaflet-container) {
-		font-family: var(--font-sans);
-		background: var(--color-surface);
-	}
-	:global(.leaflet-control-zoom a) {
-		border-radius: 7px !important;
-	}
-</style>

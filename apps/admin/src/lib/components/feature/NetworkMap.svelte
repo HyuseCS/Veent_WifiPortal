@@ -11,22 +11,18 @@
 	import ChevronDown from 'lucide-svelte/icons/chevron-down';
 	import Pencil from 'lucide-svelte/icons/pencil';
 	import 'leaflet/dist/leaflet.css';
-	import 'leaflet.markercluster/dist/MarkerCluster.css';
-	import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
 	import type { SubmitFunction } from '@sveltejs/kit';
 	import type { NetworkAp } from '$lib/types';
 	import { SearchInput, EmptyState } from '$lib/components/ui';
 	import { routerModels, rangeFor, DEFAULT_MODEL_ID } from '$lib/router-models';
 	import { distanceMeters } from '$lib/geo';
+	import { FALLBACK_CENTER, tileUrl, TILE_SUBDOMAINS, TILE_ATTRIBUTION } from '$lib/map';
 
 	let { networks }: { networks: NetworkAp[] } = $props();
 
 	// lucide-svelte icons type as the legacy component signature; EmptyState's `icon` prop
 	// wants the runes `Component` type. Same cast the dashboard page uses.
 	const icon = (c: unknown) => c as Component;
-
-	// Metro Manila fallback — shown when no APs have coordinates yet.
-	const FALLBACK_CENTER: [number, number] = [14.5995, 120.9842];
 
 	// Inline lucide "user" head — used in the marker hover tooltip and click popup.
 	const HEAD_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>`;
@@ -38,16 +34,6 @@
 	// Inline lucide "layers" — the coverage-toggle control's glyph.
 	const LAYERS_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z"/><path d="m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65"/><path d="m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65"/></svg>`;
 
-	// Coverage bands at equal-distance thirds, drawn outer→inner so the strong inner
-	// band sits on top.
-	// ponytail: equal-distance thirds, not log-distance RSSI. Real falloff is
-	// logarithmic (see apps/admin/plan.md §2). Upgrade path: replace .frac thirds with
-	// radii solved from PL(d) for target dBm cutoffs, exponent n per environment.
-	const BANDS = [
-		{ frac: 1.0, cls: 'cov-weak' },
-		{ frac: 0.66, cls: 'cov-fair' },
-		{ frac: 0.33, cls: 'cov-good' }
-	];
 
 	// A draggable map pin. apId null = a brand-new AP (posts ?/addPlace); apId set = an
 	// in-place edit of an existing AP (posts ?/updatePlace, can Remove). lat/lng mirror the
@@ -85,6 +71,8 @@
 	// Coverage domes on/off (the Leaflet toggle control). Real-AP domes only — sandbox
 	// placement pins keep their bands regardless.
 	let coverageVisible = $state(true);
+	// When set, only this AP's dome is shown; null = show all domes.
+	let focusedApId = $state<string | null>(null);
 
 	// Standalone address search (drops a new pin); per-pin lookups report status by localId.
 	let addrQuery = $state('');
@@ -103,8 +91,9 @@
 	let mapEl: HTMLDivElement;
 	let L: typeof import('leaflet') | undefined;
 	let mapInstance: import('leaflet').Map | undefined;
-	let clusterRef: import('leaflet').MarkerClusterGroup | undefined;
+	let clusterRef: import('leaflet').LayerGroup | undefined;
 	let realDomeGroup: import('leaflet').LayerGroup | undefined;
+	const markerById = new Map<string, import('leaflet').Marker>();
 	const pinLayers = new Map<
 		number,
 		{ marker: import('leaflet').Marker; group: import('leaflet').LayerGroup }
@@ -211,65 +200,65 @@
 	let collapsed = $state<Record<string, boolean>>({});
 	let editingCluster = $state<string | null>(null);
 
-	function pinIcon(bg: string) {
+	// Teardrop pin matching the Networks page CoverageMap style. Color via --c inline property.
+	function vpinIcon(color: string) {
 		return L!.divIcon({
-			className: 'radius-pin',
-			html: `<span style="background:${bg}"></span>`,
-			iconSize: [18, 18],
-			iconAnchor: [9, 9]
+			className: '',
+			html: `<div class="vpin" style="--c:${color}"><span></span></div>`,
+			iconSize: [22, 22],
+			iconAnchor: [11, 22]
 		});
 	}
 
-	// Draw the three concentric discs for one AP into `group`. Does NOT clear first — the
-	// caller owns clearing, because `realDomeGroup` is shared across every placed AP (clearing
-	// per-call would wipe all but the last). Per-pin callers clear their own group before redraw.
-	// An offline AP drops to one muted class so its dome never reads as live coverage.
-	// interactive:false lets clicks fall through to the map/markers (else the fill swallows the
-	// click). Fills are opaque and rendered into the 'domes' pane (group-opacity 0.35): opaque
-	// discs composite top-over-bottom, so overlapping domes no longer compound into mud. An
-	// overlapping AP gets a dashed warning ring on its outer disc.
-	function drawBands(
+	// Single status-colored circle per AP. Caller owns clearing `group` before redrawing.
+	// `overlap` draws a dashed stroke to signal dome intersection with a neighbour.
+	// `sandbox` uses brand color for new/edit pins being placed (not yet saved).
+	function drawCircle(
 		group: import('leaflet').LayerGroup,
 		lat: number,
 		lng: number,
 		range: number,
-		online = true,
-		overlap = false
+		tone = 'online',
+		overlap = false,
+		sandbox = false
 	) {
-		for (const b of BANDS) {
-			const outer = b.frac === 1.0;
-			const ring = overlap && outer;
-			L!.circle([lat, lng], {
-				radius: range * b.frac,
-				pane: 'domes',
-				stroke: ring,
-				weight: 2,
-				dashArray: '4',
-				className: (online ? b.cls : 'cov-offline') + (ring ? ' cov-overlap' : ''),
-				fillOpacity: 1,
-				interactive: false
-			}).addTo(group);
-		}
+		const cls = sandbox
+			? 'cov-zone-brand'
+			: tone === 'online'
+				? 'cov-zone-online'
+				: tone === 'warning'
+					? 'cov-zone-warning'
+					: 'cov-zone-offline';
+		L!.circle([lat, lng], {
+			radius: range,
+			pane: 'domes',
+			stroke: true,
+			weight: overlap ? 2 : 1.5,
+			dashArray: overlap ? '5 4' : undefined,
+			opacity: overlap ? 0.55 : 0.4,
+			fillOpacity: 0.08,
+			className: cls,
+			interactive: false
+		}).addTo(group);
 	}
 
-	// Real placed APs: coverage domes + clustered markers with live-count popups. The AP
-	// being edited is skipped (its edit pin stands in). Re-runs when placed or editingApId
-	// changes (renderReal reads both, so the $effect tracks them).
+	// Markers only — no dome drawing. Keeps open popups alive when only dome state changes.
+	// The AP being edited is skipped (its draggable edit pin stands in).
 	function renderReal() {
-		if (!L || !clusterRef || !realDomeGroup) return;
+		if (!L || !clusterRef) return;
 		clusterRef.clearLayers();
-		realDomeGroup.clearLayers();
+		markerById.clear();
 
 		for (const ap of placed) {
 			if (ap.id === editingApId) continue;
 			const lat = Number(ap.latitude);
 			const lng = Number(ap.longitude);
-			const color = ap.tone === 'online' ? 'var(--color-online)' : 'var(--color-blocked)';
-
-			if (coverageVisible) {
-				const range = ap.rangeMeters ?? rangeFor(ap.model);
-				drawBands(realDomeGroup, lat, lng, range, ap.tone === 'online', clusteredIds.has(ap.id));
-			}
+			const color =
+				ap.tone === 'online'
+					? 'var(--color-online)'
+					: ap.tone === 'warning'
+						? 'var(--color-warning)'
+						: 'var(--color-blocked)';
 
 			const popup = `
 				<div class="radius-popup">
@@ -282,10 +271,11 @@
 					<button class="radius-edit-btn" type="button">Edit on map</button>
 				</div>`;
 			const tooltip = `<span class="radius-tip-inner">${HEAD_ICON}${ap.users}</span>`;
-			const marker = L.marker([lat, lng], { icon: pinIcon(color) })
+			const marker = L.marker([lat, lng], { icon: vpinIcon(color) })
 				.bindPopup(popup)
 				.bindTooltip(tooltip, { direction: 'top', offset: [0, -10], className: 'radius-tip' });
-			// Wire the popup's "Edit on map" button each time it opens (fresh DOM per open).
+			// Clicking the marker focuses it (hides other domes); popup wires the Edit button.
+			marker.on('click', () => { focusedApId = ap.id; });
 			marker.on('popupopen', (e) => {
 				const btn = e.popup.getElement()?.querySelector('.radius-edit-btn');
 				btn?.addEventListener('click', () => {
@@ -293,16 +283,53 @@
 					startEdit(ap);
 				});
 			});
+			markerById.set(ap.id, marker);
 			marker.addTo(clusterRef);
 		}
 	}
 
+	// Domes only — clears and redraws coverage circles without touching markers/popups.
+	// Priority: editing > focused > all.
+	// • editingApId set  → hide all real domes (sandbox dome from spawnPin is the only visual)
+	// • focusedApId set  → show only that AP's dome
+	// • neither          → show all domes
+	function renderDomes() {
+		if (!L || !realDomeGroup) return;
+		realDomeGroup.clearLayers();
+		if (!coverageVisible || editingApId !== null) return;
+		for (const ap of placed) {
+			if (focusedApId !== null && focusedApId !== ap.id) continue;
+			const lat = Number(ap.latitude);
+			const lng = Number(ap.longitude);
+			const range = ap.rangeMeters ?? rangeFor(ap.model);
+			drawCircle(realDomeGroup, lat, lng, range, ap.tone, clusteredIds.has(ap.id));
+		}
+	}
+
+	// Re-create markers when the AP dataset changes.
 	$effect(() => {
 		void placed;
 		void editingApId;
-		void coverageVisible;
 		void clusteredIds;
 		if (mapReady) renderReal();
+	});
+
+	// Re-draw domes when visibility, focus, or dataset changes — no marker re-creation.
+	$effect(() => {
+		void placed;
+		void editingApId;
+		void focusedApId;
+		void coverageVisible;
+		void clusteredIds;
+		if (mapReady) renderDomes();
+	});
+
+	// Scale the focused pin up (.sel) and restore all others — no marker re-creation.
+	$effect(() => {
+		const id = focusedApId;
+		for (const [apId, marker] of markerById) {
+			marker.getElement()?.querySelector('.vpin')?.classList.toggle('sel', apId === id);
+		}
 	});
 
 	// Spawn a draggable pin (new or edit) and its dome at the given position.
@@ -312,15 +339,15 @@
 		const map = mapInstance;
 		const group = L.layerGroup().addTo(map);
 		const marker = L.marker([init.lat, init.lng], {
-			icon: pinIcon(init.apId ? 'var(--color-cta)' : 'var(--color-brand)'),
+			icon: vpinIcon(init.apId ? 'var(--color-cta)' : 'var(--color-brand)'),
 			draggable: true
 		}).addTo(map);
-		drawBands(group, init.lat, init.lng, init.range);
+		drawCircle(group, init.lat, init.lng, init.range, 'online', false, true);
 		marker.on('dragstart', () => (suppressClick = true));
 		marker.on('drag', () => {
 			const p = marker.getLatLng();
 			group.clearLayers();
-			drawBands(group, p.lat, p.lng, rangeOf(localId));
+			drawCircle(group, p.lat, p.lng, rangeOf(localId), 'online', false, true);
 		});
 		marker.on('dragend', () => {
 			const p = marker.getLatLng();
@@ -575,7 +602,7 @@
 		if (layer) {
 			const p = layer.marker.getLatLng();
 			layer.group.clearLayers();
-			drawBands(layer.group, p.lat, p.lng, range);
+			drawCircle(layer.group, p.lat, p.lng, range, 'online', false, true);
 		}
 	}
 
@@ -710,10 +737,11 @@
 
 	onMount(() => {
 		let cancelled = false;
+		let tileObs: MutationObserver | undefined;
+		let tileLayerRef: import('leaflet').TileLayer | undefined;
 
 		(async () => {
 			const mod = await import('leaflet');
-			await import('leaflet.markercluster');
 			if (cancelled) return;
 			L = mod.default;
 
@@ -721,10 +749,8 @@
 				FALLBACK_CENTER,
 				11
 			);
-			// Dedicated dome pane at group-opacity: opaque fills composite top-over-bottom inside
-			// it, so overlapping domes don't darken (see drawBands). zIndex defaults to 400 —
-			// above tiles (200), below markers (600).
-			map.createPane('domes').style.opacity = '0.35';
+			// Dome pane sits above tiles (200) but below markers (600) — default zIndex 400.
+			map.createPane('domes');
 
 			L.control.zoom({ position: 'bottomright' }).addTo(map);
 
@@ -771,15 +797,17 @@
 			});
 			new CoverageToggle({ position: 'bottomright' }).addTo(map);
 
-			// ponytail: OSM public tiles — swap for a dedicated provider before heavy prod load.
-			L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+			// CARTO basemap, themed to the admin's light/dark mode (mirrors CoverageMap).
+			tileLayerRef = L.tileLayer(tileUrl(), {
 				maxZoom: 19,
-				attribution:
-					'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+				subdomains: TILE_SUBDOMAINS,
+				attribution: TILE_ATTRIBUTION
 			}).addTo(map);
 
-			const cluster = L.markerClusterGroup();
-			map.addLayer(cluster);
+			tileObs = new MutationObserver(() => tileLayerRef?.setUrl(tileUrl()));
+			tileObs.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+			const cluster = L.layerGroup().addTo(map);
 			mapInstance = map;
 			clusterRef = cluster;
 			realDomeGroup = L.layerGroup().addTo(map);
@@ -789,6 +817,9 @@
 				if (suppressClick) return;
 				addPin(e.latlng.lat, e.latlng.lng);
 			});
+
+			// When the popup is dismissed, restore all domes.
+			map.on('popupclose', () => { focusedApId = null; });
 
 			renderReal();
 			mapReady = true;
@@ -819,6 +850,7 @@
 
 		return () => {
 			cancelled = true;
+			tileObs?.disconnect();
 			mapInstance?.remove();
 		};
 	});
@@ -1222,10 +1254,9 @@
 
 			<footer class="space-y-2 border-t border-border px-3 py-2">
 				<div class="flex items-center gap-3 px-1 text-xs text-muted">
-					<span class="flex items-center gap-1.5"><span class="swatch" style="background: var(--color-online)"></span>Good</span>
-					<span class="flex items-center gap-1.5"><span class="swatch" style="background: var(--color-warning)"></span>Fair</span>
-					<span class="flex items-center gap-1.5"><span class="swatch" style="background: var(--color-blocked)"></span>Weak</span>
-					<span class="flex items-center gap-1.5"><span class="swatch" style="background: var(--color-muted)"></span>Offline</span>
+					<span class="flex items-center gap-1.5"><span class="h-2 w-2 shrink-0 rounded-full bg-online"></span>Online</span>
+					<span class="flex items-center gap-1.5"><span class="h-2 w-2 shrink-0 rounded-full bg-warning"></span>Degraded</span>
+					<span class="flex items-center gap-1.5"><span class="h-2 w-2 shrink-0 rounded-full bg-blocked"></span>Offline</span>
 				</div>
 				<button
 					onclick={() => mapInstance && addPin(mapInstance.getCenter().lat, mapInstance.getCenter().lng)}
@@ -1304,33 +1335,23 @@
 </div>
 
 <style>
-	:global(.radius-pin span) {
-		display: block;
-		width: 18px;
-		height: 18px;
-		border-radius: 9999px;
-		border: 2px solid white;
-		box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
-	}
-	/* Band fill is driven here (not via Leaflet's fillColor) because Leaflet writes
-	   fillColor to the SVG `fill` attribute, where var() never resolves — a CSS
-	   `fill` property overrides that attribute and stays theme-reactive. */
-	:global(.cov-good) {
+	/* Coverage zone fills: CSS overrides the SVG fill/stroke attributes so var() resolves
+	   correctly in both light and dark mode (Leaflet writes to SVG attributes, not CSS). */
+	:global(.cov-zone-online) {
 		fill: var(--color-online);
+		stroke: var(--color-online);
 	}
-	:global(.cov-fair) {
+	:global(.cov-zone-warning) {
 		fill: var(--color-warning);
-	}
-	:global(.cov-weak) {
-		fill: var(--color-blocked);
-	}
-	:global(.cov-offline) {
-		fill: var(--color-muted);
-	}
-	/* Overlap ring: stroke via CSS for the same reason as fill — Leaflet writes stroke to the
-	   SVG attribute where var() won't resolve. */
-	:global(.cov-overlap) {
 		stroke: var(--color-warning);
+	}
+	:global(.cov-zone-offline) {
+		fill: var(--color-muted);
+		stroke: var(--color-muted);
+	}
+	:global(.cov-zone-brand) {
+		fill: var(--color-brand);
+		stroke: var(--color-brand);
 	}
 	:global(.leaflet-bar a.radius-locate) {
 		display: flex;
@@ -1340,12 +1361,6 @@
 	/* Coverage toggle: muted when domes are hidden, inked when shown. */
 	:global(.leaflet-bar a.radius-toggle:not(.is-active)) {
 		color: var(--color-muted);
-	}
-	.swatch {
-		display: inline-block;
-		width: 0.625rem;
-		height: 0.625rem;
-		border-radius: 9999px;
 	}
 	:global(.radius-popup) {
 		font-family: var(--font-sans);

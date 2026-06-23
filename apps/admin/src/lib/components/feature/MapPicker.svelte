@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import 'leaflet/dist/leaflet.css';
+	import { FALLBACK_CENTER, tileUrl, TILE_SUBDOMAINS, TILE_ATTRIBUTION } from '$lib/map';
 
 	// Embeddable coordinate picker: click the map (or drag the pin) to set lat/lng.
 	// Both are two-way so the parent reads the chosen spot. Mount this only while
@@ -21,9 +22,6 @@
 		onpick?: (coords: { lat: number; lng: number }) => void;
 	} = $props();
 
-	// Metro Manila fallback until geolocation (or a click) moves it.
-	const FALLBACK_CENTER: [number, number] = [14.5995, 120.9842];
-
 	let mapEl: HTMLDivElement;
 
 	onMount(() => {
@@ -35,15 +33,28 @@
 			if (cancelled) return;
 
 			const seeded = lat != null && lng != null;
-			const map = L.map(mapEl, { zoomControl: true }).setView(
+			const map = L.map(mapEl, { zoomControl: false, scrollWheelZoom: false }).setView(
 				seeded ? [lat as number, lng as number] : FALLBACK_CENTER,
 				seeded ? 16 : 12
 			);
-			L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+			L.control.zoom({ position: 'bottomright' }).addTo(map);
+			const tileLayer = L.tileLayer(tileUrl(), {
 				maxZoom: 19,
-				attribution:
-					'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+				subdomains: TILE_SUBDOMAINS,
+				attribution: TILE_ATTRIBUTION
 			}).addTo(map);
+
+			// Swap tiles live when the admin toggles light/dark.
+			const obs = new MutationObserver(() => tileLayer.setUrl(tileUrl()));
+			obs.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+			const pinIcon = (L: typeof import('leaflet').default) =>
+				L.divIcon({
+					className: '',
+					html: '<div class="vpick"><span></span></div>',
+					iconSize: [22, 22],
+					iconAnchor: [11, 22]
+				});
 
 			let marker: import('leaflet').Marker | undefined;
 			const setPin = (la: number, lo: number) => {
@@ -53,7 +64,7 @@
 				if (marker) {
 					marker.setLatLng([la, lo]);
 				} else {
-					const mk = L.marker([la, lo], { draggable: true }).addTo(map);
+					const mk = L.marker([la, lo], { draggable: true, icon: pinIcon(L) }).addTo(map);
 					mk.on('dragend', () => {
 						const p = mk.getLatLng();
 						lat = p.lat;
@@ -81,7 +92,10 @@
 				);
 			}
 
-			cleanup = () => map.remove();
+			cleanup = () => {
+				obs.disconnect();
+				map.remove();
+			};
 		})();
 
 		return () => {
@@ -95,3 +109,4 @@
 	bind:this={mapEl}
 	class="{height} w-full overflow-hidden rounded-md border border-border bg-surface"
 ></div>
+

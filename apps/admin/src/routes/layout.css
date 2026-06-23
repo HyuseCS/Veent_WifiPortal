@@ -178,3 +178,71 @@
 		transition-duration: 0.01ms !important;
 	}
 }
+
+/* ── Leaflet shared styles ──────────────────────────────────────────────────
+ * Placed here so they're available on every page that mounts a map, regardless
+ * of which map component (CoverageMap / NetworkMap / MapPicker) is rendered.
+ * Components must not redefine these — add page-specific Leaflet overrides
+ * in the component's own :global block.
+ * -------------------------------------------------------------------------- */
+
+/* Ensure map containers use the admin font stack and canvas background. */
+.leaflet-container {
+	font-family: var(--font-sans);
+	background: var(--color-surface);
+}
+
+.leaflet-control-zoom a {
+	border-radius: 7px !important;
+}
+
+/* Teardrop status pin — shared by CoverageMap (read-only) and NetworkMap (editor).
+ * Color is driven by the --c inline custom property so the caller controls tone. */
+.vpin {
+	width: 22px;
+	height: 22px;
+	border-radius: 50% 50% 50% 0;
+	transform: rotate(-45deg);
+	background: var(--c, var(--color-online));
+	border: 2.5px solid #fff;
+	box-shadow: 0 2px 7px rgba(10, 21, 80, 0.45);
+	position: relative;
+	transition: transform 0.15s ease;
+}
+.vpin span {
+	position: absolute;
+	inset: 0;
+	margin: auto;
+	width: 7px;
+	height: 7px;
+	background: #fff;
+	border-radius: 50%;
+	transform: rotate(45deg);
+}
+.vpin.sel {
+	transform: rotate(-45deg) scale(1.7);
+	z-index: 1000 !important;
+	box-shadow: 0 5px 18px rgba(10, 21, 80, 0.6);
+}
+
+/* Teardrop brand-colored picker pin — used by MapPicker inside card edit forms. */
+.vpick {
+	width: 22px;
+	height: 22px;
+	border-radius: 50% 50% 50% 0;
+	transform: rotate(-45deg);
+	background: var(--color-brand);
+	border: 2.5px solid #fff;
+	box-shadow: 0 2px 7px rgba(10, 21, 80, 0.45);
+	position: relative;
+}
+.vpick span {
+	position: absolute;
+	inset: 0;
+	margin: auto;
+	width: 7px;
+	height: 7px;
+	background: #fff;
+	border-radius: 50%;
+	transform: rotate(45deg);
+}
