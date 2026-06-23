@@ -30,6 +30,9 @@ export interface NetworkApSample {
 	users: number;
 	/** Current rx+tx throughput in Mbps (from a one-shot monitor-traffic sample). */
 	throughputMbps: number;
+	/** Internet round-trip latency in ms (router ping to a public host). Null when
+	 * the controller can't measure it (stub/dev, no internet, ping unavailable). */
+	latencyMs?: number | null;
 }
 
 export interface NetworkController {

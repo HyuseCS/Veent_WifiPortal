@@ -12,6 +12,9 @@ export interface MikrotikConfig {
 	insecureTls?: boolean;
 	/** Comment written on bindings we create, so ours are identifiable. */
 	tag?: string;
+	/** Router interfaces to omit from health sampling even if a hotspot binds them
+	 * (e.g. a wired/management `ether2` that isn't a guest AP). Matched by exact name. */
+	excludeInterfaces?: string[];
 }
 
 /**
@@ -28,9 +31,38 @@ export interface MikrotikConfig {
  * node-routeros is imported dynamically so it's only loaded when this controller
  * is actually selected (the stub path never touches it).
  */
+/** Public host the router pings to gauge internet round-trip latency. */
+const LATENCY_PROBE_HOST = '1.1.1.1';
+
+/** Parse a RouterOS ping `time` value ("12ms", "834us", "1s200ms") into milliseconds. */
+function rttToMs(raw: unknown): number | null {
+	if (typeof raw !== 'string') return null;
+	let total = 0;
+	let ok = false;
+	const us = /(\d+(?:\.\d+)?)us/.exec(raw);
+	const ms = /(\d+(?:\.\d+)?)ms/.exec(raw);
+	// A standalone `s` not part of `ms`/`us` and not followed by another letter.
+	const s = /(?:^|[^a-z])(\d+(?:\.\d+)?)s(?![a-z])/i.exec(raw);
+	if (s) {
+		total += parseFloat(s[1]) * 1000;
+		ok = true;
+	}
+	if (ms) {
+		total += parseFloat(ms[1]);
+		ok = true;
+	}
+	if (us) {
+		total += parseFloat(us[1]) / 1000;
+		ok = true;
+	}
+	return ok ? total : null;
+}
+
 export function createMikrotikController(config: MikrotikConfig): NetworkController {
 	const port = config.port ?? (config.tls ? 8729 : 8728);
 	const tag = config.tag ?? 'veent-portal';
+	// Interfaces to keep off the Networks view / map even if a hotspot binds them.
+	const excludeIfaces = new Set(config.excludeInterfaces ?? []);
 
 	async function withConn<T>(fn: (conn: RosConn) => Promise<T>): Promise<T> {
 		if (!config.host || !config.user) throw new Error('mikrotik: host/user not configured');
@@ -234,11 +266,28 @@ export function createMikrotikController(config: MikrotikConfig): NetworkControl
 				const bypassed = await conn.write('/ip/hotspot/ip-binding/print', ['?type=bypassed']);
 				const connectedUsers = bypassed.length;
 
+				// Internet round-trip latency: one ping per refresh, shared across all
+				// interfaces (the WAN path is the same regardless of which hotspot VLAN).
+				// Best-effort — a blocked/absent ping or no internet leaves latency null.
+				let latencyMs: number | null = null;
+				try {
+					const pings = await conn.write('/ping', [`=address=${LATENCY_PROBE_HOST}`, '=count=3']);
+					const times = pings
+						.map((p) => rttToMs(p.time))
+						.filter((n): n is number => n != null);
+					if (times.length) {
+						latencyMs = Math.round(times.reduce((a, b) => a + b, 0) / times.length);
+					}
+				} catch {
+					// ping unavailable / no internet — leave null
+				}
+
 				const ifaces = await conn.write('/interface/print');
 				const samples: NetworkApSample[] = [];
 				for (const i of ifaces) {
-					// Surface a hotspot interface even when down, so an outage is visible.
-					if (!i.name || !hotspotIfaces.has(i.name)) continue;
+					// Surface a hotspot interface even when down, so an outage is visible —
+					// unless it's explicitly excluded (non-guest interfaces like ether2).
+					if (!i.name || !hotspotIfaces.has(i.name) || excludeIfaces.has(i.name)) continue;
 					const running = i.running === 'true';
 					let throughputMbps = 0;
 					if (running) {
@@ -255,7 +304,13 @@ export function createMikrotikController(config: MikrotikConfig): NetworkControl
 							// throughput unavailable for this interface — leave 0, keep going
 						}
 					}
-					samples.push({ name: i.name, online: running, users: connectedUsers, throughputMbps });
+					samples.push({
+						name: i.name,
+						online: running,
+						users: connectedUsers,
+						throughputMbps,
+						latencyMs: running ? latencyMs : null
+					});
 				}
 				return samples;
 			});

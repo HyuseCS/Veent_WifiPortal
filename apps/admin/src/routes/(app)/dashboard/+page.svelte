@@ -64,7 +64,8 @@
 		{ label: 'Access Point' },
 		{ label: 'Status' },
 		{ label: 'Uptime' },
-		{ label: 'Latency' }
+		{ label: 'Latency' },
+		{ label: 'Speed' }
 	];
 </script>
 
@@ -129,6 +130,7 @@
 					<td class="px-4 py-2.5"><StatusBadge tone={ap.tone} label={ap.status} /></td>
 					<td class="px-4 py-2.5 font-mono text-ink">{ap.uptime}</td>
 					<td class="px-4 py-2.5 font-mono text-ink">{ap.latency}</td>
+					<td class="px-4 py-2.5 font-mono text-ink">{ap.throughput}</td>
 				</tr>
 			{/each}
 			{#if shownNetworks.length === 0}
