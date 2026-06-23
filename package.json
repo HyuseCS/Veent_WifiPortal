@@ -16,6 +16,7 @@
 		"db:start": "docker compose up",
 		"db:push": "bun run --filter @veent/db db:push",
 		"db:generate": "bun run --filter @veent/db db:generate",
+		"db:idempotent": "bun scripts/idempotent-migrations.ts",
 		"db:migrate": "bun run --filter @veent/db db:migrate",
 		"db:studio": "bun run --filter @veent/db db:studio",
 		"db:seed": "bun run --filter @veent/db db:seed",

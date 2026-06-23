@@ -157,10 +157,13 @@ header set to each app's `CRON_SECRET`:
 
 ```cron
 * * * * * curl -fsS -X POST -H "x-cron-secret: $CRON_SECRET" http://127.0.0.1:3001/api/network/revoke
+* * * * * curl -fsS -X POST -H "x-cron-secret: $CRON_SECRET" http://127.0.0.1:3001/api/payments/reconcile
 * * * * * curl -fsS -X POST -H "x-cron-secret: $CRON_SECRET" http://127.0.0.1:3002/api/network/health/refresh
 ```
 
 - **revoke** (customer) — enforces session end. **Without it, paid time never expires.**
+- **payments/reconcile** (customer) — safety net: credits payments whose webhook never
+  landed. **Without it, a paid user can go uncredited if their webhook is missed.**
 - **health/refresh** (admin) — keeps per-AP health + latency warm.
 
 ## Pre-production checklist (do NOT ship without)

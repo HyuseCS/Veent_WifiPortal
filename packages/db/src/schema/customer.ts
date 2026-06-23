@@ -107,6 +107,44 @@ export const paymentTransactions = pgTable(
 	]
 );
 
+/**
+ * Pending checkouts — the SAFETY NET for "user paid but the webhook never landed".
+ * Written when a checkout is created (we have the gateway checkoutId + our referenceId
+ * but not the payment/txn id yet). A reconcile pass (cron + on-return poll) asks the
+ * gateway the truth and credits idempotently, so a missed webhook can't lose money.
+ *
+ * `status` is the coordination primitive: an atomic pending→settled claim (by id from
+ * reconcile, by reference_id from the webhook) ensures EXACTLY ONE path credits, no
+ * matter the ordering. reference_id carries a per-attempt nonce so it maps to one row.
+ */
+export const paymentCheckouts = pgTable(
+	'payment_checkouts',
+	{
+		id: text('id').primaryKey(), // gateway checkoutId (unique per attempt)
+		userId: text('user_id')
+			.notNull()
+			.references(() => customerUser.id, { onDelete: 'cascade' }),
+		packageId: integer('package_id')
+			.notNull()
+			.references(() => packages.id, { onDelete: 'cascade' }),
+		// `${userId}:${packageId}:${nonce}` — echoed to the gateway, unique per attempt.
+		referenceId: text('reference_id').notNull().unique(),
+		amount: numeric('amount', { precision: 12, scale: 2 }).notNull(),
+		// pending | settled | failed | expired
+		status: text('status').notNull().default('pending'),
+		// Gateway txn id once known (from reconcile/webhook), for tracing.
+		externalTransactionId: text('external_transaction_id'),
+		// Throttle for the on-return poll so a fast-refreshing page can't hammer the gateway.
+		lastPolledAt: timestamp('last_polled_at'),
+		createdAt: timestamp('created_at').notNull().defaultNow(),
+		settledAt: timestamp('settled_at')
+	},
+	(t) => [
+		index('payment_checkouts_status_idx').on(t.status),
+		index('payment_checkouts_created_at_idx').on(t.createdAt)
+	]
+);
+
 /** A network access grant for a device MAC, tied to a user (ERD "NetworkSessions"). */
 export const networkSessions = pgTable(
 	'network_sessions',

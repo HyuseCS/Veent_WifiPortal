@@ -1,4 +1,4 @@
-CREATE TABLE "admin_role" (
+CREATE TABLE IF NOT EXISTS "admin_role" (
 	"key" text PRIMARY KEY NOT NULL,
 	"label" text NOT NULL,
 	"description" text,
@@ -15,4 +15,4 @@ INSERT INTO "admin_role" ("key", "label", "description", "assignable", "requires
 	('admin', 'Admin', 'Standard staff member. Created via invitation.', true, false, 1)
 ON CONFLICT ("key") DO NOTHING;
 --> statement-breakpoint
-ALTER TABLE "admin_profile" ADD CONSTRAINT "admin_profile_role_admin_role_key_fk" FOREIGN KEY ("role") REFERENCES "public"."admin_role"("key") ON DELETE no action ON UPDATE no action;
+DO $$ BEGIN ALTER TABLE "admin_profile" ADD CONSTRAINT "admin_profile_role_admin_role_key_fk" FOREIGN KEY ("role") REFERENCES "public"."admin_role"("key") ON DELETE no action ON UPDATE no action; EXCEPTION WHEN duplicate_object OR duplicate_table THEN null; END $$;
