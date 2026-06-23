@@ -94,7 +94,6 @@
 	let mapInstance: import('leaflet').Map | undefined;
 	let clusterRef: import('leaflet').MarkerClusterGroup | undefined;
 	let realDomeGroup: import('leaflet').LayerGroup | undefined;
-	const markersById: Record<string, import('leaflet').Marker> = {};
 	const pinLayers = new Map<
 		number,
 		{ marker: import('leaflet').Marker; group: import('leaflet').LayerGroup }
@@ -243,7 +242,6 @@
 		if (!L || !clusterRef || !realDomeGroup) return;
 		clusterRef.clearLayers();
 		realDomeGroup.clearLayers();
-		for (const id of Object.keys(markersById)) delete markersById[id];
 
 		for (const ap of placed) {
 			if (ap.id === editingApId) continue;
@@ -279,7 +277,6 @@
 				});
 			});
 			marker.addTo(clusterRef);
-			markersById[ap.id] = marker;
 		}
 	}
 
@@ -374,6 +371,21 @@
 		if (host) collapsed = { ...collapsed, [host.key]: false };
 	}
 
+	// The sidebar AP row is the AP's edit dropdown: click opens the editor beneath it (panning
+	// the map to it), click again closes it. startEdit already enforces one editor at a time, so
+	// clicking a different AP switches.
+	function toggleEdit(ap: NetworkAp) {
+		if (editingApId === ap.id) {
+			const pin = pins.find((p) => p.apId === ap.id);
+			if (pin) discardPin(pin.localId);
+			return;
+		}
+		startEdit(ap);
+		if (ap.latitude != null && ap.longitude != null) {
+			mapInstance?.setView([Number(ap.latitude), Number(ap.longitude)], 16);
+		}
+	}
+
 	function rangeOf(localId: number): number {
 		return pins.find((p) => p.localId === localId)?.range ?? rangeFor(DEFAULT_MODEL_ID);
 	}
@@ -412,6 +424,43 @@
 	const allClusterNames = $derived(
 		[...new Set(placed.map((ap) => ap.clusterName).filter((n): n is string => !!n))].sort()
 	);
+
+	// Persist overlap clusters to the DB the moment they form, so a cluster is never a live-only
+	// label: every member of a computed cluster carries its cluster_name in the DB. An unnamed
+	// auto group is minted a fresh "Cluster N"; a named cluster mirrors its stored name onto any
+	// member that overlap-joined without one. Reuses the nameCluster action (same mirror path an
+	// operator rename uses), one cluster per tick — the next fires after the reload settles.
+	// ponytail: a save that bridges two named clusters merges them under the first member's name —
+	// natural fallout of the union-find, fine for an operator tool.
+	let persistingCluster = false;
+	$effect(() => {
+		if (persistingCluster) return;
+		let target: { ids: string[]; name: string } | null = null;
+		for (const c of clusters) {
+			if (c.named) {
+				if (c.members.some((m) => m.clusterName !== c.name)) {
+					target = { ids: c.members.map((m) => m.id), name: c.name };
+					break;
+				}
+			} else {
+				const used = new Set(allClusterNames);
+				let n = 1;
+				while (used.has(`Cluster ${n}`)) n++;
+				target = { ids: c.members.map((m) => m.id), name: `Cluster ${n}` };
+				break;
+			}
+		}
+		if (!target) return;
+		persistingCluster = true;
+		const body = new FormData();
+		body.set('ids', target.ids.join(','));
+		body.set('name', target.name);
+		fetch('?/nameCluster', { method: 'POST', headers: { 'x-sveltekit-action': 'true' }, body })
+			.then((res) => (res.ok ? invalidateAll() : undefined))
+			.finally(() => {
+				persistingCluster = false;
+			});
+	});
 
 	// Is `name` a join target for this pin? True when a member of that cluster (other than the pin
 	// itself) is within coverage reach, or when the cluster has no other members yet (seeding).
@@ -464,9 +513,11 @@
 		return nearestCluster(pin.lat, pin.lng, pin.range, pin.apId);
 	}
 
-	const loosePins = $derived(pins.filter((p) => hostCluster(p) === null));
+	// Only *new* pins (apId null) live in the workspace / cluster-top. An edit pin (apId set)
+	// renders as a dropdown directly under its AP's sidebar row instead — see apRow below.
+	const loosePins = $derived(pins.filter((p) => p.apId === null && hostCluster(p) === null));
 	function clusterPins(key: string): Pin[] {
-		return pins.filter((p) => hostCluster(p)?.key === key);
+		return pins.filter((p) => p.apId === null && hostCluster(p)?.key === key);
 	}
 
 	function redrawPin(localId: number, range: number) {
@@ -603,15 +654,6 @@
 			(m) => [Number(m.latitude), Number(m.longitude)] as [number, number]
 		);
 		mapInstance.fitBounds(L.latLngBounds(pts).pad(0.3), { maxZoom: 17 });
-	}
-
-	function selectAp(ap: NetworkAp) {
-		const marker = markersById[ap.id];
-		if (clusterRef && marker) {
-			clusterRef.zoomToShowLayer(marker, () => marker.openPopup());
-		} else if (ap.latitude && ap.longitude) {
-			mapInstance?.setView([Number(ap.latitude), Number(ap.longitude)], 16);
-		}
 	}
 
 	onMount(() => {
@@ -937,8 +979,12 @@
 
 				{#snippet apRow(ap: NetworkAp)}
 					<button
-						onclick={() => selectAp(ap)}
-						class="flex min-h-[44px] w-full items-start gap-3 px-4 py-2.5 text-left hover:bg-surface"
+						onclick={() => toggleEdit(ap)}
+						class="flex min-h-[44px] w-full items-start gap-3 px-4 py-2.5 text-left hover:bg-surface {editingApId ===
+						ap.id
+							? 'bg-surface'
+							: ''}"
+						aria-expanded={editingApId === ap.id}
 					>
 						<span
 							class="mt-1.5 inline-block h-2 w-2 shrink-0 rounded-full"
@@ -946,12 +992,18 @@
 								? 'var(--color-online)'
 								: 'var(--color-blocked)'}"
 						></span>
-						<span class="min-w-0">
+						<span class="min-w-0 flex-1">
 							<span class="block truncate text-sm font-medium text-ink">{ap.name}</span>
 							{#if ap.address}
 								<span class="block truncate text-xs text-muted">{ap.address}</span>
 							{/if}
 						</span>
+						<ChevronDown
+							class="mt-1 h-4 w-4 shrink-0 text-muted transition-transform {editingApId === ap.id
+								? ''
+								: '-rotate-90'}"
+							aria-hidden="true"
+						/>
 					</button>
 				{/snippet}
 
@@ -1033,7 +1085,13 @@
 								{/each}
 								<ul class="divide-y divide-border border-t border-border">
 									{#each cluster.members as ap (ap.id)}
-										<li>{@render apRow(ap)}</li>
+										{@const editPin = pins.find((p) => p.apId === ap.id)}
+										<li>
+											{@render apRow(ap)}
+											{#if editPin}
+												<div class="border-t border-border bg-bg p-2">{@render pinPanel(editPin)}</div>
+											{/if}
+										</li>
 									{/each}
 								</ul>
 							{/if}
@@ -1043,7 +1101,13 @@
 					{#if singletons.length > 0}
 						<ul class="divide-y divide-border">
 							{#each singletons as ap (ap.id)}
-								<li>{@render apRow(ap)}</li>
+								{@const editPin = pins.find((p) => p.apId === ap.id)}
+								<li>
+									{@render apRow(ap)}
+									{#if editPin}
+										<div class="border-t border-border bg-bg p-2">{@render pinPanel(editPin)}</div>
+									{/if}
+								</li>
 							{/each}
 						</ul>
 					{/if}
