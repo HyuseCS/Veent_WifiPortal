@@ -1,7 +1,7 @@
 import { defineConfig } from 'vitest/config';
 import { playwright } from '@vitest/browser-playwright';
 import tailwindcss from '@tailwindcss/vite';
-import adapter from '@sveltejs/adapter-auto';
+import adapter from '@sveltejs/adapter-node';
 import { sveltekit } from '@sveltejs/kit/vite';
 
 export default defineConfig({
@@ -14,8 +14,8 @@ export default defineConfig({
 					filename.split(/[/\\]/).includes('node_modules') ? undefined : true
 			},
 
-			// adapter-auto only supports some environments, see https://svelte.dev/docs/kit/adapter-auto for a list.
-			// Switch this out for your subdomain's target environment (e.g. node/vercel).
+			// adapter-node: self-hosted Node/Bun server. `bun run build` emits
+			// build/index.js — start it with `node build` (or `bun ./build`).
 			adapter: adapter()
 		})
 	],

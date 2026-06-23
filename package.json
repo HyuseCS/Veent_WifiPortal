@@ -18,7 +18,8 @@
 		"db:generate": "bun run --filter @veent/db db:generate",
 		"db:migrate": "bun run --filter @veent/db db:migrate",
 		"db:studio": "bun run --filter @veent/db db:studio",
-		"db:seed": "bun run --filter @veent/db db:seed"
+		"db:seed": "bun run --filter @veent/db db:seed",
+		"setup:prod": "bun scripts/setup-prod.ts"
 	},
 	"devDependencies": {
 		"@eslint/js": "^10.0.1",

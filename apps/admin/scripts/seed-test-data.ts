@@ -121,8 +121,11 @@ const SEED_PACKAGES = [
 // Manila-ish coords; some APs mapped (locator pins), some not. interfaceName binds
 // a pin to a router interface so per-AP active-user counts attribute correctly.
 const SEED_APS = [
-	{ name: 'AP — Ground Floor', online: true, uptimePct: '99.80', latencyMs: 12, users: 38, throughputMbps: 84, latitude: '14.554700', longitude: '121.024500', address: 'Ground Floor, Main Bldg', interfaceName: 'ether2-ground' },
-	{ name: 'AP — Floor 2', online: true, uptimePct: '99.50', latencyMs: 15, users: 27, throughputMbps: 61, latitude: '14.554900', longitude: '121.024700', address: '2nd Floor', interfaceName: 'wlan2-floor2' },
+	// Ground Floor + Floor 2 sit ~28 m apart (well within the 500 m default range), so their
+	// domes overlap → one cluster. Naming both seeds a real multi-member named cluster, which the
+	// map's cluster-assignment dropdown lists and reach-gates against.
+	{ name: 'AP — Ground Floor', online: true, uptimePct: '99.80', latencyMs: 12, users: 38, throughputMbps: 84, latitude: '14.554700', longitude: '121.024500', address: 'Ground Floor, Main Bldg', interfaceName: 'ether2-ground', clusterName: 'Main Building' },
+	{ name: 'AP — Floor 2', online: true, uptimePct: '99.50', latencyMs: 15, users: 27, throughputMbps: 61, latitude: '14.554900', longitude: '121.024700', address: '2nd Floor', interfaceName: 'wlan2-floor2', clusterName: 'Main Building' },
 	{ name: 'AP — Cafe Patio', online: true, uptimePct: '97.10', latencyMs: 48, users: 12, throughputMbps: 22, latitude: '14.555200', longitude: '121.025100', address: 'Cafe Patio', interfaceName: 'wlan3-patio' }, // degraded (latency>=40)
 	{ name: 'AP — Rooftop Deck', online: true, uptimePct: '99.90', latencyMs: 9, users: 4, throughputMbps: 95, latitude: null, longitude: null, address: null, interfaceName: 'wlan4-roof' }, // unmapped
 	{ name: 'AP — Parking Lobby', online: false, uptimePct: '0.00', latencyMs: null, users: 0, throughputMbps: 0, latitude: '14.554300', longitude: '121.024200', address: 'Basement Parking', interfaceName: 'ether5-parking' }, // offline

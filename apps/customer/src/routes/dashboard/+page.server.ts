@@ -1,5 +1,6 @@
 import { redirect, fail } from '@sveltejs/kit';
 import { dev } from '$app/environment';
+import { env } from '$env/dynamic/private';
 import { and, eq } from 'drizzle-orm';
 import { packages } from '@veent/db';
 import {
@@ -29,13 +30,13 @@ import { auth } from '$lib/server/auth';
 async function resolveMac(event: RequestEvent): Promise<string | null> {
 	const fromPortal = getPortalContext(event)?.mac;
 	if (fromPortal) return fromPortal;
-	// In dev there's no real router to answer the IP→MAC lookup, so resolveDeviceMac
-	// just blocks until it times out and stalls the dashboard load. Return a
-	// locally-administered placeholder MAC instead of null so the dashboard's
-	// access buttons enable and the grant flow runs end-to-end against the stub
-	// controller. It passes MAC_RE; the stub `grant()` only logs, never dials a
-	// router. (Real device MACs still come from the captive-portal redirect.)
-	if (dev) return '02:00:00:00:00:01';
+	// The dev placeholder is ONLY safe with the stub controller, whose grant() just
+	// logs. When a real router is configured (NETWORK_CONTROLLER=mikrotik) — e.g.
+	// dev-testing through an actual hotspot — fall through to the real IP→MAC lookup:
+	// granting this fake MAC on a live router authorizes a non-existent device and the
+	// user's real device never gets internet. (Real MACs also come from the `?mac=`
+	// captive-portal redirect when it survives.)
+	if (dev && env.NETWORK_CONTROLLER !== 'mikrotik') return '02:00:00:00:00:01';
 	try {
 		// Strip the IPv4-mapped-IPv6 prefix (`::ffff:10.0.0.5`) so the router's
 		// `?address=` lookup matches the plain IPv4 the hotspot host table stores.

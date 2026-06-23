@@ -29,9 +29,13 @@ export interface PendingVerification {
 }
 
 function secret(): string {
-	// BETTER_AUTH_SECRET is set in every environment; the fallback only keeps a
-	// misconfigured dev box from crashing.
-	return env.BETTER_AUTH_SECRET || 'veent-portal-dev-secret';
+	const configured = env.BETTER_AUTH_SECRET;
+	if (configured) return configured;
+	// In prod, a missing secret means cookies/OTP would be signed with a public
+	// default — every signature forgeable. Fail loudly instead of doing that.
+	if (!dev) throw new Error('BETTER_AUTH_SECRET is required in production');
+	// Dev-only convenience: keep a misconfigured dev box from crashing.
+	return 'veent-portal-dev-secret';
 }
 
 function sign(data: string): string {
@@ -86,26 +90,48 @@ export function maskPhone(phone: string): string {
 }
 
 /**
- * Deliver the code. THE SINGLE SMS INTEGRATION POINT — wired into the
- * phoneNumber plugin's `sendOTP`. The phone is already E.164. Example:
+ * Deliver the OTP via Semaphore (https://semaphore.co), the PH SMS gateway.
+ * THE SINGLE SMS INTEGRATION POINT — wired into the phoneNumber plugin's `sendOTP`.
+ * The phone is already E.164 (e.g. +639171234567); Semaphore accepts that.
  *
- *   const res = await fetch('https://api.semaphore.co/api/v4/messages', {
- *     method: 'POST',
- *     headers: { 'Content-Type': 'application/json' },
- *     body: JSON.stringify({
- *       apikey: env.SEMAPHORE_API_KEY,
- *       number: phone,
- *       message: `Your Veent code is ${code}. It expires in 5 minutes.`
- *     })
- *   });
- *   if (!res.ok) throw new Error(`SMS send failed: ${res.status}`);
+ * Config (customer env):
+ *   SEMAPHORE_API_KEY      (required to send) — from the Semaphore dashboard
+ *   SEMAPHORE_SENDER_NAME  (optional) — an APPROVED sender name; omit to use the
+ *                           account default ("SEMAPHORE" until you register one)
+ *
+ * Not configured → dev prints the code to the server console (so you can still log
+ * in); production treats a missing key as a hard error (an OTP MUST be delivered —
+ * never silently swallow it, that would let anyone "log in" with no code).
  */
 export async function sendOtp(phone: string, code: string): Promise<void> {
-	if (dev) {
-		// No gateway in dev — read the code from the server console.
-		console.info(`[otp] verification code for ${phone}: ${code}`);
-		return;
+	const apikey = env.SEMAPHORE_API_KEY;
+
+	if (!apikey) {
+		if (dev) {
+			console.info(`[otp] Semaphore not configured — code for ${phone}: ${code}`);
+			return;
+		}
+		throw new Error('Semaphore not configured: set SEMAPHORE_API_KEY');
 	}
-	// TODO(SMS): integrate the provider here before production.
-	console.warn(`[otp] sendOtp not configured — code for ${phone} was not delivered`);
+
+	// Semaphore's send endpoint takes form-encoded params. We send our own code
+	// (better-auth generates it) via /messages, NOT the auto-code /otp endpoint.
+	const params = new URLSearchParams({
+		apikey,
+		number: phone,
+		message: `Your Veent code is ${code}. It expires in 5 minutes.`
+	});
+	const sender = env.SEMAPHORE_SENDER_NAME;
+	if (sender) params.set('sendername', sender);
+
+	const res = await fetch('https://api.semaphore.co/api/v4/messages', {
+		method: 'POST',
+		headers: { 'content-type': 'application/x-www-form-urlencoded' },
+		body: params
+	});
+	if (!res.ok) {
+		// Semaphore returns JSON (an array on success, an error object on failure).
+		const detail = await res.text().catch(() => '');
+		throw new Error(`Semaphore SMS send failed (${res.status}): ${detail}`);
+	}
 }

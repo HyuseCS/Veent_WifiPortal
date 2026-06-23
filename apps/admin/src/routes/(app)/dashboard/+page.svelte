@@ -101,7 +101,8 @@
 		{ label: 'Access Point' },
 		{ label: 'Status' },
 		{ label: 'Uptime' },
-		{ label: 'Latency' }
+		{ label: 'Latency' },
+		{ label: 'Speed' }
 	];
 </script>
 
@@ -156,7 +157,7 @@
 					</span>
 				{/if}
 			{/snippet}
-			{#each shownSessions as session (session.mac)}
+			{#each shownSessions as session (session.id)}
 				{@const t = liveTimer(session, now)}
 				<tr class="transition-colors hover:bg-surface">
 					<td class="px-4 py-3 font-mono text-xs text-ink">{session.mac}</td>
@@ -213,6 +214,7 @@
 					</td>
 					<td class="px-4 py-3 font-mono text-ink">{ap.uptime}</td>
 					<td class="px-4 py-3 font-mono text-ink">{ap.latency}</td>
+					<td class="px-4 py-3 font-mono text-ink">{ap.throughput}</td>
 				</tr>
 			{/each}
 			{#if shownNetworks.length === 0}

@@ -65,6 +65,16 @@ bun run dev:customer        # http://localhost:5173
 bun run dev:admin           # http://localhost:5174
 ```
 
+### Git hooks (optional, one-time per clone)
+
+A `pre-push` hook in `.githooks/` runs `bun run test` before every push. Enable it with:
+
+```sh
+git config core.hooksPath .githooks
+```
+
+Bypass a single push (e.g. a WIP branch) with `git push --no-verify`.
+
 ## Database (run from the repo root — delegates to @veent/db)
 
 ```sh
@@ -131,6 +141,12 @@ psql "postgres://root:mysecretpassword@localhost:5432/postgres" -c 'CREATE DATAB
 DATABASE_URL="postgres://root:mysecretpassword@localhost:5432/migrate_test" bun run --filter @veent/db db:migrate
 psql "postgres://root:mysecretpassword@localhost:5432/postgres" -c 'DROP DATABASE migrate_test;'
 ```
+
+## Deploying to production
+
+See **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)** for the first-run runbook on the
+on-site device — env, migrations, building with `adapter-node`, running both servers
+under systemd, the router + cron setup, and the pre-production checklist.
 
 ## Other
 

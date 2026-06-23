@@ -65,7 +65,27 @@ const splitList = (raw: string | undefined): string[] =>
 
 const isIp = (h: string): boolean => /^[0-9.]+(\/\d{1,2})?$/.test(h) || h.includes(':');
 
-const hosts = new Set(splitList(ADMIN_WG_HOSTS));
+/**
+ * Payment-gateway domains that MUST be reachable before a device authenticates
+ * (Core Business Rule #2). Without these, the Maya checkout redirect
+ * (payments-web*.maya.ph) is blocked by the hotspot and the browser shows a
+ * closed connection. Wildcards cover sandbox + prod, checkout page + API host.
+ *
+ * NOTE: card 3-D Secure step-up redirects to the issuing bank's ACS domain,
+ * which can't be predicted here — e-wallet/Maya-wallet checkout is fully covered;
+ * card payments may still need the bank's domain added per deployment.
+ */
+const PAYMENT_HOSTS = [
+	'maya.ph',
+	'*.maya.ph',
+	'paymaya.com',
+	'*.paymaya.com',
+	// Other gateways named in Rule #2; harmless if unused.
+	'*.paymongo.com',
+	'*.xendit.co'
+];
+
+const hosts = new Set([...splitList(ADMIN_WG_HOSTS), ...PAYMENT_HOSTS]);
 const ips = new Set(splitList(ADMIN_WG_IPS));
 
 // Derive the admin host from ORIGIN and slot it into the right layer.

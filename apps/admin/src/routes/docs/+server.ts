@@ -111,7 +111,7 @@ const spec = {
 				tags: ['Customer · Payments'],
 				summary: 'Payment gateway webhook (source of truth for credits)',
 				description:
-					'Raw body verified via the provider (Maya). On a paid event, credits the buyer EXACTLY ONCE (idempotent on the gateway txn id). referenceId = `${userId}:${packageId}`. Server: :5173. NOTE: Maya is stubbed — verifyWebhook throws (400) until wired.',
+					'Raw body verified via the provider (Maya). On a paid event, credits the buyer EXACTLY ONCE (idempotent on the gateway txn id). referenceId = `${userId}:${packageId}`. Server: :5173. NOTE: Maya verifyWebhook is wired (HMAC-verified); an invalid/missing signature is rejected (400). Only outbound createCheckout is still a stub.',
 				requestBody: {
 					required: true,
 					content: {

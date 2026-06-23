@@ -30,6 +30,10 @@ export interface RevenuePoint {
 
 /** A currently-connected device/session shown on the dashboard. */
 export interface ActiveSession {
+	/** Session row id — the stable, unique key for list rendering. MAC is NOT unique
+	 * (multiple grants can share a MAC, e.g. the dev placeholder), so keying a Svelte
+	 * each on it throws a duplicate-key error and crashes the dashboard. */
+	id: number;
 	mac: string;
 	package: string;
 	/** Remaining time, pre-formatted "MM:SS" or "H:MM" — the server's snapshot at
@@ -69,6 +73,15 @@ export interface NetworkAp {
 	address: string | null;
 	/** Router AP/interface this pin's user count is bound to; null = unbound. */
 	interfaceName: string | null;
+	/** Router/AP model id (catalog key in `$lib/router-models`); drives the simulated
+	 * coverage radius. Null = use the default model's range. */
+	model: string | null;
+	/** Operator-calibrated coverage radius in metres, overriding the model's advertised
+	 * range. Null = fall back to the model's catalog range. */
+	rangeMeters: number | null;
+	/** Operator label for the overlap cluster this AP belongs to (mirrored across the
+	 * cluster's members on rename). Null = unnamed; the UI shows "Cluster N". */
+	clusterName: string | null;
 	/** Recent connections attributed to this AP (newest first), for the card's log. */
 	logs: ConnectionLog[];
 }
