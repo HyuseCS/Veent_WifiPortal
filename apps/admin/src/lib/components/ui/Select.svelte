@@ -25,7 +25,7 @@
 		{name}
 		bind:value
 		{...rest}
-		class="min-h-[44px] w-full rounded-lg border border-border bg-bg px-4 py-3 text-sm text-ink transition-colors focus:border-brand focus:ring-2 focus:ring-brand/20 focus:outline-none"
+		class="min-h-[44px] w-full cursor-pointer rounded-lg border border-border bg-bg px-4 py-3 text-sm text-ink transition-[border-color,box-shadow] duration-150 hover:border-brand/40 focus:border-brand focus:ring-2 focus:ring-brand/20 focus:outline-none"
 	>
 		{#each options as option (option.value)}
 			<option value={option.value}>{option.label}</option>

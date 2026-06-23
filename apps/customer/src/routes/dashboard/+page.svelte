@@ -2,7 +2,7 @@
 	import { enhance } from '$app/forms';
 	import { fade, fly } from 'svelte/transition';
 	import type { SubmitFunction } from '@sveltejs/kit';
-	import { toasts } from '$lib/toast.svelte';
+	import { toasts } from '$lib/toasts.svelte';
 	import Icon from '$lib/Icon.svelte';
 	import { resolve } from '$app/paths';
 	import type { PageServerData, ActionData } from './$types';

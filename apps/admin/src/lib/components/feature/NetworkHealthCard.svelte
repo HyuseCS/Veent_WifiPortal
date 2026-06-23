@@ -1,71 +1,259 @@
 <script lang="ts">
+	import { enhance } from '$app/forms';
+	import Wifi from 'lucide-svelte/icons/wifi';
 	import MapPin from 'lucide-svelte/icons/map-pin';
+	import Pencil from 'lucide-svelte/icons/pencil';
 	import type { NetworkAp } from '$lib/types';
-	import { Card, StatusBadge } from '$lib/components/ui';
+	import { Button, Field, StatusBadge } from '$lib/components/ui';
 	import MapPicker from './MapPicker.svelte';
 
-	// `showMap` is driven by the page-level "Show/Hide all maps" toggle.
-	let { ap, showMap = true }: { ap: NetworkAp; showMap?: boolean } = $props();
+	// `selected` rings the card and mirrors the coverage-map focus; clicking the card
+	// (or its onfocus) selects this AP on the page-level map.
+	// `editing`/`onedit` are owned by the page so only one card edits at a time
+	// (→ at most one MapPicker/Leaflet map mounted). onedit(id) opens, onedit(null) closes.
+	let {
+		ap,
+		selected = false,
+		onfocus,
+		editing = false,
+		onedit
+	}: {
+		ap: NetworkAp;
+		selected?: boolean;
+		onfocus?: (id: string) => void;
+		editing?: boolean;
+		onedit?: (id: string | null) => void;
+	} = $props();
 
-	// Metric rows rendered from data so the markup stays a single <dl> loop.
+	// tone → token classes for the status icon tile + accents.
+	const toneIcon: Record<string, string> = {
+		online: 'bg-online/10 text-online',
+		warning: 'bg-warning/10 text-warning',
+		blocked: 'bg-blocked/10 text-blocked'
+	};
+	const toneBar: Record<string, string> = {
+		online: 'bg-online',
+		warning: 'bg-warning',
+		blocked: 'bg-blocked'
+	};
+
+	// Pull the leading number out of a pre-formatted metric string ("47 Mbps", "22ms").
+	const num = (s: string): number => {
+		const n = parseFloat(s);
+		return Number.isFinite(n) ? n : NaN;
+	};
+
+	// Uplink load as a share of a 120 Mbps reference, for the bar + caption.
+	const loadPct = $derived.by(() => {
+		const t = num(ap.throughput);
+		return Number.isFinite(t) ? Math.min(100, Math.round((t / 120) * 100)) : 0;
+	});
+
+	// Latency colour bands, independent of overall status.
+	const latColor = $derived.by(() => {
+		const l = num(ap.latency);
+		if (!Number.isFinite(l)) return 'text-muted';
+		if (l < 20) return 'text-online';
+		if (l < 40) return 'text-warning';
+		return 'text-blocked';
+	});
+
 	const metrics = $derived([
-		{ label: 'Uptime', value: ap.uptime },
-		{ label: 'Latency', value: ap.latency },
-		{ label: 'Users', value: String(ap.users) },
-		{ label: 'Tput', value: ap.throughput }
+		{ label: 'Uptime', value: ap.uptime, class: 'text-ink' },
+		{ label: 'Latency', value: ap.latency, class: latColor },
+		{ label: 'Users', value: String(ap.users), class: 'text-ink' },
+		{ label: 'Tput', value: ap.throughput, class: 'text-ink' }
 	]);
 
 	const placed = $derived(ap.latitude != null && ap.longitude != null);
-	const latitude = $derived(ap.latitude ?? '');
-	const longitude = $derived(ap.longitude ?? '');
+	const coordText = $derived(
+		placed ? `${Number(ap.latitude).toFixed(4)}, ${Number(ap.longitude).toFixed(4)}` : 'Not placed on map'
+	);
+
+	// A placed AP shows its coords + "Edit"; editing (page-owned) reveals the form.
+
+	// Edits (typed or map-picked) override the saved value; null = show the saved
+	// coord. Cleared on a successful save so the field re-syncs to the fresh `ap`.
+	let editLat = $state<string | null>(null);
+	let editLng = $state<string | null>(null);
+	const latitude = $derived(editLat ?? ap.latitude ?? '');
+	const longitude = $derived(editLng ?? ap.longitude ?? '');
 
 	const toNum = (s: string): number | null => {
 		const n = Number(s);
 		return s.trim() !== '' && Number.isFinite(n) ? n : null;
 	};
+
+	function cancelEdit() {
+		onedit?.(null);
+		editLat = null;
+		editLng = null;
+		msg = null;
+	}
+
+	let saving = $state(false);
+	let msg = $state<{ ok: boolean; text: string } | null>(null);
 </script>
 
-<Card padding="p-4">
+<div
+	role="button"
+	tabindex="0"
+	onclick={(e) => {
+		// Clicks inside the open location form shouldn't re-focus the map.
+		if ((e.target as HTMLElement).closest('form')) return;
+		onfocus?.(ap.id);
+	}}
+	onkeydown={(e) => {
+		// Don't hijack keys (esp. Space) bubbling up from the nested location form's inputs.
+		if ((e.target as HTMLElement).closest('form')) return;
+		if (e.key === 'Enter' || e.key === ' ') {
+			e.preventDefault();
+			onfocus?.(ap.id);
+		}
+	}}
+	class="flex cursor-pointer flex-col gap-4 rounded-xl border bg-bg p-4.5 shadow-sm transition-[border-color,box-shadow] duration-150 hover:border-brand/60 hover:shadow-md {selected
+		? 'border-[1.5px] border-brand'
+		: 'border-border'}"
+>
 	<div class="flex items-center justify-between gap-2">
-		<h3 class="text-sm font-semibold text-ink">{ap.name}</h3>
-		<StatusBadge tone={ap.tone} label={ap.status} />
+		<div class="flex min-w-0 items-center gap-3">
+			<span
+				class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg {toneIcon[ap.tone]}"
+				aria-hidden="true"
+			>
+				<Wifi class="h-4.5 w-4.5" />
+			</span>
+			<div class="min-w-0">
+				<div class="truncate text-sm font-semibold text-ink">{ap.name}</div>
+				{#if ap.address}
+					<div class="truncate text-xs text-muted">{ap.address}</div>
+				{/if}
+			</div>
+		</div>
+		<StatusBadge tone={ap.tone} label={ap.status} pulse={ap.tone !== 'online'} />
 	</div>
-	<dl class="mt-4 grid grid-cols-4 divide-x divide-border text-center">
+
+	<dl class="grid grid-cols-4 gap-2 border-y border-border py-3 text-center">
 		{#each metrics as metric (metric.label)}
-			<div class="px-2">
-				<dt class="text-xs text-muted">{metric.label}</dt>
-				<dd class="mt-0.5 font-mono text-sm font-semibold text-ink">{metric.value}</dd>
+			<div class="flex flex-col gap-1">
+				<dt class="text-[10px] font-bold tracking-wide text-muted uppercase">{metric.label}</dt>
+				<dd class="font-mono text-sm font-semibold {metric.class}">{metric.value}</dd>
 			</div>
 		{/each}
 	</dl>
 
-	<div class="mt-4 border-t border-border pt-3">
-		<div class="flex min-h-[28px] items-center gap-2 text-sm font-medium text-ink">
-			<span
-				class="inline-block h-2 w-2 rounded-full"
-				style="background: {placed ? 'var(--color-online)' : 'var(--color-border)'}"
-			></span>
-			Map location
-			<span class="text-xs font-normal text-muted">{placed ? 'on map' : 'not placed'}</span>
+	<div class="flex flex-col gap-1.5">
+		<div class="flex items-center justify-between">
+			<span class="text-xs font-medium text-muted">Uplink load</span>
+			<span class="font-mono text-xs font-medium text-muted">{loadPct}%</span>
 		</div>
-
-		{#if showMap}
-			<!-- Read-only snapshot of the saved pin. All placing/editing lives on /map (the
-			     canonical pinning surface); the link below opens it focused on this AP. -->
-			<div class="mt-3 space-y-2">
-				{#if placed}
-					<MapPicker height="h-40" autolocate={false} lat={toNum(latitude)} lng={toNum(longitude)} />
-					<p class="font-mono text-xs text-muted">{latitude}, {longitude}</p>
-					{#if ap.address}<p class="text-xs text-muted">{ap.address}</p>{/if}
-				{/if}
-				<a
-					href="/map?ap={ap.id}"
-					class="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-lg border border-border bg-bg px-4 text-sm font-medium text-ink transition-colors hover:bg-surface"
-				>
-					<MapPin class="h-4 w-4" aria-hidden="true" />
-					{placed ? 'Edit location on map' : 'Place on map'}
-				</a>
-			</div>
-		{/if}
+		<div class="h-1.5 overflow-hidden rounded bg-surface">
+			<div class="h-full rounded {toneBar[ap.tone]}" style="width: {loadPct}%"></div>
+		</div>
 	</div>
-</Card>
+
+	<div class="flex items-center justify-between gap-2">
+		<span class="flex min-w-0 items-center gap-1.5 font-mono text-xs text-muted">
+			<MapPin
+				class="h-3.5 w-3.5 shrink-0 {placed ? 'text-brand' : 'text-muted'}"
+				aria-hidden="true"
+			/>
+			<span class="truncate">{coordText}</span>
+		</span>
+		<!-- Reveals the location form; stops the card's focus click. -->
+		<button
+			type="button"
+			onclick={(e) => {
+				e.stopPropagation();
+				onedit?.(editing ? null : ap.id);
+			}}
+			class="flex min-h-[44px] shrink-0 cursor-pointer items-center gap-1.5 rounded-lg border border-border px-3 text-xs font-semibold text-muted transition-colors duration-150 hover:border-brand/40 hover:text-ink"
+		>
+			<Pencil class="h-3.5 w-3.5" aria-hidden="true" />
+			Edit
+		</button>
+	</div>
+
+	{#if editing}
+		<!-- Click/drag the map or type to set this AP's location. Same setLocation action.
+		     Card-focus is suppressed for clicks inside this form (see the card's onclick). -->
+		<form
+			method="POST"
+			action="?/setLocation"
+			class="space-y-3 border-t border-border pt-3"
+			use:enhance={() => {
+				saving = true;
+				msg = null;
+				return async ({ result, update }) => {
+					saving = false;
+					if (result.type === 'success') {
+						msg = { ok: true, text: 'Saved.' };
+						editLat = null;
+						editLng = null;
+						onedit?.(null); // back to the coords view
+					} else if (result.type === 'failure') {
+						msg = { ok: false, text: String(result.data?.error ?? 'Could not save.') };
+					}
+					await update({ reset: false });
+				};
+			}}
+		>
+			<input type="hidden" name="id" value={ap.id} />
+
+			<MapPicker
+				height="h-40"
+				autolocate={false}
+				lat={toNum(latitude)}
+				lng={toNum(longitude)}
+				onpick={(c) => {
+					editLat = String(c.lat);
+					editLng = String(c.lng);
+				}}
+			/>
+
+			<!-- 2-col grid is page-specific layout; the inputs themselves reuse the shared Field. -->
+			<div class="grid grid-cols-2 gap-3">
+				<Field
+					id="lat-{ap.id}"
+					label="Latitude"
+					name="latitude"
+					type="text"
+					inputmode="decimal"
+					placeholder="14.5560"
+					value={latitude}
+					oninput={(e) => (editLat = e.currentTarget.value)}
+				/>
+				<Field
+					id="lng-{ap.id}"
+					label="Longitude"
+					name="longitude"
+					type="text"
+					inputmode="decimal"
+					placeholder="121.0244"
+					value={longitude}
+					oninput={(e) => (editLng = e.currentTarget.value)}
+				/>
+			</div>
+			<Field
+				id="addr-{ap.id}"
+				name="address"
+				label="Address"
+				type="text"
+				placeholder="Venue, City"
+				value={ap.address ?? ''}
+			/>
+			<div class="flex items-center gap-3">
+				<Button type="submit" loading={saving}>Save location</Button>
+				<Button type="button" variant="secondary" onclick={cancelEdit}>Cancel</Button>
+				{#if msg}
+					<span
+						class="animate-fade-in text-xs"
+						style="color: {msg.ok ? 'var(--color-online)' : 'var(--color-blocked)'}"
+					>
+						{msg.text}
+					</span>
+				{/if}
+			</div>
+		</form>
+	{/if}
+</div>

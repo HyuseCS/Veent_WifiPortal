@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, type Component } from 'svelte';
 	import { page } from '$app/state';
 	import { enhance } from '$app/forms';
 	import { invalidateAll } from '$app/navigation';
@@ -15,10 +15,15 @@
 	import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
 	import type { SubmitFunction } from '@sveltejs/kit';
 	import type { NetworkAp } from '$lib/types';
+	import { SearchInput, EmptyState } from '$lib/components/ui';
 	import { routerModels, rangeFor, DEFAULT_MODEL_ID } from '$lib/router-models';
 	import { distanceMeters } from '$lib/geo';
 
 	let { networks }: { networks: NetworkAp[] } = $props();
+
+	// lucide-svelte icons type as the legacy component signature; EmptyState's `icon` prop
+	// wants the runes `Component` type. Same cast the dashboard page uses.
+	const icon = (c: unknown) => c as Component;
 
 	// Metro Manila fallback — shown when no APs have coordinates yet.
 	const FALLBACK_CENTER: [number, number] = [14.5995, 120.9842];
@@ -830,10 +835,15 @@
 <div class="relative h-full w-full overflow-hidden">
 	{#if sidebarOpen}
 		<aside
-			class="absolute top-0 bottom-0 left-0 z-[1000] flex w-72 flex-col border-r border-border bg-bg"
+			class="absolute top-0 bottom-0 left-0 z-[1000] flex w-85 flex-col border-r border-border bg-bg"
 		>
 			<header class="flex h-14 items-center justify-between gap-2 border-b border-border px-4">
-				<span class="text-sm font-semibold text-ink">Access Points</span>
+				<div class="flex items-center gap-2.5">
+					<span class="text-sm font-semibold text-ink">Access Points</span>
+					<span class="rounded-md bg-brand/10 px-2 py-0.5 font-mono text-xs font-bold text-brand">
+						{networks.length}
+					</span>
+				</div>
 				<button
 					onclick={() => (sidebarOpen = false)}
 					class="flex h-8 w-8 items-center justify-center rounded text-muted hover:bg-surface"
@@ -852,17 +862,16 @@
 					}}
 					class="flex gap-1.5"
 				>
-					<input
+					<SearchInput
 						bind:value={addrQuery}
-						type="search"
 						placeholder="Find an address…"
-						aria-label="Find an address and drop a pin"
-						class="min-h-[36px] flex-1 rounded border border-border bg-surface px-3 text-sm text-ink placeholder:text-muted focus:border-brand focus:ring-1 focus:ring-brand/20 focus:outline-none"
+						label="Find an address and drop a pin"
+						class="flex-1"
 					/>
 					<button
 						type="submit"
 						disabled={addrSearching || !addrQuery.trim()}
-						class="flex min-h-[36px] w-9 items-center justify-center rounded border border-border bg-surface text-brand hover:bg-bg disabled:opacity-50"
+						class="flex min-h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-border bg-surface text-brand transition-colors hover:border-brand/40 disabled:opacity-50"
 						aria-label="Search address"
 					>
 						<Search class="h-4 w-4" aria-hidden="true" />
@@ -876,12 +885,11 @@
 			</div>
 
 			<div class="border-b border-border px-3 py-2">
-				<input
+				<SearchInput
 					bind:value={query}
-					type="search"
 					placeholder="Filter placed APs…"
-					aria-label="Filter access points"
-					class="min-h-[36px] w-full rounded border border-border bg-surface px-3 text-sm text-ink placeholder:text-muted focus:border-brand focus:ring-1 focus:ring-brand/20 focus:outline-none"
+					label="Filter access points"
+					class="w-full"
 				/>
 			</div>
 
@@ -1099,12 +1107,19 @@
 				{/snippet}
 
 				{#if placed.length === 0}
-					<p class="px-4 py-6 text-center text-sm text-muted">
-						No router locations yet. Click the map or use
-						<span class="font-medium text-ink">+ Add router</span> below.
-					</p>
+					<EmptyState
+						icon={icon(MapPin)}
+						title="No router locations yet"
+						description="Click anywhere on the map, or use Add router below, to place your first AP."
+						compact
+					/>
 				{:else if visibleClusters.length === 0 && singletons.length === 0}
-					<p class="px-4 py-6 text-center text-sm text-muted">No match for "{query}".</p>
+					<EmptyState
+						icon={icon(Search)}
+						title="No matches"
+						description={`No placed APs match "${query}".`}
+						compact
+					/>
 				{:else}
 					<!-- Overlap clusters: collapsible, operator-renamable groups. -->
 					{#each visibleClusters as cluster (cluster.key)}
@@ -1225,9 +1240,19 @@
 						{clusters.length} overlap cluster{clusters.length === 1 ? '' : 's'}
 					</p>
 				{/if}
-				<p class="px-1 text-xs text-muted">
-					{placed.length} of {networks.length} AP{networks.length === 1 ? '' : 's'} placed · click map to add
-				</p>
+				<div class="flex items-center gap-3 px-1">
+					<div class="h-1.5 flex-1 overflow-hidden rounded-full bg-surface">
+						<div
+							class="h-full rounded-full bg-online transition-[width] duration-300"
+							style="width: {networks.length > 0
+								? Math.round((placed.length / networks.length) * 100)
+								: 0}%"
+						></div>
+					</div>
+					<span class="shrink-0 text-xs font-medium text-muted">
+						{placed.length} of {networks.length} placed
+					</span>
+				</div>
 			</footer>
 		</aside>
 	{:else}

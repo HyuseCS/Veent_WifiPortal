@@ -8,36 +8,44 @@
  * so every utility re-resolves live when `data-theme` flips. Components never
  * need `dark:` variants — they read these semantic tokens.
  *
- * Identity: one red accent (brand/cta) + a constant-black sidebar. Danger uses a
- * distinct oxblood red (--color-blocked) so it never reads as the accent.
+ * Identity: Parafiber royal-blue accent (brand/cta) + a deep-navy sidebar, with
+ * gold (--color-highlight) as a sparing highlight. Danger keeps a distinct oxblood
+ * red (--color-blocked) — now the only red, so it never reads as the accent.
  */
 @theme {
-	/* Accent — single red. cta is an alias of brand (kept so the ~16 files that
-	 * use bg-cta/text-cta don't need editing). */
+	/* Accent — Parafiber royal blue. cta is an alias of brand (kept so the ~16 files
+	 * that use bg-cta/text-cta don't need editing). */
 	/* ponytail: cta == brand; collapse to one token only if a 2nd accent appears. */
-	--color-brand: oklch(0.52 0.21 25);
-	--color-brand-hover: oklch(0.46 0.21 25);
-	--color-cta: oklch(0.52 0.21 25);
-	--color-cta-hover: oklch(0.46 0.21 25);
+	--color-brand: oklch(0.54 0.22 262);
+	--color-brand-hover: oklch(0.48 0.22 262);
+	--color-cta: oklch(0.54 0.22 262);
+	--color-cta-hover: oklch(0.48 0.22 262);
 
-	/* Surfaces — light */
+	/* Highlight — bright Parafiber yellow. Used sparingly (e.g. the OWNER badge), never
+	 * as a status. Distinct hue from --color-warning amber so the two don't blur. */
+	--color-highlight: oklch(0.86 0.18 98);
+
+	/* Surfaces — light. `bg` is the raised card/panel; `canvas` is the recessed page
+	 * background behind cards (so white cards lift off a light-gray gutter); `surface`
+	 * is the in-card tint (table headers, hover, pills). */
 	--color-bg: oklch(1 0 0);
-	--color-surface: oklch(0.975 0.006 25);
-	--color-border: oklch(0.91 0.006 25);
+	--color-canvas: oklch(0.972 0.007 264);
+	--color-surface: oklch(0.975 0.006 264);
+	--color-border: oklch(0.91 0.006 264);
 
 	/* Text — light */
-	--color-ink: oklch(0.16 0.01 25);
-	--color-muted: oklch(0.5 0.01 25);
+	--color-ink: oklch(0.16 0.01 264);
+	--color-muted: oklch(0.5 0.01 264);
 
-	/* Status — semantic. blocked = oxblood danger, distinct from accent red. */
+	/* Status — semantic. blocked = oxblood danger, distinct from the blue accent. */
 	--color-online: oklch(0.52 0.15 150);
 	--color-warning: oklch(0.62 0.15 75);
 	--color-blocked: oklch(0.42 0.15 18);
 
-	/* Admin sidebar — constant black in both modes */
-	--color-sidebar: oklch(0.13 0.006 25);
-	--color-sidebar-text: oklch(0.78 0.008 25);
-	--color-sidebar-muted: oklch(0.5 0.008 25);
+	/* Admin sidebar — deep saturated Parafiber navy (the brand header) in both modes. */
+	--color-sidebar: oklch(0.24 0.11 266);
+	--color-sidebar-text: oklch(0.86 0.05 264);
+	--color-sidebar-muted: oklch(0.67 0.06 264);
 
 	/* Type */
 	--font-sans: system-ui, -apple-system, 'Segoe UI', sans-serif;
@@ -50,30 +58,116 @@
 }
 
 /*
- * Dark mode — overrides only what changes. Accent + status reds are lifted for
- * AA on dark surfaces; hues stay put so the accent/danger distinction holds. The
- * sidebar drops below the content bg so it still separates against dark content.
+ * Dark mode — overrides only what changes. The blue accent, gold highlight, and
+ * status reds are lifted for AA on dark surfaces; hues stay put so the accent /
+ * highlight / danger distinctions hold. The navy sidebar deepens a touch so it
+ * still separates against the dark content bg.
  */
 :root[data-theme='dark'] {
 	color-scheme: dark;
 
-	--color-brand: oklch(0.6 0.21 25);
-	--color-brand-hover: oklch(0.66 0.21 25);
-	--color-cta: oklch(0.6 0.21 25);
-	--color-cta-hover: oklch(0.66 0.21 25);
+	--color-brand: oklch(0.64 0.2 262);
+	--color-brand-hover: oklch(0.7 0.19 262);
+	--color-cta: oklch(0.64 0.2 262);
+	--color-cta-hover: oklch(0.7 0.19 262);
 
-	--color-bg: oklch(0.17 0.006 25);
-	--color-surface: oklch(0.21 0.008 25);
-	--color-border: oklch(0.3 0.008 25);
+	--color-highlight: oklch(0.87 0.18 98);
 
-	--color-ink: oklch(0.95 0.005 25);
-	--color-muted: oklch(0.68 0.01 25);
+	/* Content canvas is a real dark navy (not near-black): enough blue chroma to read
+	 * blue, kept darker than the sidebar so the sidebar still frames it. `canvas` is the
+	 * recessed page background behind cards — darker than `bg` so white-equivalent cards
+	 * still lift off it (mirrors the light-mode canvas/bg relationship). Without this dark
+	 * override it would stay light-gray and glare on every page in dark mode. */
+	--color-bg: oklch(0.18 0.055 264);
+	--color-canvas: oklch(0.14 0.05 264);
+	--color-surface: oklch(0.23 0.055 264);
+	--color-border: oklch(0.33 0.045 264);
+
+	--color-ink: oklch(0.95 0.005 264);
+	--color-muted: oklch(0.68 0.01 264);
 
 	--color-online: oklch(0.68 0.15 150);
 	--color-warning: oklch(0.74 0.14 75);
 	--color-blocked: oklch(0.6 0.16 18);
 
-	--color-sidebar: oklch(0.11 0.006 25);
+	/* Deep saturated brand navy, lifted above the content bg so it reads blue, not black. */
+	--color-sidebar: oklch(0.23 0.11 266);
+}
+
+/*
+ * Motion primitives — entrance + emphasis animations, CSS-only (no JS deps). Each one
+ * resolves to its FINAL (visible) state, so the prefers-reduced-motion block below — which
+ * collapses every duration to ~0 — simply lands them instantly rather than hiding anything.
+ * Durations: micro-interactions live in Tailwind utilities (120–220ms); entrance animations
+ * here run a touch longer but only once, on mount.
+ */
+@keyframes fade-in {
+	from {
+		opacity: 0;
+	}
+	to {
+		opacity: 1;
+	}
+}
+@keyframes fade-in-up {
+	from {
+		opacity: 0;
+		transform: translateY(6px);
+	}
+	to {
+		opacity: 1;
+		transform: none;
+	}
+}
+@keyframes draw-line {
+	from {
+		stroke-dashoffset: 1;
+	}
+	to {
+		stroke-dashoffset: 0;
+	}
+}
+/* Slow, low-contrast breathe for degraded/offline status dots — emphasis without alarm. */
+@keyframes status-pulse {
+	0%,
+	100% {
+		opacity: 1;
+	}
+	50% {
+		opacity: 0.4;
+	}
+}
+
+.animate-fade-in {
+	animation: fade-in 200ms ease-out both;
+}
+.animate-fade-in-up {
+	animation: fade-in-up 200ms ease-out both;
+}
+
+/* Revenue/line chart entrance: the path "draws" on (length-normalized via pathLength="1"),
+ * then the area fill, data dots, and peak callout settle in just behind it. Runs once on
+ * mount — Svelte updates the path `d` in place on live data pushes, so it never re-fires. */
+.chart-line {
+	stroke-dasharray: 1;
+	animation: draw-line 650ms ease-out both;
+}
+.chart-area {
+	animation: fade-in 600ms ease-out both;
+}
+.chart-dot {
+	animation: fade-in 280ms ease-out 380ms both;
+	transition: r 150ms ease-out;
+}
+.chart-dot:hover {
+	r: 5;
+}
+.chart-callout {
+	animation: fade-in 280ms ease-out 480ms both;
+}
+
+.status-pulse {
+	animation: status-pulse 2.4s ease-in-out infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {

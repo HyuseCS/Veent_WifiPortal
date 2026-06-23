@@ -147,6 +147,8 @@ export function createMayaProvider(config: MayaConfig): PaymentProvider {
 				const detail = await res.text().catch(() => '');
 				throw new Error(`maya: payment lookup failed (${res.status}): ${detail}`);
 			}
+			return { checkoutId: data.checkoutId, redirectUrl: data.redirectUrl };
+		},
 
 			const payment = (await res.json()) as {
 				id: string;
