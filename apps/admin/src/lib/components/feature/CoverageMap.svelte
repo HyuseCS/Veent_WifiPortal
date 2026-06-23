@@ -25,6 +25,34 @@
 		warning: 'var(--color-warning)',
 		blocked: 'var(--color-blocked)'
 	};
+	const toneLabel: Record<string, string> = {
+		online: 'Healthy',
+		warning: 'Degraded',
+		blocked: 'Offline'
+	};
+
+	function escapeHtml(s: string): string {
+		return s
+			.replace(/&/g, '&amp;')
+			.replace(/</g, '&lt;')
+			.replace(/>/g, '&gt;')
+			.replace(/"/g, '&quot;');
+	}
+
+	function popupHtml(ap: NetworkAp): string {
+		const color = toneColor[ap.tone] ?? 'var(--color-online)';
+		const label = toneLabel[ap.tone] ?? ap.tone;
+		return `<div style="font-family:var(--font-sans);color:var(--color-ink);min-width:9rem;">
+			<div style="font-size:.875rem;font-weight:700;letter-spacing:-.01em;">${escapeHtml(ap.name)}</div>
+			${ap.address ? `<div style="font-size:.75rem;color:var(--color-muted);margin-top:.125rem;">${escapeHtml(ap.address)}</div>` : ''}
+			<div style="display:flex;align-items:center;gap:.375rem;margin-top:.5rem;font-size:.8125rem;font-weight:700;color:${color};">
+				<span style="display:inline-block;width:.5rem;height:.5rem;border-radius:9999px;background:${color};flex:none;"></span>${label}
+			</div>
+			<div style="display:flex;align-items:center;gap:.375rem;margin-top:.25rem;font-size:.8125rem;font-weight:600;color:var(--color-ink);">
+				<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--color-muted)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>${ap.users} active
+			</div>
+		</div>`;
+	}
 
 	let mapEl: HTMLDivElement;
 	const placed = $derived(networks.filter((n) => n.latitude != null && n.longitude != null));
@@ -64,6 +92,7 @@
 				iconAnchor: [11, 22]
 			});
 			const m = L.marker([Number(ap.latitude), Number(ap.longitude)], { icon }).addTo(map);
+			m.bindPopup(popupHtml(ap), { offset: [0, -14], closeButton: true });
 			m.on('click', () => onselect?.(ap.id));
 			markers[ap.id] = m;
 		}
@@ -88,7 +117,11 @@
 			pin?.classList.toggle('sel', mid === id);
 		}
 		const ap = placed.find((a) => a.id === id);
-		if (ap) map.flyTo([Number(ap.latitude), Number(ap.longitude)], 18, { duration: 0.7 });
+		if (ap && id) {
+			map.flyTo([Number(ap.latitude), Number(ap.longitude)], 18, { duration: 0.7 });
+			const mk = markers[id];
+			if (mk) map.once('moveend', () => mk.openPopup());
+		}
 	});
 
 	onMount(() => {
