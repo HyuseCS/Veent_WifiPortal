@@ -15,4 +15,3 @@ What "implementing SMS" actually looks like
         });     
         if (!res.ok) throw new Error(`SMS send failed: ${res.status}`);
   }     
-  

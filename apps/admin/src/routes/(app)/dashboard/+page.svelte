@@ -66,15 +66,30 @@
 	// Chosen arrangement comes from the header switcher via shared context (see (app)/+layout).
 	const layoutCtx = getContext<DashLayoutCtx>(DASH_LAYOUT_CTX);
 
-	// Single-screen budget: cap the variable tables so nothing pushes the page past one
-	// viewport. Overflow rows collapse into a "+N more" / "View all" affordance instead of
-	// a scrollbar (panels are overflow-hidden; <main> scroll is only a last-resort net).
-	const SESSION_CAP = 6;
-	const NET_CAP = 4;
-	const shownSessions = $derived(activeSessions.slice(0, SESSION_CAP));
-	const moreSessions = $derived(Math.max(0, activeSessions.length - SESSION_CAP));
-	const shownNetworks = $derived(networks.slice(0, NET_CAP));
-	const moreNetworks = $derived(Math.max(0, networks.length - NET_CAP));
+	// Single-screen budget: show only as many rows as the panel actually has room for, so
+	// nothing pushes the page past one viewport. Overflow rows collapse into a "+N more"
+	// affordance instead of a scrollbar (panels are overflow-hidden). The cap is NOT fixed —
+	// each Table reports its live scroll-body height (`bind:bodyHeight`) and we fit rows to
+	// it, so the count grows/shrinks with the chosen layout (Bento / Two-column / Stacked).
+	let sessionBodyH = $state(0);
+	let netBodyH = $state(0);
+	// Sticky header (~38px) sits inside the scroll body; each row is ~44px (px-4 py-3 + border).
+	// Rounded slightly generous so the last visible row never clips. Fallbacks seed SSR/first
+	// paint before the body is measured.
+	const THEAD_H = 38;
+	const ROW_H = 44;
+	const rowsThatFit = (bodyH: number, fallback: number) =>
+		bodyH > 0 ? Math.max(1, Math.floor((bodyH - THEAD_H) / ROW_H)) : fallback;
+	const sessionCap = $derived(rowsThatFit(sessionBodyH, 6));
+	const netCap = $derived(rowsThatFit(netBodyH, 4));
+	const shownSessions = $derived(activeSessions.slice(0, sessionCap));
+	const moreSessions = $derived(Math.max(0, activeSessions.length - sessionCap));
+	const shownNetworks = $derived(networks.slice(0, netCap));
+	const moreNetworks = $derived(Math.max(0, networks.length - netCap));
+
+	// Network Health header badge — real online/total counts (no fabricated data).
+	const onlineCount = $derived(networks.filter((ap) => ap.tone === 'online').length);
+	const apTotal = $derived(networks.length);
 
 	const sessionCols = [
 		{ label: 'MAC Address' },
@@ -130,7 +145,7 @@
 
 	<!-- Active Sessions -->
 	<section class="sessions flex min-h-0 flex-col">
-		<Table title="Active Sessions" columns={sessionCols} class="min-h-0 flex-1">
+		<Table title="Active Sessions" columns={sessionCols} class="min-h-0 flex-1" bind:bodyHeight={sessionBodyH}>
 			{#snippet aside()}
 				{#if activeSessions.length > 0}
 					<span
@@ -168,17 +183,27 @@
 					</td>
 				</tr>
 			{/if}
+			{#snippet footer()}
+				<div class="flex items-center justify-between gap-2 px-4 py-2.5">
+					<span class="text-xs text-muted">Streaming via RADIUS accounting</span>
+					{#if moreSessions > 0}
+						<span class="text-xs text-muted">+{moreSessions} more active</span>
+					{/if}
+				</div>
+			{/snippet}
 		</Table>
-		{#if moreSessions > 0}
-			<p class="pt-2 text-xs text-muted">+{moreSessions} more active</p>
-		{/if}
 	</section>
 
 	<!-- Network Health -->
 	<section class="network flex min-h-0 flex-col">
-		<Table title="Network Health" columns={netCols} class="min-h-0 flex-1">
+		<Table title="Network Health" columns={netCols} class="min-h-0 flex-1" bind:bodyHeight={netBodyH}>
 			{#snippet aside()}
-				<a href="/networks" class="text-xs font-medium text-brand hover:underline">View all</a>
+				<div class="flex items-center gap-2">
+					{#if apTotal > 0}
+						<StatusBadge tone="online" label="{onlineCount}/{apTotal} online" />
+					{/if}
+					<a href="/networks" class="text-xs font-medium text-brand hover:underline">View all</a>
+				</div>
 			{/snippet}
 			{#each shownNetworks as ap (ap.id)}
 				<tr class="transition-colors hover:bg-surface">
@@ -202,10 +227,15 @@
 					</td>
 				</tr>
 			{/if}
+			{#snippet footer()}
+				<div class="flex items-center justify-between gap-2 px-4 py-2.5">
+					<span class="text-xs text-muted">ICMP ping · 30s interval</span>
+					{#if moreNetworks > 0}
+						<span class="text-xs text-muted">+{moreNetworks} more access points</span>
+					{/if}
+				</div>
+			{/snippet}
 		</Table>
-		{#if moreNetworks > 0}
-			<p class="pt-2 text-xs text-muted">+{moreNetworks} more access points</p>
-		{/if}
 	</section>
 </div>
 

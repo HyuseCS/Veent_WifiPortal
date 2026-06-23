@@ -10,11 +10,14 @@
 	// Dependency-free SVG area+line chart (same no-dep philosophy as DonutChart). One real
 	// series — `amount` per bucket; the design mockup's dashed "credits sold" comparison line
 	// is intentionally omitted (no second series exists in the data).
-	const W = 700;
 	const padLeft = 46;
 	const padRight = 14;
 	const padTop = 20;
 	const padBottom = 26;
+	// Floor on the viewBox height so a short card never collapses the plot (padTop+padBottom
+	// alone is 46). Also the base viewBox width for normal-aspect cards / the SSR fallback.
+	const MIN_H = 120;
+	const BASE_W = 700;
 
 	// Stable gradient/clip id derived from the label so two charts on a page never collide
 	// and SSR/client markup matches (no Math.random).
@@ -38,16 +41,26 @@
 		return `₱${Math.round(n)}`;
 	}
 
-	// Container-driven height: the chart fills whatever card it sits in (tall stacked
-	// card, short two-column card, …) instead of a fixed aspect ratio. We measure the
-	// wrapper and set the viewBox height so its aspect matches the box exactly — then
-	// `meet` fills it with no letterboxing / dead space. `height` is the SSR /
-	// pre-measure fallback; 120 is a floor so a short card never collapses the plot.
+	// Container-driven viewBox: the chart fills whatever card it sits in (tall stacked card,
+	// short two-column card, …) instead of a fixed aspect ratio. We size the viewBox so its
+	// aspect matches the measured box exactly — then `meet` fills it with no letterboxing.
+	//
+	// `naturalH` is the height that keeps the base 700-wide viewBox at the container's aspect.
+	// In a very wide, short card (the stacked layout) that drops below MIN_H; flooring the
+	// height *alone* would leave the 700-wide viewBox too tall-aspect and letterbox the chart
+	// into a narrow centred strip. So when we floor the height we also widen the viewBox in
+	// proportion (W = MIN_H · wrapW/wrapH), preserving aspect and the edge-to-edge fill.
+	// Normal-aspect cards keep the original 700-wide viewBox untouched. `height`/700 are the
+	// SSR / pre-measure fallbacks.
 	let wrapW = $state(0);
 	let wrapH = $state(0);
-	const H = $derived(wrapW > 0 && wrapH > 0 ? Math.max(120, (W * wrapH) / wrapW) : height);
+	const measured = $derived(wrapW > 0 && wrapH > 0);
+	const naturalH = $derived(measured ? (BASE_W * wrapH) / wrapW : height);
+	const floored = $derived(measured && naturalH < MIN_H);
+	const W = $derived(floored ? (MIN_H * wrapW) / wrapH : BASE_W);
+	const H = $derived(measured ? Math.max(MIN_H, naturalH) : height);
 
-	const plotW = W - padLeft - padRight;
+	const plotW = $derived(W - padLeft - padRight);
 	const plotH = $derived(H - padTop - padBottom);
 	const baseline = $derived(padTop + plotH);
 
@@ -87,6 +100,27 @@
 			? `${linePath} L ${pts[pts.length - 1].x} ${baseline} L ${pts[0].x} ${baseline} Z`
 			: ''
 	);
+
+	// X-axis labels are thinned to a fixed, evenly-spaced subset so they never crowd or clip
+	// when the period spans many days — dots/hit-targets still cover every point. First and
+	// last are always kept and anchored inward (start/end) so the edge labels stay in-frame.
+	const MAX_X_LABELS = 8;
+	const xLabels = $derived.by(() => {
+		const n = pts.length;
+		if (n === 0) return [];
+		const k = Math.min(n, MAX_X_LABELS);
+		if (k === 1) return [{ ...pts[0], anchor: 'middle' as const }];
+		const out: { label: string; x: number; anchor: 'start' | 'middle' | 'end' }[] = [];
+		let prev = -1;
+		for (let j = 0; j < k; j++) {
+			const i = Math.round((j * (n - 1)) / (k - 1));
+			if (i === prev) continue;
+			prev = i;
+			const anchor = i === 0 ? 'start' : i === n - 1 ? 'end' : 'middle';
+			out.push({ label: pts[i].label, x: pts[i].x, anchor });
+		}
+		return out;
+	});
 
 	// Peak point gets a value callout, clamped horizontally so the bubble stays in-frame.
 	const peak = $derived.by(() => {
@@ -220,9 +254,9 @@
 				/>
 			{/if}
 
-			<!-- X labels -->
-			{#each pts as p (p.label)}
-				<text x={p.x} y={H - 8} text-anchor="middle" class="fill-muted text-[12px]"
+			<!-- X labels (thinned + edge-anchored so they don't crowd or clip) -->
+			{#each xLabels as p (p.label)}
+				<text x={p.x} y={H - 8} text-anchor={p.anchor} class="fill-muted text-[12px]"
 					>{p.label}</text
 				>
 			{/each}

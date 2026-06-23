@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
 	import { invalidateAll } from '$app/navigation';
-	import { Button } from '$lib/components/ui';
+	import { Button, Field } from '$lib/components/ui';
 	import MapPicker from './MapPicker.svelte';
 
 	// Parent (the AP sidebar's + button) toggles this; two-way so we can self-close.
@@ -70,24 +70,22 @@
 				: 'No location picked yet'}
 		</p>
 
-		<label class="block text-sm">
-			<span class="text-muted">Name</span>
-			<input
-				name="name"
-				bind:value={name}
-				placeholder="e.g. Lobby AP"
-				class="mt-1 w-full rounded-md border border-border bg-surface px-3 py-2 text-ink"
-			/>
-		</label>
-		<label class="block text-sm">
-			<span class="text-muted">Address <span class="text-muted/70">(optional)</span></span>
-			<input
-				name="address"
-				bind:value={address}
-				placeholder="Street, building, floor…"
-				class="mt-1 w-full rounded-md border border-border bg-surface px-3 py-2 text-ink"
-			/>
-		</label>
+		<Field
+			id="place-name"
+			label="Name"
+			name="name"
+			placeholder="e.g. Lobby AP"
+			value={name}
+			oninput={(e) => (name = e.currentTarget.value)}
+		/>
+		<Field
+			id="place-address"
+			label="Address (optional)"
+			name="address"
+			placeholder="Street, building, floor…"
+			value={address}
+			oninput={(e) => (address = e.currentTarget.value)}
+		/>
 
 		<input type="hidden" name="latitude" value={lat ?? ''} />
 		<input type="hidden" name="longitude" value={lng ?? ''} />

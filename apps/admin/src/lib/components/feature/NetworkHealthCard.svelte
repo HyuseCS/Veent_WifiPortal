@@ -9,11 +9,21 @@
 
 	// `selected` rings the card and mirrors the coverage-map focus; clicking the card
 	// (or its onfocus) selects this AP on the page-level map.
+	// `editing`/`onedit` are owned by the page so only one card edits at a time
+	// (→ at most one MapPicker/Leaflet map mounted). onedit(id) opens, onedit(null) closes.
 	let {
 		ap,
 		selected = false,
-		onfocus
-	}: { ap: NetworkAp; selected?: boolean; onfocus?: (id: string) => void } = $props();
+		onfocus,
+		editing = false,
+		onedit
+	}: {
+		ap: NetworkAp;
+		selected?: boolean;
+		onfocus?: (id: string) => void;
+		editing?: boolean;
+		onedit?: (id: string | null) => void;
+	} = $props();
 
 	// tone → token classes for the status icon tile + accents.
 	const toneIcon: Record<string, string> = {
@@ -60,8 +70,7 @@
 		placed ? `${Number(ap.latitude).toFixed(4)}, ${Number(ap.longitude).toFixed(4)}` : 'Not placed on map'
 	);
 
-	// A placed AP shows its coords + "Edit"; editing reveals the form.
-	let editing = $state(false);
+	// A placed AP shows its coords + "Edit"; editing (page-owned) reveals the form.
 
 	// Edits (typed or map-picked) override the saved value; null = show the saved
 	// coord. Cleared on a successful save so the field re-syncs to the fresh `ap`.
@@ -76,7 +85,7 @@
 	};
 
 	function cancelEdit() {
-		editing = false;
+		onedit?.(null);
 		editLat = null;
 		editLng = null;
 		msg = null;
@@ -154,7 +163,7 @@
 			type="button"
 			onclick={(e) => {
 				e.stopPropagation();
-				editing = !editing;
+				onedit?.(editing ? null : ap.id);
 			}}
 			class="flex h-8 shrink-0 cursor-pointer items-center gap-1.5 rounded-lg border border-border px-3 text-xs font-semibold text-muted transition-colors duration-150 hover:border-brand/40 hover:text-ink"
 		>
@@ -179,7 +188,7 @@
 						msg = { ok: true, text: 'Saved.' };
 						editLat = null;
 						editLng = null;
-						editing = false; // back to the coords view
+						onedit?.(null); // back to the coords view
 					} else if (result.type === 'failure') {
 						msg = { ok: false, text: String(result.data?.error ?? 'Could not save.') };
 					}
@@ -200,31 +209,28 @@
 				}}
 			/>
 
+			<!-- 2-col grid is page-specific layout; the inputs themselves reuse the shared Field. -->
 			<div class="grid grid-cols-2 gap-3">
-				<div class="space-y-1.5">
-					<label for="lat-{ap.id}" class="block text-sm font-medium text-ink">Latitude</label>
-					<input
-						id="lat-{ap.id}"
-						name="latitude"
-						value={latitude}
-						oninput={(e) => (editLat = e.currentTarget.value)}
-						inputmode="decimal"
-						placeholder="14.5560"
-						class="min-h-[44px] w-full rounded-lg border border-border bg-bg px-4 py-3 text-sm text-ink transition-[border-color,box-shadow] duration-150 hover:border-brand/40 focus:border-brand focus:ring-2 focus:ring-brand/20 focus:outline-none"
-					/>
-				</div>
-				<div class="space-y-1.5">
-					<label for="lng-{ap.id}" class="block text-sm font-medium text-ink">Longitude</label>
-					<input
-						id="lng-{ap.id}"
-						name="longitude"
-						value={longitude}
-						oninput={(e) => (editLng = e.currentTarget.value)}
-						inputmode="decimal"
-						placeholder="121.0244"
-						class="min-h-[44px] w-full rounded-lg border border-border bg-bg px-4 py-3 text-sm text-ink transition-[border-color,box-shadow] duration-150 hover:border-brand/40 focus:border-brand focus:ring-2 focus:ring-brand/20 focus:outline-none"
-					/>
-				</div>
+				<Field
+					id="lat-{ap.id}"
+					label="Latitude"
+					name="latitude"
+					type="text"
+					inputmode="decimal"
+					placeholder="14.5560"
+					value={latitude}
+					oninput={(e) => (editLat = e.currentTarget.value)}
+				/>
+				<Field
+					id="lng-{ap.id}"
+					label="Longitude"
+					name="longitude"
+					type="text"
+					inputmode="decimal"
+					placeholder="121.0244"
+					value={longitude}
+					oninput={(e) => (editLng = e.currentTarget.value)}
+				/>
 			</div>
 			<Field
 				id="addr-{ap.id}"

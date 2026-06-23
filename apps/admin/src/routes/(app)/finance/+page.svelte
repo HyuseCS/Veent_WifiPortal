@@ -1,60 +1,64 @@
 <script lang="ts">
-	import { Card, SectionHeading, Table, StatusBadge } from '$lib/components/ui';
-	import { KpiCard, RevenueChart, DonutChart } from '$lib/components/feature';
+	import TrendingUp from 'lucide-svelte/icons/trending-up';
+	import ArrowLeftRight from 'lucide-svelte/icons/arrow-left-right';
+	import CircleCheck from 'lucide-svelte/icons/circle-check';
+	import Wallet from 'lucide-svelte/icons/wallet';
 	import Download from 'lucide-svelte/icons/download';
+	import type { Component } from 'svelte';
+	import { Card, SectionHeading, FilterTabs } from '$lib/components/ui';
+	import { KpiCard, RevenueChart, DonutChart, TransactionsTable } from '$lib/components/feature';
+	import type { Kpi } from '$lib/types';
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();
 
-	const PERIODS = [
+	// lucide types don't match Svelte's `Component` structurally; cast as the other pages do.
+	const icon = (c: unknown) => c as Component;
+
+	// Period pills double as SSR navigation — selecting one reloads with `?period=`, which the
+	// page load reads. Rendered via the shared <FilterTabs> in link mode so the pill chrome
+	// matches the Users/Networks filters.
+	const periodTabs = [
 		{ key: '7d', label: '7 days' },
 		{ key: '30d', label: '30 days' },
 		{ key: '90d', label: '90 days' },
 		{ key: 'all', label: 'All time' }
 	];
+	const periodLabel: Record<string, string> = {
+		'7d': 'Last 7 days',
+		'30d': 'Last 30 days',
+		'90d': 'Last 90 days',
+		all: 'All time'
+	};
+
+	// Presentation chrome for each server KPI — icon + an honest caption describing the metric
+	// (not invented data), matched by label so order changes can't mis-pair them. The success
+	// rate also drives a real progress bar (its own value, parsed back from "73%").
+	// $derived so the period-dependent caption tracks navigation; matched by label so a
+	// reordered KPI list can't mis-pair icon/caption to the wrong metric.
+	const kpiChrome = $derived<
+		Record<string, { icon?: Component; helper: string; progress?: boolean }>
+	>({
+		'Gross Revenue (settled)': { icon: icon(TrendingUp), helper: periodLabel[data.period] ?? '' },
+		Transactions: { icon: icon(ArrowLeftRight), helper: 'settled & failed' },
+		'Success Rate': { icon: icon(CircleCheck), helper: 'of all attempts', progress: true },
+		'Avg. Transaction': { icon: icon(Wallet), helper: 'per settled payment' }
+	});
+	const chromeFor = (kpi: Kpi) => kpiChrome[kpi.label] ?? { icon: undefined, helper: '' };
 
 	const revenueTotal = $derived(data.revenue.reduce((sum, p) => sum + p.amount, 0));
-
-	const txCols = [
-		{ label: 'Date' },
-		{ label: 'Status' },
-		{ label: 'Amount' },
-		{ label: 'Method' },
-		{ label: 'Buyer' },
-		{ label: 'Receipt' }
-	];
-
-	const dateFmt = new Intl.DateTimeFormat('en-PH', {
-		month: 'short',
-		day: 'numeric',
-		hour: '2-digit',
-		minute: '2-digit'
-	});
-	const fmtDate = (iso: string) => dateFmt.format(new Date(iso));
+	const settledTotal = $derived(data.breakdown.reduce((sum, s) => sum + s.amount, 0));
 </script>
 
 <div class="space-y-6">
 	<!-- Period selector + export -->
 	<div class="flex flex-wrap items-center justify-between gap-3">
-		<nav class="flex gap-1 rounded-lg border border-border bg-bg p-1" aria-label="Period">
-			{#each PERIODS as p (p.key)}
-				<a
-					href="/finance?period={p.key}"
-					class="flex min-h-[44px] items-center rounded-md px-3 text-sm font-medium transition-colors {data.period ===
-					p.key
-						? 'bg-brand text-white'
-						: 'text-muted hover:bg-surface hover:text-ink'}"
-					aria-current={data.period === p.key ? 'page' : undefined}
-				>
-					{p.label}
-				</a>
-			{/each}
-		</nav>
+		<FilterTabs tabs={periodTabs} active={data.period} href={(key) => `/finance?period=${key}`} />
 
 		<a
 			href="/finance/export?period={data.period}"
 			download
-			class="inline-flex min-h-[44px] items-center gap-2 rounded-lg border border-border bg-bg px-4 text-sm font-medium text-ink transition-colors hover:bg-surface"
+			class="inline-flex min-h-11 items-center gap-2 rounded-lg border border-border bg-bg px-4 text-sm font-medium text-ink transition-colors hover:bg-surface"
 		>
 			<Download class="h-4 w-4" aria-hidden="true" />
 			Export CSV
@@ -64,13 +68,19 @@
 	<!-- KPIs -->
 	<section class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
 		{#each data.kpis as kpi (kpi.label)}
-			<KpiCard {kpi} />
+			{@const c = chromeFor(kpi)}
+			<KpiCard
+				{kpi}
+				icon={c.icon}
+				helper={c.helper}
+				progress={c.progress ? Number.parseInt(kpi.value, 10) || 0 : undefined}
+			/>
 		{/each}
 	</section>
 
 	<!-- Revenue + method breakdown -->
-	<section class="grid grid-cols-1 gap-4 lg:grid-cols-3">
-		<Card class="flex min-h-[260px] flex-col lg:col-span-2">
+	<section class="grid grid-cols-1 items-stretch gap-4 lg:grid-cols-3">
+		<Card class="flex min-h-65 flex-col lg:col-span-2">
 			<SectionHeading title="Settled revenue over time" class="mb-4">
 				{#snippet aside()}
 					<span class="font-mono text-sm text-muted">₱{revenueTotal.toLocaleString('en-PH')}</span>
@@ -87,48 +97,23 @@
 			</div>
 		</Card>
 
-		<Card>
+		<Card class="flex flex-col">
 			<SectionHeading title="By payment method" class="mb-4" />
-			<DonutChart data={data.breakdown} />
+			<!-- Center the donut block in the leftover height so the card isn't top-heavy
+			     next to the taller chart panel. -->
+			<div class="flex min-h-0 flex-1 items-center">
+				<DonutChart
+					data={data.breakdown}
+					centerValue="₱{settledTotal.toLocaleString('en-PH')}"
+					centerLabel="Settled"
+				/>
+			</div>
 		</Card>
 	</section>
 
 	<!-- Transactions -->
 	<section class="space-y-2">
-		<Table title="Transactions" columns={txCols}>
-			{#snippet aside()}
-				<span class="text-xs text-muted">
-					Showing {data.transactions.length} of {data.total}
-				</span>
-			{/snippet}
-			{#each data.transactions as tx (tx.id)}
-				<tr class="transition-colors hover:bg-surface">
-					<td class="px-4 py-2.5 whitespace-nowrap text-ink">{fmtDate(tx.createdAt)}</td>
-					<td class="px-4 py-2.5">
-						<StatusBadge tone={tx.statusTone} label={tx.status.replace('PAYMENT_', '')} />
-					</td>
-					<td class="px-4 py-2.5 font-mono text-ink">{tx.amount}</td>
-					<td class="px-4 py-2.5 text-ink">
-						{tx.fundSourceType}{#if tx.fundSourceMasked}<span class="ml-1 font-mono text-xs text-muted"
-								>•{tx.fundSourceMasked}</span
-							>{/if}
-					</td>
-					<td class="px-4 py-2.5 text-ink">
-						<span class="block truncate">{tx.buyerName}</span>
-						{#if tx.buyerEmail}<span class="block truncate text-xs text-muted">{tx.buyerEmail}</span
-							>{/if}
-					</td>
-					<td class="px-4 py-2.5 font-mono text-xs text-muted">{tx.receiptNo ?? '—'}</td>
-				</tr>
-			{/each}
-			{#if data.transactions.length === 0}
-				<tr>
-					<td colspan={txCols.length} class="px-4 py-8 text-center text-sm text-muted">
-						No transactions in this period.
-					</td>
-				</tr>
-			{/if}
-		</Table>
+		<TransactionsTable transactions={data.transactions} total={data.total} />
 		{#if data.total > data.transactions.length}
 			<p class="text-xs text-muted">
 				{data.total - data.transactions.length} more — narrow the period or export the full CSV.

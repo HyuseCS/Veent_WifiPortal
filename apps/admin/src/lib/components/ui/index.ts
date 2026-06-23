@@ -6,6 +6,8 @@ export { default as Card } from './Card.svelte';
 export { default as SectionHeading } from './SectionHeading.svelte';
 export { default as Table } from './Table.svelte';
 export { default as StatusBadge } from './StatusBadge.svelte';
+export { default as FilterTabs } from './FilterTabs.svelte';
+export { default as SearchInput } from './SearchInput.svelte';
 export { default as EmptyState } from './EmptyState.svelte';
 export { default as LiveDot } from './LiveDot.svelte';
 export { default as LiveStatusPill } from './LiveStatusPill.svelte';

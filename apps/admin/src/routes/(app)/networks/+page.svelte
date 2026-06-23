@@ -1,8 +1,17 @@
 <script lang="ts">
-	import { Card } from '$lib/components/ui';
-	import { NetworkHealthCard, RouterLogPanel, CoverageMap } from '$lib/components/feature';
+	import type { Component } from 'svelte';
+	import { Card, FilterTabs } from '$lib/components/ui';
+	import { NetworkHealthCard, RouterLogPanel, CoverageMap, KpiCard } from '$lib/components/feature';
+	import Router from 'lucide-svelte/icons/router';
+	import Users from 'lucide-svelte/icons/users';
+	import Gauge from 'lucide-svelte/icons/gauge';
+	import Timer from 'lucide-svelte/icons/timer';
+	import TriangleAlert from 'lucide-svelte/icons/triangle-alert';
 	import type { NetworkAp, StatusTone } from '$lib/types';
 	import type { PageData } from './$types';
+
+	// lucide types don't match Svelte's `Component` structurally; cast as dashboard/nav do.
+	const icon = (c: unknown) => c as Component;
 
 	let { data }: { data: PageData } = $props();
 	const networks = $derived(data.networks);
@@ -18,7 +27,12 @@
 	// Metrics arrive pre-formatted ("47 Mbps", "22ms") — pull the leading number to aggregate.
 	const lead = (s: string): number => parseFloat(s);
 	const tputTotal = $derived(
-		Math.round(networks.reduce((s, n) => s + (Number.isFinite(lead(n.throughput)) ? lead(n.throughput) : 0), 0))
+		Math.round(
+			networks.reduce(
+				(s, n) => s + (Number.isFinite(lead(n.throughput)) ? lead(n.throughput) : 0),
+				0
+			)
+		)
 	);
 	const latVals = $derived(networks.map((n) => lead(n.latency)).filter((v) => Number.isFinite(v)));
 	const avgLat = $derived(
@@ -29,12 +43,53 @@
 		networks.filter((n) => n.latitude != null && n.longitude != null).length
 	);
 
-	const kpis = $derived([
-		{ label: 'Access Points', value: String(total), caption: `${onlineCount} online`, captionClass: 'text-online' },
-		{ label: 'Connected Users', value: String(usersTotal), caption: 'across the venue', captionClass: 'text-muted' },
-		{ label: 'Total Throughput', value: String(tputTotal), unit: 'Mbps', caption: 'aggregate uplink', captionClass: 'text-muted' },
-		{ label: 'Avg Latency', value: avgLat == null ? '—' : String(avgLat), unit: avgLat == null ? '' : 'ms', caption: 'across active APs', captionClass: 'text-muted' },
-		{ label: 'Alerts', value: String(alerts), caption: 'needs attention', valueClass: 'text-blocked', captionClass: 'text-blocked' }
+	// Feeds the shared <KpiCard> (same component as Dashboard/Finance). `tone`/`captionTone`
+	// carry the status colour; `unit` is the muted value suffix.
+	type NetKpi = {
+		label: string;
+		value: string;
+		icon: Component;
+		caption: string;
+		unit?: string;
+		tone?: StatusTone;
+		captionTone?: StatusTone;
+	};
+	const kpis = $derived<NetKpi[]>([
+		{
+			label: 'Access Points',
+			value: String(total),
+			icon: icon(Router),
+			caption: `${onlineCount} online`,
+			captionTone: 'online'
+		},
+		{
+			label: 'Connected Users',
+			value: String(usersTotal),
+			icon: icon(Users),
+			caption: 'across the venue'
+		},
+		{
+			label: 'Total Throughput',
+			value: String(tputTotal),
+			unit: 'Mbps',
+			icon: icon(Gauge),
+			caption: 'aggregate uplink'
+		},
+		{
+			label: 'Avg Latency',
+			value: avgLat == null ? '—' : String(avgLat),
+			unit: avgLat == null ? undefined : 'ms',
+			icon: icon(Timer),
+			caption: 'across active APs'
+		},
+		{
+			label: 'Alerts',
+			value: String(alerts),
+			icon: icon(TriangleAlert),
+			caption: 'needs attention',
+			tone: 'blocked',
+			captionTone: 'blocked'
+		}
 	]);
 
 	// Fleet donut: healthy → degraded → offline, token-coloured. Grey when empty.
@@ -73,6 +128,8 @@
 	// Selecting a card flies the coverage map to that AP (and rings the card), and
 	// scrolls the map into view so the focus is visible on small/scrolled layouts.
 	let selectedId = $state<string | null>(null);
+	// Only one card may edit at a time, so at most one MapPicker (Leaflet) mounts.
+	let editingId = $state<string | null>(null);
 	let mapEl: HTMLDivElement;
 	function focusAp(id: string) {
 		selectedId = id;
@@ -84,14 +141,14 @@
 	<!-- KPI STRIP -->
 	<section class="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-5">
 		{#each kpis as k (k.label)}
-			<Card padding="p-4" class="flex flex-col gap-2">
-				<span class="text-[10.5px] font-bold tracking-wide text-muted uppercase">{k.label}</span>
-				<span class="font-mono text-2xl font-extrabold tracking-tight {k.valueClass ?? 'text-ink'}">
-					{k.value}{#if k.unit}<span class="ml-1 text-sm font-semibold text-muted">{k.unit}</span
-						>{/if}
-				</span>
-				<span class="text-xs font-semibold {k.captionClass}">{k.caption}</span>
-			</Card>
+			<KpiCard
+				kpi={{ label: k.label, value: k.value }}
+				icon={k.icon}
+				unit={k.unit}
+				helper={k.caption}
+				tone={k.tone}
+				captionTone={k.captionTone}
+			/>
 		{/each}
 	</section>
 
@@ -134,7 +191,8 @@
 							class="absolute inset-3.5 flex flex-col items-center justify-center rounded-full bg-bg"
 						>
 							<span class="font-mono text-2xl font-extrabold text-ink">{total}</span>
-							<span class="text-[10px] font-bold tracking-wide text-muted uppercase">Total APs</span>
+							<span class="text-[10px] font-bold tracking-wide text-muted uppercase">Total APs</span
+							>
 						</div>
 					</div>
 					<ul class="flex min-w-0 flex-1 flex-col gap-2.5">
@@ -161,19 +219,7 @@
 			<h2 class="text-base font-semibold text-ink">Access Points</h2>
 			<p class="mt-0.5 text-xs text-muted">Health per access point across the venue</p>
 		</div>
-		<div class="flex gap-1 rounded-xl border border-border bg-bg p-1 shadow-sm">
-			{#each filterDefs as f (f.key)}
-				<button
-					onclick={() => (filter = f.key)}
-					class="flex min-h-11 cursor-pointer items-center gap-1.5 rounded-lg px-3 text-xs font-bold transition-colors duration-150 {filter ===
-					f.key
-						? 'bg-brand text-white'
-						: 'text-muted hover:text-ink'}"
-				>
-					{f.label}<span class="font-mono text-[11px] opacity-75">{f.count}</span>
-				</button>
-			{/each}
-		</div>
+		<FilterTabs tabs={filterDefs} active={filter} onselect={(key) => (filter = key)} />
 	</div>
 
 	{#if visible.length === 0}
@@ -193,7 +239,13 @@
 			style="grid-template-columns: repeat(auto-fill, minmax(330px, 1fr));"
 		>
 			{#each visible as ap (ap.id)}
-				<NetworkHealthCard {ap} selected={ap.id === selectedId} onfocus={focusAp} />
+				<NetworkHealthCard
+					{ap}
+					selected={ap.id === selectedId}
+					onfocus={focusAp}
+					editing={ap.id === editingId}
+					onedit={(id) => (editingId = id)}
+				/>
 			{/each}
 		</section>
 	{/if}
