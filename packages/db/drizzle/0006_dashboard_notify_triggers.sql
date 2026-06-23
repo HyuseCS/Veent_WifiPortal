@@ -10,14 +10,17 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 --> statement-breakpoint
+DROP TRIGGER IF EXISTS network_sessions_notify_dashboard ON network_sessions;--> statement-breakpoint
 CREATE TRIGGER network_sessions_notify_dashboard
 	AFTER INSERT OR UPDATE OR DELETE ON network_sessions
 	FOR EACH STATEMENT EXECUTE FUNCTION notify_dashboard();
 --> statement-breakpoint
+DROP TRIGGER IF EXISTS credit_ledger_notify_dashboard ON credit_ledger;--> statement-breakpoint
 CREATE TRIGGER credit_ledger_notify_dashboard
 	AFTER INSERT OR UPDATE OR DELETE ON credit_ledger
 	FOR EACH STATEMENT EXECUTE FUNCTION notify_dashboard();
 --> statement-breakpoint
+DROP TRIGGER IF EXISTS network_health_notify_dashboard ON network_health;--> statement-breakpoint
 CREATE TRIGGER network_health_notify_dashboard
 	AFTER INSERT OR UPDATE OR DELETE ON network_health
 	FOR EACH STATEMENT EXECUTE FUNCTION notify_dashboard();
