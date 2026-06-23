@@ -93,7 +93,7 @@
 	<!-- Active Sessions -->
 	<section class="sessions flex min-h-0 flex-col">
 		<Table title="Active Sessions" columns={sessionCols} class="min-h-0 flex-1">
-			{#each shownSessions as session (session.mac)}
+			{#each shownSessions as session (session.id)}
 				{@const t = liveTimer(session, now)}
 				<tr class="transition-colors hover:bg-surface">
 					<td class="px-4 py-2.5 font-mono text-xs text-ink">{session.mac}</td>
