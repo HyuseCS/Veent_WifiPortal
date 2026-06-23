@@ -377,16 +377,6 @@ export async function setClusterName(
 	await db.update(networkHealth).set({ clusterName: name }).where(inArray(networkHealth.id, ids));
 }
 
-/** Set (or clear) an AP's map location. Coords are decimal-degree strings or null;
- * powers the public locator map. */
-export async function setNetworkLocation(
-	db: DB,
-	id: number,
-	loc: { latitude: string | null; longitude: string | null; address: string | null }
-): Promise<void> {
-	await db.update(networkHealth).set(loc).where(eq(networkHealth.id, id));
-}
-
 // ───────────────────────────── Finance page ─────────────────────────────
 // Finance reads payment_transactions (the full webhook record), NOT credit_ledger.
 // "Revenue (settled)" here = money the gateway actually charged on PAYMENT_SUCCESS,
@@ -590,8 +580,8 @@ export async function createNetworkPlace(
 	});
 }
 
-/** Update an operator-placed AP's editable fields (name, location, model) from the map.
- * Distinct from `setNetworkLocation` (used by /networks) so that flow is left untouched. */
+/** Update an operator-placed AP's editable fields (name, location, model, range, cluster)
+ * from the map — the single editing path now that /networks deep-links here. */
 export async function updateNetworkPlace(
 	db: DB,
 	id: number,

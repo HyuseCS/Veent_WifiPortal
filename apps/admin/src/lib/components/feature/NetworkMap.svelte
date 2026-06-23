@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { page } from '$app/state';
 	import { enhance } from '$app/forms';
 	import { invalidateAll } from '$app/navigation';
 	import Plus from 'lucide-svelte/icons/plus';
@@ -50,6 +51,11 @@
 	interface Pin {
 		localId: number;
 		apId: string | null;
+		/** A brand-new pin (apId null) that the operator bound to an existing *unplaced* AP via
+		 * the name combobox. Saving posts ?/updatePlace for this id (sets its coords) instead of
+		 * minting a duplicate. Distinct from apId so the pin stays in the workspace, not nested
+		 * under a sidebar row it has no coords for yet. */
+		targetId: string | null;
 		model: string;
 		/** Coverage radius in metres — defaults to the model's advertised range, then
 		 * calibrated by the operator via the slider to match real-world reach. */
@@ -102,6 +108,11 @@
 	let suppressClick = false;
 
 	const placed = $derived(networks.filter((ap) => ap.latitude != null && ap.longitude != null));
+	// APs that exist (from /networks) but were never put on the map — offered in the new-pin
+	// name combobox so placing one configures that row instead of minting a duplicate.
+	const unplacedAps = $derived(
+		networks.filter((ap) => ap.latitude == null || ap.longitude == null)
+	);
 
 	interface Cluster {
 		/** Stable key = smallest-placed-order member's id. */
@@ -329,6 +340,7 @@
 		const host = nearestCluster(lat, lng, range, null);
 		spawnPin({
 			apId: null,
+			targetId: null,
 			model: DEFAULT_MODEL_ID,
 			range,
 			name: '',
@@ -351,6 +363,7 @@
 		editingApId = ap.id;
 		spawnPin({
 			apId: ap.id,
+			targetId: null,
 			model: ap.model ?? DEFAULT_MODEL_ID,
 			range: ap.rangeMeters ?? rangeFor(ap.model),
 			name: ap.name,
@@ -405,6 +418,36 @@
 
 	function setCluster(localId: number, cluster: string | null) {
 		pins = pins.map((p) => (p.localId === localId ? { ...p, cluster } : p));
+	}
+
+	// Which pin's name combobox is open (its input focused). Only one at a time.
+	let nameOpen = $state<number | null>(null);
+	// Unplaced APs whose name contains the pin's current text — the dropdown options. Hidden once
+	// the text exactly matches one (nothing left to pick).
+	function nameSuggestions(pin: Pin): NetworkAp[] {
+		const q = pin.name.trim().toLowerCase();
+		if (unplacedAps.some((ap) => ap.name === pin.name)) return [];
+		return unplacedAps.filter((ap) => !q || ap.name.toLowerCase().includes(q)).slice(0, 6);
+	}
+
+	// New-pin name combobox: typing/selecting a name that exactly matches an unplaced AP binds the
+	// pin to that row (save → updatePlace) and adopts its model/range/cluster so we don't clobber
+	// them; any other text reverts to create-mode (targetId null → addPlace).
+	function onNameInput(localId: number, value: string) {
+		const match = unplacedAps.find((ap) => ap.name === value);
+		pins = pins.map((p) => {
+			if (p.localId !== localId) return p;
+			if (!match) return { ...p, name: value, targetId: null };
+			return {
+				...p,
+				name: value,
+				targetId: match.id,
+				model: match.model ?? DEFAULT_MODEL_ID,
+				range: match.rangeMeters ?? rangeFor(match.model),
+				cluster: match.clusterName ?? p.cluster
+			};
+		});
+		if (match) redrawPin(localId, match.rangeMeters ?? rangeFor(match.model));
 	}
 
 	// Per-pin "+ New cluster…" mode (operator typing a fresh name vs picking an existing one).
@@ -559,6 +602,7 @@
 		mapInstance.setView([hit.lat, hit.lng], 16);
 		spawnPin({
 			apId: null,
+			targetId: null,
 			model: DEFAULT_MODEL_ID,
 			range: rangeFor(DEFAULT_MODEL_ID),
 			name: '',
@@ -741,6 +785,14 @@
 			renderReal();
 			mapReady = true;
 
+			// Deep-link from /networks ("Edit location"): ?ap=<id> opens that AP's editor.
+			const focusId = page.url.searchParams.get('ap');
+			const focusAp = focusId ? placed.find((ap) => ap.id === focusId) : undefined;
+			if (focusAp) {
+				toggleEdit(focusAp);
+				return;
+			}
+
 			// Centre on the admin's location; fall back to the placed APs, else Manila.
 			if (navigator.geolocation) {
 				navigator.geolocation.getCurrentPosition(
@@ -902,22 +954,58 @@
 
 								<form
 									method="post"
-									action={pin.apId ? '?/updatePlace' : '?/addPlace'}
+									action={(pin.apId ?? pin.targetId) ? '?/updatePlace' : '?/addPlace'}
 									use:enhance={saveEnhance(pin.localId)}
 									class="mt-1.5 space-y-1.5"
 								>
-									{#if pin.apId}<input type="hidden" name="id" value={pin.apId} />{/if}
+									{#if pin.apId ?? pin.targetId}
+										<input type="hidden" name="id" value={pin.apId ?? pin.targetId} />
+									{/if}
 									<input type="hidden" name="latitude" value={pin.lat} />
 									<input type="hidden" name="longitude" value={pin.lng} />
 									<input type="hidden" name="model" value={pin.model} />
 									<input type="hidden" name="range" value={pin.range} />
 									<input type="hidden" name="cluster" value={pin.cluster ?? ''} />
-									<input
-										name="name"
-										bind:value={pin.name}
-										placeholder="Name this AP"
-										class="w-full rounded border border-border bg-bg px-2 py-1.5 text-xs text-ink"
-									/>
+									<!-- Name combobox: free text + an in-UI suggestion list of unplaced APs. Edit pins
+									     (apId set) skip the suggestions — you don't rebind an already-placed AP. -->
+									<div class="relative">
+										<input
+											name="name"
+											value={pin.name}
+											oninput={(e) => onNameInput(pin.localId, e.currentTarget.value)}
+											onfocus={() => (nameOpen = pin.apId ? null : pin.localId)}
+											onblur={() => (nameOpen = nameOpen === pin.localId ? null : nameOpen)}
+											autocomplete="off"
+											role="combobox"
+											aria-expanded={nameOpen === pin.localId && nameSuggestions(pin).length > 0}
+											aria-controls="name-opts-{pin.localId}"
+											placeholder="Name this AP"
+											class="w-full rounded border border-border bg-bg px-2 py-1.5 text-xs text-ink"
+										/>
+										{#if nameOpen === pin.localId && nameSuggestions(pin).length > 0}
+											<ul
+												id="name-opts-{pin.localId}"
+												role="listbox"
+												class="absolute z-10 mt-1 max-h-44 w-full overflow-y-auto rounded border border-border bg-bg shadow-md"
+											>
+												{#each nameSuggestions(pin) as ap (ap.id)}
+													<li role="option" aria-selected={pin.name === ap.name}>
+														<button
+															type="button"
+															onpointerdown={(e) => e.preventDefault()}
+															onclick={() => {
+																onNameInput(pin.localId, ap.name);
+																nameOpen = null;
+															}}
+															class="block w-full truncate px-2 py-1.5 text-left text-xs text-ink hover:bg-surface"
+														>
+															{ap.name}
+														</button>
+													</li>
+												{/each}
+											</ul>
+										{/if}
+									</div>
 									<div class="flex gap-1.5">
 										<input
 											name="address"

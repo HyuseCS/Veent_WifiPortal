@@ -1,7 +1,7 @@
 <script lang="ts">
-	import { enhance } from '$app/forms';
+	import MapPin from 'lucide-svelte/icons/map-pin';
 	import type { NetworkAp } from '$lib/types';
-	import { Button, Card, Field, StatusBadge } from '$lib/components/ui';
+	import { Card, StatusBadge } from '$lib/components/ui';
 	import MapPicker from './MapPicker.svelte';
 
 	// `showMap` is driven by the page-level "Show/Hide all maps" toggle.
@@ -16,31 +16,13 @@
 	]);
 
 	const placed = $derived(ap.latitude != null && ap.longitude != null);
-
-	// A placed AP shows a read-only map + "Edit location"; editing reveals the form.
-	let editing = $state(false);
-
-	// Edits (typed or map-picked) override the saved value; null = show the saved
-	// coord. Cleared on a successful save so the field re-syncs to the fresh `ap`.
-	let editLat = $state<string | null>(null);
-	let editLng = $state<string | null>(null);
-	const latitude = $derived(editLat ?? ap.latitude ?? '');
-	const longitude = $derived(editLng ?? ap.longitude ?? '');
+	const latitude = $derived(ap.latitude ?? '');
+	const longitude = $derived(ap.longitude ?? '');
 
 	const toNum = (s: string): number | null => {
 		const n = Number(s);
 		return s.trim() !== '' && Number.isFinite(n) ? n : null;
 	};
-
-	function cancelEdit() {
-		editing = false;
-		editLat = null;
-		editLng = null;
-		msg = null;
-	}
-
-	let saving = $state(false);
-	let msg = $state<{ ok: boolean; text: string } | null>(null);
 </script>
 
 <Card padding="p-4">
@@ -68,102 +50,22 @@
 		</div>
 
 		{#if showMap}
-			{#if placed && !editing}
-				<!-- Read-only view of the saved pin; Edit reveals the form. -->
-				<div class="mt-3 space-y-2">
+			<!-- Read-only snapshot of the saved pin. All placing/editing lives on /map (the
+			     canonical pinning surface); the link below opens it focused on this AP. -->
+			<div class="mt-3 space-y-2">
+				{#if placed}
 					<MapPicker height="h-40" autolocate={false} lat={toNum(latitude)} lng={toNum(longitude)} />
 					<p class="font-mono text-xs text-muted">{latitude}, {longitude}</p>
 					{#if ap.address}<p class="text-xs text-muted">{ap.address}</p>{/if}
-					<Button type="button" variant="secondary" onclick={() => (editing = true)}>
-						Edit location
-					</Button>
-				</div>
-			{:else}
-				<form
-					method="POST"
-					action="?/setLocation"
-					class="mt-3 space-y-3"
-					use:enhance={() => {
-						saving = true;
-						msg = null;
-						return async ({ result, update }) => {
-							saving = false;
-							if (result.type === 'success') {
-								msg = { ok: true, text: 'Saved.' };
-								editLat = null;
-								editLng = null;
-								editing = false; // back to the read-only view
-							} else if (result.type === 'failure') {
-								msg = { ok: false, text: String(result.data?.error ?? 'Could not save.') };
-							}
-							await update({ reset: false });
-						};
-					}}
+				{/if}
+				<a
+					href="/map?ap={ap.id}"
+					class="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-lg border border-border bg-bg px-4 text-sm font-medium text-ink transition-colors hover:bg-surface"
 				>
-					<input type="hidden" name="id" value={ap.id} />
-
-					<!-- Click/drag to set this AP's location. -->
-					<MapPicker
-						height="h-40"
-						autolocate={false}
-						lat={toNum(latitude)}
-						lng={toNum(longitude)}
-						onpick={(c) => {
-							editLat = String(c.lat);
-							editLng = String(c.lng);
-						}}
-					/>
-
-					<div class="grid grid-cols-2 gap-3">
-						<div class="space-y-1.5">
-							<label for="lat-{ap.id}" class="block text-sm font-medium text-ink">Latitude</label>
-							<input
-								id="lat-{ap.id}"
-								name="latitude"
-								value={latitude}
-								oninput={(e) => (editLat = e.currentTarget.value)}
-								inputmode="decimal"
-								placeholder="14.5560"
-								class="min-h-[44px] w-full rounded-lg border border-border bg-bg px-4 py-3 text-sm text-ink transition-colors focus:border-brand focus:ring-2 focus:ring-brand/20 focus:outline-none"
-							/>
-						</div>
-						<div class="space-y-1.5">
-							<label for="lng-{ap.id}" class="block text-sm font-medium text-ink">Longitude</label>
-							<input
-								id="lng-{ap.id}"
-								name="longitude"
-								value={longitude}
-								oninput={(e) => (editLng = e.currentTarget.value)}
-								inputmode="decimal"
-								placeholder="121.0244"
-								class="min-h-[44px] w-full rounded-lg border border-border bg-bg px-4 py-3 text-sm text-ink transition-colors focus:border-brand focus:ring-2 focus:ring-brand/20 focus:outline-none"
-							/>
-						</div>
-					</div>
-					<Field
-						id="addr-{ap.id}"
-						name="address"
-						label="Address"
-						type="text"
-						placeholder="Venue, City"
-						value={ap.address ?? ''}
-					/>
-					<div class="flex items-center gap-3">
-						<Button type="submit" loading={saving}>Save location</Button>
-						{#if placed}
-							<Button type="button" variant="secondary" onclick={cancelEdit}>Cancel</Button>
-						{/if}
-						{#if msg}
-							<span
-								class="text-xs"
-								style="color: {msg.ok ? 'var(--color-online)' : 'var(--color-blocked)'}"
-							>
-								{msg.text}
-							</span>
-						{/if}
-					</div>
-				</form>
-			{/if}
+					<MapPin class="h-4 w-4" aria-hidden="true" />
+					{placed ? 'Edit location on map' : 'Place on map'}
+				</a>
+			</div>
 		{/if}
 	</div>
 </Card>
