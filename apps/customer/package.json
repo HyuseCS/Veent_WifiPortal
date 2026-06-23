@@ -12,7 +12,8 @@
 		"test": "vitest run",
 		"test:unit": "vitest",
 		"test:e2e": "playwright test",
-		"auth:schema": "better-auth generate --config src/lib/server/auth.ts --output ../../packages/db/src/schema/auth-customer.generated.ts --yes"
+		"auth:schema": "better-auth generate --config src/lib/server/auth.ts --output ../../packages/db/src/schema/auth-customer.generated.ts --yes",
+		"maya:webhooks": "bun scripts/maya-webhooks.ts"
 	},
 	"dependencies": {
 		"@veent/core": "workspace:*",
