@@ -361,9 +361,17 @@ interface DateRange {
 	to?: Date;
 }
 
-/** Build the created_at range predicate shared by every Finance query. */
+/**
+ * Predicate shared by every Finance query: the created_at range AND a scope to
+ * ATTRIBUTED transactions (those tied to a real customer_user). Unattributed rows —
+ * a failed event with no referenceId, or a webhook for a user not in this DB (e.g.
+ * other developers sharing the same Maya sandbox account) — are still recorded in
+ * payment_transactions, but kept OUT of Finance reporting so the figures reflect real
+ * activity, matching the dashboard. (The webhook nulls user_id for unknown users, so
+ * `user_id IS NOT NULL` is exactly the attributed set.)
+ */
 function rangeWhere(range: DateRange): SQL[] {
-	const conds: SQL[] = [];
+	const conds: SQL[] = [isNotNull(paymentTransactions.userId)];
 	if (range.from) conds.push(gte(paymentTransactions.createdAt, range.from));
 	if (range.to) conds.push(lte(paymentTransactions.createdAt, range.to));
 	return conds;

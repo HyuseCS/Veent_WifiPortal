@@ -188,9 +188,17 @@ database any other way, or it drifts and the next `db:migrate` breaks for that m
 ```sh
 # 1. Edit packages/db/src/schema/*.ts
 bun run db:generate         # writes a new packages/db/drizzle/NNNN_*.sql
+bun run db:idempotent       # rewrite the new SQL to IF NOT EXISTS / guarded forms
 bun run db:migrate          # apply it to your own DB
 git add packages/db/drizzle # COMMIT the generated SQL with your schema change
 ```
+
+`db:idempotent` (`scripts/idempotent-migrations.ts`) makes every migration safe to
+re-run over an existing/drifted schema — `CREATE TABLE/INDEX IF NOT EXISTS`,
+`ADD COLUMN IF NOT EXISTS`, guarded `ADD CONSTRAINT` (catches `duplicate_object`/
+`duplicate_table`), `DROP ... IF EXISTS`, `DROP TRIGGER IF EXISTS` before `CREATE
+TRIGGER`. Run it after every `db:generate`. Drizzle gates by journal timestamp, so
+editing the generated SQL never re-runs it where already applied.
 
 **Everyone else, after `git pull`:** just `bun run db:migrate`. That's it.
 

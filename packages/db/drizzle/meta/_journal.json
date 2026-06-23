@@ -71,6 +71,13 @@
       "when": 1781845516771,
       "tag": "0009_tough_ser_duncan",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1782191608724,
+      "tag": "0010_low_inhumans",
+      "breakpoints": true
     }
   ]
 }

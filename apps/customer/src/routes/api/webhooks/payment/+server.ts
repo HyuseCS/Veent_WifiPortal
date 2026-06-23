@@ -1,7 +1,7 @@
 import { json, error } from '@sveltejs/kit';
 import { eq } from 'drizzle-orm';
-import { customerUser, packages, paymentTransactions } from '@veent/db';
-import { addCredits, LEDGER_TYPE } from '@veent/core';
+import { customerUser, packages, paymentCheckouts, paymentTransactions } from '@veent/db';
+import { creditCheckoutIfUnsettled } from '@veent/core';
 import { db } from '$lib/server/db';
 import { payments } from '$lib/server/payments';
 import type { RequestHandler } from './$types';
@@ -21,9 +21,11 @@ const STATUS_DB: Record<string, string> = {
  * records EVERY event (success and failure) in payment_transactions for the admin
  * Finance page, then credits the buyer's balance EXACTLY ONCE — addCredits is
  * idempotent on the gateway transaction id, so retried webhooks can't double-credit
- * (business rule #3).
+ * (business rule #3). Crediting goes through creditCheckoutIfUnsettled, which claims
+ * the matching payment_checkouts row so the webhook and the reconcile safety net can
+ * never both credit the same payment.
  *
- * `referenceId` is the value we set at checkout: `${userId}:${packageId}`.
+ * `referenceId` is the value we set at checkout: `${userId}:${packageId}:${nonce}`.
  */
 export const POST: RequestHandler = async (event) => {
 	const raw = await event.request.text();
@@ -35,13 +37,29 @@ export const POST: RequestHandler = async (event) => {
 		error(400, `Webhook verification failed: ${(e as Error).message}`);
 	}
 
-	// Best-effort attribution: a failed/expired event may carry an empty referenceId,
-	// AND a resent webhook can point at a user/package that no longer exists (test DB
-	// resets, deleted users). Verify both FK targets and fall back to null — recording
-	// the transaction UNATTRIBUTED beats letting the FK throw, which would 500 (making
-	// Maya retry forever) and drop the Finance record entirely.
-	const [refUserId, refPackageIdStr] = (evt.referenceId ?? '').split(':');
-	const refPackageId = Number(refPackageIdStr) || null;
+	// Resolve the buyer from the pending checkout we recorded at creation — referenceId is
+	// a short token (Maya caps it at 36 chars), so the buyer isn't encoded in the string.
+	// Fall back to the legacy `userId:packageId` format for any in-flight pre-token
+	// payments. A reference with no matching row (e.g. foreign webhooks on shared sandbox
+	// keys) stays UNATTRIBUTED — recorded for Finance, not credited — rather than 500ing.
+	let refUserId: string | null = null;
+	let refPackageId: number | null = null;
+	const ref = evt.referenceId ?? '';
+	const [co] = ref
+		? await db
+				.select({ userId: paymentCheckouts.userId, packageId: paymentCheckouts.packageId })
+				.from(paymentCheckouts)
+				.where(eq(paymentCheckouts.referenceId, ref))
+				.limit(1)
+		: [];
+	if (co) {
+		refUserId = co.userId;
+		refPackageId = co.packageId;
+	} else if (ref.includes(':')) {
+		const [u, p] = ref.split(':');
+		refUserId = u || null;
+		refPackageId = Number(p) || null;
+	}
 
 	const userExists =
 		!!refUserId &&
@@ -104,14 +122,13 @@ export const POST: RequestHandler = async (event) => {
 		return json({ ok: true, recorded: true, credited: false, reason: 'unattributed' });
 	}
 
-	const [pkg] = await db.select().from(packages).where(eq(packages.id, attributedPackageId)).limit(1);
-	if (!pkg) error(404, 'Package not found');
-
-	const result = await addCredits(db, {
+	// Credit through the shared claim path: it atomically claims the matching checkout
+	// (by referenceId, unique per attempt) so the webhook and the reconcile safety net
+	// can't both credit. Idempotent on the gateway txn id as a second guard.
+	const result = await creditCheckoutIfUnsettled(db, {
+		referenceId: evt.referenceId,
 		userId: attributedUserId,
-		amount: pkg.creditsProvided ?? 0,
-		type: LEDGER_TYPE.topup,
-		packageId: pkg.id,
+		packageId: attributedPackageId,
 		externalTransactionId: evt.externalTransactionId
 	});
 

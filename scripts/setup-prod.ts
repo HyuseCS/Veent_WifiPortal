@@ -196,6 +196,7 @@ WantedBy=multi-user.target
 	}
 	const cron = `# Radius cron jobs — install with: crontab deploy/crontab
 * * * * * curl -fsS -X POST -H "x-cron-secret: ${cronSecret}" http://127.0.0.1:${APPS[0].port}/api/network/revoke
+* * * * * curl -fsS -X POST -H "x-cron-secret: ${cronSecret}" http://127.0.0.1:${APPS[0].port}/api/payments/reconcile
 * * * * * curl -fsS -X POST -H "x-cron-secret: ${cronSecret}" http://127.0.0.1:${APPS[1].port}/api/network/health/refresh
 `;
 	writeOut(join(deploy, 'crontab'), cron);
@@ -220,6 +221,7 @@ nssm start Radius-${a.name}`
 	const tasks = `# Radius cron equivalents — Scheduled Tasks (run elevated). Fires every minute.
 $h = @{ 'x-cron-secret' = '${cronSecret}' }
 schtasks /Create /SC MINUTE /TN "Radius-Revoke" /TR "powershell -c \\"Invoke-WebRequest -Method POST -Headers @{'x-cron-secret'='${cronSecret}'} http://127.0.0.1:${APPS[0].port}/api/network/revoke\\"" /F
+schtasks /Create /SC MINUTE /TN "Radius-Reconcile" /TR "powershell -c \\"Invoke-WebRequest -Method POST -Headers @{'x-cron-secret'='${cronSecret}'} http://127.0.0.1:${APPS[0].port}/api/payments/reconcile\\"" /F
 schtasks /Create /SC MINUTE /TN "Radius-Health" /TR "powershell -c \\"Invoke-WebRequest -Method POST -Headers @{'x-cron-secret'='${cronSecret}'} http://127.0.0.1:${APPS[1].port}/api/network/health/refresh\\"" /F
 `;
 	writeOut(join(deploy, 'scheduled-tasks.ps1'), tasks);
