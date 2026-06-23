@@ -64,7 +64,7 @@ async function listWebhooks(): Promise<Webhook[]> {
 
 /** Turn a bare origin (or full URL) into the exact callback URL Maya should call. */
 function toCallbackUrl(input: string): string {
-	let url: URL= new URL('');
+	let url: URL;
 	try {
 		url = new URL(input);
 	} catch {
