@@ -141,7 +141,7 @@ export interface SpendCreditsResult {
  * Deducts credits for an access-tier purchase inside a caller-owned transaction, only
  * if the balance covers it. The conditional UPDATE (balance >= amount) prevents overspend
  * under concurrent requests without an explicit lock. Use this when the spend must commit
- * atomically with another effect (e.g. the session grant in `startPaidSession`); use
+ * atomically with another effect (e.g. the grant in `startPaidAccessAndBindDevice`); use
  * `spendCredits` for a standalone spend.
  */
 export async function spendCreditsTx(

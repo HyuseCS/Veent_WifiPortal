@@ -19,7 +19,8 @@
 | R7 | No rate limit on login/register, webhook, cron, SSE, Finance export | Low–Med | 🔴 Open | unassigned |
 | R8 | No config fail-fast for `CRON_SECRET` / payment keys / `DATABASE_URL` | Low | 🔴 Open | unassigned |
 | R9 | Router management plane (Winbox/Dude/API) reachable from the internet | High | 🟡 Mitigated | — |
-| R10 | Portal↔router API runs in cleartext (port 8728, no TLS) | Medium | 🔵 Deferred (TODO) | unassigned |
+| R10 | Portal↔router API runs in cleartext (port 8728, no TLS) | Medium | ✅ Resolved | — |
+| R11 | node-routeros connection timeout crashes the whole app server | Medium | ✅ Resolved | — |
 
 Severity = impact × likelihood for *this* app at its current scale, not generic CVSS.
 
@@ -181,13 +182,61 @@ avoid locking yourself out):**
 
 ---
 
-## R10 — Portal↔router API is cleartext 🔵 Deferred (TODO)
+## R10 — Portal↔router API is cleartext ✅ Resolved
 
-The admin app reaches the router over the **plain RouterOS API** (`MIKROTIK_HOST=10.0.0.1`,
-`MIKROTIK_PORT=8728`, `MIKROTIK_TLS=false`), so the `veent-portal` API user's
+**Resolved 2026-06-24.** The portal↔router API now runs over **api-ssl (TLS, 8729)**.
+
+Setup that landed:
+- Router: signed a self-signed cert (`api-cert-radius`, `key-usage=tls-server,key-cert-sign`)
+  and enabled `api-ssl` on 8729 with *Available From* restricted to the apps' host
+  `10.0.0.147/32`.
+- Apps: both `apps/customer/.env` and `apps/admin/.env` set to `MIKROTIK_PORT=8729`,
+  `MIKROTIK_TLS=true`, `MIKROTIK_TLS_INSECURE=true` (self-signed cert).
+- Verified: customer grant brings a device online and the admin Networks page loads
+  health — both over TLS, no crash (the **R11** fix held).
+- Final step: cleartext `api` (8728) disabled on the router
+  (`/ip service set api disabled=yes`).
+
+The API user's password no longer crosses the wire in cleartext, closing the
+shared-segment sniff/MITM exposure.
+
+**Reminder:** the cert was created with `days-valid=3650` — it will expire in ~10
+years; no rotation needed soon, but note it exists. Pin `10.0.0.147` to a static
+DHCP lease so the *Available From* restriction can't break on a lease change.
+
+## R11 — A router connection timeout crashes the app server ✅ Resolved
+
+**Was:** `createMikrotikController` (`packages/core/src/integrations/network/mikrotik.ts`)
+opened a node-routeros connection per call with no `error` handler. On a timeout,
+node-routeros re-emits `'error'` on the connection (RouterOSAPI.js:106); with no
+listener Node throws "Unhandled error event" → **uncaught exception, whole app
+server down** (admin exited code 1 on `SOCKTMOUT`). Far more likely over api-ssl,
+which is why it surfaced during the R10 attempt — but any slow/unreachable router
+could trigger it.
+
+**Fix (2026-06-24):** in both `withConn` and `openConn` — attach a no-op `error`
+listener (`conn.on('error', …)`) so the re-emit can't crash the process while the
+awaited `connect()`/`write()` still reject for the caller to handle; set an explicit
+`timeout: 15` (node-routeros default is 10s); and wrap `conn.close()` so teardown on
+a half-dead socket can't throw. Verified against the node-routeros 1.6.9 source +
+core typecheck. A router hiccup now degrades a single request instead of taking the
+server down.
+
+> Runtime-confirmed 2026-06-24: with the apps on api-ssl, the admin Networks page
+> (the path that previously crashed on `SOCKTMOUT`) now loads without taking the
+> server down. The fix held over the slower TLS link — which is what unblocked R10.
+
+
+**Both** the customer app (guest grant/revoke) and the admin app (management) reach
+the router over the **plain RouterOS API** (`MIKROTIK_HOST=10.0.0.1`,
+`MIKROTIK_PORT=8728`, `MIKROTIK_TLS=false`, user `veent-portal`), so that API user's
 password crosses the wire **unencrypted**. Because guests are on the **same
 `10.0.0.0/24`** as the router (per DHCP leases), a guest on that L2 segment could
 sniff/MITM the API credentials.
+
+Both apps run on the same host (`10.0.0.147`), so the API *Available From*
+restriction is a single `10.0.0.147/32` — but that host is DHCP-assigned, so pin it
+to a static lease or the restriction will eventually break both apps' grants.
 
 **Status:** deferred by decision on 2026-06-24 — not urgent because API access is
 already restricted via *Available From* (R9), but it should be closed before
@@ -202,9 +251,11 @@ production / before guests and management share a segment long-term.
    /certificate sign api-cert-radius          # async — confirm with: /certificate print detail
    /ip service set api-ssl certificate=api-cert-radius address=<ADMIN_SERVER_LAN_IP>/32 disabled=no
    ```
-2. Set `apps/admin/.env`: `MIKROTIK_PORT="8729"`, `MIKROTIK_TLS="true"`,
+2. Set the same in **both** `apps/admin/.env` **and** `apps/customer/.env`
+   (both apps connect): `MIKROTIK_PORT="8729"`, `MIKROTIK_TLS="true"`,
    `MIKROTIK_TLS_INSECURE="true"` (self-signed).
-3. Restart the admin app, verify a grant/revoke works, **then** `/ip service set api disabled=yes`.
+3. Restart both apps, verify a guest grant/revoke (customer) and a management
+   action (admin) work, **then** `/ip service set api disabled=yes`.
 
 **Stronger structural option:** move guests to their own VLAN/subnet with hotspot
 client isolation, so they can't reach or sniff the management segment at all.

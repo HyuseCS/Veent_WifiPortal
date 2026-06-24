@@ -7,9 +7,10 @@ import type { NetworkController } from '../integrations/network';
  * whitelisted) admin dashboard, we drop the firewall for their device so they
  * have working internet without buying credits or burning their Free Time.
  *
- * Unlike guest grants this writes NO `network_sessions` row, so the time-based
- * revoke cron (`expireDueSessions`, which only revokes session MACs) never sweeps
- * it — the bypass persists until an explicit sign-out / kick. The binding carries
+ * Unlike guest grants this writes NO `network_sessions` row and no account window,
+ * so the revoke cron (`expireDueAccounts`, which only touches accounts with a lapsed
+ * window) never sweeps it — the bypass persists until an explicit sign-out / kick.
+ * It also isn't a bound device under any account. The binding carries
  * its own tag so it's identifiable on the router and separable from guest bypasses.
  */
 export const ADMIN_BYPASS_TAG = 'veent-admin';

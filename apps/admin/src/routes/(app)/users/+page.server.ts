@@ -3,7 +3,7 @@ import { dev } from '$app/environment';
 import {
 	setBlocked,
 	revokeUserSessions,
-	startSession,
+	extendAccessAndBindDevice,
 	deleteCustomers,
 	wipeCustomers,
 	getAdminRole,
@@ -68,10 +68,10 @@ export const actions: Actions = {
 	},
 
 	/**
-	 * Allow WiFi (DEV ONLY): comp the user onto the network without payment — a
-	 * COMP_MINUTES session on their last-known device MAC, granted on the router and
-	 * logged like any session (so it shows online and the revoke cron expires it).
-	 * Gated to dev: this bypasses credits/Free Time entirely.
+	 * Allow WiFi (DEV ONLY): comp the user onto the network without payment — extends
+	 * their ACCOUNT access window by COMP_MINUTES and binds their last-known device MAC,
+	 * granted on the router and logged like any access (so it shows online and the revoke
+	 * cron expires it). Gated to dev: this bypasses credits/Free Time entirely.
 	 */
 	allowWifi: async (event) => {
 		if (!dev) return fail(403, { error: 'Allow WiFi is a dev-only override.' });
@@ -83,7 +83,11 @@ export const actions: Actions = {
 			return fail(400, { error: 'No known device MAC for this user yet.' });
 		}
 		try {
-			await startSession(db, network, { userId, macAddress: mac, durationMinutes: COMP_MINUTES });
+			await extendAccessAndBindDevice(db, network, {
+				userId,
+				macAddress: mac,
+				durationMinutes: COMP_MINUTES
+			});
 		} catch (err) {
 			console.error('[admin] allowWifi grant failed:', err);
 			return fail(502, { error: 'Network controller rejected the grant.' });

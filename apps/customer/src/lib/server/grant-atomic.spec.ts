@@ -1,13 +1,13 @@
 import { describe, it, expect, vi } from 'vitest';
-import { startPaidSession } from '@veent/core';
+import { startPaidAccessAndBindDevice } from '@veent/core';
 
 /**
- * Atomicity guard for the paid-grant flow (business rule #1): spend + session grant must
- * commit/roll back together, so a failed router grant never leaves a user charged with no
- * access. The real rollback is Drizzle's job; what *we* must guarantee is that a grant
- * failure propagates OUT of `db.transaction` (rejects) instead of being swallowed — which
- * is exactly what makes Drizzle roll the spend back. These tests verify that boundary with
- * a fake transaction, no DB required.
+ * Atomicity guard for the paid-grant flow (business rule #1): spend + account-window extend +
+ * device bind + router grant must commit/roll back together, so a failed router grant never
+ * leaves a user charged with no access. The real rollback is Drizzle's job; what *we* must
+ * guarantee is that a grant failure propagates OUT of `db.transaction` (rejects) instead of
+ * being swallowed — which is exactly what makes Drizzle roll the spend back. These tests verify
+ * that boundary with a fake transaction, no DB required.
  */
 
 // A chainable Drizzle-query stand-in: every builder method returns the same proxy, and
@@ -37,32 +37,45 @@ const input = {
 	durationMinutes: 180
 };
 
-describe('startPaidSession atomicity', () => {
+// Awaited statements, in order, for a successful paid bind of a NEW device:
+//   spend: balance update→[{balance}], ledger insert→[]
+//   bind:  profile FOR UPDATE→[{accessExpiresAt}], window update→[], existing-binding select→[]
+//          (none), active-rows select→[] (none to evict), insert binding→[{id}], mirror update→[]
+//   then network.grant() runs (not a tx statement).
+const bindAwaits = (balance: number, id: number) => [
+	[{ balance }],
+	[],
+	[{ accessExpiresAt: null }],
+	[],
+	[],
+	[],
+	[{ id }],
+	[]
+];
+
+describe('startPaidAccessAndBindDevice atomicity', () => {
 	it('rolls back (rejects) when the router grant fails — spend never commits alone', async () => {
-		// Awaits in order: spend update→[{balance}], spend ledger insert→[], session
-		// existing-check→[] (none), session insert→[{id}], then grant() throws and the
-		// catch does one compensating update→[].
-		const db = fakeDb([[{ balance: 80 }], [], [], [{ id: 1 }], []]);
+		const db = fakeDb(bindAwaits(80, 1));
 		const network = {
 			grant: vi.fn().mockRejectedValue(new Error('router unreachable')),
 			revoke: vi.fn()
 		} as never;
 
-		await expect(startPaidSession(db, network, input)).rejects.toThrow('router unreachable');
+		await expect(startPaidAccessAndBindDevice(db, network, input)).rejects.toThrow(
+			'router unreachable'
+		);
 		// The grant was attempted (so the spend ran first, inside the same transaction).
 		expect((network as { grant: ReturnType<typeof vi.fn> }).grant).toHaveBeenCalledOnce();
 	});
 
-	it('returns ok with the session when spend + grant both succeed', async () => {
-		// spend update→[{balance}], ledger insert→[], session existing-check→[], session
-		// insert→[{session}]; grant resolves; no resolveApForMac → attribution skipped.
-		const db = fakeDb([[{ balance: 60 }], [], [], [{ id: 9, macAddress: input.macAddress }]]);
+	it('returns ok with the new window when spend + grant both succeed', async () => {
+		const db = fakeDb(bindAwaits(60, 9));
 		const network = { grant: vi.fn().mockResolvedValue(undefined), revoke: vi.fn() } as never;
 
-		const res = await startPaidSession(db, network, input);
+		const res = await startPaidAccessAndBindDevice(db, network, input);
 		expect(res.ok).toBe(true);
 		expect(res.balance).toBe(60);
-		expect(res.session).toMatchObject({ id: 9 });
+		expect(res.accessExpiresAt).toBeInstanceOf(Date);
 		expect((network as { grant: ReturnType<typeof vi.fn> }).grant).toHaveBeenCalledOnce();
 	});
 
@@ -71,7 +84,7 @@ describe('startPaidSession atomicity', () => {
 		const db = fakeDb([[], [{ balance: 5 }]]);
 		const network = { grant: vi.fn(), revoke: vi.fn() } as never;
 
-		const res = await startPaidSession(db, network, input);
+		const res = await startPaidAccessAndBindDevice(db, network, input);
 		expect(res.ok).toBe(false);
 		expect(res.reason).toBe('insufficient_balance');
 		expect((network as { grant: ReturnType<typeof vi.fn> }).grant).not.toHaveBeenCalled();
