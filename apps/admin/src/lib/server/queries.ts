@@ -53,8 +53,8 @@ export async function listUsers(db: DB, now: Date = new Date()): Promise<AdminUs
 	const rows = await db
 		.select({
 			id: customerUser.id,
-			name: customerUser.name,
-			email: customerUser.email,
+			// Customers register by phone only — the canonical identity for the table.
+			phone: customerUser.phoneNumber,
 			balance: customerProfile.creditBalance,
 			blocked: customerProfile.blocked,
 			// Account-owned access window (source of truth for online + time-left).
@@ -62,7 +62,7 @@ export async function listUsers(db: DB, now: Date = new Date()): Promise<AdminUs
 		})
 		.from(customerUser)
 		.leftJoin(customerProfile, eq(customerProfile.userId, customerUser.id))
-		.orderBy(customerUser.name);
+		.orderBy(customerUser.phoneNumber);
 
 	// One pass over sessions (newest first) yields: the most recent device MAC (any
 	// status, for the dev Allow-WiFi grant) and the list of currently-BOUND devices
@@ -72,12 +72,17 @@ export async function listUsers(db: DB, now: Date = new Date()): Promise<AdminUs
 			userId: networkSessions.userId,
 			mac: networkSessions.macAddress,
 			status: networkSessions.status,
-			lastSeenAt: networkSessions.lastSeenAt
+			lastSeenAt: networkSessions.lastSeenAt,
+			network: networkHealth.name
 		})
 		.from(networkSessions)
+		.leftJoin(networkHealth, eq(networkHealth.id, networkSessions.networkId))
 		.orderBy(desc(networkSessions.startedAt));
 	const lastMacByUser = new Map<string, string>();
 	const devicesByUser = new Map<string, { mac: string | null; lastSeenAt: string | null }[]>();
+	// Distinct AP names per user, across their active sessions (Set dedupes a user with
+	// several devices on the same AP; null networkId — unresolved — is skipped).
+	const networksByUser = new Map<string, Set<string>>();
 	for (const s of sessions) {
 		if (s.mac && !lastMacByUser.has(s.userId)) lastMacByUser.set(s.userId, s.mac);
 		if (s.status === SESSION_STATUS.active) {
@@ -85,6 +90,10 @@ export async function listUsers(db: DB, now: Date = new Date()): Promise<AdminUs
 			devicesByUser
 				.get(s.userId)!
 				.push({ mac: s.mac, lastSeenAt: s.lastSeenAt ? s.lastSeenAt.toISOString() : null });
+			if (s.network) {
+				if (!networksByUser.has(s.userId)) networksByUser.set(s.userId, new Set());
+				networksByUser.get(s.userId)!.add(s.network);
+			}
 		}
 	}
 
@@ -101,10 +110,11 @@ export async function listUsers(db: DB, now: Date = new Date()): Promise<AdminUs
 			tone = 'warning';
 			status = 'Low Balance';
 		}
+		const timeLeftMs =
+			online && r.accessExpiresAt ? r.accessExpiresAt.getTime() - now.getTime() : null;
 		return {
 			id: r.id,
-			name: r.name,
-			email: r.email,
+			phone: r.phone ?? '—',
 			balance,
 			usage: '—', // byte-level usage isn't tracked yet (needs accounting feed)
 			tone,
@@ -113,10 +123,9 @@ export async function listUsers(db: DB, now: Date = new Date()): Promise<AdminUs
 			lastMac: lastMacByUser.get(r.id) ?? null,
 			deviceCount: devices.length,
 			devices,
-			timeLeft:
-				online && r.accessExpiresAt
-					? formatTimeLeft(r.accessExpiresAt.getTime() - now.getTime())
-					: null
+			timeLeft: timeLeftMs != null ? formatTimeLeft(timeLeftMs) : null,
+			timeLeftMs,
+			location: online ? ([...(networksByUser.get(r.id) ?? [])].join(', ') || null) : null
 		};
 	});
 }

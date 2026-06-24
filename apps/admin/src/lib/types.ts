@@ -104,8 +104,9 @@ export interface ConnectionLog {
 /** A row in the user-management table. */
 export interface AdminUserRow {
 	id: string;
-	name: string;
-	email: string;
+	/** The guest's phone number in E.164 (e.g. "+639176544521") — customers register by
+	 * phone only (no name/email), so this is the identity shown in the table. */
+	phone: string;
 	/** Credit balance in pesos. */
 	balance: number;
 	/** Lifetime/period usage, pre-formatted (e.g. "4.2 GB"). */
@@ -123,6 +124,11 @@ export interface AdminUserRow {
 	devices: { mac: string | null; lastSeenAt: string | null }[];
 	/** Account access time remaining, pre-formatted (e.g. "1:23:45"); null if offline. */
 	timeLeft: string | null;
+	/** Raw remaining access time in ms (for chronological Time-Left sort); null if offline. */
+	timeLeftMs: number | null;
+	/** Network(s) the user's live device(s) are on (network_health.name, distinct,
+	 * comma-joined). Null if offline or no AP resolved (stub/dev, wired client). */
+	location: string | null;
 }
 
 /**

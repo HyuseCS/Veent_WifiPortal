@@ -29,10 +29,16 @@
 - [ ] Modularize NetworkMap.svelte file, it is nearly 1.5k lines long💀
 
 **Users Page**
-- [ ] Add a column "Location" to the table, where it will show which network the user is connected to.
+- [x] Add a column "Location" to the table, where it will show which network the user is connected to.
+      — `listUsers` left-joins `network_health` per active session; distinct AP names, comma-joined
 - [x] The table is what should be scrollable not the page
 - [x] Change the "Wipe User Database" button to color red so that it will bring caution to users.
       — new `danger`/`danger-solid` Button variants; trigger outlined-red, modal confirm solid-red
+- [x] Sortable column headers (Staff-style) — clickable User/Balance/Time-Left/Devices/Location/Status
+      headers (asc/desc toggle); dropped the status FilterTabs + sort button
+- [x] Show the phone number as the user identity (customers register by phone, not names) —
+      query selects `customerUser.phoneNumber`; seed scripts now populate phone-as-name + synthesized
+      `@otp.veent.local` email, matching the customer app's better-auth signUpOnVerification
 
 **Finance Page**
 - [x] Make table scrollable not page — moved to dedicated `/finance/transactions`, capped internal scroll
