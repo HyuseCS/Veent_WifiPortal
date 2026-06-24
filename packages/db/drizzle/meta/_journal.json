@@ -113,6 +113,13 @@
       "when": 1782273797096,
       "tag": "0015_sturdy_manta",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1782277935869,
+      "tag": "0016_dazzling_archangel",
+      "breakpoints": true
     }
   ]
 }
