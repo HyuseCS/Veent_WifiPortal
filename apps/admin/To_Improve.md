@@ -89,11 +89,13 @@ Backend/security work is phased; the UI/page items above are a separate, ongoing
 - [x] SSE `/api/connected` — concurrent-stream cap per user (6, in-memory)
 - Helpers: `apps/{customer,admin}/src/lib/server/rateLimit.ts` · test `rateLimit.spec.ts`
 
-### ⬜ Phase 3 — Hardening — NEXT  ◀ YOU ARE HERE
-- [ ] Fail-fast config validation at boot (`CRON_SECRET`, `DATABASE_URL`, payment keys)
-- [ ] Verify/add indexes (`payment_transactions(status, created_at)`, active-session lookup, etc.)
-- [ ] Observability (webhook success rate, email-delivery failures, open SSE count)
-- [ ] Explicit `max` on the primary Drizzle connection pool
+### ✅ Phase 3 — Hardening — DONE
+- [x] Fail-fast config validation at boot — `validateEnv()` per app (hard-fail prod / warn dev / no-op build), wired in `hooks.server.ts`
+- [x] Indexes — **verified already present** (`payment_transactions(status)`+`(created_at)`, `network_sessions(status, expires_at)`, `rate_limits`); no migration needed
+- [x] Observability — structured logs: webhook outcome + verify-fail, email-send failures, open SSE count
+- [x] Explicit Drizzle pool `max` (10) in `createDb`; LISTEN client stays at `max:1`
+
+**🎉 Backend hardening plan (Phases 0–3) complete.** Remaining: the frontend/page-polish track above, plus net-new features (e.g. admin TOTP/MFA).
 
 ### 🎨 Frontend / page polish — ongoing (separate track)
 The per-page items at the top of this file (System, Dashboard, Network, Map, Users, Finance, Staff). Independent of the backend phases — pick up alongside or between them.

@@ -124,7 +124,9 @@ export const actions: Actions = {
 		if (dev) console.log(`[wipe] verification code for ${owner.email}: ${code}`);
 		try {
 			await mailer.send({ to: owner.email, subject, html, text });
-		} catch {
+		} catch (err) {
+			// Observability: email-delivery failure signal (no address/code logged).
+			console.warn('[email] wipe code send failed:', (err as Error)?.message);
 			return fail(502, { error: "Couldn't send the verification code. Please try again." });
 		}
 		return { ok: true, action: 'requestWipeCode' };

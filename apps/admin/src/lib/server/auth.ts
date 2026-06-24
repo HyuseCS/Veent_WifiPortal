@@ -45,6 +45,8 @@ export const auth = betterAuth({
 				await mailer.send({ to: user.email, subject, html, text });
 				inviteSendFailures.delete(user.email);
 			} catch (err) {
+				// Observability: email-delivery failure signal (no address/token logged).
+				console.warn('[email] invite send failed:', (err as Error)?.message);
 				inviteSendFailures.set(user.email, err);
 			}
 		},

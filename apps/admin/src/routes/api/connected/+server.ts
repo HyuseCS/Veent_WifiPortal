@@ -27,7 +27,10 @@ export const GET: RequestHandler = async (event) => {
 	if ((openStreams.get(userId) ?? 0) >= MAX_STREAMS_PER_USER) {
 		error(429, 'Too many open dashboard connections. Close some tabs and try again.');
 	}
-	openStreams.set(userId, (openStreams.get(userId) ?? 0) + 1);
+	const openCount = (openStreams.get(userId) ?? 0) + 1;
+	openStreams.set(userId, openCount);
+	// Observability: open SSE connection count per user (resource-usage / leak signal).
+	console.info('[sse] connected', { userId, open: openCount });
 	let released = false;
 	const release = () => {
 		if (released) return;
@@ -35,6 +38,7 @@ export const GET: RequestHandler = async (event) => {
 		const n = (openStreams.get(userId) ?? 1) - 1;
 		if (n <= 0) openStreams.delete(userId);
 		else openStreams.set(userId, n);
+		console.info('[sse] disconnected', { userId, open: Math.max(0, n) });
 	};
 
 	const encoder = new TextEncoder();
