@@ -58,7 +58,10 @@ export async function listUsers(db: DB, now: Date = new Date()): Promise<AdminUs
 			balance: customerProfile.creditBalance,
 			blocked: customerProfile.blocked,
 			// Account-owned access window (source of truth for online + time-left).
-			accessExpiresAt: customerProfile.accessExpiresAt
+			accessExpiresAt: customerProfile.accessExpiresAt,
+			// Non-null = window FROZEN (paused): devices unbound, no internet flows, so the
+			// account is not "online" and its time-left is held, not ticking.
+			accessPausedAt: customerProfile.accessPausedAt
 		})
 		.from(customerUser)
 		.leftJoin(customerProfile, eq(customerProfile.userId, customerUser.id))
@@ -99,7 +102,9 @@ export async function listUsers(db: DB, now: Date = new Date()): Promise<AdminUs
 
 	return rows.map((r) => {
 		const balance = Number(r.balance ?? 0);
-		const online = !!r.accessExpiresAt && r.accessExpiresAt.getTime() > now.getTime();
+		// A paused account has no live devices and isn't passing traffic — treat as offline.
+		const online =
+			!r.accessPausedAt && !!r.accessExpiresAt && r.accessExpiresAt.getTime() > now.getTime();
 		const devices = online ? (devicesByUser.get(r.id) ?? []) : [];
 		let tone: StatusTone = 'online';
 		let status = 'Active';

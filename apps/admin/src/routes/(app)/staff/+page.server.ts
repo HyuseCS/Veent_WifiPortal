@@ -78,15 +78,23 @@ async function inviteOne(
 	const user = await ctx.internalAdapter.createUser({ name, email, emailVerified: false });
 	const userId = user.id;
 
-	await db
-		.insert(adminProfile)
-		.values({ userId, role: STAFF_ROLE.admin, status: STAFF_STATUS.pending })
-		.onConflictDoNothing();
+	// createUser already committed the auth row; if the profile insert or the reset call
+	// throws, roll the user back so a bare, profile-less account isn't orphaned (it would
+	// otherwise block re-inviting the same email via the findUserByEmail guard above).
+	try {
+		await db
+			.insert(adminProfile)
+			.values({ userId, role: STAFF_ROLE.admin, status: STAFF_STATUS.pending })
+			.onConflictDoNothing();
 
-	// Issues the reset token → fires sendResetPassword, which sends the activation email.
-	// better-auth awaits the callback but swallows a thrown error, so the send outcome is
-	// surfaced via inviteSendFailures (keyed by email) instead.
-	await auth.api.requestPasswordReset({ body: { email, redirectTo: '/activate' } });
+		// Issues the reset token → fires sendResetPassword, which sends the activation email.
+		// better-auth awaits the callback but swallows a thrown error, so the send outcome is
+		// surfaced via inviteSendFailures (keyed by email) instead.
+		await auth.api.requestPasswordReset({ body: { email, redirectTo: '/activate' } });
+	} catch {
+		await removeStaff(db, userId);
+		return { error: `Couldn't create the invitation for ${email}.` };
+	}
 
 	// Atomic create+send: if the email didn't go out, roll the pending account back (cascades
 	// user + profile + account) so no orphaned invite is left behind.

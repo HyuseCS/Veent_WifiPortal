@@ -160,7 +160,7 @@
 		{/if}
 		{#if failed.length > 0}
 			<ul class="animate-fade-in-up space-y-1 text-sm text-blocked">
-				{#each failed as f (f.email)}
+				{#each failed as f, i (i)}
 					<li><span class="font-mono">{f.email}</span> — {f.error}</li>
 				{/each}
 			</ul>

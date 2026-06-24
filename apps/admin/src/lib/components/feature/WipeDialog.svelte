@@ -24,8 +24,10 @@
 		noun: string;
 		/** What else goes with them, e.g. "their sessions, credit history, and logins". */
 		detail: string;
-		/** Page `form` for surfacing action errors. */
-		form?: { error?: string } | null;
+		/** Page `form` for surfacing action errors. `action` discriminates WHICH action
+		 *  failed — the page's `form` is shared by every action (block, kick, …), so the
+		 *  dialog only shows errors tagged with its own wipe actions, never a foreign one. */
+		form?: { error?: string; action?: string } | null;
 	} = $props();
 
 	let el = $state<HTMLDialogElement>();
@@ -69,7 +71,9 @@
 			<p class="text-sm text-muted">
 				We'll email a verification code to your admin address. Enter it on the next step to confirm.
 			</p>
-			{#if form?.error}<p class="text-sm text-blocked">{form.error}</p>{/if}
+			{#if form?.error && form?.action === 'requestWipeCode'}<p class="text-sm text-blocked">
+					{form.error}
+				</p>{/if}
 			<div class="flex justify-end gap-2">
 				<Button type="button" variant="secondary" onclick={() => (open = false)}>Cancel</Button>
 				<Button type="submit">Email me a code</Button>
@@ -98,7 +102,9 @@
 				oninput={(e) => (code = e.currentTarget.value)}
 				class="font-mono tracking-widest"
 			/>
-			{#if form?.error}<p class="text-sm text-blocked">{form.error}</p>{/if}
+			{#if form?.error && form?.action === 'wipe'}<p class="text-sm text-blocked">
+					{form.error}
+				</p>{/if}
 			<div class="flex justify-end gap-2">
 				<Button type="button" variant="secondary" onclick={() => (open = false)}>Cancel</Button>
 				<Button type="submit" variant="danger-solid" disabled={!code.trim()}>Wipe everything</Button>
