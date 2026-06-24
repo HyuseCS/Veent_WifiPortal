@@ -42,6 +42,9 @@ export interface ActiveSession {
 	timeLeft: string;
 	tone: StatusTone;
 	status: string;
+	/** AP/network the session is bound to (network_health.name), or null when the
+	 * controller couldn't resolve an AP (stub/dev, wired client). */
+	network: string | null;
 	/** Session expiry as an ISO string, so the client can tick the countdown every
 	 * second instead of waiting on the 5s SSE snapshot. Null if no expiry recorded. */
 	expiresAt: string | null;

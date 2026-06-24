@@ -128,10 +128,12 @@ export async function listActiveSessions(db: DB, now: Date = new Date()): Promis
 			id: networkSessions.id,
 			macAddress: networkSessions.macAddress,
 			expiresAt: networkSessions.expiresAt,
-			packageName: packages.name
+			packageName: packages.name,
+			networkName: networkHealth.name
 		})
 		.from(networkSessions)
 		.leftJoin(packages, eq(packages.id, networkSessions.packageId))
+		.leftJoin(networkHealth, eq(networkHealth.id, networkSessions.networkId))
 		.where(eq(networkSessions.status, SESSION_STATUS.active))
 		.orderBy(desc(networkSessions.startedAt));
 
@@ -150,6 +152,7 @@ export async function listActiveSessions(db: DB, now: Date = new Date()): Promis
 			id: r.id,
 			mac: r.macAddress ?? '—',
 			package: r.packageName ?? 'Free Time',
+			network: r.networkName ?? null,
 			timeLeft: formatTimeLeft(msLeft),
 			tone,
 			status,

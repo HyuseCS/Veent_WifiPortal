@@ -71,9 +71,9 @@
 
 	const sessionCols = [
 		{ label: 'MAC Address' },
+		{ label: 'Network' },
 		{ label: 'Package' },
-		{ label: 'Time Left' },
-		{ label: 'Status' }
+		{ label: 'Time Left' }
 	];
 	const netCols = [
 		{ label: 'Access Point' },
@@ -139,15 +139,13 @@
 				{@const t = liveTimer(session, now)}
 				<tr class="transition-colors hover:bg-surface">
 					<td class="px-4 py-3 font-mono text-xs text-ink">{session.mac}</td>
+					<td class="px-4 py-3 text-ink">{session.network ?? '—'}</td>
 					<td class="px-4 py-3">
 						<span class="inline-flex rounded-md bg-surface px-2 py-0.5 text-xs font-medium text-ink">
 							{session.package}
 						</span>
 					</td>
 					<td class="px-4 py-3 font-mono {timeClass(t.tone)}">{t.left}</td>
-					<td class="px-4 py-3">
-						<StatusBadge tone={t.tone} label={t.status} />
-					</td>
 				</tr>
 			{/each}
 			{#if activeSessions.length === 0}

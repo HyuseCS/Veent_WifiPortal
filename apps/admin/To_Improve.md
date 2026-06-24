@@ -11,7 +11,8 @@
 
 - Active Sessions Table
   - [x] make scrollable on all layouts — renders the full row set; Table body scrolls internally
-  - [ ] make it show which network the user is connected
+  - [x] make it show which network the user is connected — new "Network" column;
+        `listActiveSessions` left-joins `network_health` on the existing `network_id`
 
 
 - Network Health Table
