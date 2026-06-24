@@ -125,53 +125,6 @@ const spec = {
 				}
 			}
 		},
-		'/api/auth/sign-up/email': {
-			post: {
-				tags: ['Auth'],
-				summary: 'Register (better-auth)',
-				description:
-					'Creates a user and signs in (sets the session cookie). Customer :5173 → customer_* tables; admin :5174 → admin_* tables.',
-				requestBody: {
-					required: true,
-					content: {
-						'application/json': {
-							schema: {
-								type: 'object',
-								required: ['email', 'password', 'name'],
-								properties: {
-									name: { type: 'string' },
-									email: { type: 'string' },
-									password: { type: 'string', minLength: 8 }
-								}
-							}
-						}
-					}
-				},
-				responses: { '200': { description: 'Signed up; Set-Cookie session token' } }
-			}
-		},
-		'/api/auth/sign-in/email': {
-			post: {
-				tags: ['Auth'],
-				summary: 'Log in (better-auth)',
-				requestBody: {
-					required: true,
-					content: {
-						'application/json': {
-							schema: {
-								type: 'object',
-								required: ['email', 'password'],
-								properties: { email: { type: 'string' }, password: { type: 'string' } }
-							}
-						}
-					}
-				},
-				responses: {
-					'200': { description: 'Signed in; Set-Cookie session token' },
-					'401': { description: 'Invalid credentials' }
-				}
-			}
-		},
 		'/api/connected': {
 			get: {
 				tags: ['Admin'],

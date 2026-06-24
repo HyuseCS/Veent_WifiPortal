@@ -12,7 +12,7 @@
 |---|------|----------|--------|-------|
 | R1 | OTP send had no rate limit (SMS-bomb / credit drain) | High | ✅ Resolved | — |
 | R2 | `rate_limits` table built but never wired in | High | ✅ Resolved | — |
-| R3 | `emailAndPassword` enabled on a phone-only portal + guessable temp email | Medium | 🟡 In progress | teammate (email rate-limit work) |
+| R3 | `emailAndPassword` enabled on a phone-only portal + guessable temp email | Medium | ✅ Resolved | — |
 | R4 | `/api/network/grant` spend→grant is not transactional | Medium | ✅ Resolved | — |
 | R5 | Maya webhook signature scheme is an unconfirmed assumption | Medium | ✅ Resolved (moot by design) | — |
 | R6 | `/register` admin hole mints an active owner per submit | High (dev-only) | ✅ Resolved (deleted) | — |
@@ -53,20 +53,26 @@ the 6th returns 429 and sends no text.
 
 ---
 
-## R3 — Email auth on a phone-only portal 🟡 In progress (teammate)
+## R3 — Email auth on a phone-only portal ✅ Resolved
 
-`auth.ts`: `emailAndPassword: { enabled: true }` activates `/sign-up/email` and
-`/sign-in/email`, which the portal UI never uses. Combined with
-`signUpOnVerification`, every phone user gets a **predictable** temp email:
-`<phone>@otp.veent.local`. Because the address is derivable from the phone number,
-an attacker could pre-create the account via `/sign-up/email` before the real
-owner ever logs in by SMS — risking account collision/takeover and free account
-spam.
+**Was:** `auth.ts` had `emailAndPassword: { enabled: true }`, activating
+`/sign-up/email` + `/sign-in/email` (which the phone-only portal never uses).
+Combined with `signUpOnVerification`'s **predictable** temp email
+`<phone>@otp.veent.local`, an attacker could pre-create `<phone>@otp.veent.local`
+with a password before the real owner's first SMS login — an account
+collision/takeover surface.
 
-**Direction:** if the portal is truly phone-only, set `emailAndPassword.enabled:
-false`. If email auth is needed, the temp-email scheme must not be guessable and
-the signup path needs its own rate limit. *Owned by the teammate doing the email
-rate-limit work — left untouched here to avoid a merge conflict.*
+**Fix (2026-06-24):** in `apps/customer/src/lib/server/auth.ts` —
+`emailAndPassword: { enabled: false }` (closes both endpoints; phone OTP is the only
+credential provider), and `getTempEmail` now returns a **random** `randomUUID()`
+`@phone.veent.local` address so it can't be derived from the phone even if email
+auth ever returns. Stale `/sign-up/email` + `/sign-in/email` entries removed from the
+customer `docs` route. Verified phone-only auth paths unaffected (svelte-check clean).
+
+**Cleanup note:** two pre-existing **test** credential accounts
+(`butaya.kentvincent07@gmail.com`, `t@t.com`) were found from when the surface was
+open — neither is a malicious `@…veent.local` pre-registration. They can no longer
+sign in (email auth off) and can be deleted at will.
 
 ---
 
