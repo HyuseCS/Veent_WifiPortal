@@ -114,240 +114,328 @@
 		else for (const u of filtered) selected.delete(u.id);
 	}
 
-	// Header config: `key` makes a column a clickable sort toggle; Actions stays static.
-	const headers: { label: string; key?: SortKey; srOnly?: boolean }[] = [
-		{ label: 'User', key: 'phone' },
-		{ label: 'Balance', key: 'balance' },
-		{ label: 'Time Left', key: 'timeLeft' },
-		{ label: 'Devices', key: 'devices' },
-		{ label: 'Location', key: 'location' },
-		{ label: 'Status', key: 'status' },
+	// First two letters of the name, for the avatar chip.
+	const initials = (name: string) =>
+		name
+			.split(' ')
+			.map((w) => w[0])
+			.slice(0, 2)
+			.join('')
+			.toUpperCase();
+
+	// Usage and Last MAC hidden on tablet (sm–lg), fully visible at desktop (lg+).
+	const columns = [
+		{ label: 'User' },
+		{ label: 'Balance' },
+		{ label: 'Usage', class: 'hidden lg:table-cell' },
+		{ label: 'Last MAC', class: 'hidden lg:table-cell' },
+		{ label: 'Status' },
 		{ label: 'Actions', srOnly: true }
 	];
 </script>
 
-<Table class="min-h-0 flex-1">
-	<!-- Toolbar: search + any owner action (Wipe) on the right. -->
-	{#snippet toolbar()}
-		<div class="flex flex-wrap items-center gap-3 px-4 py-3">
+<!-- Mobile: stacked card list (hidden at sm+) -->
+<div class="flex flex-col overflow-hidden rounded-xl border border-border bg-bg shadow-sm sm:hidden">
+	<div class="border-b border-border">
+		<div class="flex flex-col gap-2 px-4 py-3">
 			<SearchInput
 				bind:value={query}
 				placeholder="Search phone or MAC…"
 				label="Search users"
-				class="min-w-60 flex-1"
+				class="w-full"
 			/>
-			<div class="ml-auto flex items-center gap-3">
+			<FilterTabs {tabs} active={filter} onselect={(key) => (filter = key)} fill />
+			<div class="flex items-center justify-end gap-2">
+				<button
+					type="button"
+					onclick={cycleSort}
+					class="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-lg border border-border bg-bg px-3 text-xs font-bold text-muted transition-colors duration-150 hover:border-brand/40 hover:text-ink"
+				>
+					<ArrowUpDown class="h-4 w-4" aria-hidden="true" />
+					{sortLabel}
+				</button>
 				{@render actions?.()}
 			</div>
 		</div>
-	{/snippet}
+	</div>
 
-	<!-- Custom header row: master select-all checkbox + clickable, sortable column headers. -->
-	{#snippet headRow()}
-		<tr class="border-b border-border bg-surface">
-			<th class="w-10 px-4 py-2.5">
+	<div class="divide-y divide-border">
+		{#each filtered as user (user.id)}
+			<div
+				class="flex items-start gap-3 px-4 py-3 transition-colors duration-150 hover:bg-surface"
+				class:bg-surface={selected.has(user.id)}
+			>
 				<input
 					type="checkbox"
-					class="h-4 w-4 accent-brand"
-					aria-label="Select all users"
-					checked={allShown}
-					onchange={(e) => toggleAll(e.currentTarget.checked)}
-				/>
-			</th>
-			{#each headers as h (h.label)}
-				<th
-					class="px-4 py-2.5 text-left text-[11px] font-semibold tracking-wider text-muted uppercase {h.srOnly
-						? 'text-right'
-						: ''}"
-					aria-sort={sortKey === h.key
-						? sortDir === 'asc'
-							? 'ascending'
-							: 'descending'
-						: undefined}
-				>
-					{#if h.srOnly}
-						<span class="sr-only">{h.label}</span>
-					{:else if h.key}
-						<button
-							type="button"
-							onclick={() => toggleSort(h.key!)}
-							class="group inline-flex items-center gap-1 tracking-wider uppercase transition-colors hover:text-ink {sortKey ===
-							h.key
-								? 'text-ink'
-								: ''}"
-						>
-							{h.label}
-							{#if sortKey === h.key}
-								{#if sortDir === 'asc'}
-									<ChevronUp class="h-3.5 w-3.5" aria-hidden="true" />
-								{:else}
-									<ChevronDown class="h-3.5 w-3.5" aria-hidden="true" />
-								{/if}
-							{:else}
-								<ChevronsUpDown
-									class="h-3.5 w-3.5 opacity-0 transition-opacity group-hover:opacity-50"
-									aria-hidden="true"
-								/>
-							{/if}
-						</button>
-					{:else}
-						{h.label}
-					{/if}
-				</th>
-			{/each}
-		</tr>
-	{/snippet}
-
-	{#each sorted as user (user.id)}
-		<tr class="hover:bg-surface" class:bg-surface={selected.has(user.id)}>
-			<td class="px-4 py-3">
-				<input
-					type="checkbox"
-					class="h-4 w-4 accent-brand"
-					aria-label="Select {user.phone}"
+					class="mt-0.5 h-4 w-4 shrink-0 accent-brand"
+					aria-label="Select {user.name}"
 					checked={selected.has(user.id)}
 					onchange={(e) => toggle(user.id, e.currentTarget.checked)}
 				/>
-			</td>
-			<td class="px-4 py-3">
-				<span class="truncate font-mono font-medium text-ink">{fmtPhone(user.phone)}</span>
-			</td>
-			<td class="px-4 py-3">
-				<span
-					class="inline-flex items-center gap-1.5 font-mono font-semibold {user.tone === 'warning'
-						? 'text-warning'
-						: 'text-ink'}"
-				>
-					₱{user.balance.toFixed(2)}
-					{#if user.tone === 'warning'}
-						<TriangleAlert class="h-3.5 w-3.5 text-warning" aria-label="Low balance" />
-					{/if}
-				</span>
-			</td>
-			<td class="px-4 py-3 font-mono text-ink">{user.timeLeft ?? '—'}</td>
-			<td class="px-4 py-3">
-				{#if user.deviceCount > 0}
+				<div class="relative shrink-0">
+					<span
+						class="flex h-10 w-10 items-center justify-center rounded-full bg-brand/10 text-xs font-bold text-brand"
+						aria-hidden="true">{initials(user.name)}</span
+					>
+					<span
+						class="absolute -right-0.5 -bottom-0.5 h-3 w-3 rounded-full border-2 border-bg {user.online
+							? 'bg-online'
+							: 'bg-muted/40'}"
+						title={user.online ? 'Online' : 'Offline'}
+					></span>
+				</div>
+				<div class="min-w-0 flex-1">
+					<div class="flex items-center justify-between gap-2">
+						<p class="truncate font-medium text-ink">{user.name}</p>
+						<StatusBadge tone={user.tone} label={user.status} />
+					</div>
+					<p class="truncate text-xs text-muted">{user.email}</p>
+					<div class="mt-1.5 flex items-center justify-between gap-2">
+						<div class="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs">
+							<span
+								class="inline-flex items-center gap-1 font-mono font-semibold {user.tone ===
+								'warning'
+									? 'text-warning'
+									: 'text-ink'}"
+							>
+								₱{user.balance.toFixed(2)}
+								{#if user.tone === 'warning'}
+									<TriangleAlert class="h-3 w-3 text-warning" aria-label="Low balance" />
+								{/if}
+							</span>
+							<span class="text-muted">{user.usage}</span>
+							{#if user.lastMac}
+								<span class="font-mono text-xs text-muted">{user.lastMac}</span>
+							{/if}
+						</div>
+						<div class="flex shrink-0 items-center gap-1">
+							{#if user.tone === 'blocked'}
+								<form method="post" action="?/unblock" use:enhance>
+									<input type="hidden" name="userId" value={user.id} />
+									<IconButton
+										type="submit"
+										icon={ShieldCheck as unknown as Component}
+										label="Unblock {user.name}"
+									/>
+								</form>
+							{:else}
+								{#if dev}
+									<form method="post" action="?/allowWifi" use:enhance>
+										<input type="hidden" name="userId" value={user.id} />
+										<input type="hidden" name="mac" value={user.lastMac ?? ''} />
+										<IconButton
+											type="submit"
+											icon={Wifi as unknown as Component}
+											label="Allow WiFi for {user.name} (dev)"
+											disabled={!user.lastMac}
+										/>
+									</form>
+								{/if}
+								<form method="post" action="?/kick" use:enhance>
+									<input type="hidden" name="userId" value={user.id} />
+									<IconButton
+										type="submit"
+										icon={WifiOff as unknown as Component}
+										label="Kick {user.name} off the network"
+									/>
+								</form>
+								<form method="post" action="?/block" use:enhance>
+									<input type="hidden" name="userId" value={user.id} />
+									<IconButton
+										type="submit"
+										icon={Ban as unknown as Component}
+										label="Block {user.name}"
+										tone="danger"
+									/>
+								</form>
+							{/if}
+						</div>
+					</div>
+				</div>
+			</div>
+		{/each}
+
+		{#if filtered.length === 0}
+			<EmptyState
+				icon={Search as unknown as Component}
+				title="No users match your filters"
+				description="Try a different search term or status filter."
+				compact
+			/>
+		{/if}
+	</div>
+
+	<div class="border-t border-border">
+		<p class="px-4 py-3 text-xs text-muted">Showing {filtered.length} of {users.length} users</p>
+	</div>
+</div>
+
+<!-- Tablet+: full table (hidden below sm) -->
+<div class="hidden sm:block">
+	<Table {columns} scrollX>
+		{#snippet toolbar()}
+			<div class="flex flex-wrap items-center gap-3 px-4 py-3">
+				<SearchInput
+					bind:value={query}
+					placeholder="Search name, email or MAC…"
+					label="Search users"
+					class="min-w-0 flex-1"
+				/>
+				<FilterTabs {tabs} active={filter} onselect={(key) => (filter = key)} />
+				<div class="ml-auto flex items-center gap-3">
 					<button
 						type="button"
-						onclick={() => toggleExpand(user.id)}
-						aria-expanded={expanded.has(user.id)}
-						aria-label="{user.deviceCount} device{user.deviceCount === 1
-							? ''
-							: 's'} for {user.phone}"
-						class="inline-flex min-h-9 cursor-pointer items-center gap-1.5 rounded-lg border border-border bg-bg px-2.5 text-xs font-semibold text-ink transition-colors duration-150 hover:border-brand/40"
+						onclick={cycleSort}
+						class="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-lg border border-border bg-bg px-3 text-xs font-bold text-muted transition-colors duration-150 hover:border-brand/40 hover:text-ink"
 					>
-						<Smartphone class="h-3.5 w-3.5 text-muted" aria-hidden="true" />
-						<span class="font-mono">{user.deviceCount}</span>
-						<ChevronDown
-							class="h-3.5 w-3.5 text-muted transition-transform duration-150 {expanded.has(user.id)
-								? 'rotate-180'
-								: ''}"
-							aria-hidden="true"
-						/>
+						<ArrowUpDown class="h-4 w-4" aria-hidden="true" />
+						{sortLabel}
 					</button>
-				{:else}
-					<span class="font-mono text-xs text-muted">—</span>
-				{/if}
-			</td>
-			<td class="px-4 py-3">
-				{#if user.location}
-					<span class="inline-flex min-w-0 items-center gap-1.5 text-sm text-ink">
-						<MapPin class="h-3.5 w-3.5 shrink-0 text-muted" aria-hidden="true" />
-						<span class="truncate">{user.location}</span>
+					{@render actions?.()}
+				</div>
+			</div>
+		{/snippet}
+
+		{#snippet headRow()}
+			<tr class="border-b border-border bg-surface">
+				<th class="w-10 px-4 py-2.5">
+					<input
+						type="checkbox"
+						class="h-4 w-4 accent-brand"
+						aria-label="Select all users"
+						checked={allShown}
+						onchange={(e) => toggleAll(e.currentTarget.checked)}
+					/>
+				</th>
+				{#each columns as col (col.label)}
+					<th
+						class="px-4 py-2.5 text-left text-[11px] font-semibold tracking-wider text-muted uppercase {col.srOnly
+							? 'text-right'
+							: ''} {col.class ?? ''}"
+					>
+						{#if col.srOnly}<span class="sr-only">{col.label}</span>{:else}{col.label}{/if}
+					</th>
+				{/each}
+			</tr>
+		{/snippet}
+
+		{#each filtered as user (user.id)}
+			<tr class="hover:bg-surface" class:bg-surface={selected.has(user.id)}>
+				<td class="px-4 py-3">
+					<input
+						type="checkbox"
+						class="h-4 w-4 accent-brand"
+						aria-label="Select {user.name}"
+						checked={selected.has(user.id)}
+						onchange={(e) => toggle(user.id, e.currentTarget.checked)}
+					/>
+				</td>
+				<td class="px-4 py-3">
+					<div class="flex items-center gap-3">
+						<div class="relative shrink-0">
+							<span
+								class="flex h-9 w-9 items-center justify-center rounded-full bg-brand/10 text-xs font-bold text-brand"
+								aria-hidden="true">{initials(user.name)}</span
+							>
+							<span
+								class="absolute -right-0.5 -bottom-0.5 h-3 w-3 rounded-full border-2 border-bg {user.online
+									? 'bg-online'
+									: 'bg-muted/40'}"
+								title={user.online ? 'Online' : 'Offline'}
+							></span>
+						</div>
+						<div class="min-w-0">
+							<div class="truncate font-medium text-ink">{user.name}</div>
+							<div class="truncate text-xs text-muted">{user.email}</div>
+						</div>
+					</div>
+				</td>
+				<td class="px-4 py-3">
+					<span
+						class="inline-flex items-center gap-1.5 font-mono font-semibold {user.tone === 'warning'
+							? 'text-warning'
+							: 'text-ink'}"
+					>
+						₱{user.balance.toFixed(2)}
+						{#if user.tone === 'warning'}
+							<TriangleAlert class="h-3.5 w-3.5 text-warning" aria-label="Low balance" />
+						{/if}
 					</span>
-				{:else}
-					<span class="text-xs text-muted">—</span>
-				{/if}
-			</td>
-			<td class="px-4 py-3">
-				<StatusBadge tone={user.tone} label={user.status} />
-			</td>
-			<td class="px-4 py-3">
-				<div class="flex items-center justify-end gap-1">
-					{#if user.tone === 'blocked'}
-						<!-- Blocked users have no live session to kick; offer Unblock instead. -->
-						<form method="post" action="?/unblock" use:enhance>
-							<input type="hidden" name="userId" value={user.id} />
-							<IconButton
-								type="submit"
-								icon={ShieldCheck as unknown as Component}
-								label="Unblock {user.phone}"
-							/>
-						</form>
-					{:else}
-						{#if dev}
-							<!-- Dev-only: comp this user onto the WiFi (60-min session on their last
-							     known device MAC). Disabled until we've seen a MAC for them. -->
-							<form method="post" action="?/allowWifi" use:enhance>
+				</td>
+				<td class="hidden px-4 py-3 font-mono text-ink lg:table-cell">{user.usage}</td>
+				<td class="hidden px-4 py-3 font-mono text-xs text-muted lg:table-cell"
+					>{user.lastMac ?? '—'}</td
+				>
+				<td class="px-4 py-3">
+					<StatusBadge tone={user.tone} label={user.status} />
+				</td>
+				<td class="px-4 py-3">
+					<div class="flex items-center justify-end gap-1">
+						{#if user.tone === 'blocked'}
+							<form method="post" action="?/unblock" use:enhance>
 								<input type="hidden" name="userId" value={user.id} />
-								<input type="hidden" name="mac" value={user.lastMac ?? ''} />
 								<IconButton
 									type="submit"
-									icon={Wifi as unknown as Component}
-									label="Allow WiFi for {user.phone} (dev)"
-									disabled={!user.lastMac}
+									icon={ShieldCheck as unknown as Component}
+									label="Unblock {user.name}"
+								/>
+							</form>
+						{:else}
+							{#if dev}
+								<form method="post" action="?/allowWifi" use:enhance>
+									<input type="hidden" name="userId" value={user.id} />
+									<input type="hidden" name="mac" value={user.lastMac ?? ''} />
+									<IconButton
+										type="submit"
+										icon={Wifi as unknown as Component}
+										label="Allow WiFi for {user.name} (dev)"
+										disabled={!user.lastMac}
+									/>
+								</form>
+							{/if}
+							<form method="post" action="?/kick" use:enhance>
+								<input type="hidden" name="userId" value={user.id} />
+								<IconButton
+									type="submit"
+									icon={WifiOff as unknown as Component}
+									label="Kick {user.name} off the network"
+								/>
+							</form>
+							<form method="post" action="?/block" use:enhance>
+								<input type="hidden" name="userId" value={user.id} />
+								<IconButton
+									type="submit"
+									icon={Ban as unknown as Component}
+									label="Block {user.name}"
+									tone="danger"
 								/>
 							</form>
 						{/if}
-						<form method="post" action="?/kick" use:enhance>
-							<input type="hidden" name="userId" value={user.id} />
-							<IconButton
-								type="submit"
-								icon={WifiOff as unknown as Component}
-								label="Disconnect all of {user.phone}'s devices"
-							/>
-						</form>
-						<form method="post" action="?/block" use:enhance>
-							<input type="hidden" name="userId" value={user.id} />
-							<IconButton
-								type="submit"
-								icon={Ban as unknown as Component}
-								label="Block {user.phone} (disconnects all devices)"
-								tone="danger"
-							/>
-						</form>
-					{/if}
-				</div>
-			</td>
-		</tr>
-		{#if expanded.has(user.id) && user.deviceCount > 0}
-			<tr class="bg-surface">
-				<td></td>
-				<td colspan={headers.length} class="px-4 pt-0 pb-3">
-					<ul class="flex flex-col gap-1.5 rounded-lg border border-border bg-bg p-3">
-						{#each user.devices as d, i (d.mac ?? i)}
-							<li class="flex items-center gap-2 text-xs">
-								<span class="h-1.5 w-1.5 rounded-full bg-online" aria-hidden="true"></span>
-								<span class="font-mono text-ink">{d.mac ?? '—'}</span>
-								<span class="text-muted">· seen {seenAgo(d.lastSeenAt)}</span>
-							</li>
-						{/each}
-					</ul>
+					</div>
+				</td>
+			</tr>
+		{/each}
+
+		{#if filtered.length === 0}
+			<tr>
+				<td colspan={columns.length + 1} class="p-0">
+					<EmptyState
+						icon={Search as unknown as Component}
+						title="No users match your filters"
+						description="Try a different search term or status filter."
+						compact
+					/>
 				</td>
 			</tr>
 		{/if}
-	{/each}
 
-	{#if filtered.length === 0}
-		<tr>
-			<td colspan={headers.length + 1} class="p-0">
-				<EmptyState
-					icon={Search as unknown as Component}
-					title="No users match your search"
-					description="Try a different search term."
-					compact
-				/>
-			</td>
-		</tr>
-	{/if}
-
-	<!-- Footer: live count of what's shown vs. the full registered base. -->
-	{#snippet footer()}
-		<p class="px-4 py-3 text-xs text-muted">
-			Showing {filtered.length} of {users.length} users
-		</p>
-	{/snippet}
-</Table>
+		{#snippet footer()}
+			<p class="px-4 py-3 text-xs text-muted">
+				Showing {filtered.length} of {users.length} users
+			</p>
+		{/snippet}
+	</Table>
+</div>
 
 <!-- Floating bulk bar: appears only with a selection. Delete is the one bulk action with a
      backing form action; select/clear are local UI state. -->
@@ -370,7 +458,7 @@
 			<input type="hidden" name="userIds" value={[...selected].join(',')} />
 			<button
 				type="submit"
-				class="inline-flex min-h-[44px] cursor-pointer items-center gap-2 rounded-lg bg-blocked px-3 text-sm font-semibold text-white transition-[filter] duration-150 hover:brightness-110"
+				class="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-lg bg-blocked px-3 text-sm font-semibold text-white transition-[filter] duration-150 hover:brightness-110"
 			>
 				<Trash2 class="h-4 w-4" aria-hidden="true" />
 				Delete

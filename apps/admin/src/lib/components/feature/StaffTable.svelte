@@ -89,12 +89,12 @@
 			.join('')
 			.toUpperCase();
 
-	// Header config: `key` makes a column a clickable sort toggle; Actions stays static.
-	const headers: { label: string; key?: SortKey; srOnly?: boolean }[] = [
-		{ label: 'Member', key: 'name' },
-		{ label: 'Role', key: 'role' },
-		{ label: 'Status', key: 'status' },
-		{ label: 'Last active', key: 'lastActive' },
+	// Last Active hidden on tablet (sm–lg), visible at desktop (lg+).
+	const columns = [
+		{ label: 'Member' },
+		{ label: 'Role' },
+		{ label: 'Status' },
+		{ label: 'Last active', class: 'hidden lg:table-cell' },
 		{ label: 'Actions', srOnly: true }
 	];
 
@@ -105,224 +105,333 @@
 	};
 </script>
 
-<!-- min-h-0 flex-1: the Staff page gives this a full-height flex column, so the table body
-     scrolls internally (sticky header) instead of growing the page. -->
-<Table class="min-h-0 flex-1">
-	<!-- Toolbar: title + status filter + search, matching the Users/Transactions chrome. -->
-	{#snippet toolbar()}
-		<div class="flex flex-wrap items-center gap-3 px-4 py-3">
-			<h2 class="text-base font-semibold text-ink">Members</h2>
+<!-- Mobile: stacked card list (hidden at sm+) -->
+<div class="flex flex-col overflow-hidden rounded-xl border border-border bg-bg shadow-sm sm:hidden">
+	<div class="border-b border-border">
+		<div class="flex flex-col gap-2 px-4 py-3">
+			<h2 class="text-sm font-semibold text-ink">Members</h2>
 			<SearchInput
 				bind:value={query}
 				placeholder="Search name or email…"
 				label="Search staff"
-				class="ml-auto min-w-60 flex-1 sm:max-w-xs"
+				class="w-full"
 			/>
-			{#if onadd}
-				<!-- Icon-only; "Add staff" shows as a native hover tooltip (title) + a11y label. -->
-				<Button onclick={onadd} title="Add staff" aria-label="Add staff" class="shrink-0">
-					<UserPlus class="h-4 w-4" aria-hidden="true" />
-				</Button>
-			{/if}
+			<FilterTabs {tabs} active={filter} onselect={(key) => (filter = key)} fill />
 		</div>
-	{/snippet}
+	</div>
 
-	<!-- Clickable, sortable column headers (replaces Table's auto-generated header row). -->
-	{#snippet headRow()}
-		<tr class="border-b border-border bg-surface">
-			{#each headers as h (h.label)}
-				<th
-					class="px-4 py-2.5 text-left text-[11px] font-semibold tracking-wider text-muted uppercase"
-					aria-sort={sortKey === h.key
-						? sortDir === 'asc'
-							? 'ascending'
-							: 'descending'
-						: undefined}
+	<div class="divide-y divide-border">
+		{#each filtered as member (member.id)}
+			<div
+				class="flex items-start gap-3 px-4 py-3 transition-colors duration-150 hover:bg-surface"
+				class:opacity-60={member.status === 'disabled'}
+			>
+				<span
+					class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand/10 text-xs font-bold text-brand"
+					aria-hidden="true">{initials(member.name)}</span
 				>
-					{#if h.srOnly}
-						<span class="sr-only">{h.label}</span>
-					{:else if h.key}
-						<button
-							type="button"
-							onclick={() => toggleSort(h.key!)}
-							class="group inline-flex items-center gap-1 tracking-wider uppercase transition-colors hover:text-ink {sortKey ===
-							h.key
-								? 'text-ink'
-								: ''}"
-						>
-							{h.label}
-							{#if sortKey === h.key}
-								{#if sortDir === 'asc'}
-									<ChevronUp class="h-3.5 w-3.5" aria-hidden="true" />
-								{:else}
-									<ChevronDown class="h-3.5 w-3.5" aria-hidden="true" />
-								{/if}
+				<div class="min-w-0 flex-1">
+					<div class="flex items-center justify-between gap-2">
+						<p class="truncate font-medium text-ink">{member.name}</p>
+						<StatusBadge
+							tone={statusMeta[member.status].tone}
+							label={statusMeta[member.status].label}
+						/>
+					</div>
+					<p class="truncate font-mono text-xs text-muted">{member.email}</p>
+					<div class="mt-1.5 flex items-center justify-between gap-2">
+						<div class="flex items-center gap-2">
+							{#if member.role === 'owner'}
+								<span
+									class="inline-flex items-center gap-1 rounded-full bg-brand/10 px-2 py-0.5 text-xs font-medium text-brand"
+								>
+									<Crown class="h-3 w-3" aria-hidden="true" />{member.roleLabel}
+								</span>
 							{:else}
-								<ChevronsUpDown
-									class="h-3.5 w-3.5 opacity-0 transition-opacity group-hover:opacity-50"
-									aria-hidden="true"
-								/>
+								<span
+									class="inline-flex items-center rounded-full bg-surface px-2 py-0.5 text-xs font-medium text-ink"
+									>{member.roleLabel}</span
+								>
 							{/if}
-						</button>
-					{:else}
-						{h.label}
-					{/if}
-				</th>
-			{/each}
-		</tr>
-	{/snippet}
-
-	{#each sorted as member (member.id)}
-		<tr class="hover:bg-surface" class:opacity-60={member.status === 'disabled'}>
-			<td class="px-4 py-3">
-				<div class="flex items-center gap-3">
-					<span
-						class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand/10 text-xs font-bold text-brand"
-						aria-hidden="true">{initials(member.name)}</span
-					>
-					<div class="min-w-0">
-						<div class="truncate font-medium text-ink">{member.name}</div>
-						<div class="truncate font-mono text-xs text-muted">{member.email}</div>
+							<span class="font-mono text-xs text-muted">{member.lastActive}</span>
+						</div>
+						{#if member.role !== 'owner'}
+							<div class="flex shrink-0 items-center gap-1">
+								{#if confirmingId === member.id}
+									<span class="text-xs text-muted">Remove?</span>
+									<form
+										method="post"
+										action="?/remove"
+										use:enhance={() =>
+											async ({ update }) => {
+												confirmingId = null;
+												await update();
+											}}
+									>
+										<input type="hidden" name="userId" value={member.id} />
+										<IconButton
+											type="submit"
+											icon={Check as unknown as Component}
+											label="Confirm removing {member.name}"
+											tone="danger"
+										/>
+									</form>
+									<IconButton
+										icon={X as unknown as Component}
+										label="Cancel"
+										onclick={() => (confirmingId = null)}
+									/>
+								{:else if promotingId === member.id}
+									<span class="text-xs text-muted">Make owner?</span>
+									<form
+										method="post"
+										action="?/promote"
+										use:enhance={() =>
+											async ({ update }) => {
+												promotingId = null;
+												await update();
+											}}
+									>
+										<input type="hidden" name="userId" value={member.id} />
+										<IconButton
+											type="submit"
+											icon={Check as unknown as Component}
+											label="Confirm promoting {member.name} to owner"
+										/>
+									</form>
+									<IconButton
+										icon={X as unknown as Component}
+										label="Cancel"
+										onclick={() => (promotingId = null)}
+									/>
+								{:else}
+									{#if member.role === 'admin' && member.status === 'active'}
+										<IconButton
+											icon={Crown as unknown as Component}
+											label="Give {member.name} the owner role"
+											onclick={() => (promotingId = member.id)}
+										/>
+									{/if}
+									{#if member.status === 'disabled'}
+										<form method="post" action="?/setStatus" use:enhance>
+											<input type="hidden" name="userId" value={member.id} />
+											<input type="hidden" name="status" value="active" />
+											<IconButton
+												type="submit"
+												icon={RotateCcw as unknown as Component}
+												label="Reactivate {member.name}"
+											/>
+										</form>
+									{:else}
+										<form method="post" action="?/setStatus" use:enhance>
+											<input type="hidden" name="userId" value={member.id} />
+											<input type="hidden" name="status" value="disabled" />
+											<IconButton
+												type="submit"
+												icon={Ban as unknown as Component}
+												label="Suspend {member.name}"
+												tone="danger"
+											/>
+										</form>
+									{/if}
+									<IconButton
+										icon={Trash2 as unknown as Component}
+										label="Remove {member.name}"
+										tone="danger"
+										onclick={() => (confirmingId = member.id)}
+									/>
+								{/if}
+							</div>
+						{/if}
 					</div>
 				</div>
-			</td>
-			<td class="px-4 py-3">
-				{#if member.role === 'owner'}
-					<span
-						class="inline-flex items-center gap-1.5 rounded-full bg-brand/10 px-2.5 py-1 text-xs font-medium text-brand"
-					>
-						<Crown class="h-3.5 w-3.5" aria-hidden="true" />
-						{member.roleLabel}
-					</span>
-				{:else}
-					<span
-						class="inline-flex items-center rounded-full bg-surface px-2.5 py-1 text-xs font-medium text-ink"
-					>
-						{member.roleLabel}
-					</span>
-				{/if}
-			</td>
-			<td class="px-4 py-3">
-				<StatusBadge
-					tone={statusMeta[member.status].tone}
-					label={statusMeta[member.status].label}
-				/>
-			</td>
-			<td class="px-4 py-3 font-mono text-muted">{member.lastActive}</td>
-			<td class="px-4 py-3">
-				{#if member.role !== 'owner'}
-					{#if confirmingId === member.id}
-						<div class="flex items-center justify-end gap-1">
-							<span class="text-xs text-muted">Remove {member.name}?</span>
-							<form
-								method="post"
-								action="?/remove"
-								use:enhance={() =>
-									async ({ update }) => {
-										confirmingId = null;
-										await update();
-									}}
-							>
-								<input type="hidden" name="userId" value={member.id} />
-								<IconButton
-									type="submit"
-									icon={Check as unknown as Component}
-									label="Confirm removing {member.name}"
-									tone="danger"
-								/>
-							</form>
-							<IconButton
-								icon={X as unknown as Component}
-								label="Cancel"
-								onclick={() => (confirmingId = null)}
-							/>
-						</div>
-					{:else if promotingId === member.id}
-						<div class="flex items-center justify-end gap-1">
-							<span class="text-xs text-muted">Make {member.name} an owner?</span>
-							<form
-								method="post"
-								action="?/promote"
-								use:enhance={() =>
-									async ({ update }) => {
-										promotingId = null;
-										await update();
-									}}
-							>
-								<input type="hidden" name="userId" value={member.id} />
-								<IconButton
-									type="submit"
-									icon={Check as unknown as Component}
-									label="Confirm promoting {member.name} to owner"
-								/>
-							</form>
-							<IconButton
-								icon={X as unknown as Component}
-								label="Cancel"
-								onclick={() => (promotingId = null)}
-							/>
-						</div>
-					{:else}
-						<div class="flex items-center justify-end gap-1">
-							{#if member.role === 'admin' && member.status === 'active'}
-								<IconButton
-									icon={Crown as unknown as Component}
-									label="Give {member.name} the owner role"
-									onclick={() => (promotingId = member.id)}
-								/>
-							{/if}
-							{#if member.status === 'disabled'}
-								<form method="post" action="?/setStatus" use:enhance>
-									<input type="hidden" name="userId" value={member.id} />
-									<input type="hidden" name="status" value="active" />
-									<IconButton
-										type="submit"
-										icon={RotateCcw as unknown as Component}
-										label="Reactivate {member.name}"
-									/>
-								</form>
-							{:else}
-								<form method="post" action="?/setStatus" use:enhance>
-									<input type="hidden" name="userId" value={member.id} />
-									<input type="hidden" name="status" value="disabled" />
-									<IconButton
-										type="submit"
-										icon={Ban as unknown as Component}
-										label="Suspend {member.name}"
-										tone="danger"
-									/>
-								</form>
-							{/if}
-							<IconButton
-								icon={Trash2 as unknown as Component}
-								label="Remove {member.name}"
-								tone="danger"
-								onclick={() => (confirmingId = member.id)}
-							/>
-						</div>
-					{/if}
-				{/if}
-			</td>
-		</tr>
-	{/each}
+			</div>
+		{/each}
 
-	{#if filtered.length === 0}
-		<tr>
-			<td colspan={headers.length} class="p-0">
-				<EmptyState
-					icon={Search as unknown as Component}
-					title="No staff members match"
-					description="Try a different search term."
-					compact
-				/>
-			</td>
-		</tr>
-	{/if}
+		{#if filtered.length === 0}
+			<EmptyState
+				icon={Search as unknown as Component}
+				title="No staff members match"
+				description="Try a different search term or status filter."
+				compact
+			/>
+		{/if}
+	</div>
 
-	<!-- Footer: live count of what's shown vs. the full staff list. -->
-	{#snippet footer()}
+	<div class="border-t border-border">
 		<p class="px-4 py-3 text-xs text-muted">
 			Showing {filtered.length} of {staff.length} staff members
 		</p>
-	{/snippet}
-</Table>
+	</div>
+</div>
+
+<!-- Tablet+: full table (hidden below sm) -->
+<div class="hidden sm:block">
+	<Table {columns} scrollX>
+		{#snippet toolbar()}
+			<div class="flex flex-wrap items-center gap-3 px-4 py-3">
+				<h2 class="text-base font-semibold text-ink">Members</h2>
+				<FilterTabs {tabs} active={filter} onselect={(key) => (filter = key)} />
+				<SearchInput
+					bind:value={query}
+					placeholder="Search name or email…"
+					label="Search staff"
+					class="ml-auto min-w-0 flex-1 sm:max-w-xs"
+				/>
+			</div>
+		{/snippet}
+
+		{#each filtered as member (member.id)}
+			<tr class="hover:bg-surface" class:opacity-60={member.status === 'disabled'}>
+				<td class="px-4 py-3">
+					<div class="flex items-center gap-3">
+						<span
+							class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand/10 text-xs font-bold text-brand"
+							aria-hidden="true">{initials(member.name)}</span
+						>
+						<div class="min-w-0">
+							<div class="truncate font-medium text-ink">{member.name}</div>
+							<div class="truncate font-mono text-xs text-muted">{member.email}</div>
+						</div>
+					</div>
+				</td>
+				<td class="px-4 py-3">
+					{#if member.role === 'owner'}
+						<span
+							class="inline-flex items-center gap-1.5 rounded-full bg-brand/10 px-2.5 py-1 text-xs font-medium text-brand"
+						>
+							<Crown class="h-3.5 w-3.5" aria-hidden="true" />
+							{member.roleLabel}
+						</span>
+					{:else}
+						<span
+							class="inline-flex items-center rounded-full bg-surface px-2.5 py-1 text-xs font-medium text-ink"
+						>
+							{member.roleLabel}
+						</span>
+					{/if}
+				</td>
+				<td class="px-4 py-3">
+					<StatusBadge
+						tone={statusMeta[member.status].tone}
+						label={statusMeta[member.status].label}
+					/>
+				</td>
+				<td class="hidden px-4 py-3 font-mono text-muted lg:table-cell">{member.lastActive}</td>
+				<td class="px-4 py-3">
+					{#if member.role !== 'owner'}
+						{#if confirmingId === member.id}
+							<div class="flex items-center justify-end gap-1">
+								<span class="text-xs text-muted">Remove {member.name}?</span>
+								<form
+									method="post"
+									action="?/remove"
+									use:enhance={() =>
+										async ({ update }) => {
+											confirmingId = null;
+											await update();
+										}}
+								>
+									<input type="hidden" name="userId" value={member.id} />
+									<IconButton
+										type="submit"
+										icon={Check as unknown as Component}
+										label="Confirm removing {member.name}"
+										tone="danger"
+									/>
+								</form>
+								<IconButton
+									icon={X as unknown as Component}
+									label="Cancel"
+									onclick={() => (confirmingId = null)}
+								/>
+							</div>
+						{:else if promotingId === member.id}
+							<div class="flex items-center justify-end gap-1">
+								<span class="text-xs text-muted">Make {member.name} an owner?</span>
+								<form
+									method="post"
+									action="?/promote"
+									use:enhance={() =>
+										async ({ update }) => {
+											promotingId = null;
+											await update();
+										}}
+								>
+									<input type="hidden" name="userId" value={member.id} />
+									<IconButton
+										type="submit"
+										icon={Check as unknown as Component}
+										label="Confirm promoting {member.name} to owner"
+									/>
+								</form>
+								<IconButton
+									icon={X as unknown as Component}
+									label="Cancel"
+									onclick={() => (promotingId = null)}
+								/>
+							</div>
+						{:else}
+							<div class="flex items-center justify-end gap-1">
+								{#if member.role === 'admin' && member.status === 'active'}
+									<IconButton
+										icon={Crown as unknown as Component}
+										label="Give {member.name} the owner role"
+										onclick={() => (promotingId = member.id)}
+									/>
+								{/if}
+								{#if member.status === 'disabled'}
+									<form method="post" action="?/setStatus" use:enhance>
+										<input type="hidden" name="userId" value={member.id} />
+										<input type="hidden" name="status" value="active" />
+										<IconButton
+											type="submit"
+											icon={RotateCcw as unknown as Component}
+											label="Reactivate {member.name}"
+										/>
+									</form>
+								{:else}
+									<form method="post" action="?/setStatus" use:enhance>
+										<input type="hidden" name="userId" value={member.id} />
+										<input type="hidden" name="status" value="disabled" />
+										<IconButton
+											type="submit"
+											icon={Ban as unknown as Component}
+											label="Suspend {member.name}"
+											tone="danger"
+										/>
+									</form>
+								{/if}
+								<IconButton
+									icon={Trash2 as unknown as Component}
+									label="Remove {member.name}"
+									tone="danger"
+									onclick={() => (confirmingId = member.id)}
+								/>
+							</div>
+						{/if}
+					{/if}
+				</td>
+			</tr>
+		{/each}
+
+		{#if filtered.length === 0}
+			<tr>
+				<td colspan={columns.length} class="p-0">
+					<EmptyState
+						icon={Search as unknown as Component}
+						title="No staff members match"
+						description="Try a different search term or status filter."
+						compact
+					/>
+				</td>
+			</tr>
+		{/if}
+
+		{#snippet footer()}
+			<p class="px-4 py-3 text-xs text-muted">
+				Showing {filtered.length} of {staff.length} staff members
+			</p>
+		{/snippet}
+	</Table>
+</div>

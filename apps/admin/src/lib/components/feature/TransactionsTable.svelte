@@ -49,13 +49,14 @@
 		return rows;
 	});
 
+	// Receipt hidden on tablet (sm–lg), visible at desktop (lg+).
 	const columns = [
 		{ label: 'Date' },
 		{ label: 'Status' },
 		{ label: 'Amount' },
 		{ label: 'Method' },
 		{ label: 'Buyer' },
-		{ label: 'Receipt' }
+		{ label: 'Receipt', class: 'hidden lg:table-cell' }
 	];
 
 	const dateFmt = new Intl.DateTimeFormat('en-PH', {
@@ -67,61 +68,124 @@
 	const fmtDate = (iso: string) => dateFmt.format(new Date(iso));
 </script>
 
-<!-- Fill the parent's height so the rows scroll inside (sticky header) instead of growing the
-     page; the finance page gives this a full-viewport-tall flex column. -->
-<Table {columns} class="min-h-0 flex-1">
-	<!-- Toolbar: search + status filter, matching the Users table chrome exactly. -->
-	{#snippet toolbar()}
-		<div class="flex flex-wrap items-center gap-3 px-4 py-3">
-			<h2 class="text-base font-semibold text-ink">Transactions</h2>
-			<FilterTabs {tabs} active={filter} onselect={(key) => (filter = key)} />
+<!-- Mobile: stacked card list (hidden at sm+) -->
+<div class="flex flex-col overflow-hidden rounded-xl border border-border bg-bg shadow-sm sm:hidden">
+	<div class="border-b border-border">
+		<div class="flex flex-col gap-2 px-4 py-3">
+			<h2 class="text-sm font-semibold text-ink">Transactions</h2>
 			<SearchInput
 				bind:value={query}
 				placeholder="Search buyer or receipt…"
 				label="Search transactions"
-				class="ml-auto min-w-60 flex-1 sm:max-w-xs"
+				class="w-full"
 			/>
+			<FilterTabs {tabs} active={filter} onselect={(key) => (filter = key)} fill />
 		</div>
-	{/snippet}
+	</div>
 
-	{#each filtered as tx (tx.id)}
-		<tr class="hover:bg-surface">
-			<td class="px-4 py-2.5 whitespace-nowrap text-ink">{fmtDate(tx.createdAt)}</td>
-			<td class="px-4 py-2.5">
-				<StatusBadge tone={tx.statusTone} label={cleanStatus(tx.status)} />
-			</td>
-			<td class="px-4 py-2.5 font-mono font-semibold text-ink">{tx.amount}</td>
-			<td class="px-4 py-2.5 text-ink">
-				{tx.fundSourceType}{#if tx.fundSourceMasked}<span class="ml-1 font-mono text-xs text-muted"
+	<div class="divide-y divide-border">
+		{#each filtered as tx (tx.id)}
+			<div class="px-4 py-3 transition-colors duration-150 hover:bg-surface">
+				<div class="flex items-start justify-between gap-2">
+					<div class="min-w-0">
+						<p class="truncate font-medium text-ink">{tx.buyerName}</p>
+						{#if tx.buyerEmail}
+							<p class="truncate text-xs text-muted">{tx.buyerEmail}</p>
+						{/if}
+					</div>
+					<StatusBadge tone={tx.statusTone} label={cleanStatus(tx.status)} />
+				</div>
+				<div class="mt-1.5 flex items-center justify-between gap-3">
+					<div class="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted">
+						<span class="whitespace-nowrap">{fmtDate(tx.createdAt)}</span>
+						<span
+							>{tx.fundSourceType}{#if tx.fundSourceMasked}&nbsp;•{tx.fundSourceMasked}{/if}</span
+						>
+						{#if tx.receiptNo}
+							<span class="font-mono">{tx.receiptNo}</span>
+						{/if}
+					</div>
+					<span class="shrink-0 font-mono text-sm font-semibold text-ink">{tx.amount}</span>
+				</div>
+			</div>
+		{/each}
+
+		{#if filtered.length === 0}
+			<EmptyState
+				icon={Search as unknown as Component}
+				title="No transactions match"
+				description="Try a different search term or status filter."
+				compact
+			/>
+		{/if}
+	</div>
+
+	<div class="border-t border-border">
+		<p class="px-4 py-3 text-xs text-muted">Showing {filtered.length} of {total} transactions</p>
+	</div>
+</div>
+
+<!-- Tablet+: full table (hidden below sm) -->
+<div class="hidden sm:block">
+	<Table {columns} scrollX>
+		{#snippet toolbar()}
+			<div class="flex flex-col gap-2 px-4 py-3 md:flex-row md:items-center">
+				<h2 class="shrink-0 text-base font-semibold text-ink">Transactions</h2>
+				<FilterTabs
+					{tabs}
+					active={filter}
+					onselect={(key) => (filter = key)}
+					class="flex-wrap"
+				/>
+				<SearchInput
+					bind:value={query}
+					placeholder="Search buyer or receipt…"
+					label="Search transactions"
+					class="w-full md:ml-auto md:max-w-xs"
+				/>
+			</div>
+		{/snippet}
+
+		{#each filtered as tx (tx.id)}
+			<tr class="hover:bg-surface">
+				<td class="px-4 py-2.5 whitespace-nowrap text-ink">{fmtDate(tx.createdAt)}</td>
+				<td class="px-4 py-2.5">
+					<StatusBadge tone={tx.statusTone} label={cleanStatus(tx.status)} />
+				</td>
+				<td class="px-4 py-2.5 font-mono font-semibold text-ink">{tx.amount}</td>
+				<td class="px-4 py-2.5 text-ink">
+					{tx.fundSourceType}{#if tx.fundSourceMasked}<span class="ml-1 font-mono text-xs text-muted"
 						>•{tx.fundSourceMasked}</span
 					>{/if}
-			</td>
-			<td class="px-4 py-2.5 text-ink">
-				<span class="block truncate">{tx.buyerName}</span>
-				{#if tx.buyerEmail}<span class="block truncate text-xs text-muted">{tx.buyerEmail}</span
+				</td>
+				<td class="px-4 py-2.5 text-ink">
+					<span class="block truncate">{tx.buyerName}</span>
+					{#if tx.buyerEmail}<span class="block truncate text-xs text-muted">{tx.buyerEmail}</span
 					>{/if}
-			</td>
-			<td class="px-4 py-2.5 font-mono text-xs text-muted">{tx.receiptNo ?? '—'}</td>
-		</tr>
-	{/each}
+				</td>
+				<td class="hidden px-4 py-2.5 font-mono text-xs text-muted lg:table-cell"
+					>{tx.receiptNo ?? '—'}</td
+				>
+			</tr>
+		{/each}
 
-	{#if filtered.length === 0}
-		<tr>
-			<td colspan={columns.length} class="p-0">
-				<EmptyState
-					icon={Search as unknown as Component}
-					title="No transactions match"
-					description="Try a different search term or status filter."
-					compact
-				/>
-			</td>
-		</tr>
-	{/if}
+		{#if filtered.length === 0}
+			<tr>
+				<td colspan={columns.length} class="p-0">
+					<EmptyState
+						icon={Search as unknown as Component}
+						title="No transactions match"
+						description="Try a different search term or status filter."
+						compact
+					/>
+				</td>
+			</tr>
+		{/if}
 
-	<!-- Footer: how many of the server-matched total are on this page. -->
-	{#snippet footer()}
-		<p class="px-4 py-3 text-xs text-muted">
-			Showing {filtered.length} of {total} transactions
-		</p>
-	{/snippet}
-</Table>
+		{#snippet footer()}
+			<p class="px-4 py-3 text-xs text-muted">
+				Showing {filtered.length} of {total} transactions
+			</p>
+		{/snippet}
+	</Table>
+</div>

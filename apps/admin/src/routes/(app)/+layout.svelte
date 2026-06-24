@@ -30,17 +30,19 @@
 		]
 	);
 	const onFinance = $derived(page.url.pathname.startsWith('/finance'));
+
+	let sidebarOpen = $state(false);
 </script>
 
 <div class="flex h-screen overflow-hidden bg-bg">
-	<Sidebar user={data.user} />
-	<div class="flex flex-1 flex-col overflow-hidden">
-		<Topbar {title} {subtitle}>
+	<Sidebar user={data.user} open={sidebarOpen} onclose={() => (sidebarOpen = false)} />
+	<div class="flex min-w-0 flex-1 flex-col overflow-hidden">
+		<Topbar {title} {subtitle} ontoggleMenu={() => (sidebarOpen = !sidebarOpen)}>
 			{#snippet actions()}
 				{#if onFinance}<FinanceHeaderControls />{/if}
 			{/snippet}
 		</Topbar>
-		<main class="flex-1 overflow-y-auto bg-canvas p-4 sm:p-6">
+		<main class="min-w-0 flex-1 overflow-x-hidden overflow-y-auto bg-canvas p-4 sm:p-6">
 			{@render children()}
 		</main>
 	</div>

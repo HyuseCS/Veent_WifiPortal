@@ -80,15 +80,15 @@
 		{ label: 'Status' },
 		{ label: 'Uptime' },
 		{ label: 'Latency' },
-		{ label: 'Speed' }
+		{ label: 'Speed', class: 'hidden lg:table-cell' }
 	];
 </script>
 
 <div class="dash">
 	<!-- KPIs + Revenue share the left column: KPIs keep their natural height, revenue fills
 	     the rest — so the sessions/network rows on the right can split the height evenly. -->
-	<div class="leftcol flex min-h-0 flex-col gap-4">
-		<section class="grid grid-cols-1 gap-4 sm:grid-cols-3">
+	<div class="leftcol flex min-h-0 min-w-0 flex-col gap-4">
+		<section class="grid grid-cols-2 gap-2 sm:gap-4 lg:grid-cols-3">
 			{#each kpis as kpi (kpi.label)}
 				<KpiCard
 					{kpi}
@@ -99,13 +99,13 @@
 			{/each}
 		</section>
 
-		<Card class="flex min-h-0 flex-1 flex-col">
+		<Card class="flex flex-col lg:min-h-0 lg:flex-1">
 			<SectionHeading title="Revenue — last 7 days" class="mb-4">
 				{#snippet aside()}
 					<span class="font-mono text-sm text-muted">₱{total.toLocaleString('en-PH')}</span>
 				{/snippet}
 			</SectionHeading>
-			<div class="min-h-0 flex-1">
+			<div class="h-40 sm:h-48 lg:min-h-0 lg:flex-1">
 				{#if total > 0}
 					<RevenueChart data={revenue} />
 				{:else}
@@ -123,91 +123,189 @@
 	</div>
 
 	<!-- Active Sessions -->
-	<section class="sessions flex min-h-0 flex-col">
-		<Table title="Active Sessions" columns={sessionCols} class="min-h-0 flex-1">
-			{#snippet aside()}
+	<section class="sessions flex min-h-0 min-w-0 flex-col">
+		<!-- Mobile: stacked card list -->
+		<div class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-border bg-bg shadow-sm sm:hidden">
+			<div class="flex items-center justify-between border-b border-border px-4 py-3">
+				<h2 class="text-sm font-semibold text-ink">Active Sessions</h2>
 				{#if activeSessions.length > 0}
-					<span
-						class="inline-flex items-center gap-1.5 rounded-full bg-online/10 px-2.5 py-1 text-xs font-medium text-online"
-					>
+					<span class="inline-flex items-center gap-1.5 rounded-full bg-online/10 px-2.5 py-1 text-xs font-medium text-online">
 						<span class="h-1.5 w-1.5 rounded-full bg-online" aria-hidden="true"></span>
 						{activeSessions.length} connected
 					</span>
 				{/if}
-			{/snippet}
-			{#each activeSessions as session (session.id)}
-				{@const t = liveTimer(session, now)}
-				<tr class="transition-colors hover:bg-surface">
-					<td class="px-4 py-3 font-mono text-xs text-ink">{session.mac}</td>
-					<td class="px-4 py-3 text-ink">{session.network ?? '—'}</td>
-					<td class="px-4 py-3">
-						<span class="inline-flex rounded-md bg-surface px-2 py-0.5 text-xs font-medium text-ink">
-							{session.package}
-						</span>
-					</td>
-					<td class="px-4 py-3 font-mono {timeClass(t.tone)}">{t.left}</td>
-				</tr>
-			{/each}
-			{#if activeSessions.length === 0}
-				<tr>
-					<td colspan={sessionCols.length} class="p-0">
+			</div>
+			<div class="min-h-0 flex-1 divide-y divide-border overflow-y-auto">
+				{#each shownSessions as session (session.id)}
+					{@const t = liveTimer(session, now)}
+					<div class="flex items-center justify-between gap-3 px-4 py-3 transition-colors hover:bg-surface">
+						<div class="min-w-0 flex-1">
+							<p class="truncate font-mono text-xs text-ink">{session.mac}</p>
+							<div class="mt-1 flex flex-wrap items-center gap-2">
+								<span class="inline-flex rounded-md bg-surface px-2 py-0.5 text-xs font-medium text-ink">{session.package}</span>
+								<span class="font-mono {timeClass(t.tone)}">{t.left}</span>
+							</div>
+						</div>
+						<StatusBadge tone={t.tone} label={t.status} />
+					</div>
+				{/each}
+				{#if shownSessions.length === 0}
+					<div class="flex h-full items-center justify-center">
 						<EmptyState
 							icon={icon(Wifi)}
 							title="No active sessions"
 							description="Connected guests appear here automatically as they come online — the list streams live, no refresh needed."
 							compact
 						/>
-					</td>
-				</tr>
-			{/if}
-			{#snippet footer()}
-				<div class="px-4 py-2.5">
+					</div>
+				{/if}
+			</div>
+			<div class="border-t border-border">
+				<div class="flex items-center justify-between gap-2 px-4 py-2.5">
 					<span class="text-xs text-muted">Streaming via RADIUS accounting</span>
 				</div>
-			{/snippet}
-		</Table>
+			</div>
+		</div>
+		<!-- Tablet+: table view -->
+		<div class="hidden min-h-0 flex-1 flex-col sm:flex">
+			<Table title="Active Sessions" columns={sessionCols} class="min-h-0 flex-1" bind:bodyHeight={sessionBodyH}>
+				{#snippet aside()}
+					{#if activeSessions.length > 0}
+						<span
+							class="inline-flex items-center gap-1.5 rounded-full bg-online/10 px-2.5 py-1 text-xs font-medium text-online"
+						>
+							<span class="h-1.5 w-1.5 rounded-full bg-online" aria-hidden="true"></span>
+							{activeSessions.length} connected
+						</span>
+					{/if}
+				{/snippet}
+				{#each shownSessions as session (session.id)}
+					{@const t = liveTimer(session, now)}
+					<tr class="transition-colors hover:bg-surface">
+						<td class="px-4 py-3 font-mono text-xs text-ink">{session.mac}</td>
+						<td class="px-4 py-3">
+							<span class="inline-flex rounded-md bg-surface px-2 py-0.5 text-xs font-medium text-ink">
+								{session.package}
+							</span>
+						</td>
+						<td class="px-4 py-3 font-mono {timeClass(t.tone)}">{t.left}</td>
+						<td class="px-4 py-3">
+							<StatusBadge tone={t.tone} label={t.status} />
+						</td>
+					</tr>
+				{/each}
+				{#if shownSessions.length === 0}
+					<tr>
+						<td colspan={sessionCols.length} class="p-0">
+							<EmptyState
+								icon={icon(Wifi)}
+								title="No active sessions"
+								description="Connected guests appear here automatically as they come online — the list streams live, no refresh needed."
+								compact
+							/>
+						</td>
+					</tr>
+				{/if}
+				{#snippet footer()}
+					<div class="flex items-center justify-between gap-2 px-4 py-2.5">
+						<span class="text-xs text-muted">Streaming via RADIUS accounting</span>
+						{#if moreSessions > 0}
+							<span class="text-xs text-muted">+{moreSessions} more active</span>
+						{/if}
+					</div>
+				{/snippet}
+			</Table>
+		</div>
 	</section>
 
 	<!-- Network Health -->
-	<section class="network flex min-h-0 flex-col">
-		<Table title="Network Health" columns={netCols} class="min-h-0 flex-1">
-			{#snippet aside()}
+	<section class="network flex min-h-0 min-w-0 flex-col">
+		<!-- Mobile: stacked card list -->
+		<div class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-border bg-bg shadow-sm sm:hidden">
+			<div class="flex items-center justify-between border-b border-border px-4 py-3">
+				<h2 class="text-sm font-semibold text-ink">Network Health</h2>
 				<div class="flex items-center gap-2">
 					{#if apTotal > 0}
 						<StatusBadge tone="online" label="{onlineCount}/{apTotal} online" />
 					{/if}
 					<a href="/networks" class="text-xs font-medium text-brand hover:underline">View all</a>
 				</div>
-			{/snippet}
-			{#each networks as ap (ap.id)}
-				<tr class="transition-colors hover:bg-surface">
-					<td class="px-4 py-3 font-medium text-ink">{ap.name}</td>
-					<td class="px-4 py-3">
-						<StatusBadge tone={ap.tone} label={ap.status} pulse={ap.tone !== 'online'} />
-					</td>
-					<td class="px-4 py-3 font-mono text-ink">{ap.uptime}</td>
-					<td class="px-4 py-3 font-mono text-ink">{ap.latency}</td>
-					<td class="px-4 py-3 font-mono text-ink">{ap.throughput}</td>
-				</tr>
-			{/each}
-			{#if networks.length === 0}
-				<tr>
-					<td colspan={netCols.length} class="p-0">
+			</div>
+			<div class="min-h-0 flex-1 divide-y divide-border overflow-y-auto">
+				{#each shownNetworks as ap (ap.id)}
+					<div class="px-4 py-3 transition-colors hover:bg-surface">
+						<div class="flex items-center justify-between gap-2">
+							<p class="font-medium text-ink">{ap.name}</p>
+							<StatusBadge tone={ap.tone} label={ap.status} pulse={ap.tone !== 'online'} />
+						</div>
+						<div class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs">
+							<span class="text-muted">Uptime <span class="font-mono text-ink">{ap.uptime}</span></span>
+							<span class="text-muted">Latency <span class="font-mono text-ink">{ap.latency}</span></span>
+							<span class="text-muted">Speed <span class="font-mono text-ink">{ap.throughput}</span></span>
+						</div>
+					</div>
+				{/each}
+				{#if shownNetworks.length === 0}
+					<div class="flex h-full items-center justify-center">
 						<EmptyState
 							icon={icon(Router)}
 							title="No access points reporting"
 							description="AP health appears here once your access points start reporting uptime and latency metrics."
 							compact
 						/>
-					</td>
-				</tr>
-			{/if}
-			{#snippet footer()}
-				<div class="px-4 py-2.5">
+					</div>
+				{/if}
+			</div>
+			<div class="border-t border-border">
+				<div class="flex items-center justify-between gap-2 px-4 py-2.5">
 					<span class="text-xs text-muted">ICMP ping · 30s interval</span>
 				</div>
-			{/snippet}
-		</Table>
+			</div>
+		</div>
+		<!-- Tablet+: table view -->
+		<div class="hidden min-h-0 flex-1 flex-col sm:flex">
+			<Table title="Network Health" columns={netCols} class="min-h-0 flex-1" bind:bodyHeight={netBodyH}>
+				{#snippet aside()}
+					<div class="flex items-center gap-2">
+						{#if apTotal > 0}
+							<StatusBadge tone="online" label="{onlineCount}/{apTotal} online" />
+						{/if}
+						<a href="/networks" class="text-xs font-medium text-brand hover:underline">View all</a>
+					</div>
+				{/snippet}
+				{#each shownNetworks as ap (ap.id)}
+					<tr class="transition-colors hover:bg-surface">
+						<td class="px-4 py-3 font-medium text-ink">{ap.name}</td>
+						<td class="px-4 py-3">
+							<StatusBadge tone={ap.tone} label={ap.status} pulse={ap.tone !== 'online'} />
+						</td>
+						<td class="px-4 py-3 font-mono text-ink">{ap.uptime}</td>
+						<td class="px-4 py-3 font-mono text-ink">{ap.latency}</td>
+						<td class="hidden px-4 py-3 font-mono text-ink lg:table-cell">{ap.throughput}</td>
+					</tr>
+				{/each}
+				{#if shownNetworks.length === 0}
+					<tr>
+						<td colspan={netCols.length} class="p-0">
+							<EmptyState
+								icon={icon(Router)}
+								title="No access points reporting"
+								description="AP health appears here once your access points start reporting uptime and latency metrics."
+								compact
+							/>
+						</td>
+					</tr>
+				{/if}
+				{#snippet footer()}
+					<div class="flex items-center justify-between gap-2 px-4 py-2.5">
+						<span class="text-xs text-muted">ICMP ping · 30s interval</span>
+						{#if moreNetworks > 0}
+							<span class="text-xs text-muted">+{moreNetworks} more access points</span>
+						{/if}
+					</div>
+				{/snippet}
+			</Table>
+		</div>
 	</section>
 </div>
 
@@ -216,11 +314,9 @@
 	   is a single stacked column; the chosen arrangement only diverges at lg+. */
 	.dash {
 		display: grid;
-		height: 100%;
 		min-height: 0;
 		gap: 1rem;
 		grid-template-columns: 1fr;
-		grid-template-rows: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr);
 		grid-template-areas: 'leftcol' 'sessions' 'network';
 	}
 
@@ -243,6 +339,37 @@
 			grid-template-areas:
 				'leftcol sessions'
 				'leftcol network';
+		}
+
+		.dash-bento {
+			height: 100%;
+			grid-template-columns: 1fr 1fr;
+			grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+			grid-template-areas:
+				'leftcol sessions'
+				'leftcol network';
+		}
+
+		/* Two columns: left is KPIs+revenue over network, right is sessions at full height. */
+		.dash-split {
+			height: 100%;
+			grid-template-columns: 1.4fr 1fr;
+			grid-template-rows: minmax(0, 1fr) auto;
+			grid-template-areas:
+				'leftcol sessions'
+				'network sessions';
+		}
+
+		/* Stacked: single column — KPIs+revenue, then sessions and network split the rest.
+		   leftcol keeps a definite height (so the chart fills a known box, no aspect-ratio
+		   feedback loop) but with a min floor so KPIs + chart can't squeeze the chart to
+		   nothing on short viewports; on tall ones all three rows share the height equally.
+		   The tables shrink first, and <main> scrolls only if the floor outgrows the screen. */
+		.dash-stacked {
+			height: 100%;
+			grid-template-columns: 1fr;
+			grid-template-rows: minmax(360px, 1fr) minmax(0, 1fr) minmax(0, 1fr);
+			grid-template-areas: 'leftcol' 'sessions' 'network';
 		}
 	}
 </style>

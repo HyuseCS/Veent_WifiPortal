@@ -1,13 +1,19 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
 	import { invalidateAll } from '$app/navigation';
+	import Menu from 'lucide-svelte/icons/menu';
 	import RefreshCw from 'lucide-svelte/icons/refresh-cw';
 	import { LiveStatusPill } from '$lib/components/ui';
 	import { live, connectLive } from '$lib/live.svelte';
 
 	// `actions` renders page-specific controls on the right (e.g. the dashboard layout switcher).
-	let { title, subtitle, actions }: { title: string; subtitle?: string; actions?: Snippet } =
-		$props();
+	// `ontoggleMenu` is called by the hamburger button; only rendered on mobile (lg:hidden).
+	let {
+		title,
+		subtitle,
+		actions,
+		ontoggleMenu
+	}: { title: string; subtitle?: string; actions?: Snippet; ontoggleMenu?: () => void } = $props();
 
 	$effect(connectLive);
 
@@ -51,6 +57,17 @@
 	class="flex h-16 shrink-0 items-center justify-between gap-4 border-b border-border bg-bg px-4 sm:px-6"
 >
 	<div class="flex min-w-0 items-center gap-3">
+		<!-- Hamburger: only visible on mobile (below lg breakpoint where sidebar is always shown) -->
+		{#if ontoggleMenu}
+			<button
+				type="button"
+				onclick={ontoggleMenu}
+				aria-label="Toggle navigation menu"
+				class="flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted transition-colors duration-150 hover:bg-surface hover:text-ink lg:hidden"
+			>
+				<Menu class="h-5 w-5" aria-hidden="true" />
+			</button>
+		{/if}
 		<div class="min-w-0">
 			<h1 class="truncate text-lg font-semibold tracking-tight text-ink sm:text-xl">{title}</h1>
 			{#if subtitle}

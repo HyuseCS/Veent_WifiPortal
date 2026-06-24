@@ -50,8 +50,8 @@
 	});
 </script>
 
-<div class="flex items-center gap-6">
-	<div class="relative h-36 w-36 shrink-0">
+<div class="flex flex-col items-center gap-4 sm:flex-row sm:items-center sm:gap-6">
+	<div class="relative h-32 w-32 shrink-0 sm:h-36 sm:w-36">
 		<svg viewBox="0 0 42 42" class="h-full w-full" role="img" aria-label={label}>
 			<circle
 				cx="21"
@@ -88,7 +88,7 @@
 		{/if}
 	</div>
 
-	<ul class="flex min-w-0 flex-1 flex-col gap-2 text-sm">
+	<ul class="flex w-full min-w-0 flex-1 flex-col gap-2 text-sm">
 		{#each segments as seg (seg.key)}
 			<li class="flex items-center gap-2">
 				<span class="h-2.5 w-2.5 shrink-0 rounded-full" style="background: {seg.color}"></span>

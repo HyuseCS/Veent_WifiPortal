@@ -6,7 +6,16 @@
 
 	// Owner-only entries (e.g. Staff) are hidden for non-owners. This is cosmetic —
 	// the routes themselves enforce access server-side.
-	let { user }: { user?: { name?: string; email?: string; role?: string | null } } = $props();
+	let {
+		user,
+		open = false,
+		onclose
+	}: {
+		user?: { name?: string; email?: string; role?: string | null };
+		open?: boolean;
+		onclose?: () => void;
+	} = $props();
+
 	const items = $derived(nav.filter((item) => !item.ownerOnly || user?.role === 'owner'));
 	const initials = $derived(
 		(user?.name ?? user?.email ?? '?')
@@ -18,7 +27,27 @@
 	);
 </script>
 
-<aside class="flex w-60 shrink-0 flex-col bg-sidebar text-sidebar-text">
+<!-- Mobile backdrop — tapping it closes the drawer -->
+{#if open}
+	<div
+		class="fixed inset-0 bg-black/50 lg:hidden" style="z-index: 1050"
+		onclick={onclose}
+		aria-hidden="true"
+	></div>
+{/if}
+
+<!--
+  Mobile: fixed drawer that slides in/out from the left.
+  Desktop (lg+): static sidebar in normal document flow.
+  translate-x classes drive the open/close animation; lg:translate-x-0 keeps it
+  permanently visible on desktop regardless of the `open` state.
+-->
+<aside
+	style="z-index: 1100"
+	class="fixed inset-y-0 left-0 flex w-60 shrink-0 flex-col bg-sidebar text-sidebar-text transition-transform duration-200 ease-in-out lg:static lg:translate-x-0 {open
+		? 'translate-x-0'
+		: '-translate-x-full'}"
+>
 	<div class="flex h-16 items-center gap-2.5 border-b border-white/5 px-5">
 		<div
 			class="flex h-8 w-8 items-center justify-center rounded-lg bg-cta text-sm font-bold text-white shadow-sm shadow-black/40"
@@ -47,6 +76,7 @@
 					page.url.pathname === item.href || page.url.pathname.startsWith(item.href + '/')}
 				<a
 					href={item.href}
+					onclick={onclose}
 					aria-current={active ? 'page' : undefined}
 					class="group relative flex min-h-[44px] items-center gap-3 rounded-md px-3 text-sm font-medium transition-all duration-150 outline-none focus-visible:ring-2 focus-visible:ring-cta/60 {active
 						? 'bg-cta/15 text-white'

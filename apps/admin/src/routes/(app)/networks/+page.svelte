@@ -182,7 +182,7 @@
 			</div>
 			<div
 				bind:this={mapEl}
-				class="relative mx-4 mb-4 min-h-107.5 flex-1 scroll-mt-4 overflow-hidden rounded-xl border border-border"
+				class="relative mx-4 mb-4 min-h-60 flex-1 scroll-mt-4 overflow-hidden rounded-xl border border-border sm:min-h-80 lg:min-h-107.5"
 			>
 				<div class="absolute inset-0">
 					<CoverageMap {networks} {selectedId} onselect={focusAp} />
@@ -194,7 +194,7 @@
 		<div class="flex min-w-0 flex-col gap-5">
 			<Card class="flex flex-col gap-4">
 				<h2 class="text-base font-semibold text-ink">Fleet Status</h2>
-				<div class="flex items-center gap-5">
+				<div class="flex flex-col items-center gap-4 sm:flex-row sm:items-center sm:gap-5">
 					<div class="relative h-28 w-28 shrink-0 rounded-full" style="background: {donut}">
 						<div
 							class="absolute inset-3.5 flex flex-col items-center justify-center rounded-full bg-bg"
@@ -204,7 +204,7 @@
 							>
 						</div>
 					</div>
-					<ul class="flex min-w-0 flex-1 flex-col gap-2.5">
+					<ul class="flex w-full min-w-0 flex-1 flex-col gap-2.5">
 						{#each fleet as row (row.label)}
 							<li class="flex items-center gap-2.5">
 								<span class="h-2.5 w-2.5 rounded {row.dot}"></span>

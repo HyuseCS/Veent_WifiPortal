@@ -44,7 +44,7 @@
      Full-height column so the charts stretch to the bottom of the page. -->
 <div class="flex h-full flex-col gap-6">
 	<!-- KPIs -->
-	<section class="grid shrink-0 grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+	<section class="grid shrink-0 grid-cols-2 gap-2 sm:gap-4 lg:grid-cols-4">
 		{#each data.kpis as kpi (kpi.label)}
 			{@const c = chromeFor(kpi)}
 			<KpiCard
@@ -59,13 +59,13 @@
 	<!-- Revenue + method breakdown (transactions list moved to /finance/transactions).
 	     flex-1 + min-h-0 so the cards fill the leftover height down to the page bottom. -->
 	<section class="grid min-h-0 flex-1 grid-cols-1 items-stretch gap-4 lg:grid-cols-3">
-		<Card class="flex min-h-65 flex-col lg:col-span-2">
+		<Card class="flex flex-col lg:col-span-2">
 			<SectionHeading title="Settled revenue over time" class="mb-4">
 				{#snippet aside()}
 					<span class="font-mono text-sm text-muted">₱{revenueTotal.toLocaleString('en-PH')}</span>
 				{/snippet}
 			</SectionHeading>
-			<div class="min-h-0 flex-1">
+			<div class="h-48 sm:h-56">
 				{#if data.revenue.length > 0}
 					<RevenueChart data={data.revenue} />
 				{:else}

@@ -524,7 +524,7 @@
 <div class="relative h-full w-full overflow-hidden">
 	{#if sidebarOpen}
 		<aside
-			class="absolute top-0 bottom-0 left-0 z-[1000] flex w-85 flex-col border-r border-border bg-bg"
+			class="absolute bottom-0 left-0 right-0 z-1000 flex h-2/3 flex-col rounded-t-2xl border-t border-border bg-bg sm:top-0 sm:right-auto sm:h-full sm:w-85 sm:rounded-none sm:border-t-0 sm:border-r"
 		>
 			<header class="flex h-14 items-center justify-between gap-2 border-b border-border px-4">
 				<div class="flex items-center gap-2.5">

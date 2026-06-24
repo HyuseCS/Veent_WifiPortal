@@ -2,10 +2,12 @@
 	import type { Snippet } from 'svelte';
 	import SectionHeading from './SectionHeading.svelte';
 
-	/** A header cell definition. `srOnly` hides the label visually (e.g. an actions column). */
+	/** A header cell definition. `srOnly` hides the label visually (e.g. an actions column).
+	 *  `class` is appended to the `<th>` — use for responsive column hiding, e.g. `hidden lg:table-cell`. */
 	interface Column {
 		label: string;
 		srOnly?: boolean;
+		class?: string;
 	}
 
 	// Bordered table shell: renders the styled header from `columns`; rows go in the default slot.
@@ -33,7 +35,8 @@
 		headRow,
 		footer,
 		class: klass = '',
-		bodyHeight = $bindable(0)
+		bodyHeight = $bindable(0),
+		scrollX = false
 	}: {
 		columns?: Column[];
 		children: Snippet;
@@ -44,6 +47,9 @@
 		footer?: Snippet;
 		class?: string;
 		bodyHeight?: number;
+		/** Enables horizontal scroll on the table body (adds min-w-max). Use for full-data
+		 *  tables (Users, Finance, Staff). Leave false for dashboard compact panels. */
+		scrollX?: boolean;
 	} = $props();
 </script>
 
@@ -59,7 +65,7 @@
 		</div>
 	{/if}
 	<div class="min-h-0 flex-1 overflow-auto" bind:clientHeight={bodyHeight}>
-		<table class="w-full text-sm">
+		<table class="w-full text-sm {scrollX ? 'min-w-max' : ''}">
 			<thead class="sticky top-0 z-10">
 				{#if headRow}
 					{@render headRow()}
@@ -67,7 +73,7 @@
 					<tr class="border-b border-border bg-surface">
 						{#each columns as col (col.label)}
 							<th
-								class="px-4 py-2.5 text-left text-[11px] font-semibold tracking-wider text-muted uppercase"
+								class="px-4 py-2.5 text-left text-[11px] font-semibold tracking-wider text-muted uppercase {col.class ?? ''}"
 							>
 								{#if col.srOnly}<span class="sr-only">{col.label}</span>{:else}{col.label}{/if}
 							</th>

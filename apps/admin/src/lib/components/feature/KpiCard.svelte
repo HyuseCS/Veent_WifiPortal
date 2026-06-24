@@ -64,12 +64,12 @@
 
 <Card
 	padding={compact ? 'p-3.5' : 'p-5'}
-	class="group flex flex-col {compact
+	class="group min-w-0 flex flex-col {compact
 		? 'gap-2'
 		: 'gap-4'} hover:-translate-y-0.5 hover:border-brand/30 hover:shadow-md"
 >
 	<div class="flex items-start justify-between gap-2">
-		<p class="text-xs font-semibold tracking-wide text-muted uppercase">{kpi.label}</p>
+		<p class="min-w-0 flex-1 text-xs font-semibold leading-tight tracking-wide text-muted uppercase">{kpi.label}</p>
 		{#if Icon}
 			<span
 				class="flex {compact
@@ -86,13 +86,13 @@
 		<p
 			class="font-mono {compact
 				? 'text-2xl'
-				: 'text-3xl'} font-bold tracking-tight {valueTone[tone]}"
+				: 'text-xl sm:text-2xl lg:text-3xl'} font-bold tracking-tight {valueTone[tone]}"
 		>
 			{kpi.value}{#if unit}<span class="ml-1 text-sm font-semibold text-muted">{unit}</span>{/if}
 		</p>
 		{#if helper || kpi.delta || period}
 			<div class="flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
-				<span class="text-xs {capTone[captionTone]}">{helper ?? period}</span>
+				<span class="min-w-0 text-xs leading-tight {capTone[captionTone]}">{helper ?? period}</span>
 				{#if kpi.delta}
 					<span
 						class="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold {deltaPill}"
