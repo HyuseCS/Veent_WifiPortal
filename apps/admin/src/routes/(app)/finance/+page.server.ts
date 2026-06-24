@@ -1,28 +1,22 @@
 import { db } from '$lib/server/db';
-import {
-	financeKpis,
-	revenueByPeriod,
-	paymentMethodBreakdown,
-	listTransactions
-} from '$lib/server/queries';
+import { financeKpis, revenueByPeriod, paymentMethodBreakdown } from '$lib/server/queries';
 import { parsePeriod, granularityFor } from '$lib/server/period';
 import type { PageServerLoad } from './$types';
 
 /**
- * Finance SSR seed. Reads payment_transactions over the selected `?period=` window:
- * KPIs, settled revenue over time, fund-source breakdown, and the first page of
- * transactions. CSV export is a separate GET endpoint (./export) — a form action
- * can't return a downloadable Response.
+ * Finance overview SSR seed. Reads payment_transactions over the selected `?period=` window:
+ * KPIs, settled revenue over time, and fund-source breakdown. The transactions list lives on
+ * its own page (./transactions). CSV export is a separate GET endpoint (./export) — a form
+ * action can't return a downloadable Response.
  */
 export const load: PageServerLoad = async ({ url }) => {
 	const { period, from, to } = parsePeriod(url.searchParams.get('period'));
 
-	const [kpis, revenue, breakdown, { rows: transactions, total }] = await Promise.all([
+	const [kpis, revenue, breakdown] = await Promise.all([
 		financeKpis(db, { from, to }),
 		revenueByPeriod(db, { from, to, granularity: granularityFor(period) }),
-		paymentMethodBreakdown(db, { from, to }),
-		listTransactions(db, { from, to, page: 1, pageSize: 50 })
+		paymentMethodBreakdown(db, { from, to })
 	]);
 
-	return { kpis, revenue, breakdown, transactions, total, period };
+	return { kpis, revenue, breakdown, period };
 };

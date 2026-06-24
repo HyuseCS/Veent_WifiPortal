@@ -3,10 +3,9 @@
 	import ArrowLeftRight from 'lucide-svelte/icons/arrow-left-right';
 	import CircleCheck from 'lucide-svelte/icons/circle-check';
 	import Wallet from 'lucide-svelte/icons/wallet';
-	import Download from 'lucide-svelte/icons/download';
 	import type { Component } from 'svelte';
-	import { Card, SectionHeading, FilterTabs } from '$lib/components/ui';
-	import { KpiCard, RevenueChart, DonutChart, TransactionsTable } from '$lib/components/feature';
+	import { Card, SectionHeading } from '$lib/components/ui';
+	import { KpiCard, RevenueChart, DonutChart } from '$lib/components/feature';
 	import type { Kpi } from '$lib/types';
 	import type { PageData } from './$types';
 
@@ -15,15 +14,6 @@
 	// lucide types don't match Svelte's `Component` structurally; cast as the other pages do.
 	const icon = (c: unknown) => c as Component;
 
-	// Period pills double as SSR navigation — selecting one reloads with `?period=`, which the
-	// page load reads. Rendered via the shared <FilterTabs> in link mode so the pill chrome
-	// matches the Users/Networks filters.
-	const periodTabs = [
-		{ key: '7d', label: '7 days' },
-		{ key: '30d', label: '30 days' },
-		{ key: '90d', label: '90 days' },
-		{ key: 'all', label: 'All time' }
-	];
 	const periodLabel: Record<string, string> = {
 		'7d': 'Last 7 days',
 		'30d': 'Last 30 days',
@@ -50,23 +40,11 @@
 	const settledTotal = $derived(data.breakdown.reduce((sum, s) => sum + s.amount, 0));
 </script>
 
-<div class="space-y-6">
-	<!-- Period selector + export -->
-	<div class="flex flex-wrap items-center justify-between gap-3">
-		<FilterTabs tabs={periodTabs} active={data.period} href={(key) => `/finance?period=${key}`} />
-
-		<a
-			href="/finance/export?period={data.period}"
-			download
-			class="inline-flex min-h-11 items-center gap-2 rounded-lg border border-border bg-bg px-4 text-sm font-medium text-ink transition-colors hover:bg-surface"
-		>
-			<Download class="h-4 w-4" aria-hidden="true" />
-			Export CSV
-		</a>
-	</div>
-
+<!-- Period selector + Export CSV now live in the Topbar header (FinanceHeaderControls).
+     Full-height column so the charts stretch to the bottom of the page. -->
+<div class="flex h-full flex-col gap-6">
 	<!-- KPIs -->
-	<section class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+	<section class="grid shrink-0 grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
 		{#each data.kpis as kpi (kpi.label)}
 			{@const c = chromeFor(kpi)}
 			<KpiCard
@@ -78,8 +56,9 @@
 		{/each}
 	</section>
 
-	<!-- Revenue + method breakdown -->
-	<section class="grid grid-cols-1 items-stretch gap-4 lg:grid-cols-3">
+	<!-- Revenue + method breakdown (transactions list moved to /finance/transactions).
+	     flex-1 + min-h-0 so the cards fill the leftover height down to the page bottom. -->
+	<section class="grid min-h-0 flex-1 grid-cols-1 items-stretch gap-4 lg:grid-cols-3">
 		<Card class="flex min-h-65 flex-col lg:col-span-2">
 			<SectionHeading title="Settled revenue over time" class="mb-4">
 				{#snippet aside()}
@@ -109,15 +88,5 @@
 				/>
 			</div>
 		</Card>
-	</section>
-
-	<!-- Transactions -->
-	<section class="space-y-2">
-		<TransactionsTable transactions={data.transactions} total={data.total} />
-		{#if data.total > data.transactions.length}
-			<p class="text-xs text-muted">
-				{data.total - data.transactions.length} more — narrow the period or export the full CSV.
-			</p>
-		{/if}
 	</section>
 </div>

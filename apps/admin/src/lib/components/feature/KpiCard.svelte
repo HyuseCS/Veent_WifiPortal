@@ -19,7 +19,8 @@
 		unit,
 		tone = 'default',
 		captionTone = 'muted',
-		progress
+		progress,
+		compact = false
 	}: {
 		kpi: Kpi;
 		icon?: Component;
@@ -30,6 +31,8 @@
 		captionTone?: 'muted' | StatusTone;
 		/** Optional 0–100 fill rendered as a thin brand bar (e.g. a real success/utilisation %). */
 		progress?: number;
+		/** Denser variant: smaller padding/value/icon so the strip takes less height. */
+		compact?: boolean;
 	} = $props();
 
 	const progressPct = $derived(progress === undefined ? 0 : Math.max(0, Math.min(100, progress)));
@@ -59,12 +62,19 @@
 	);
 </script>
 
-<Card class="group flex flex-col gap-4 hover:-translate-y-0.5 hover:border-brand/30 hover:shadow-md">
+<Card
+	padding={compact ? 'p-3.5' : 'p-5'}
+	class="group flex flex-col {compact
+		? 'gap-2'
+		: 'gap-4'} hover:-translate-y-0.5 hover:border-brand/30 hover:shadow-md"
+>
 	<div class="flex items-start justify-between gap-2">
 		<p class="text-xs font-semibold tracking-wide text-muted uppercase">{kpi.label}</p>
 		{#if Icon}
 			<span
-				class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand/10 text-brand transition-[background-color,transform,color] duration-200 group-hover:scale-105 group-hover:bg-brand/20"
+				class="flex {compact
+					? 'h-8 w-8'
+					: 'h-9 w-9'} shrink-0 items-center justify-center rounded-lg bg-brand/10 text-brand transition-[background-color,transform,color] duration-200 group-hover:scale-105 group-hover:bg-brand/20"
 				aria-hidden="true"
 			>
 				<Icon class="h-4 w-4" />
@@ -72,8 +82,12 @@
 		{/if}
 	</div>
 
-	<div class="flex flex-col gap-2">
-		<p class="font-mono text-3xl font-bold tracking-tight {valueTone[tone]}">
+	<div class="flex flex-col {compact ? 'gap-1' : 'gap-2'}">
+		<p
+			class="font-mono {compact
+				? 'text-2xl'
+				: 'text-3xl'} font-bold tracking-tight {valueTone[tone]}"
+		>
 			{kpi.value}{#if unit}<span class="ml-1 text-sm font-semibold text-muted">{unit}</span>{/if}
 		</p>
 		{#if helper || kpi.delta || period}

@@ -13,6 +13,9 @@
 	let { data }: { data: PageData } = $props();
 	const staff = $derived(data.staff);
 
+	// The invite form is a modal, opened from the "Add staff" button in the table toolbar.
+	let inviteOpen = $state(false);
+
 	// lucide types don't match Svelte's `Component` structurally; cast as the other pages do.
 	const icon = (c: unknown) => c as Component;
 
@@ -64,8 +67,10 @@
 	]);
 </script>
 
-<div class="space-y-5">
-	<section class="grid grid-cols-2 gap-4 lg:grid-cols-4">
+<!-- Full-height flex column so the members table scrolls internally, not the page (see
+     StaffTable's Table). KPIs + invite form stay fixed; the table takes the rest. -->
+<div class="flex h-full flex-col gap-5">
+	<section class="grid shrink-0 grid-cols-2 gap-4 lg:grid-cols-4">
 		{#each kpis as k (k.label)}
 			<KpiCard
 				kpi={{ label: k.label, value: k.value }}
@@ -77,7 +82,7 @@
 		{/each}
 	</section>
 
-	<AddStaffForm />
-
-	<StaffTable {staff} />
+	<StaffTable {staff} onadd={() => (inviteOpen = true)} />
 </div>
+
+<AddStaffForm bind:open={inviteOpen} />

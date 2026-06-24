@@ -2,6 +2,8 @@
 	import Wifi from 'lucide-svelte/icons/wifi';
 	import MapPin from 'lucide-svelte/icons/map-pin';
 	import Pencil from 'lucide-svelte/icons/pencil';
+	import Trash2 from 'lucide-svelte/icons/trash-2';
+	import { enhance } from '$app/forms';
 	import type { NetworkAp } from '$lib/types';
 	import { StatusBadge } from '$lib/components/ui';
 
@@ -11,10 +13,13 @@
 	let {
 		ap,
 		selected = false,
+		canDelete = false,
 		onfocus
 	}: {
 		ap: NetworkAp;
 		selected?: boolean;
+		/** Owner-only: show the delete control (the server re-checks owner regardless). */
+		canDelete?: boolean;
 		onfocus?: (id: string) => void;
 	} = $props();
 
@@ -127,14 +132,39 @@
 			/>
 			<span class="truncate">{coordText}</span>
 		</span>
-		<!-- Edit this AP's location on the unified map editor (deep-links via ?ap=<id>). -->
-		<a
-			href={mapHref}
-			onclick={(e) => e.stopPropagation()}
-			class="flex min-h-[44px] shrink-0 cursor-pointer items-center gap-1.5 rounded-lg border border-border px-3 text-xs font-semibold text-muted transition-colors duration-150 hover:border-brand/40 hover:text-ink"
-		>
-			<Pencil class="h-3.5 w-3.5" aria-hidden="true" />
-			{placed ? 'Edit on map' : 'Place on map'}
-		</a>
+		<div class="flex shrink-0 items-center gap-2">
+			{#if canDelete}
+				<!-- Owner-only delete. Native confirm gates the destructive submit; enhance
+				     reloads the page data on success (default invalidateAll). -->
+				<form
+					method="post"
+					action="?/deleteNetwork"
+					use:enhance={({ cancel }) => {
+						if (!confirm(`Delete "${ap.name}"? This removes its health and location data.`))
+							cancel();
+						return async ({ update }) => update();
+					}}
+				>
+					<input type="hidden" name="id" value={ap.id} />
+					<button
+						type="submit"
+						onclick={(e) => e.stopPropagation()}
+						aria-label="Delete {ap.name}"
+						class="flex h-11 w-11 cursor-pointer items-center justify-center rounded-lg border border-border text-muted transition-colors duration-150 hover:border-blocked/40 hover:text-blocked"
+					>
+						<Trash2 class="h-3.5 w-3.5" aria-hidden="true" />
+					</button>
+				</form>
+			{/if}
+			<!-- Edit this AP's location on the unified map editor (deep-links via ?ap=<id>). -->
+			<a
+				href={mapHref}
+				onclick={(e) => e.stopPropagation()}
+				class="flex min-h-[44px] shrink-0 cursor-pointer items-center gap-1.5 rounded-lg border border-border px-3 text-xs font-semibold text-muted transition-colors duration-150 hover:border-brand/40 hover:text-ink"
+			>
+				<Pencil class="h-3.5 w-3.5" aria-hidden="true" />
+				{placed ? 'Edit on map' : 'Place on map'}
+			</a>
+		</div>
 	</div>
 </div>
