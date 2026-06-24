@@ -6,7 +6,6 @@ import { packages } from '@veent/db';
 import {
 	getAccount,
 	getActiveAccess,
-	getFreeTimeStatus,
 	startFreeAccessAndBindDevice,
 	startPaidAccessAndBindDevice,
 	pauseAccountAccess,
@@ -15,11 +14,11 @@ import {
 	unbindDevice,
 	unbindAllDevices,
 	resolveDeviceMac,
-	MAX_DEVICES_PER_ACCOUNT,
-	type ActiveAccess
+	MAX_DEVICES_PER_ACCOUNT
 } from '@veent/core';
 import { db } from '$lib/server/db';
 import { network } from '$lib/server/network';
+import { buildAccountView } from '$lib/server/account-view';
 import { getPortalContext } from '$lib/server/portal';
 import type { RequestEvent } from '@sveltejs/kit';
 import { maskPhone } from '$lib/server/otp';
@@ -49,40 +48,6 @@ async function resolveMac(event: RequestEvent): Promise<string | null> {
 	} catch {
 		return null;
 	}
-}
-
-/** Last three octets of a MAC — a recognizable, low-PII device label for guests. */
-function macTail(mac: string | null): string | null {
-	if (!mac) return null;
-	const parts = mac.split(':');
-	return parts.length >= 3 ? parts.slice(-3).join(':') : mac;
-}
-
-/** Shape the account access + device registry for the client. */
-function shapeDevices(access: ActiveAccess | null, thisMac: string | null) {
-	const macU = thisMac?.toUpperCase() ?? null;
-	const list = (access?.devices ?? [])
-		.map((d) => ({
-			id: d.id,
-			macTail: macTail(d.macAddress),
-			thisDevice: !!macU && d.macAddress?.toUpperCase() === macU,
-			boundAt: d.boundAt.toISOString(),
-			lastSeenAt: d.lastSeenAt.toISOString()
-		}))
-		// Most-recently-seen first; the current device floats to the top.
-		.sort((a, b) => (a.thisDevice ? -1 : b.thisDevice ? 1 : b.lastSeenAt.localeCompare(a.lastSeenAt)));
-
-	const thisDeviceBound = list.some((d) => d.thisDevice);
-	const oldest = [...list].sort((a, b) => a.lastSeenAt.localeCompare(b.lastSeenAt))[0] ?? null;
-
-	return {
-		cap: MAX_DEVICES_PER_ACCOUNT,
-		count: list.length,
-		thisDeviceBound,
-		atCap: list.length >= MAX_DEVICES_PER_ACCOUNT && !thisDeviceBound,
-		oldest: oldest ? { id: oldest.id, macTail: oldest.macTail } : null,
-		list
-	};
 }
 
 /**
@@ -128,26 +93,16 @@ export const load: PageServerLoad = async (event) => {
 
 	const phone = (user as { phoneNumber?: string | null }).phoneNumber ?? null;
 
+	// The live, per-account slice (balance, free-time, access window, devices) — same shape
+	// the SSE feed pushes (`$lib/server/account-view`), so cross-device updates merge cleanly.
+	const view = await buildAccountView(db, user.id, mac);
+
 	return {
 		maskedPhone: phone ? maskPhone(phone) : null,
 		mac,
 		hasMac: !!mac,
-		balance: account?.balance ?? 0,
-		blocked,
-		freeTime: getFreeTimeStatus(account?.lastFreeSessionAt ?? null),
-		access: {
-			active: !!access,
-			isFree: access?.isFree ?? false,
-			paused: access?.paused ?? false,
-			// Frozen hold while paused; live remaining otherwise. The client shows this directly
-			// when paused (no countdown) and falls back to expiresAt − now when running.
-			remainingMs: access?.remainingMs ?? 0,
-			label: access ? (access.isFree ? 'Free Time' : access.name) : null,
-			startedAt: access?.startedAt.toISOString() ?? null,
-			expiresAt: access?.expiresAt.toISOString() ?? null
-		},
-		devices: shapeDevices(access, mac),
-		tiers
+		tiers,
+		...view
 	};
 };
 
