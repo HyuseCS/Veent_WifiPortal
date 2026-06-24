@@ -1,6 +1,13 @@
 <script lang="ts">
 	import { type Component } from 'svelte';
-	import { Card, SectionHeading, Table, StatusBadge, EmptyState } from '$lib/components/ui';
+	import {
+		Card,
+		SectionHeading,
+		Table,
+		SortHeader,
+		StatusBadge,
+		EmptyState
+	} from '$lib/components/ui';
 	import { KpiCard, RevenueChart } from '$lib/components/feature';
 	import Wallet from 'lucide-svelte/icons/wallet';
 	import Gift from 'lucide-svelte/icons/gift';
@@ -69,18 +76,88 @@
 	const onlineCount = $derived(networks.filter((ap) => ap.tone === 'online').length);
 	const apTotal = $derived(networks.length);
 
-	const sessionCols = [
-		{ label: 'MAC Address' },
-		{ label: 'Network' },
-		{ label: 'Package' },
-		{ label: 'Time Left' }
+	// Logical status order via tone (online → warning → blocked), not alphabetical.
+	const toneRank: Record<StatusTone, number> = { online: 0, warning: 1, blocked: 2 };
+	// Pull the leading number out of a pre-formatted metric ("47 Mbps", "22ms", "99.9%").
+	const lead = (s: string) => parseFloat(s) || 0;
+
+	// --- Active Sessions: clickable-header sort (null = server order). ---
+	type SessKey = 'mac' | 'network' | 'package' | 'timeLeft';
+	let sessSortKey = $state<SessKey | null>(null);
+	let sessSortDir = $state<'asc' | 'desc'>('asc');
+	const sessDefaultDir: Record<SessKey, 'asc' | 'desc'> = {
+		mac: 'asc',
+		network: 'asc',
+		package: 'asc',
+		timeLeft: 'asc'
+	};
+	function sessSort(key: SessKey) {
+		if (sessSortKey === key) sessSortDir = sessSortDir === 'asc' ? 'desc' : 'asc';
+		else {
+			sessSortKey = key;
+			sessSortDir = sessDefaultDir[key];
+		}
+	}
+	// Sort by expiry time (soonest first) for Time Left; null-expiry rows sort last.
+	const expMs = (s: ActiveSession) => (s.expiresAt ? new Date(s.expiresAt).getTime() : Infinity);
+	const sortedSessions = $derived.by(() => {
+		if (!sessSortKey) return activeSessions;
+		const key = sessSortKey;
+		const dir = sessSortDir === 'asc' ? 1 : -1;
+		return [...activeSessions].sort((a, b) => {
+			let cmp = 0;
+			if (key === 'mac') cmp = a.mac.localeCompare(b.mac);
+			else if (key === 'network') cmp = (a.network ?? '').localeCompare(b.network ?? '');
+			else if (key === 'package') cmp = a.package.localeCompare(b.package);
+			else cmp = expMs(a) - expMs(b); // timeLeft
+			return cmp * dir;
+		});
+	});
+	const sessionCols: { label: string; key: SessKey }[] = [
+		{ label: 'MAC Address', key: 'mac' },
+		{ label: 'Network', key: 'network' },
+		{ label: 'Package', key: 'package' },
+		{ label: 'Time Left', key: 'timeLeft' }
 	];
-	const netCols = [
-		{ label: 'Access Point' },
-		{ label: 'Status' },
-		{ label: 'Uptime' },
-		{ label: 'Latency' },
-		{ label: 'Speed' }
+
+	// --- Network Health: clickable-header sort (null = server order). ---
+	type NetKey = 'name' | 'status' | 'uptime' | 'latency' | 'speed';
+	let netSortKey = $state<NetKey | null>(null);
+	let netSortDir = $state<'asc' | 'desc'>('asc');
+	const netDefaultDir: Record<NetKey, 'asc' | 'desc'> = {
+		name: 'asc',
+		status: 'asc',
+		uptime: 'desc',
+		latency: 'asc',
+		speed: 'desc'
+	};
+	function netSort(key: NetKey) {
+		if (netSortKey === key) netSortDir = netSortDir === 'asc' ? 'desc' : 'asc';
+		else {
+			netSortKey = key;
+			netSortDir = netDefaultDir[key];
+		}
+	}
+	const sortedNetworks = $derived.by(() => {
+		if (!netSortKey) return networks;
+		const key = netSortKey;
+		const dir = netSortDir === 'asc' ? 1 : -1;
+		return [...networks].sort((a, b) => {
+			let cmp = 0;
+			if (key === 'name') cmp = a.name.localeCompare(b.name);
+			else if (key === 'status') cmp = toneRank[a.tone] - toneRank[b.tone];
+			else if (key === 'uptime') cmp = lead(a.uptime) - lead(b.uptime);
+			else if (key === 'latency') cmp = lead(a.latency) - lead(b.latency);
+			else cmp = lead(a.throughput) - lead(b.throughput); // speed
+			return cmp * dir;
+		});
+	});
+	const netCols: { label: string; key: NetKey }[] = [
+		{ label: 'Access Point', key: 'name' },
+		{ label: 'Status', key: 'status' },
+		{ label: 'Uptime', key: 'uptime' },
+		{ label: 'Latency', key: 'latency' },
+		{ label: 'Speed', key: 'speed' }
 	];
 </script>
 
@@ -124,7 +201,7 @@
 
 	<!-- Active Sessions -->
 	<section class="sessions flex min-h-0 flex-col">
-		<Table title="Active Sessions" columns={sessionCols} class="min-h-0 flex-1">
+		<Table title="Active Sessions" class="min-h-0 flex-1">
 			{#snippet aside()}
 				{#if activeSessions.length > 0}
 					<span
@@ -135,7 +212,19 @@
 					</span>
 				{/if}
 			{/snippet}
-			{#each activeSessions as session (session.id)}
+			{#snippet headRow()}
+				<tr class="border-b border-border bg-surface">
+					{#each sessionCols as col (col.key)}
+						<SortHeader
+							label={col.label}
+							active={sessSortKey === col.key}
+							dir={sessSortDir}
+							onsort={() => sessSort(col.key)}
+						/>
+					{/each}
+				</tr>
+			{/snippet}
+			{#each sortedSessions as session (session.id)}
 				{@const t = liveTimer(session, now)}
 				<tr class="transition-colors hover:bg-surface">
 					<td class="px-4 py-3 font-mono text-xs text-ink">{session.mac}</td>
@@ -170,7 +259,7 @@
 
 	<!-- Network Health -->
 	<section class="network flex min-h-0 flex-col">
-		<Table title="Network Health" columns={netCols} class="min-h-0 flex-1">
+		<Table title="Network Health" class="min-h-0 flex-1">
 			{#snippet aside()}
 				<div class="flex items-center gap-2">
 					{#if apTotal > 0}
@@ -179,7 +268,19 @@
 					<a href="/networks" class="text-xs font-medium text-brand hover:underline">View all</a>
 				</div>
 			{/snippet}
-			{#each networks as ap (ap.id)}
+			{#snippet headRow()}
+				<tr class="border-b border-border bg-surface">
+					{#each netCols as col (col.key)}
+						<SortHeader
+							label={col.label}
+							active={netSortKey === col.key}
+							dir={netSortDir}
+							onsort={() => netSort(col.key)}
+						/>
+					{/each}
+				</tr>
+			{/snippet}
+			{#each sortedNetworks as ap (ap.id)}
 				<tr class="transition-colors hover:bg-surface">
 					<td class="px-4 py-3 font-medium text-ink">{ap.name}</td>
 					<td class="px-4 py-3">

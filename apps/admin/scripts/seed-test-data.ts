@@ -87,7 +87,9 @@ const daysAgoRandom = (maxDays: number) => minutesAgo(randInt(0, maxDays * 24 * 
 
 // ───────────────────────────── fixed source data ─────────────────────────────
 // Human names — NOT used as account identity (customers are phone-only); only as the
-// gateway-reported payer name on payment_transactions (buyerName/buyerEmail).
+// gateway-reported payer name on payment_transactions (buyerName/buyerEmail), and only when
+// the fund source actually captures one (card checkout). For wallet/QR payments buyerName is
+// left null so the Finance table falls back to the guest's phone — matching the Users page.
 const FIRST = [
 	'Ana', 'Ben', 'Carlos', 'Divya', 'Erin', 'Felix', 'Grace', 'Hugo', 'Ines', 'Jomar',
 	'Kira', 'Leo', 'Maya', 'Noel', 'Olive', 'Paolo', 'Quinn', 'Rina', 'Sami', 'Tonio'
@@ -264,6 +266,9 @@ async function main() {
 		const cust = status !== PAYMENT_STATUS.success && rand() < 0.4 ? null : pick(customers);
 		const fund = pick(FUND_SOURCES);
 		const success = status === PAYMENT_STATUS.success;
+		// Only card checkout captures a cardholder name; wallet/QR don't. Leaving buyerName null
+		// exercises the Finance buyer fallback: phone (when attributed) → "—" (unattributed).
+		const capturesName = fund === 'card';
 		// Skew a third of payments into the last 7 days so the Dashboard's 7-day
 		// revenue chart and the Finance "7d" view both have data.
 		const createdAt = rand() < 0.33 ? minutesAgo(randInt(0, 7 * 24 * 60)) : daysAgoRandom(PAYMENT_WINDOW_DAYS);
@@ -280,8 +285,8 @@ async function main() {
 			referenceNo: cust ? `ref_${cust.id.slice(0, 8)}` : null,
 			errorCode: success ? null : status === PAYMENT_STATUS.failed ? 'PAYMENT_DECLINED' : null,
 			errorMessage: status === PAYMENT_STATUS.failed ? 'Card was declined by issuer.' : null,
-			buyerName: cust?.payerName ?? 'Guest Checkout',
-			buyerEmail: cust ? `${cust.payerName.split(' ')[0].toLowerCase()}@example.com` : null,
+			buyerName: capturesName ? (cust?.payerName ?? 'Guest Checkout') : null,
+			buyerEmail: capturesName && cust ? `${cust.payerName.split(' ')[0].toLowerCase()}@example.com` : null,
 			userId: cust?.id ?? null,
 			packageId: bundle.id,
 			createdAt

@@ -35,6 +35,7 @@ import type {
 	StatusTone,
 	TransactionRow
 } from '$lib/types';
+import { fmtPhone } from '$lib/format';
 
 const peso = (n: number) => `₱${Math.round(n).toLocaleString('en-PH')}`;
 
@@ -560,7 +561,7 @@ export async function listTransactions(
 				buyerName: paymentTransactions.buyerName,
 				buyerEmail: paymentTransactions.buyerEmail,
 				createdAt: paymentTransactions.createdAt,
-				userName: customerUser.name,
+				userPhone: customerUser.phoneNumber,
 				packageName: packages.name
 			})
 			.from(paymentTransactions)
@@ -582,8 +583,10 @@ export async function listTransactions(
 			fundSourceType: fundSourceLabel(r.fundSourceType),
 			fundSourceMasked: r.fundSourceMasked,
 			receiptNo: r.receiptNo,
-			// Prefer the buyer captured on the gateway event; fall back to the linked user.
-			buyerName: r.buyerName || r.userName || '—',
+			// Prefer the real buyer name captured on the gateway event; otherwise fall back to
+			// the linked guest's phone number (customers register by phone, not names — same
+			// identity the Users table shows), then '—' for unattributed events.
+			buyerName: r.buyerName || (r.userPhone ? fmtPhone(r.userPhone) : '') || '—',
 			buyerEmail: r.buyerEmail,
 			packageName: r.packageName,
 			createdAt: r.createdAt.toISOString()

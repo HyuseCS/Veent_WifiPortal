@@ -18,6 +18,7 @@
 	import { dev } from '$app/environment';
 	import { enhance } from '$app/forms';
 	import type { AdminUserRow, StatusTone } from '$lib/types';
+	import { fmtPhone } from '$lib/format';
 	import { EmptyState, IconButton, SearchInput, StatusBadge, Table } from '$lib/components/ui';
 
 	// `actions` lets the page slot owner-only controls (the Wipe button) into the toolbar
@@ -79,12 +80,6 @@
 			return cmp * dir;
 		});
 	});
-
-	// Pretty-print an E.164 PH mobile (+63 then 10 digits) as "+63 917 654 4521"; raw otherwise.
-	function fmtPhone(p: string): string {
-		const m = p.match(/^\+63(\d{3})(\d{3})(\d{4})$/);
-		return m ? `+63 ${m[1]} ${m[2]} ${m[3]}` : p;
-	}
 
 	// Set of selected user ids. SvelteSet so mutations stay reactive.
 	const selected = new SvelteSet<string>();

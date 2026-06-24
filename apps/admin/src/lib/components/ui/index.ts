@@ -5,6 +5,7 @@
 export { default as Card } from './Card.svelte';
 export { default as SectionHeading } from './SectionHeading.svelte';
 export { default as Table } from './Table.svelte';
+export { default as SortHeader } from './SortHeader.svelte';
 export { default as StatusBadge } from './StatusBadge.svelte';
 export { default as FilterTabs } from './FilterTabs.svelte';
 export { default as SearchInput } from './SearchInput.svelte';

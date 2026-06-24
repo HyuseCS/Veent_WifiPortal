@@ -2,7 +2,7 @@
 	import Search from 'lucide-svelte/icons/search';
 	import type { Component } from 'svelte';
 	import type { TransactionRow } from '$lib/types';
-	import { EmptyState, FilterTabs, SearchInput, StatusBadge, Table } from '$lib/components/ui';
+	import { EmptyState, SearchInput, SortHeader, StatusBadge, Table } from '$lib/components/ui';
 
 	// The Finance transactions panel. Mirrors <UsersTable>: client-side search + status
 	// filter run purely over the already-loaded `transactions` (no extra loads / DB hits),
@@ -21,41 +21,62 @@
 	};
 
 	let query = $state('');
-	let filter = $state<string>('all');
 
-	// Status filter pills with live counts off the full set (counts stay stable as you filter).
-	// Tabs are derived from the statuses actually present — no fabricated buckets.
-	const tabs = $derived.by(() => {
-		const counts: Record<string, number> = {};
-		for (const tx of transactions) counts[tx.status] = (counts[tx.status] ?? 0) + 1;
-		return [
-			{ key: 'all', label: 'All', count: transactions.length },
-			...Object.entries(counts).map(([status, count]) => ({
-				key: status,
-				label: cleanStatus(status),
-				count
-			}))
-		];
-	});
-
+	// Status is reachable via the sortable Status column, so the filter pills were dropped —
+	// this is now a plain text search over the already-loaded rows (no extra loads / DB hits).
 	const filtered = $derived.by(() => {
 		const q = query.trim().toLowerCase();
-		let rows = transactions.filter((tx) => filter === 'all' || tx.status === filter);
-		if (q) {
-			rows = rows.filter((tx) =>
-				`${tx.buyerName} ${tx.buyerEmail ?? ''} ${tx.receiptNo ?? ''}`.toLowerCase().includes(q)
-			);
-		}
-		return rows;
+		if (!q) return transactions;
+		return transactions.filter((tx) =>
+			`${tx.buyerName} ${tx.buyerEmail ?? ''} ${tx.receiptNo ?? ''}`.toLowerCase().includes(q)
+		);
 	});
 
-	const columns = [
-		{ label: 'Date' },
-		{ label: 'Status' },
-		{ label: 'Amount' },
-		{ label: 'Method' },
-		{ label: 'Buyer' },
-		{ label: 'Receipt' }
+	// Clickable-header sort over the filtered rows. `null` keeps server order (newest first).
+	type SortKey = 'date' | 'status' | 'amount' | 'method' | 'buyer' | 'receipt';
+	let sortKey = $state<SortKey | null>(null);
+	let sortDir = $state<'asc' | 'desc'>('asc');
+	const defaultDir: Record<SortKey, 'asc' | 'desc'> = {
+		date: 'desc',
+		status: 'asc',
+		amount: 'desc',
+		method: 'asc',
+		buyer: 'asc',
+		receipt: 'asc'
+	};
+	function toggleSort(key: SortKey) {
+		if (sortKey === key) sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+		else {
+			sortKey = key;
+			sortDir = defaultDir[key];
+		}
+	}
+	// Amount is a pre-formatted "₱1,200" string — pull the number out to sort numerically.
+	const amountNum = (s: string) => parseFloat(s.replace(/[^0-9.]/g, '')) || 0;
+
+	const sorted = $derived.by(() => {
+		if (!sortKey) return filtered;
+		const key = sortKey;
+		const dir = sortDir === 'asc' ? 1 : -1;
+		return [...filtered].sort((a, b) => {
+			let cmp = 0;
+			if (key === 'date') cmp = a.createdAt.localeCompare(b.createdAt);
+			else if (key === 'status') cmp = a.status.localeCompare(b.status);
+			else if (key === 'amount') cmp = amountNum(a.amount) - amountNum(b.amount);
+			else if (key === 'method') cmp = a.fundSourceType.localeCompare(b.fundSourceType);
+			else if (key === 'buyer') cmp = a.buyerName.localeCompare(b.buyerName);
+			else cmp = (a.receiptNo ?? '').localeCompare(b.receiptNo ?? ''); // receipt
+			return cmp * dir;
+		});
+	});
+
+	const columns: { label: string; key: SortKey }[] = [
+		{ label: 'Date', key: 'date' },
+		{ label: 'Status', key: 'status' },
+		{ label: 'Amount', key: 'amount' },
+		{ label: 'Method', key: 'method' },
+		{ label: 'Buyer', key: 'buyer' },
+		{ label: 'Receipt', key: 'receipt' }
 	];
 
 	const dateFmt = new Intl.DateTimeFormat('en-PH', {
@@ -69,12 +90,11 @@
 
 <!-- Fill the parent's height so the rows scroll inside (sticky header) instead of growing the
      page; the finance page gives this a full-viewport-tall flex column. -->
-<Table {columns} class="min-h-0 flex-1">
+<Table class="min-h-0 flex-1">
 	<!-- Toolbar: search + status filter, matching the Users table chrome exactly. -->
 	{#snippet toolbar()}
 		<div class="flex flex-wrap items-center gap-3 px-4 py-3">
 			<h2 class="text-base font-semibold text-ink">Transactions</h2>
-			<FilterTabs {tabs} active={filter} onselect={(key) => (filter = key)} />
 			<SearchInput
 				bind:value={query}
 				placeholder="Search buyer or receipt…"
@@ -84,7 +104,21 @@
 		</div>
 	{/snippet}
 
-	{#each filtered as tx (tx.id)}
+	<!-- Clickable, sortable column headers (replaces the static `columns` header row). -->
+	{#snippet headRow()}
+		<tr class="border-b border-border bg-surface">
+			{#each columns as col (col.key)}
+				<SortHeader
+					label={col.label}
+					active={sortKey === col.key}
+					dir={sortDir}
+					onsort={() => toggleSort(col.key)}
+				/>
+			{/each}
+		</tr>
+	{/snippet}
+
+	{#each sorted as tx (tx.id)}
 		<tr class="hover:bg-surface">
 			<td class="px-4 py-2.5 whitespace-nowrap text-ink">{fmtDate(tx.createdAt)}</td>
 			<td class="px-4 py-2.5">

@@ -131,6 +131,13 @@ rate, or why payments failed. The Finance feature adds a complete, queryable rec
 `{ from, to }` range. Period→range parsing is shared in `$lib/server/period.ts` (used by both
 the page `load` and the CSV endpoint).
 
+**Buyer identity:** the transactions table's Buyer column shows the real name from the gateway
+event when present, else the linked guest's **phone number** (formatted via shared
+`$lib/format.ts → fmtPhone`), else "—". Customers register by phone, not names, so this matches
+the Users-page identity — never fall back to `customer_user.name` (synthesized phone-as-name).
+Buyer email shown under the name is the gateway-captured `buyer_email` only (never the
+synthesized `@otp.veent.local` login email).
+
 **Revenue source-of-truth (important):** Finance "Gross Revenue (settled)" = actual amount the
 gateway charged on `PAYMENT_SUCCESS`. This is intentionally a **different** number from the
 Dashboard's revenue, which estimates from `credit_ledger ⨝ packages.fiatCost` (package list

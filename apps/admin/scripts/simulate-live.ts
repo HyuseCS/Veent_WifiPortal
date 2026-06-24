@@ -304,8 +304,10 @@ async function topup() {
 			fundSourceMasked: fund === 'card' ? `**** ${randInt(1000, 9999)}` : null,
 			receiptNo: `RCPT-${randInt(100000, 999999)}`,
 			referenceNo: `ref_${cust.id.slice(0, 8)}`,
-			buyerName: cust.payerName,
-			buyerEmail: `${cust.payerName.split(' ')[0].toLowerCase()}@example.com`,
+			// Only card checkout captures a cardholder name; wallet/QR leave it null so the
+			// Finance buyer column falls back to the guest's phone (matches the Users page).
+			buyerName: fund === 'card' ? cust.payerName : null,
+			buyerEmail: fund === 'card' ? `${cust.payerName.split(' ')[0].toLowerCase()}@example.com` : null,
 			userId: cust.id,
 			packageId: bundle.id,
 			createdAt: now
@@ -332,16 +334,20 @@ async function failedPayment() {
 	const cust = customers.length && chance(0.6) ? pick(customers) : null;
 	const bundle = pick(bundles);
 	const status = pick(['PAYMENT_FAILED', 'PAYMENT_EXPIRED', 'PAYMENT_CANCELLED'] as const);
+	const fund = pick(FUND_SOURCES);
+	// Only card checkout captures a cardholder name; otherwise null → phone fallback (attributed)
+	// or "—" (unattributed) in the Finance buyer column.
+	const capturesName = fund === 'card';
 	await db.insert(paymentTransactions).values({
 		id: `tx_live_${Date.now()}_${randInt(1000, 9999)}`,
 		status,
 		amount: String(bundle.fiatCost ?? 0),
 		currency: 'PHP',
-		fundSourceType: pick(FUND_SOURCES),
+		fundSourceType: fund,
 		errorCode: status === 'PAYMENT_FAILED' ? 'PAYMENT_DECLINED' : null,
 		errorMessage: status === 'PAYMENT_FAILED' ? 'Card was declined by issuer.' : null,
-		buyerName: cust?.payerName ?? 'Guest Checkout',
-		buyerEmail: cust ? `${cust.payerName.split(' ')[0].toLowerCase()}@example.com` : null,
+		buyerName: capturesName ? (cust?.payerName ?? 'Guest Checkout') : null,
+		buyerEmail: capturesName && cust ? `${cust.payerName.split(' ')[0].toLowerCase()}@example.com` : null,
 		userId: cust?.id ?? null,
 		packageId: bundle.id,
 		createdAt: new Date()

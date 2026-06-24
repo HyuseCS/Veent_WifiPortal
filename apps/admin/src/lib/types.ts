@@ -187,6 +187,9 @@ export interface TransactionRow {
 	fundSourceType: string;
 	fundSourceMasked: string | null;
 	receiptNo: string | null;
+	/** Buyer identity: the real name on the gateway event when present, else the linked
+	 * guest's formatted phone number (customers register by phone, not names — matches the
+	 * Users table identity), else "—" for unattributed events. Built in `listTransactions`. */
 	buyerName: string;
 	buyerEmail: string | null;
 	packageName: string | null;
