@@ -29,7 +29,8 @@ for (const file of readdirSync(dir).filter((f) => f.endsWith('.sql'))) {
 				return line.replace('ADD COLUMN "', 'ADD COLUMN IF NOT EXISTS "');
 			// Wrap a single-line ADD CONSTRAINT so a duplicate is ignored.
 			const m = line.match(/^(ALTER TABLE .*ADD CONSTRAINT .*?;)(\s*--> statement-breakpoint)?\s*$/);
-			if (m) return `DO $$ BEGIN ${m[1]} EXCEPTION WHEN duplicate_object THEN null; END $$;${m[2] ?? ''}`;
+			// Catch both: FKs raise duplicate_object, UNIQUE/PK raise duplicate_table (backing index).
+			if (m) return `DO $$ BEGIN ${m[1]} EXCEPTION WHEN duplicate_object OR duplicate_table THEN null; END $$;${m[2] ?? ''}`;
 			return line;
 		})
 		.join('\n');

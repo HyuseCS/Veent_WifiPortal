@@ -9,7 +9,7 @@ import {
 	updateNetworkPlace
 } from '$lib/server/queries';
 import { routerModels, rangeFor, DEFAULT_MODEL_ID } from '$lib/router-models';
-import { distanceMeters } from '$lib/geo';
+import { reachesAny } from '$lib/reach';
 import type { Actions, PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async () => ({ networks: await listNetworkHealth(db) });
@@ -52,11 +52,16 @@ async function clusterReachable(
 	if (!name) return true;
 	const members = await clusterMembers(db, name, excludeId);
 	if (members.length === 0) return true;
-	return members.some((m) => {
-		if (m.latitude == null || m.longitude == null) return false;
-		const memberRange = m.rangeMeters ?? rangeFor(m.model);
-		return distanceMeters(lat, lng, Number(m.latitude), Number(m.longitude)) < range + memberRange;
-	});
+	// Same overlap math the client clusterer uses (shared `$lib/reach`), so the join
+	// guard can't drift from what the operator sees on the map.
+	const domes = members
+		.filter((m) => m.latitude != null && m.longitude != null)
+		.map((m) => ({
+			lat: Number(m.latitude),
+			lng: Number(m.longitude),
+			range: m.rangeMeters ?? rangeFor(m.model)
+		}));
+	return reachesAny(lat, lng, range, domes);
 }
 
 export const actions: Actions = {

@@ -16,7 +16,7 @@
  *
  * What it does NOT do (deployment-specific, left to you):
  *   - install bun / node / Postgres system packages
- *   - fill external secrets (Maya, Semaphore, Resend, MikroTik creds, OWNER_*)
+ *   - fill external secrets (Maya, iTexMo, Resend, MikroTik creds, OWNER_*)
  *   - configure the router (upload login.html, run setup:router)
  *   - TLS / reverse proxy
  */
@@ -234,7 +234,7 @@ schtasks /Create /SC MINUTE /TN "Radius-Health" /TR "powershell -c \\"Invoke-Web
 // ── 5. Final checklist ───────────────────────────────────────────────────────
 step('Remaining manual steps (deployment-specific)');
 console.log(`  1. Fill real secrets in apps/*/.env:
-       customer: MAYA_PUBLIC_KEY / MAYA_SECRET_KEY (+ MAYA_SANDBOX=false), SEMAPHORE_API_KEY, ORIGIN
+       customer: MAYA_PUBLIC_KEY / MAYA_SECRET_KEY (+ MAYA_SANDBOX=false), ITEXMO_API_CODE/EMAIL/PASSWORD, ORIGIN
        admin:    MIKROTIK_HOST/USER/PASSWORD, RESEND_API_KEY/EMAIL_FROM, OWNER_*, ORIGIN, set NETWORK_CONTROLLER=mikrotik
   2. Remove the temporary /register admin hole before serving users.
   3. Router: edit docs/mikrotik/login.html to the prod portal URL & upload it; run:

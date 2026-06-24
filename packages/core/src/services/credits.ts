@@ -2,6 +2,11 @@ import { and, desc, eq, gt, sql } from 'drizzle-orm';
 import { type DB, customerProfile, creditLedger } from '@veent/db';
 import { LEDGER_TYPE, type LedgerType } from '../config';
 
+/** A Drizzle transaction handle — the value passed to a `db.transaction(tx => …)`
+ * callback. Lets a service run inside a caller-owned transaction (e.g. so a spend and
+ * the session grant commit/roll back together) instead of opening its own. */
+export type Tx = Parameters<Parameters<DB['transaction']>[0]>[0];
+
 /**
  * The id of the user's most recent ledger entry (0 if none). Captured right
  * before a checkout redirect as a watermark: the payment webhook later inserts a
@@ -133,48 +138,59 @@ export interface SpendCreditsResult {
 }
 
 /**
+ * Deducts credits for an access-tier purchase inside a caller-owned transaction, only
+ * if the balance covers it. The conditional UPDATE (balance >= amount) prevents overspend
+ * under concurrent requests without an explicit lock. Use this when the spend must commit
+ * atomically with another effect (e.g. the session grant in `startPaidSession`); use
+ * `spendCredits` for a standalone spend.
+ */
+export async function spendCreditsTx(
+	tx: Tx,
+	input: { userId: string; amount: number; packageId?: number }
+): Promise<SpendCreditsResult> {
+	if (input.amount <= 0) throw new Error('spendCredits: amount must be positive');
+
+	const [updated] = await tx
+		.update(customerProfile)
+		.set({ creditBalance: sql`${customerProfile.creditBalance} - ${input.amount}` })
+		.where(
+			and(
+				eq(customerProfile.userId, input.userId),
+				sql`${customerProfile.creditBalance} >= ${input.amount}`
+			)
+		)
+		.returning({ balance: customerProfile.creditBalance });
+
+	if (!updated) {
+		return {
+			ok: false,
+			reason: 'insufficient_balance',
+			balance: await balanceInTx(tx, input.userId)
+		};
+	}
+
+	await tx.insert(creditLedger).values({
+		userId: input.userId,
+		packageId: input.packageId,
+		amount: -input.amount,
+		type: LEDGER_TYPE.spend
+	});
+
+	return { ok: true, balance: Number(updated.balance) };
+}
+
+/**
  * Deducts credits for an access-tier purchase, atomically and only if the balance
- * covers it. The conditional UPDATE (balance >= amount) prevents overspend under
- * concurrent requests without an explicit lock.
+ * covers it. Standalone wrapper around `spendCreditsTx` in its own transaction.
  */
 export async function spendCredits(
 	db: DB,
 	input: { userId: string; amount: number; packageId?: number }
 ): Promise<SpendCreditsResult> {
-	if (input.amount <= 0) throw new Error('spendCredits: amount must be positive');
-
-	return db.transaction(async (tx) => {
-		const [updated] = await tx
-			.update(customerProfile)
-			.set({ creditBalance: sql`${customerProfile.creditBalance} - ${input.amount}` })
-			.where(
-				and(
-					eq(customerProfile.userId, input.userId),
-					sql`${customerProfile.creditBalance} >= ${input.amount}`
-				)
-			)
-			.returning({ balance: customerProfile.creditBalance });
-
-		if (!updated) {
-			return {
-				ok: false,
-				reason: 'insufficient_balance',
-				balance: await balanceInTx(tx, input.userId)
-			};
-		}
-
-		await tx.insert(creditLedger).values({
-			userId: input.userId,
-			packageId: input.packageId,
-			amount: -input.amount,
-			type: LEDGER_TYPE.spend
-		});
-
-		return { ok: true, balance: Number(updated.balance) };
-	});
+	return db.transaction((tx) => spendCreditsTx(tx, input));
 }
 
-async function balanceInTx(tx: Parameters<Parameters<DB['transaction']>[0]>[0], userId: string) {
+async function balanceInTx(tx: Tx, userId: string) {
 	const [row] = await tx
 		.select({ balance: customerProfile.creditBalance })
 		.from(customerProfile)
