@@ -2,6 +2,7 @@
 	import { setContext, untrack, type Snippet } from 'svelte';
 	import { page } from '$app/state';
 	import { Sidebar, Topbar, LayoutSwitcher } from '$lib/components/layout';
+	import { FinanceHeaderControls } from '$lib/components/feature';
 	import { nav } from '$lib/nav';
 	import {
 		DASH_LAYOUT_CTX,
@@ -35,6 +36,7 @@
 		]
 	);
 	const onDashboard = $derived(page.url.pathname === '/dashboard');
+	const onFinance = $derived(page.url.pathname.startsWith('/finance'));
 
 	// Dashboard layout choice lives here (the header switcher and the dashboard grid both
 	// need it). Seed once from the cookie-backed load value; selecting one rewrites the
@@ -57,6 +59,7 @@
 		<Topbar {title} {subtitle}>
 			{#snippet actions()}
 				{#if onDashboard}<LayoutSwitcher />{/if}
+				{#if onFinance}<FinanceHeaderControls />{/if}
 			{/snippet}
 		</Topbar>
 		<main class="flex-1 overflow-y-auto bg-canvas p-4 sm:p-6">

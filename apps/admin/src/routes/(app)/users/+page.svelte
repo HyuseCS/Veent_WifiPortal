@@ -92,6 +92,7 @@
 				helper={k.helper}
 				tone={k.tone}
 				captionTone={k.captionTone}
+				compact
 			/>
 		{/each}
 	</section>
