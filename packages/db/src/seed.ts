@@ -21,19 +21,21 @@ type SeedAp = typeof networkHealth.$inferInsert;
 const seedPackages: SeedPackage[] = [
 	{ name: 'Free Time', type: 'free', durationMinutes: 15, creditCost: 0, isActive: true },
 
-	{ name: '₱20 — 50 Credits', type: 'bundle', fiatCost: 20, creditsProvided: 50, isActive: true },
-	{ name: '₱50 — 150 Credits', type: 'bundle', fiatCost: 50, creditsProvided: 150, isActive: true },
+	// Bundles: 1 PHP -> 1 credit.
+	{ name: '₱20 — 20 Credits', type: 'bundle', fiatCost: 20, creditsProvided: 20, isActive: true },
+	{ name: '₱50 — 50 Credits', type: 'bundle', fiatCost: 50, creditsProvided: 50, isActive: true },
 	{
-		name: '₱100 — 350 Credits',
+		name: '₱100 — 100 Credits',
 		type: 'bundle',
 		fiatCost: 100,
-		creditsProvided: 350,
+		creditsProvided: 100,
 		isActive: true
 	},
 
-	{ name: '1 Hour', type: 'tier', creditCost: 20, durationMinutes: 60, isActive: true },
-	{ name: '3 Hours', type: 'tier', creditCost: 50, durationMinutes: 180, isActive: true },
-	{ name: '1 Day', type: 'tier', creditCost: 150, durationMinutes: 1440, isActive: true }
+	// Tiers: spend credits for access time.
+	{ name: '5 Minutes', type: 'tier', creditCost: 1, durationMinutes: 5, isActive: true },
+	{ name: '30 Minutes', type: 'tier', creditCost: 5, durationMinutes: 30, isActive: true },
+	{ name: '1 Hour', type: 'tier', creditCost: 10, durationMinutes: 60, isActive: true }
 ];
 
 // SAMPLE per-AP health for the Networks page. Synthetic until a real router /

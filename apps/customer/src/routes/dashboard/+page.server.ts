@@ -6,18 +6,19 @@ import { packages } from '@veent/db';
 import {
 	getAccount,
 	getActiveAccess,
-	getFreeTimeStatus,
 	startFreeAccessAndBindDevice,
 	startPaidAccessAndBindDevice,
+	pauseAccountAccess,
+	resumeAccountAccess,
 	bindDevice,
 	unbindDevice,
 	unbindAllDevices,
 	resolveDeviceMac,
-	MAX_DEVICES_PER_ACCOUNT,
-	type ActiveAccess
+	MAX_DEVICES_PER_ACCOUNT
 } from '@veent/core';
 import { db } from '$lib/server/db';
 import { network } from '$lib/server/network';
+import { buildAccountView } from '$lib/server/account-view';
 import { getPortalContext } from '$lib/server/portal';
 import type { RequestEvent } from '@sveltejs/kit';
 import { maskPhone } from '$lib/server/otp';
@@ -49,40 +50,6 @@ async function resolveMac(event: RequestEvent): Promise<string | null> {
 	}
 }
 
-/** Last three octets of a MAC — a recognizable, low-PII device label for guests. */
-function macTail(mac: string | null): string | null {
-	if (!mac) return null;
-	const parts = mac.split(':');
-	return parts.length >= 3 ? parts.slice(-3).join(':') : mac;
-}
-
-/** Shape the account access + device registry for the client. */
-function shapeDevices(access: ActiveAccess | null, thisMac: string | null) {
-	const macU = thisMac?.toUpperCase() ?? null;
-	const list = (access?.devices ?? [])
-		.map((d) => ({
-			id: d.id,
-			macTail: macTail(d.macAddress),
-			thisDevice: !!macU && d.macAddress?.toUpperCase() === macU,
-			boundAt: d.boundAt.toISOString(),
-			lastSeenAt: d.lastSeenAt.toISOString()
-		}))
-		// Most-recently-seen first; the current device floats to the top.
-		.sort((a, b) => (a.thisDevice ? -1 : b.thisDevice ? 1 : b.lastSeenAt.localeCompare(a.lastSeenAt)));
-
-	const thisDeviceBound = list.some((d) => d.thisDevice);
-	const oldest = [...list].sort((a, b) => a.lastSeenAt.localeCompare(b.lastSeenAt))[0] ?? null;
-
-	return {
-		cap: MAX_DEVICES_PER_ACCOUNT,
-		count: list.length,
-		thisDeviceBound,
-		atCap: list.length >= MAX_DEVICES_PER_ACCOUNT && !thisDeviceBound,
-		oldest: oldest ? { id: oldest.id, macTail: oldest.macTail } : null,
-		list
-	};
-}
-
 /**
  * The Hub. Renders the ACCOUNT's access window (one countdown shared across the
  * account's devices), the bound-device list, balance, Free Time eligibility, and
@@ -105,8 +72,10 @@ export const load: PageServerLoad = async (event) => {
 	let access = await getActiveAccess(db, user.id);
 
 	// Auto-bind: a returning device with live account time should get online with zero
-	// taps. Best-effort — a router hiccup must never break the dashboard render.
-	if (access && mac && !blocked) {
+	// taps. Best-effort — a router hiccup must never break the dashboard render. Skipped while
+	// PAUSED: auto-binding would re-grant internet and defeat the pause (devices stay off until
+	// the user resumes).
+	if (access && !access.paused && mac && !blocked) {
 		const macU = mac.toUpperCase();
 		const bound = access.devices.find((d) => d.macAddress?.toUpperCase() === macU);
 		const underCap = access.devices.length < MAX_DEVICES_PER_ACCOUNT;
@@ -124,22 +93,16 @@ export const load: PageServerLoad = async (event) => {
 
 	const phone = (user as { phoneNumber?: string | null }).phoneNumber ?? null;
 
+	// The live, per-account slice (balance, free-time, access window, devices) — same shape
+	// the SSE feed pushes (`$lib/server/account-view`), so cross-device updates merge cleanly.
+	const view = await buildAccountView(db, user.id, mac);
+
 	return {
 		maskedPhone: phone ? maskPhone(phone) : null,
 		mac,
 		hasMac: !!mac,
-		balance: account?.balance ?? 0,
-		blocked,
-		freeTime: getFreeTimeStatus(account?.lastFreeSessionAt ?? null),
-		access: {
-			active: !!access,
-			isFree: access?.isFree ?? false,
-			label: access ? (access.isFree ? 'Free Time' : access.name) : null,
-			startedAt: access?.startedAt.toISOString() ?? null,
-			expiresAt: access?.expiresAt.toISOString() ?? null
-		},
-		devices: shapeDevices(access, mac),
-		tiers
+		tiers,
+		...view
 	};
 };
 
@@ -269,6 +232,52 @@ export const actions: Actions = {
 			return fail(502, { error: 'Could not reach the network controller. Please try again.' });
 		}
 		return { removed: true };
+	},
+
+	// Pause the account's PAID access window: freeze the remaining time and disconnect every
+	// device. The held time survives until resume (the revoke cron skips paused accounts).
+	pauseAccess: async (event) => {
+		const user = event.locals.user;
+		if (!user) return redirect(302, '/login');
+
+		let result;
+		try {
+			result = await pauseAccountAccess(db, network, user.id);
+		} catch (err) {
+			console.error('[customer] pauseAccess failed:', err);
+			return fail(502, { error: 'Could not reach the network controller. Please try again.' });
+		}
+		if (!result.ok) {
+			const error =
+				result.reason === 'free_not_pausable'
+					? 'Free Time can’t be paused.'
+					: 'No active access to pause.';
+			return fail(409, { error });
+		}
+		return { paused: true };
+	},
+
+	// Resume a paused window: restore the held time into a fresh window. The current device
+	// reconnects via the dashboard auto-bind on the resulting reload.
+	resumeAccess: async (event) => {
+		const user = event.locals.user;
+		if (!user) return redirect(302, '/login');
+
+		let result;
+		try {
+			result = await resumeAccountAccess(db, user.id);
+		} catch (err) {
+			console.error('[customer] resumeAccess failed:', err);
+			return fail(502, { error: 'Could not resume access. Please try again.' });
+		}
+		if (!result.ok) {
+			const error =
+				result.reason === 'no_remaining'
+					? 'No held time left to resume.'
+					: 'Nothing to resume.';
+			return fail(409, { error });
+		}
+		return { resumed: true };
 	},
 
 	signOut: async (event) => {

@@ -120,6 +120,20 @@
       "when": 1782277935869,
       "tag": "0016_dazzling_archangel",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1782282852556,
+      "tag": "0017_exotic_callisto",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1782285300817,
+      "tag": "0018_account_notify_triggers",
+      "breakpoints": true
     }
   ]
 }

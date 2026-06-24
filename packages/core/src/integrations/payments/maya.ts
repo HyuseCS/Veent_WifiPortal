@@ -125,7 +125,7 @@ export function createMayaProvider(config: MayaConfig): PaymentProvider {
 			return { checkoutId: data.checkoutId, redirectUrl: data.redirectUrl };
 		},
 
-		async verifyWebhook(rawBody: string, _headers: Headers): Promise<PaymentEvent> {
+		async verifyWebhook(rawBody: string): Promise<PaymentEvent> {
 			if (!config.secretKey) throw new Error('maya: secretKey not configured');
 
 			let payload: { id?: string; paymentId?: string };

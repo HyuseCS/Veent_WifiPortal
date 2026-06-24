@@ -17,6 +17,8 @@
 		| 'log-out'
 		| 'alert-circle'
 		| 'alert-triangle'
+		| 'pause'
+		| 'play'
 		| 'smartphone'
 		| 'monitor'
 		| 'trash'
@@ -81,6 +83,11 @@
 		/>
 		<line x1="12" y1="9" x2="12" y2="13" />
 		<line x1="12" y1="17" x2="12.01" y2="17" />
+	{:else if name === 'pause'}
+		<rect x="14" y="4" width="4" height="16" rx="1" />
+		<rect x="6" y="4" width="4" height="16" rx="1" />
+	{:else if name === 'play'}
+		<polygon points="6 3 20 12 6 21 6 3" />
 	{:else if name === 'smartphone'}
 		<rect x="5" y="2" width="14" height="20" rx="2" ry="2" />
 		<line x1="12" y1="18" x2="12.01" y2="18" />

@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, isNotNull, lte } from 'drizzle-orm';
+import { and, asc, desc, eq, isNotNull, isNull, lte } from 'drizzle-orm';
 import { type DB, customerProfile, networkHealth, networkSessions, packages } from '@veent/db';
 import type { NetworkController } from '../integrations/network';
 import { MAX_DEVICES_PER_ACCOUNT, SESSION_STATUS } from '../config';
@@ -77,9 +77,14 @@ async function bindMacTx(
 	if (opts.addMinutes > 0) {
 		// The window AND its package are account-level: the most recent extend sets both, so
 		// every bound device reads one consistent package (paid tier, or null = Free Time).
+		// Clear any pause: adding time resumes the account (a fresh window can't be "frozen").
 		await tx
 			.update(customerProfile)
-			.set({ accessExpiresAt: newWindow, accessPackageId: opts.packageId ?? null })
+			.set({
+				accessExpiresAt: newWindow,
+				accessPackageId: opts.packageId ?? null,
+				accessPausedAt: null
+			})
 			.where(eq(customerProfile.userId, opts.userId));
 	}
 
@@ -389,7 +394,8 @@ export interface AccountDevice {
 }
 
 export interface ActiveAccess {
-	/** The account's access window end. */
+	/** The account's access window end. While paused this is the FROZEN end captured at
+	 * pause time (so it may be in the past); read `remainingMs` for the held time instead. */
 	expiresAt: Date;
 	/** Earliest bound device's start, for the progress bar. */
 	startedAt: Date;
@@ -397,13 +403,19 @@ export interface ActiveAccess {
 	packageId: number | null;
 	name: string | null;
 	isFree: boolean;
-	/** Devices currently bound under this window. */
+	/** True when the window is paused (frozen, devices unbound). */
+	paused: boolean;
+	/** Time left on the window: live (`expiresAt − now`) or, when paused, the frozen hold. */
+	remainingMs: number;
+	/** Devices currently bound under this window (empty while paused — pause unbinds all). */
 	devices: AccountDevice[];
 }
 
 /**
- * The account's live access window + its bound devices, or null if no live window. The
- * authoritative gate is `customer_profile.access_expires_at`; device rows are the registry.
+ * The account's live (or paused) access window + its bound devices, or null if no time left.
+ * The authoritative gate is `customer_profile.access_expires_at`; device rows are the registry.
+ * A paused window is still "active" — its remaining time is frozen as `expiresAt − pausedAt`
+ * and reported via `remainingMs`, so it survives even after the original expiry instant passes.
  */
 export async function getActiveAccess(
 	db: DB,
@@ -415,6 +427,7 @@ export async function getActiveAccess(
 	const [profile] = await db
 		.select({
 			accessExpiresAt: customerProfile.accessExpiresAt,
+			accessPausedAt: customerProfile.accessPausedAt,
 			accessPackageId: customerProfile.accessPackageId,
 			packageName: packages.name
 		})
@@ -424,7 +437,12 @@ export async function getActiveAccess(
 		.limit(1);
 
 	const window = profile?.accessExpiresAt ?? null;
-	if (!window || window <= now) return null;
+	if (!window) return null;
+	const pausedAt = profile?.accessPausedAt ?? null;
+	const paused = !!pausedAt;
+	// Paused → remaining is frozen (ignores wall-clock); live → counts down to `window`.
+	const remainingMs = paused ? window.getTime() - pausedAt.getTime() : window.getTime() - now.getTime();
+	if (remainingMs <= 0) return null;
 
 	const devices = await db
 		.select({
@@ -452,6 +470,8 @@ export async function getActiveAccess(
 		packageId: profile.accessPackageId ?? null,
 		name: profile.packageName ?? null,
 		isFree: (profile.accessPackageId ?? null) == null,
+		paused,
+		remainingMs,
 		devices: devices.map((d) => ({
 			id: d.id,
 			macAddress: d.macAddress,
@@ -459,6 +479,111 @@ export async function getActiveAccess(
 			lastSeenAt: d.lastSeenAt
 		}))
 	};
+}
+
+export interface PauseAccessResult {
+	ok: boolean;
+	/** 'no_access' = no live window; 'free_not_pausable' = Free Time can't be paused. */
+	reason?: 'no_access' | 'free_not_pausable';
+	/** Held time on success (frozen window remaining). */
+	remainingMs?: number;
+}
+
+/**
+ * Pause the ACCOUNT's PAID access window: stamp `access_paused_at` (freezes the remaining
+ * time) and unbind every device so no internet flows while paused. The revoke cron skips
+ * paused accounts (see `expireDueAccounts`), so the held time is preserved indefinitely until
+ * resume. Free Time can't be paused (it would just game the 12h cooldown). Idempotent: pausing
+ * an already-paused account re-reports the held time without changing it.
+ */
+export async function pauseAccountAccess(
+	db: DB,
+	network: NetworkController,
+	userId: string,
+	now: Date = new Date()
+): Promise<PauseAccessResult> {
+	const outcome = await db.transaction(async (tx) => {
+		const [p] = await tx
+			.select({
+				accessExpiresAt: customerProfile.accessExpiresAt,
+				accessPausedAt: customerProfile.accessPausedAt,
+				accessPackageId: customerProfile.accessPackageId
+			})
+			.from(customerProfile)
+			.where(eq(customerProfile.userId, userId))
+			.for('update')
+			.limit(1);
+
+		const window = p?.accessExpiresAt ?? null;
+		// Already paused → idempotent success with the frozen remaining.
+		if (p?.accessPausedAt) {
+			return { ok: true as const, remainingMs: (window?.getTime() ?? 0) - p.accessPausedAt.getTime() };
+		}
+		if (!window || window <= now) return { ok: false as const, reason: 'no_access' as const };
+		if (p.accessPackageId == null) return { ok: false as const, reason: 'free_not_pausable' as const };
+
+		await tx
+			.update(customerProfile)
+			.set({ accessPausedAt: now })
+			.where(eq(customerProfile.userId, userId));
+		return { ok: true as const, remainingMs: window.getTime() - now.getTime() };
+	});
+
+	if (!outcome.ok) return outcome;
+	// Drop every device (revokes the router bypass) so paused time isn't consumed. Idempotent;
+	// reconcileGuestBindings sweeps any miss.
+	await unbindAllDevices(db, network, userId);
+	return { ok: true, remainingMs: outcome.remainingMs };
+}
+
+export interface ResumeAccessResult {
+	ok: boolean;
+	/** 'not_paused' = nothing to resume; 'no_remaining' = held time was already used up. */
+	reason?: 'not_paused' | 'no_remaining';
+	accessExpiresAt?: Date | null;
+}
+
+/**
+ * Resume a paused account: restore the held time into a fresh window
+ * (`access_expires_at = now + held`) and clear the pause. Does NOT bind a device — the
+ * dashboard auto-bind reconnects the current device on the next load (same as after
+ * "disconnect all devices"). If the held time was somehow ≤ 0, the window is simply cleared.
+ */
+export async function resumeAccountAccess(
+	db: DB,
+	userId: string,
+	now: Date = new Date()
+): Promise<ResumeAccessResult> {
+	return db.transaction(async (tx) => {
+		const [p] = await tx
+			.select({
+				accessExpiresAt: customerProfile.accessExpiresAt,
+				accessPausedAt: customerProfile.accessPausedAt
+			})
+			.from(customerProfile)
+			.where(eq(customerProfile.userId, userId))
+			.for('update')
+			.limit(1);
+
+		if (!p?.accessPausedAt) return { ok: false as const, reason: 'not_paused' as const };
+
+		const window = p.accessExpiresAt ?? null;
+		const remainingMs = window ? window.getTime() - p.accessPausedAt.getTime() : 0;
+		if (remainingMs <= 0) {
+			await tx
+				.update(customerProfile)
+				.set({ accessExpiresAt: null, accessPausedAt: null })
+				.where(eq(customerProfile.userId, userId));
+			return { ok: false as const, reason: 'no_remaining' as const };
+		}
+
+		const newWindow = new Date(now.getTime() + remainingMs);
+		await tx
+			.update(customerProfile)
+			.set({ accessExpiresAt: newWindow, accessPausedAt: null })
+			.where(eq(customerProfile.userId, userId));
+		return { ok: true as const, accessExpiresAt: newWindow };
+	});
 }
 
 export interface StartFreeSessionResult {
@@ -525,7 +650,15 @@ export async function expireDueAccounts(
 	const due = await db
 		.select({ userId: customerProfile.userId })
 		.from(customerProfile)
-		.where(and(isNotNull(customerProfile.accessExpiresAt), lte(customerProfile.accessExpiresAt, now)));
+		.where(
+			and(
+				isNotNull(customerProfile.accessExpiresAt),
+				lte(customerProfile.accessExpiresAt, now),
+				// Skip paused accounts: their window is frozen (expiresAt may be in the past), and
+				// the held time must survive until resume — never swept by the cron.
+				isNull(customerProfile.accessPausedAt)
+			)
+		);
 
 	let revoked = 0;
 	for (const { userId } of due) {
@@ -610,9 +743,10 @@ export async function revokeUserSessions(
 		revoked++;
 	}
 
+	// Clear the window AND any pause so a kicked/blocked account can't be silently resumed.
 	await db
 		.update(customerProfile)
-		.set({ accessExpiresAt: null })
+		.set({ accessExpiresAt: null, accessPausedAt: null })
 		.where(eq(customerProfile.userId, userId));
 
 	return revoked;

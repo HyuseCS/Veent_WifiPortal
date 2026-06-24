@@ -22,3 +22,14 @@ export function createDb(connectionString: string, opts?: { max?: number }) {
 }
 
 export type DB = ReturnType<typeof createDb>;
+
+/**
+ * A dedicated single connection for Postgres LISTEN/NOTIFY, kept SEPARATE from the
+ * Drizzle query pool (a LISTEN ties up its connection for the process lifetime, so it
+ * must not borrow from the pool). `postgres.js` owns it and re-issues any LISTEN on
+ * reconnect. Use `.listen(channel, onNotify)`; the caller owns the lifecycle.
+ */
+export function createListenClient(connectionString: string): postgres.Sql {
+	if (!connectionString) throw new Error('createListenClient: connectionString is required');
+	return postgres(connectionString, { max: 1 });
+}
