@@ -24,8 +24,8 @@ export interface MikrotikConfig {
  *               (device skips the hotspot login → full access)
  * revoke(mac) → remove that binding (device falls back under the hotspot again)
  *
- * Time is enforced by our revoke cron (expireDueSessions), matching the
- * startSession lifecycle. Connection is opened per call and closed after —
+ * Time is enforced by our revoke cron (expireDueAccounts), matching the
+ * account-access lifecycle. Connection is opened per call and closed after —
  * grant/revoke are infrequent, so a pooled socket isn't worth the complexity.
  *
  * node-routeros is imported dynamically so it's only loaded when this controller
@@ -74,13 +74,26 @@ export function createMikrotikController(config: MikrotikConfig): NetworkControl
 			user: config.user,
 			password: config.password,
 			port,
+			timeout: 15,
 			tls: config.tls ? { rejectUnauthorized: !config.insecureTls } : undefined
 		});
+		// node-routeros surfaces socket failures (e.g. SOCKTMOUT — common on a slow or
+		// api-ssl link) by throwing from inside the socket 'error'/'timeout' event. With
+		// no listener that escapes the awaited call and becomes an UNCAUGHT exception that
+		// crashes the whole server. Swallow it here — connect()/write() already reject on
+		// failure, which callers catch and turn into an empty result / 500.
+		conn.on?.('error', () => {});
 		await conn.connect();
 		try {
 			return await fn(conn);
 		} finally {
-			conn.close();
+			// close() can itself throw on an already-errored socket — never let teardown
+			// mask the real result or crash on a half-dead connection.
+			try {
+				conn.close();
+			} catch {
+				/* already closed */
+			}
 		}
 	}
 
@@ -323,6 +336,8 @@ interface RosConn {
 	connect(): Promise<unknown>;
 	close(): void;
 	write(menu: string, params?: string[]): Promise<Array<Record<string, string>>>;
+	/** node-routeros connections are EventEmitters; attach to swallow async socket errors. */
+	on?(event: string, listener: (...args: unknown[]) => void): void;
 }
 
 async function openConn(config: MikrotikConfig): Promise<RosConn> {
@@ -336,8 +351,12 @@ async function openConn(config: MikrotikConfig): Promise<RosConn> {
 		user: config.user,
 		password: config.password,
 		port,
+		timeout: 15,
 		tls: config.tls ? { rejectUnauthorized: !config.insecureTls } : undefined
 	});
+	// See withConn: without an 'error' listener a socket timeout becomes an uncaught
+	// exception that crashes the server. The awaited connect()/write() still reject.
+	conn.on?.('error', () => {});
 	await conn.connect();
 	return conn;
 }
