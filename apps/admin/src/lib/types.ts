@@ -109,11 +109,17 @@ export interface AdminUserRow {
 	usage: string;
 	tone: StatusTone;
 	status: string;
-	/** Currently has an active, unexpired network session (live connectivity). */
+	/** Account has a live access window (online across any of its devices). */
 	online: boolean;
 	/** Most recent device MAC seen for this user, for the dev "Allow WiFi" grant.
 	 * Null if we've never recorded a session MAC for them. */
 	lastMac: string | null;
+	/** Number of devices currently bound under the account's access window. */
+	deviceCount: number;
+	/** The bound devices (account-owned access): MAC + last-seen time. */
+	devices: { mac: string | null; lastSeenAt: string | null }[];
+	/** Account access time remaining, pre-formatted (e.g. "1:23:45"); null if offline. */
+	timeLeft: string | null;
 }
 
 /**

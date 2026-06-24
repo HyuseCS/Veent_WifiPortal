@@ -1,7 +1,12 @@
 import { json, error } from '@sveltejs/kit';
 import { eq } from 'drizzle-orm';
 import { packages } from '@veent/db';
-import { getAccount, isValidMac, startFreeSession, startPaidSession } from '@veent/core';
+import {
+	getAccount,
+	isValidMac,
+	startFreeAccessAndBindDevice,
+	startPaidAccessAndBindDevice
+} from '@veent/core';
 import { db } from '$lib/server/db';
 import { network } from '$lib/server/network';
 import { rateLimit } from '$lib/server/rateLimit';
@@ -42,23 +47,23 @@ export const POST: RequestHandler = async (event) => {
 
 	// Free Time
 	if (!body.packageId) {
-		const result = await startFreeSession(db, network, {
+		const result = await startFreeAccessAndBindDevice(db, network, {
 			userId: user.id,
 			macAddress: body.macAddress
 		});
 		if (!result.ok) error(429, `Free time not available. Next eligible: ${result.nextEligibleAt}`);
-		return json({ ok: true, mode: 'free', session: result.session });
+		return json({ ok: true, mode: 'free', accessExpiresAt: result.accessExpiresAt });
 	}
 
 	// Paid tier — spend credits, then grant
 	const [pkg] = await db.select().from(packages).where(eq(packages.id, body.packageId)).limit(1);
 	if (!pkg || !pkg.isActive) error(404, 'Package not found');
 
-	// Spend + grant atomically: a failed grant rolls back the spend, so the user is never
-	// charged without getting access (business rule #1).
+	// Spend + extend the account window + bind the device + grant atomically: a failed grant
+	// rolls back the spend, so the user is never charged without getting access (rule #1).
 	let result;
 	try {
-		result = await startPaidSession(db, network, {
+		result = await startPaidAccessAndBindDevice(db, network, {
 			userId: user.id,
 			macAddress: body.macAddress,
 			packageId: pkg.id,
@@ -66,9 +71,9 @@ export const POST: RequestHandler = async (event) => {
 			durationMinutes: pkg.durationMinutes ?? 0
 		});
 	} catch (err) {
-		console.error('[grant] paid session failed (rolled back, not charged):', err);
+		console.error('[grant] paid access failed (rolled back, not charged):', err);
 		error(503, 'Could not open access — your credits were not charged. Please try again.');
 	}
 	if (!result.ok) error(402, 'Insufficient credit balance');
-	return json({ ok: true, mode: 'tier', session: result.session, balance: result.balance });
+	return json({ ok: true, mode: 'tier', accessExpiresAt: result.accessExpiresAt, balance: result.balance });
 };

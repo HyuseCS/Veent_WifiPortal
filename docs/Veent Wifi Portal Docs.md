@@ -92,7 +92,7 @@ This handles the asynchronous gap between paying and getting internet.
   * **Purpose:** The URL the payment gateway redirects the user to after they finish paying.  
   * **Logic:** Displays a loading spinner. It continuously polls the database (or uses Server-Sent Events) waiting for the credit\_ledger to update. Once verified, it pushes the user back to /dashboard.  
 * **src/routes/api/webhooks/payment/+server.ts (The Source of Truth)**  
-  * **Purpose:** A highly secure, server-only endpoint. It receives the async POST request from your payment provider, verifies the cryptographic signature, and updates the Drizzle database to add the credits.
+  * **Purpose:** A highly secure, server-only endpoint. It receives the async POST request from your payment provider, **re-fetches the authoritative payment from Maya with the secret key** to verify it (the unsigned webhook body is never trusted), records the event, and updates the Drizzle database to add the credits. (See `docs/API.md`.)
 
 ### **4\. Network Operations (The Handoff)**
 

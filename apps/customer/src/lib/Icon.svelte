@@ -18,7 +18,12 @@
 		| 'alert-circle'
 		| 'alert-triangle'
 		| 'pause'
-		| 'play';
+		| 'play'
+		| 'smartphone'
+		| 'monitor'
+		| 'trash'
+		| 'x'
+		| 'refresh-cw';
 
 	let {
 		name,
@@ -83,5 +88,24 @@
 		<rect x="6" y="4" width="4" height="16" rx="1" />
 	{:else if name === 'play'}
 		<polygon points="6 3 20 12 6 21 6 3" />
+	{:else if name === 'smartphone'}
+		<rect x="5" y="2" width="14" height="20" rx="2" ry="2" />
+		<line x1="12" y1="18" x2="12.01" y2="18" />
+	{:else if name === 'monitor'}
+		<rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
+		<line x1="8" y1="21" x2="16" y2="21" />
+		<line x1="12" y1="17" x2="12" y2="21" />
+	{:else if name === 'trash'}
+		<polyline points="3 6 5 6 21 6" />
+		<path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+		<line x1="10" y1="11" x2="10" y2="17" />
+		<line x1="14" y1="11" x2="14" y2="17" />
+	{:else if name === 'x'}
+		<line x1="18" y1="6" x2="6" y2="18" />
+		<line x1="6" y1="6" x2="18" y2="18" />
+	{:else if name === 'refresh-cw'}
+		<polyline points="23 4 23 10 17 10" />
+		<polyline points="1 20 1 14 7 14" />
+		<path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
 	{/if}
 </svg>

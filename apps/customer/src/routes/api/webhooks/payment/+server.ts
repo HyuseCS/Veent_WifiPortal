@@ -43,6 +43,9 @@ export const POST: RequestHandler = async (event) => {
 	try {
 		evt = await payments.verifyWebhook(raw, event.request.headers);
 	} catch (e) {
+		// Observability: surface verification failures (spoofed/garbled events, gateway lookup
+		// errors) — a spike here is a signal worth alerting on.
+		console.warn('[webhook] verification failed:', (e as Error).message);
 		error(400, `Webhook verification failed: ${(e as Error).message}`);
 	}
 
@@ -140,6 +143,10 @@ export const POST: RequestHandler = async (event) => {
 		packageId: attributedPackageId,
 		externalTransactionId: evt.externalTransactionId
 	});
+
+	// Observability: one structured line per paid event — feeds webhook success-rate tracking.
+	// `credited: false` here means an idempotent replay (already credited), not a failure.
+	console.info('[webhook] paid', { txId: evt.externalTransactionId, credited: result.credited });
 
 	return json({ ok: true, credited: result.credited, balance: result.balance });
 };

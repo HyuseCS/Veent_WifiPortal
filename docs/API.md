@@ -53,12 +53,18 @@ this endpoint server-to-server whenever a payment changes state, posting the
 transaction payload here rather than relying on the customer's browser redirect.
 
 Flow:
-1. Read the **raw** request body (needed for signature verification — do not parse first).
-2. Verify the payload via `payments.verifyWebhook` (HMAC against `MAYA_WEBHOOK_SECRET`); 400 if invalid.
-3. On a `paid` event, credit `creditsProvided` for the package in `referenceId`
-   (`"${userId}:${packageId}"`), idempotent on the gateway transaction id so a
-   re-delivered payload never double-credits.
-4. Non-`paid` events (e.g. `failed`, `expired`) are acknowledged with `200` but credit nothing.
+0. **Per-IP flood cap** (120/min) — every call triggers an outbound re-fetch, so this is
+   guarded first; over budget → `429`.
+1. Read the **raw** request body (do not parse first).
+2. Verify via `payments.verifyWebhook`. **No HMAC** — Maya Checkout webhooks are unsigned, so
+   it takes only the payment id from the (untrusted) body and **re-fetches the authoritative
+   payment from Maya's API with `MAYA_SECRET_KEY`**, trusting that response; `400` on any
+   lookup/status mismatch. The posted body is never trusted on its own.
+3. Record **every** event (success and failure) in `payment_transactions` (upsert) for the
+   admin Finance page.
+4. On a `paid` event, credit `creditsProvided` for the package in `referenceId`, idempotent on
+   the gateway transaction id so a re-delivered payload never double-credits.
+5. Non-`paid` events (e.g. `failed`, `expired`) are acknowledged with `200` but credit nothing.
 
 → `{ ok, credited: boolean, balance }`
 
@@ -82,7 +88,9 @@ Loaders return the exact shapes in `src/lib/types.ts`, so pages swap
   Actions: **`block`** (refuse future grants + cut current), **`unblock`**,
   **`kick`** (cut current only). Form field: `userId`.
 - `(app)/dashboard` `load` → `{ kpis, revenue, activeSessions }`.
-- `GET /api/connected` — SSE stream of `ActiveSession[]` (snapshot + every 5 s).
+- `GET /api/connected` — SSE stream of the dashboard snapshot: initial snapshot on connect,
+  then a fresh push on every Postgres `NOTIFY` (real write to sessions / ledger / health,
+  250 ms-debounced), with a 25 s heartbeat. No polling. Concurrent streams capped per user (6).
 
 ---
 
@@ -90,9 +98,9 @@ Loaders return the exact shapes in `src/lib/types.ts`, so pages swap
 
 | Seam | File | To go live |
 |------|------|-----------|
-| **Payments (Maya)** | `packages/core/src/integrations/payments/maya.ts` | Implement `createCheckout` (Maya Checkout API) + `verifyWebhook` (HMAC). Set `MAYA_*` env. |
+| **Payments (Maya)** | `packages/core/src/integrations/payments/maya.ts` | `verifyWebhook` is **done** (re-fetch, no HMAC). Still stubbed: `createCheckout` (Maya Checkout API). Set `MAYA_*` env. |
 | **Network controller** | `packages/core/src/integrations/network/` | Add a real impl behind `NetworkController` (UniFi/Omada/RADIUS/grant_url); register in `index.ts`; set `NETWORK_CONTROLLER`. |
-| **Connected-users feed** | `apps/admin/.../api/connected/+server.ts` | Replace the 5 s DB poll with a push from RADIUS accounting (same SSE wire format). |
+| **Connected-users feed** | `apps/admin/.../api/connected/+server.ts` | Already push-based (Postgres NOTIFY → SSE). To go truly live, drive the NOTIFY from RADIUS accounting instead of app writes (same SSE wire format). |
 | **Per-user data usage** | `apps/admin/src/lib/server/queries.ts` (`usage: '—'`) | Needs a byte-accounting feed. |
 | **Network health (APs)** | admin `networks` page (still on mocks) | Needs AP/location + health-sample tables (ICMP/SNMP polling) — not yet modeled. |
 
