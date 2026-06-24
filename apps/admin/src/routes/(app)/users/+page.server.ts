@@ -12,6 +12,7 @@ import {
 import { db } from '$lib/server/db';
 import { network } from '$lib/server/network';
 import { mailer } from '$lib/server/email';
+import { checkAdminEmailLimit } from '$lib/server/emailRateLimit';
 import { wipeCodeEmail } from '$lib/server/emails/wipe-code';
 import { issueWipeCode, consumeWipeCode } from '$lib/server/wipe-verification';
 import { listUsers } from '$lib/server/queries';
@@ -109,6 +110,13 @@ export const actions: Actions = {
 		if (denied) return denied;
 
 		const owner = event.locals.user!;
+
+		// Cap wipe-code emails so the owner's inbox can't be flooded with codes.
+		const limited = await checkAdminEmailLimit(owner.email, owner.id);
+		if (limited) {
+			return fail(429, { error: 'Too many verification codes requested. Try again later.' });
+		}
+
 		const code = issueWipeCode(owner.id);
 		const { subject, html, text } = wipeCodeEmail({ code, name: owner.name });
 		// Dev affordance: the stub mailer never logs bodies, so surface the code here

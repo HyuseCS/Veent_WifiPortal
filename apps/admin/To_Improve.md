@@ -53,8 +53,8 @@
   5. Admin Finance CSV export / range queries — cap to prevent DB DoS via export spam.
   6. Payment webhook + cron endpoints — cheap per-IP cap on webhook; IP-allowlist the crons.
   7. SSE connections (`/api/connected`) — cap concurrent streams per user.
-- Check grant transactionality: `spendCredits` + `startSession` are two separate awaits — if the grant fails after the spend, the user pays and gets nothing. Wrap in one transaction / compensating path.
-- Confirm the Maya webhook signature scheme (`maya.ts` `ponytail:` comment) against the Maya dashboard before go-live — it's the credit-granting trust boundary.
+- ~~Check grant transactionality~~ — DONE: `startPaidSession` spends + grants in one transaction (a failed grant rolls back the spend); wired into the grant endpoint + dashboard buyTier. Covered by `grant-atomic.spec.ts`.
+- ~~Confirm the Maya webhook signature scheme~~ — RESOLVED: `verifyWebhook` uses no HMAC; it re-fetches the authoritative payment from Maya with the secret key (unsigned body never trusted). Covered by `maya-webhook.spec.ts`. Residual: per-IP cap on the webhook endpoint (Phase 2).
 - Fail-fast config validation at boot for `CRON_SECRET`, `DATABASE_URL`, payment keys (same pattern already used for `BETTER_AUTH_SECRET`).
 - Verify indexes: `rate_limits(mac_address)`/`(phone_number)`, `payment_transactions(status, created_at)`, active-session lookup on `network_sessions`.
 - Observability: emit webhook success rate, OTP delivery-failure rate, open SSE connection count.

@@ -3,6 +3,7 @@ import { type DB, customerProfile, networkHealth, networkSessions, packages } fr
 import type { NetworkController } from '../integrations/network';
 import { SESSION_STATUS } from '../config';
 import { getFreeTimeStatus } from './freeTime';
+import { spendCreditsTx, type Tx } from './credits';
 
 function expiry(durationMinutes: number, now: Date) {
 	return new Date(now.getTime() + durationMinutes * 60 * 1000);
@@ -22,7 +23,11 @@ export interface StartSessionInput {
  * if the grant throws, the session is marked revoked so we never report access
  * that wasn't actually opened.
  */
-export async function startSession(db: DB, network: NetworkController, input: StartSessionInput) {
+export async function startSession(
+	db: DB | Tx,
+	network: NetworkController,
+	input: StartSessionInput
+) {
 	const now = new Date();
 
 	// Stack onto a running session for the SAME device instead of opening a parallel
@@ -127,6 +132,58 @@ export async function startSession(db: DB, network: NetworkController, input: St
 	}
 
 	return session;
+}
+
+export interface StartPaidSessionResult {
+	ok: boolean;
+	/** Set when ok=false. */
+	reason?: 'insufficient_balance';
+	balance: number;
+	session?: Awaited<ReturnType<typeof startSession>>;
+}
+
+/**
+ * Atomically spend an access tier's credits AND open the session — including the router
+ * grant — in ONE transaction. If the grant (or anything after the spend) throws, the whole
+ * transaction rolls back, so a charged user is never left without access (business rule #1).
+ * Replaces the old spend-then-grant, where the spend committed before the grant could fail.
+ *
+ * Returns `{ ok: false }` only for insufficient balance (a committed no-op — nothing was
+ * deducted). A grant failure rejects: the caller surfaces it, and the spend has rolled back.
+ *
+ * ponytail: holds the DB transaction open across the router grant call — fine at captive-
+ * portal volume; if grant latency ever starves the connection pool, switch to a
+ * reserve→grant→confirm saga.
+ */
+export async function startPaidSession(
+	db: DB,
+	network: NetworkController,
+	input: {
+		userId: string;
+		macAddress: string;
+		packageId: number;
+		amount: number;
+		durationMinutes: number;
+		bandwidthMbps?: number;
+	}
+): Promise<StartPaidSessionResult> {
+	return db.transaction(async (tx) => {
+		const spend = await spendCreditsTx(tx, {
+			userId: input.userId,
+			amount: input.amount,
+			packageId: input.packageId
+		});
+		if (!spend.ok) return { ok: false, reason: 'insufficient_balance', balance: spend.balance };
+
+		const session = await startSession(tx, network, {
+			userId: input.userId,
+			macAddress: input.macAddress,
+			packageId: input.packageId,
+			durationMinutes: input.durationMinutes,
+			bandwidthMbps: input.bandwidthMbps
+		});
+		return { ok: true, balance: spend.balance, session };
+	});
 }
 
 export interface ActiveSession {

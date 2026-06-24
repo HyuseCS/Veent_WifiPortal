@@ -118,10 +118,14 @@ already solved.
   compensating path, or make the grant claim the spend the way the webhook claims the
   checkout. Same idempotency discipline already applied on the payment side
   (`creditCheckoutIfUnsettled`) — it just hasn't reached the grant path.
-- **Confirm the Maya webhook signature scheme.** `maya.ts` carries a `ponytail:` comment: the
-  HMAC algorithm + header name is an *assumption*. That's the credit-granting trust boundary
-  — verify against the Maya dashboard before go-live. Wrong → either reject all real webhooks
-  or (worse) accept forged ones.
+- **Maya webhook verification — RESOLVED by design (no HMAC).** `verifyWebhook` no longer
+  depends on an unconfirmed HMAC scheme: Maya Checkout webhooks are unsigned, so the provider
+  takes only the payment id from the (untrusted) body and **re-fetches the authoritative
+  payment from Maya's API with the secret key**, trusting that response. A spoofed webhook
+  can't produce a real paid payment under our account. Covered by `maya-webhook.spec.ts`
+  (status mapping, centavo conversion, re-fetch-required). Residual: the webhook endpoint is
+  unauthenticated and does an outbound fetch per call → add a per-IP cap (see rate-limit #6)
+  to blunt request-amplification.
 - **Fail-fast config validation at boot.** Already done for `BETTER_AUTH_SECRET`
   (`otp.ts:36`). Extend the same pattern to `CRON_SECRET`, `DATABASE_URL`, and the payment
   keys — validate once at startup, not on first request, so a misconfigured deploy dies

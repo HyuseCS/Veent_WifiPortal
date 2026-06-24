@@ -185,12 +185,19 @@ export const rateLimits = pgTable(
 		id: serial('id').primaryKey(),
 		macAddress: text('mac_address'),
 		phoneNumber: text('phone_number'),
+		// Generic key for non-OTP limiters (e.g. admin email): `scope` namespaces the
+		// counter ('admin_email'), `identifier` is the keyed value (recipient address).
+		// Kept alongside mac/phone so each limiter uses its own column pair and never
+		// shares a row — a scoped counter can't collide with a mac/phone one.
+		scope: text('scope'),
+		identifier: text('identifier'),
 		attempts: integer('attempts').notNull().default(0),
 		lastAttemptAt: timestamp('last_attempt_at').notNull().defaultNow()
 	},
-	// Looked up on every OTP request, by one identifier or the other.
+	// Looked up on every OTP request (mac/phone) or scoped check (scope+identifier).
 	(t) => [
 		index('rate_limits_mac_address_idx').on(t.macAddress),
-		index('rate_limits_phone_number_idx').on(t.phoneNumber)
+		index('rate_limits_phone_number_idx').on(t.phoneNumber),
+		index('rate_limits_scope_identifier_idx').on(t.scope, t.identifier)
 	]
 );

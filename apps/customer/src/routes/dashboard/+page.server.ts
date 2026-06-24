@@ -8,8 +8,7 @@ import {
 	getActiveSession,
 	getFreeTimeStatus,
 	startFreeSession,
-	startSession,
-	spendCredits,
+	startPaidSession,
 	resolveDeviceMac
 } from '@veent/core';
 import { db } from '$lib/server/db';
@@ -129,26 +128,24 @@ export const actions: Actions = {
 		const [pkg] = await db.select().from(packages).where(eq(packages.id, packageId)).limit(1);
 		if (!pkg || !pkg.isActive) return fail(404, { error: 'Package not found' });
 
-		const spend = await spendCredits(db, {
-			userId: user.id,
-			amount: pkg.creditCost ?? 0,
-			packageId: pkg.id
-		});
-		if (!spend.ok) return fail(402, { error: 'Insufficient credit balance' });
-
+		// Spend + grant atomically: a failed grant rolls back the spend, so a failed grant
+		// never leaves the user charged without access (business rule #1).
+		let result;
 		try {
-			await startSession(db, network, {
+			result = await startPaidSession(db, network, {
 				userId: user.id,
 				macAddress: mac,
 				packageId: pkg.id,
+				amount: pkg.creditCost ?? 0,
 				durationMinutes: pkg.durationMinutes ?? 0
 			});
 		} catch (err) {
-			console.error('[customer] buyTier grant failed:', err);
+			console.error('[customer] buyTier grant failed (rolled back, not charged):', err);
 			return fail(502, {
-				error: 'Payment succeeded but the network grant failed. Contact support — your credits are safe.'
+				error: 'The network grant failed — your credits were not charged. Please try again.'
 			});
 		}
+		if (!result.ok) return fail(402, { error: 'Insufficient credit balance' });
 		return { connected: true };
 	},
 

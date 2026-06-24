@@ -17,8 +17,10 @@ const STATUS_DB: Record<string, string> = {
 /**
  * POST /api/webhooks/payment — the source of truth for adding credits.
  *
- * Verifies the gateway signature (provider.verifyWebhook throws if invalid),
- * records EVERY event (success and failure) in payment_transactions for the admin
+ * Verifies the event authoritatively (provider.verifyWebhook re-fetches the payment from
+ * the gateway with the secret key and trusts THAT, not the unsigned webhook body; throws on
+ * any mismatch/lookup failure), records EVERY event (success and failure) in
+ * payment_transactions for the admin
  * Finance page, then credits the buyer's balance EXACTLY ONCE — addCredits is
  * idempotent on the gateway transaction id, so retried webhooks can't double-credit
  * (business rule #3). Crediting goes through creditCheckoutIfUnsettled, which claims
