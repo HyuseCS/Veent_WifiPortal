@@ -65,8 +65,8 @@
 <Card
 	padding={compact ? 'p-3.5' : 'p-5'}
 	class="group min-w-0 flex flex-col {compact
-		? 'gap-2'
-		: 'gap-4'} hover:-translate-y-0.5 hover:border-brand/30 hover:shadow-md"
+		? 'gap-1'
+		: 'gap-1'} hover:-translate-y-0.5 hover:border-brand/30 hover:shadow-md"
 >
 	<div class="flex items-start justify-between gap-2">
 		<p class="min-w-0 flex-1 text-xs font-semibold leading-tight tracking-wide text-muted uppercase">{kpi.label}</p>

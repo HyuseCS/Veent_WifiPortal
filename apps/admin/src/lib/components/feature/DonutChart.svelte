@@ -50,8 +50,8 @@
 	});
 </script>
 
-<div class="flex flex-col items-center gap-4 sm:flex-row sm:items-center sm:gap-6">
-	<div class="relative h-32 w-32 shrink-0 sm:h-36 sm:w-36">
+<div class="flex flex-row items-center gap-4 sm:gap-6">
+	<div class="relative h-24 w-24 shrink-0 sm:h-32 sm:w-32">
 		<svg viewBox="0 0 42 42" class="h-full w-full" role="img" aria-label={label}>
 			<circle
 				cx="21"
@@ -78,7 +78,7 @@
 			<div
 				class="pointer-events-none absolute inset-0 flex flex-col items-center justify-center text-center leading-none"
 			>
-				<span class="font-mono text-lg font-bold tracking-tight text-ink">{centerValue}</span>
+				<span class="font-mono text-sm font-bold tracking-tight text-ink sm:text-base">{centerValue}</span>
 				{#if centerLabel}
 					<span class="mt-1 text-[10px] font-semibold tracking-wide text-muted uppercase"
 						>{centerLabel}</span
@@ -88,13 +88,13 @@
 		{/if}
 	</div>
 
-	<ul class="flex w-full min-w-0 flex-1 flex-col gap-2 text-sm">
+	<ul class="flex w-full min-w-0 flex-1 flex-col gap-1.5 text-sm sm:gap-2">
 		{#each segments as seg (seg.key)}
-			<li class="flex items-center gap-2">
-				<span class="h-2.5 w-2.5 shrink-0 rounded-full" style="background: {seg.color}"></span>
-				<span class="truncate text-ink">{seg.label}</span>
+			<li class="flex items-center gap-1.5 sm:gap-2">
+				<span class="h-2 w-2 shrink-0 rounded-full sm:h-2.5 sm:w-2.5" style="background: {seg.color}"></span>
+				<span class="truncate text-xs text-ink sm:text-sm">{seg.label}</span>
 				<span class="ml-auto font-mono text-xs text-muted">{peso(seg.amount)}</span>
-				<span class="w-10 text-right font-mono font-semibold text-ink">{seg.pct}%</span>
+				<span class="w-8 text-right font-mono text-xs font-semibold text-ink sm:w-10">{seg.pct}%</span>
 			</li>
 		{/each}
 		{#if segments.length === 0}

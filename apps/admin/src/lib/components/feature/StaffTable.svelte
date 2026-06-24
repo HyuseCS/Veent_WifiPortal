@@ -16,6 +16,7 @@
 	import {
 		Button,
 		EmptyState,
+		FilterTabs,
 		IconButton,
 		SearchInput,
 		StatusBadge,
@@ -33,14 +34,27 @@
 	let confirmingId = $state<string | null>(null); // remove
 	let promotingId = $state<string | null>(null); // give owner role
 
-	// Client-side text search over the loaded rows (status is reachable via the Status column
-	// sorter now, so the old status-filter pills were dropped from the toolbar).
 	let query = $state('');
+	let filter = $state<string>('all');
+
+	const tabs = $derived.by(() => {
+		const counts: Record<string, number> = {};
+		for (const m of staff) counts[m.status] = (counts[m.status] ?? 0) + 1;
+		return [
+			{ key: 'all', label: 'All', count: staff.length },
+			...Object.entries(counts).map(([k, v]) => ({
+				key: k,
+				label: k.charAt(0).toUpperCase() + k.slice(1),
+				count: v
+			}))
+		];
+	});
 
 	const filtered = $derived.by(() => {
 		const q = query.trim().toLowerCase();
-		if (!q) return staff;
-		return staff.filter((m) => `${m.name} ${m.email}`.toLowerCase().includes(q));
+		let rows = filter === 'all' ? staff : staff.filter((m) => m.status === filter);
+		if (q) rows = rows.filter((m) => `${m.name} ${m.email}`.toLowerCase().includes(q));
+		return rows;
 	});
 
 	// Clickable-header sorting. `null` key keeps the server order (owner pinned first, then

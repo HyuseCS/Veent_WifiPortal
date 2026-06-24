@@ -30,8 +30,12 @@
 
 	// Pills keep you on the current finance page; the nav button toggles between the two.
 	const onList = $derived(page.url.pathname === '/finance/transactions');
-	const btn =
-		'inline-flex min-h-11 items-center gap-2 rounded-lg border border-border bg-bg px-4 text-sm font-medium text-ink transition-colors hover:bg-surface';
+	// Secondary ghost button for period selector and the back-to-overview link.
+	const ghostBtn =
+		'inline-flex min-h-[44px] items-center gap-2 rounded-lg border border-border bg-bg px-3 sm:px-4 text-sm font-medium text-ink transition-colors hover:bg-surface';
+	// Primary brand button for the Transactions CTA — draws the eye on the overview page.
+	const brandBtn =
+		'inline-flex min-h-[44px] items-center gap-2 rounded-lg bg-brand px-3 sm:px-4 text-sm font-semibold text-white transition-colors hover:bg-brand/90';
 
 	let open = $state(false);
 	let menuEl = $state<HTMLElement>();
@@ -53,29 +57,29 @@
 	});
 </script>
 
-<div class="flex items-center gap-3">
+<div class="flex items-center gap-2 sm:gap-3">
 	{#if onList}
-		<a href="/finance?period={period}" class={btn}>
-			<ChartColumn class="h-4 w-4" aria-hidden="true" />
-			Overview
+		<a href="/finance?period={period}" class={ghostBtn}>
+			<ChartColumn class="h-4 w-4 shrink-0" aria-hidden="true" />
+			<span class="hidden sm:inline">Overview</span>
 		</a>
 	{:else}
-		<a href="/finance/transactions?period={period}" class={btn}>
-			<Receipt class="h-4 w-4" aria-hidden="true" />
-			Transactions
+		<a href="/finance/transactions?period={period}" class={brandBtn}>
+			<Receipt class="h-4 w-4 shrink-0" aria-hidden="true" />
+			<span class="hidden sm:inline">Transactions</span>
 		</a>
 	{/if}
 
 	<div class="relative" bind:this={menuEl}>
 		<button
 			type="button"
-			class={btn}
+			class={ghostBtn}
 			aria-haspopup="menu"
 			aria-expanded={open}
 			onclick={() => (open = !open)}
 		>
-			<SlidersHorizontal class="h-4 w-4" aria-hidden="true" />
-			{periodLabel[period]}
+			<SlidersHorizontal class="h-4 w-4 shrink-0" aria-hidden="true" />
+			<span class="hidden sm:inline">{periodLabel[period]}</span>
 			<ChevronDown
 				class="h-4 w-4 transition-transform duration-150 {open ? 'rotate-180' : ''}"
 				aria-hidden="true"

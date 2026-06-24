@@ -18,25 +18,39 @@
 	import { dev } from '$app/environment';
 	import { enhance } from '$app/forms';
 	import type { AdminUserRow, StatusTone } from '$lib/types';
-	import { EmptyState, IconButton, SearchInput, StatusBadge, Table } from '$lib/components/ui';
+	import ArrowUpDown from 'lucide-svelte/icons/arrow-up-down';
+	import { EmptyState, FilterTabs, IconButton, SearchInput, StatusBadge, Table } from '$lib/components/ui';
 
 	// `actions` lets the page slot owner-only controls (the Wipe button) into the toolbar
 	// without this component owning the gated dialog/flow — data flow stays on the page.
 	let { users, actions }: { users: AdminUserRow[]; actions?: Snippet } = $props();
 
-	// Client-side view state over the already-loaded rows (no extra loads / no DB hits):
-	// a text search + clickable-header sort. Status is reachable via the Status column
-	// sorter, so the old status-filter pills + sort button were dropped (mirrors <StaffTable>).
 	let query = $state('');
+	let filter = $state<string>('all');
+
+	const tabs = $derived.by(() => {
+		const counts: Record<string, number> = {};
+		for (const u of users) counts[u.tone] = (counts[u.tone] ?? 0) + 1;
+		return [
+			{ key: 'all', label: 'All', count: users.length },
+			...Object.entries(counts).map(([k, v]) => ({
+				key: k,
+				label: k.charAt(0).toUpperCase() + k.slice(1),
+				count: v
+			}))
+		];
+	});
 
 	const filtered = $derived.by(() => {
 		const q = query.trim().toLowerCase();
-		if (!q) return users;
-		return users.filter((u) =>
-			`${u.phone} ${u.lastMac ?? ''} ${u.devices.map((d) => d.mac ?? '').join(' ')}`
-				.toLowerCase()
-				.includes(q)
-		);
+		let rows = filter === 'all' ? users : users.filter((u) => u.tone === filter);
+		if (q)
+			rows = rows.filter((u) =>
+				`${u.phone} ${u.lastMac ?? ''} ${u.devices.map((d) => d.mac ?? '').join(' ')}`
+					.toLowerCase()
+					.includes(q)
+			);
+		return rows;
 	});
 
 	// Clickable-header sorting. `null` key keeps the server order (by phone). Clicking a
@@ -62,6 +76,25 @@
 			sortKey = key;
 			sortDir = defaultDir[key];
 		}
+	}
+
+	// Mobile-only: cycle through common sort options with a single button tap.
+	const mobileSortKeys: (SortKey | null)[] = [null, 'balance', 'status', 'timeLeft', 'phone'];
+	const mobileSortLabels: Record<string, string> = {
+		phone: 'Phone',
+		balance: 'Balance',
+		status: 'Status',
+		timeLeft: 'Time Left'
+	};
+	let mobileSortIdx = $state(0);
+	const sortLabel = $derived(
+		mobileSortKeys[mobileSortIdx] ? mobileSortLabels[mobileSortKeys[mobileSortIdx]!] : 'Sort'
+	);
+	function cycleSort() {
+		mobileSortIdx = (mobileSortIdx + 1) % mobileSortKeys.length;
+		const k = mobileSortKeys[mobileSortIdx];
+		sortKey = k;
+		sortDir = k ? defaultDir[k] : 'asc';
 	}
 
 	const sorted = $derived.by(() => {
@@ -168,14 +201,14 @@
 				<input
 					type="checkbox"
 					class="mt-0.5 h-4 w-4 shrink-0 accent-brand"
-					aria-label="Select {user.name}"
+					aria-label="Select {user.phone}"
 					checked={selected.has(user.id)}
 					onchange={(e) => toggle(user.id, e.currentTarget.checked)}
 				/>
 				<div class="relative shrink-0">
 					<span
 						class="flex h-10 w-10 items-center justify-center rounded-full bg-brand/10 text-xs font-bold text-brand"
-						aria-hidden="true">{initials(user.name)}</span
+						aria-hidden="true">{user.phone.slice(-2)}</span
 					>
 					<span
 						class="absolute -right-0.5 -bottom-0.5 h-3 w-3 rounded-full border-2 border-bg {user.online
@@ -186,10 +219,9 @@
 				</div>
 				<div class="min-w-0 flex-1">
 					<div class="flex items-center justify-between gap-2">
-						<p class="truncate font-medium text-ink">{user.name}</p>
+						<p class="truncate font-mono font-medium text-ink">{fmtPhone(user.phone)}</p>
 						<StatusBadge tone={user.tone} label={user.status} />
 					</div>
-					<p class="truncate text-xs text-muted">{user.email}</p>
 					<div class="mt-1.5 flex items-center justify-between gap-2">
 						<div class="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs">
 							<span
@@ -215,7 +247,7 @@
 									<IconButton
 										type="submit"
 										icon={ShieldCheck as unknown as Component}
-										label="Unblock {user.name}"
+										label="Unblock {user.phone}"
 									/>
 								</form>
 							{:else}
@@ -226,7 +258,7 @@
 										<IconButton
 											type="submit"
 											icon={Wifi as unknown as Component}
-											label="Allow WiFi for {user.name} (dev)"
+											label="Allow WiFi for {user.phone} (dev)"
 											disabled={!user.lastMac}
 										/>
 									</form>
@@ -236,7 +268,7 @@
 									<IconButton
 										type="submit"
 										icon={WifiOff as unknown as Component}
-										label="Kick {user.name} off the network"
+										label="Kick {user.phone} off the network"
 									/>
 								</form>
 								<form method="post" action="?/block" use:enhance>
@@ -244,7 +276,7 @@
 									<IconButton
 										type="submit"
 										icon={Ban as unknown as Component}
-										label="Block {user.name}"
+										label="Block {user.phone}"
 										tone="danger"
 									/>
 								</form>
@@ -325,7 +357,7 @@
 					<input
 						type="checkbox"
 						class="h-4 w-4 accent-brand"
-						aria-label="Select {user.name}"
+						aria-label="Select {user.phone}"
 						checked={selected.has(user.id)}
 						onchange={(e) => toggle(user.id, e.currentTarget.checked)}
 					/>
@@ -335,7 +367,7 @@
 						<div class="relative shrink-0">
 							<span
 								class="flex h-9 w-9 items-center justify-center rounded-full bg-brand/10 text-xs font-bold text-brand"
-								aria-hidden="true">{initials(user.name)}</span
+								aria-hidden="true">{user.phone.slice(-2)}</span
 							>
 							<span
 								class="absolute -right-0.5 -bottom-0.5 h-3 w-3 rounded-full border-2 border-bg {user.online
@@ -345,8 +377,7 @@
 							></span>
 						</div>
 						<div class="min-w-0">
-							<div class="truncate font-medium text-ink">{user.name}</div>
-							<div class="truncate text-xs text-muted">{user.email}</div>
+							<div class="truncate font-mono font-medium text-ink">{fmtPhone(user.phone)}</div>
 						</div>
 					</div>
 				</td>
@@ -377,7 +408,7 @@
 								<IconButton
 									type="submit"
 									icon={ShieldCheck as unknown as Component}
-									label="Unblock {user.name}"
+									label="Unblock {user.phone}"
 								/>
 							</form>
 						{:else}
@@ -388,7 +419,7 @@
 									<IconButton
 										type="submit"
 										icon={Wifi as unknown as Component}
-										label="Allow WiFi for {user.name} (dev)"
+										label="Allow WiFi for {user.phone} (dev)"
 										disabled={!user.lastMac}
 									/>
 								</form>
@@ -398,7 +429,7 @@
 								<IconButton
 									type="submit"
 									icon={WifiOff as unknown as Component}
-									label="Kick {user.name} off the network"
+									label="Kick {user.phone} off the network"
 								/>
 							</form>
 							<form method="post" action="?/block" use:enhance>
@@ -406,7 +437,7 @@
 								<IconButton
 									type="submit"
 									icon={Ban as unknown as Component}
-									label="Block {user.name}"
+									label="Block {user.phone}"
 									tone="danger"
 								/>
 							</form>

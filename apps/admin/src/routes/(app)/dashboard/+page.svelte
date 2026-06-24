@@ -69,6 +69,14 @@
 	const onlineCount = $derived(networks.filter((ap) => ap.tone === 'online').length);
 	const apTotal = $derived(networks.length);
 
+	// Responsive dual-view: show all rows, no cap. bodyHeight is bound to Table's scroll viewport.
+	const shownSessions = $derived(activeSessions);
+	const moreSessions = $derived(0);
+	const shownNetworks = $derived(networks);
+	const moreNetworks = $derived(0);
+	let sessionBodyH = $state(0);
+	let netBodyH = $state(0);
+
 	const sessionCols = [
 		{ label: 'MAC Address' },
 		{ label: 'Network' },
