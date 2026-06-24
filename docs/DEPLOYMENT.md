@@ -30,7 +30,7 @@ cron config under `./deploy/` (systemd units on Linux, NSSM script on Windows) w
 the exact privileged commands to finish. It never runs sudo/admin itself.
 
 It does **not** install system packages (bun/node/Postgres), fill external secrets
-(Maya/Semaphore/Resend/MikroTik/`OWNER_*`), configure the router, or set up TLS — do
+(Maya/iTexMo/Resend/MikroTik/`OWNER_*`), configure the router, or set up TLS — do
 those by hand (the script prints the checklist). The manual walkthrough below documents
 every step the script performs, for when you want to understand or override it.
 
@@ -68,10 +68,19 @@ Minimum for production:
 - `ORIGIN` — public URL of the portal (e.g. `https://portal.example.com`)
 - `BETTER_AUTH_SECRET` — 32+ random chars (**required**; the app refuses to start without it)
 - `NETWORK_CONTROLLER="mikrotik"`
-- `CRON_SECRET` — shared secret for the revoke cron
+- `CRON_SECRET` — shared secret for the revoke + reconcile crons
+- `CRON_IP_ALLOWLIST` — optional comma-separated source-IP allowlist for the cron endpoints
+  (`/api/network/revoke`, `/api/payments/reconcile`); empty = allow any IP (still secret-gated)
 - `MAYA_PUBLIC_KEY` / `MAYA_SECRET_KEY` — your **live** account keys
 - `MAYA_SANDBOX="false"`
-- `SEMAPHORE_API_KEY` (+ optional `SEMAPHORE_SENDER_NAME`) — SMS OTP delivery
+- `ITEXMO_API_CODE` / `ITEXMO_EMAIL` / `ITEXMO_PASSWORD` — SMS OTP delivery (all three)
+
+> **Boot-time validation:** each app runs `validateEnv()` on startup (`hooks.server.ts`). In
+> production a missing **required** var aborts the boot with a clear message instead of failing
+> on first request. Required — customer: `DATABASE_URL`, `BETTER_AUTH_SECRET`, `CRON_SECRET`,
+> `MAYA_PUBLIC_KEY`, `MAYA_SECRET_KEY` (+ `MIKROTIK_*` when `NETWORK_CONTROLLER=mikrotik`);
+> admin: `DATABASE_URL`, `BETTER_AUTH_SECRET`, `ORIGIN` (+ mikrotik conditional). In dev these
+> only warn.
 
 **`apps/admin/.env`**
 - `DATABASE_URL` — same DB
@@ -168,12 +177,13 @@ header set to each app's `CRON_SECRET`:
 
 ## Pre-production checklist (do NOT ship without)
 
-- [ ] **Remove the open admin signup** — delete `apps/admin/src/routes/register/` and
-      the `<!-- TEMP: remove with /register -->` link in `apps/admin/src/routes/login/+page.svelte`.
-      (Anyone reaching it can mint an owner.) Create the real owner with `bootstrap:owner`.
+- [x] ~~**Remove the open admin signup**~~ — **already done**: `apps/admin/src/routes/register/`
+      and its `/login` link were deleted in the hardening pass. Create the real owner with
+      `bootstrap:owner`; do not reintroduce a browser signup route.
 - [ ] `BETTER_AUTH_SECRET` set (distinct per app), real `CRON_SECRET`s.
+      (Boot validation now **hard-fails** in prod on any missing required var — see note below.)
 - [ ] Maya **live** keys + `MAYA_SANDBOX="false"`.
-- [ ] `SEMAPHORE_API_KEY` set (otherwise prod refuses the OTP flow).
+- [ ] `ITEXMO_API_CODE` / `ITEXMO_EMAIL` / `ITEXMO_PASSWORD` set (otherwise prod refuses the OTP flow).
 - [ ] Built + running via `node build` (not `vite dev`).
 - [ ] TLS in front; `ORIGIN` matches the public URL.
 - [ ] Router `login.html` points at prod; walled garden provisioned; crons scheduled.

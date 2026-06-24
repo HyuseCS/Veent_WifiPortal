@@ -3,7 +3,7 @@ import { dev } from '$app/environment';
 import {
 	setBlocked,
 	revokeUserSessions,
-	startSession,
+	extendAccessAndBindDevice,
 	deleteCustomers,
 	wipeCustomers,
 	getAdminRole,
@@ -12,6 +12,7 @@ import {
 import { db } from '$lib/server/db';
 import { network } from '$lib/server/network';
 import { mailer } from '$lib/server/email';
+import { checkAdminEmailLimit } from '$lib/server/emailRateLimit';
 import { wipeCodeEmail } from '$lib/server/emails/wipe-code';
 import { issueWipeCode, consumeWipeCode } from '$lib/server/wipe-verification';
 import { listUsers } from '$lib/server/queries';
@@ -67,10 +68,10 @@ export const actions: Actions = {
 	},
 
 	/**
-	 * Allow WiFi (DEV ONLY): comp the user onto the network without payment — a
-	 * COMP_MINUTES session on their last-known device MAC, granted on the router and
-	 * logged like any session (so it shows online and the revoke cron expires it).
-	 * Gated to dev: this bypasses credits/Free Time entirely.
+	 * Allow WiFi (DEV ONLY): comp the user onto the network without payment — extends
+	 * their ACCOUNT access window by COMP_MINUTES and binds their last-known device MAC,
+	 * granted on the router and logged like any access (so it shows online and the revoke
+	 * cron expires it). Gated to dev: this bypasses credits/Free Time entirely.
 	 */
 	allowWifi: async (event) => {
 		if (!dev) return fail(403, { error: 'Allow WiFi is a dev-only override.' });
@@ -82,7 +83,11 @@ export const actions: Actions = {
 			return fail(400, { error: 'No known device MAC for this user yet.' });
 		}
 		try {
-			await startSession(db, network, { userId, macAddress: mac, durationMinutes: COMP_MINUTES });
+			await extendAccessAndBindDevice(db, network, {
+				userId,
+				macAddress: mac,
+				durationMinutes: COMP_MINUTES
+			});
 		} catch (err) {
 			console.error('[admin] allowWifi grant failed:', err);
 			return fail(502, { error: 'Network controller rejected the grant.' });
@@ -109,6 +114,13 @@ export const actions: Actions = {
 		if (denied) return denied;
 
 		const owner = event.locals.user!;
+
+		// Cap wipe-code emails so the owner's inbox can't be flooded with codes.
+		const limited = await checkAdminEmailLimit(owner.email, owner.id);
+		if (limited) {
+			return fail(429, { error: 'Too many verification codes requested. Try again later.' });
+		}
+
 		const code = issueWipeCode(owner.id);
 		const { subject, html, text } = wipeCodeEmail({ code, name: owner.name });
 		// Dev affordance: the stub mailer never logs bodies, so surface the code here
@@ -116,7 +128,9 @@ export const actions: Actions = {
 		if (dev) console.log(`[wipe] verification code for ${owner.email}: ${code}`);
 		try {
 			await mailer.send({ to: owner.email, subject, html, text });
-		} catch {
+		} catch (err) {
+			// Observability: email-delivery failure signal (no address/code logged).
+			console.warn('[email] wipe code send failed:', (err as Error)?.message);
 			return fail(502, { error: "Couldn't send the verification code. Please try again." });
 		}
 		return { ok: true, action: 'requestWipeCode' };

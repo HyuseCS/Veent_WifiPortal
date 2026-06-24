@@ -5,6 +5,13 @@
 export const FREE_TIME_MINUTES = 15;
 export const FREE_TIME_COOLDOWN_HOURS = 12;
 
+/**
+ * Max simultaneously-bound device MACs per ACCOUNT. Access time belongs to the
+ * account; devices bind under it. A new bind beyond this cap evicts the
+ * least-recently-seen device, so Apple per-SSID MAC rotation can't lock a user out.
+ */
+export const MAX_DEVICES_PER_ACCOUNT = 2;
+
 export const GRACE_PERIOD_MINUTES = 3;
 /** Max grace-period grants per rolling hour, per device. */
 export const GRACE_RATE_LIMIT_PER_HOUR = 3;

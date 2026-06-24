@@ -43,32 +43,47 @@ packages/
 | Route | Purpose |
 |-------|---------|
 | `/login` | TOTP-secured login |
-| `/register` | ⚠️ **TEMPORARY** open registration — creates an **active owner** on every submit. Dev only. **Remove before prod** (see warning below). |
 | `/dashboard` | KPI cards + revenue charts + active users table |
 | `/networks` | Network health per AP (uptime, latency, throughput) |
 | `/users` | User list with credit balance, usage, block/kick actions |
 | `/finance` | Payment reporting — settled-revenue KPIs, revenue-over-time chart, payment-method donut, transactions table, CSV export (see **Finance & Payment Reporting** below) |
 | `/staff` | **Owner-only** staff management — invite / enable-disable / remove admins |
 
-### ⚠️ TEMPORARY CODE — MUST BE REMOVED BEFORE PRODUCTION
+### Owner bootstrap (the `/register` hole was removed)
 
-> **`apps/admin/src/routes/register/` is an intentional, UNGATED admin-signup hole.**
-> It exists only as a dev convenience (a browser equivalent of `bun run bootstrap:owner`):
-> anyone who submits the form gets a fully **active `owner`** account. There is **no gate,
-> no env flag, no rate limit** — while this route exists, anyone who can reach the admin
-> app can mint an owner.
->
-> **Any agent or developer preparing this app for production (build, deploy, release,
-> security pass, or "harden the admin app") MUST remove it first.** Removal is two steps,
-> and reverts nothing else (no schema/service/migration was added for it):
->
-> 1. Delete the directory `apps/admin/src/routes/register/` (`+page.server.ts` + `+page.svelte`).
-> 2. Remove the `<!-- TEMP: remove with /register -->` link block in
->    `apps/admin/src/routes/login/+page.svelte`.
->
-> The legitimate, secure way to create the first owner is `bun run bootstrap:owner`
-> (`apps/admin/scripts/bootstrap-owner.ts`); all other staff come from the owner-only
-> `/staff` invite flow. Do **not** build new features on top of `/register`.
+There used to be an ungated `apps/admin/src/routes/register/` route that minted an
+**active `owner`** on every submit (a dev convenience). It was **deleted** during the
+backend-hardening pass (see `docs/SECURITY_RISKS.md` R6) along with its `/login` link.
+Do **not** reintroduce a browser owner-signup route.
+
+The only ways to create staff now:
+- **First owner:** `bun run --filter radius-admin bootstrap:owner`
+  (`apps/admin/scripts/bootstrap-owner.ts`, uses `OWNER_*` env).
+- **All other staff:** the owner-only `/staff` invite flow.
+
+### Backend hardening (Phases 0–3 — complete)
+
+A senior-review-driven hardening pass landed; the rationale is in
+`docs/ARCHITECTURE_REVIEW.md` and the risk ledger in `docs/SECURITY_RISKS.md`, with a
+phase roadmap at the bottom of `apps/admin/To_Improve.md`. What changed (all additive):
+
+- **Grant atomicity** — `startPaidSession` (`packages/core`) spends credits + opens the
+  session + fires the router grant in **one transaction**; a failed grant rolls back the
+  spend (no "paid, got nothing"). Wired into `/api/network/grant` + dashboard buy-tier.
+- **Rate limiting** — shared `rateLimit(scope, identifier, max, windowMs)` helper
+  (`apps/{customer,admin}/src/lib/server/rateLimit.ts`) over the existing `rate_limits`
+  table (now with additive `scope`/`identifier` columns, migration `0014`). Covers admin
+  login, grant, finance CSV export, payment webhook (per-IP flood cap), SSE stream count,
+  and admin email sends (`checkAdminEmailLimit`). **OTP/SMS limiting is teammate-owned —
+  do not touch `otpRateLimit.ts` or the mac/phone limiter paths.**
+- **Cron allowlist** — optional `CRON_IP_ALLOWLIST` env (customer) gates `/api/network/revoke`
+  + `/api/payments/reconcile` by source IP (in addition to `x-cron-secret`).
+- **Config fail-fast** — `validateEnv()` per app, called in `hooks.server.ts`: hard-fails in
+  prod on missing required vars, warns in dev, no-ops during build.
+- **Maya webhook** — `verifyWebhook` re-fetches the authoritative payment from Maya with the
+  secret key (no HMAC); the unsigned body is never trusted.
+- **Pool bound** — `createDb` sets an explicit Drizzle pool `max` (10); the LISTEN client
+  stays isolated at `max:1`.
 
 ### Finance & Payment Reporting
 
@@ -92,18 +107,20 @@ rate, or why payments failed. The Finance feature adds a complete, queryable rec
   it's still recorded, just unattributed. Migration: `packages/db/drizzle/0008_*.sql`.
 
 **`maya.ts` `verifyWebhook`** (`packages/core/src/integrations/payments/maya.ts`)
-- Previously a throwing stub; now implemented. Verifies the webhook HMAC signature over the
-  raw body (throws on mismatch — never trusts an unverified payload), then maps the Maya
-  payload to the normalized `PaymentEvent`.
-- ⚠️ The signature scheme (HMAC-SHA256 hex in `paymaya-signature`/`x-signature`) is an
-  **assumption** flagged with a `ponytail:` comment — confirm the exact algorithm + header in
-  the Maya dashboard's webhook config before going live; if it differs, change it in that one
-  spot. `createCheckout` is still a stub (outbound checkout is out of scope for this feature).
+- Previously a throwing stub; now implemented. **No HMAC.** Maya Checkout webhooks are
+  unsigned, so it takes only the payment id from the (untrusted) body and **re-fetches the
+  authoritative payment from Maya's API with the secret key**, trusting THAT response — never
+  the posted body. Throws on lookup failure or status mismatch, then maps the re-fetched
+  payment to the normalized `PaymentEvent`. A spoofed webhook can't produce a real paid
+  payment under our account. Covered by `apps/customer/src/lib/server/maya-webhook.spec.ts`.
+  `createCheckout` is still a stub (outbound checkout is out of scope for this feature).
 - `PaymentEvent` (`payments/types.ts`) gained a `'cancelled'` status and optional detail
   fields (`fundSourceType`, `receiptNo`, `buyerName`, …) that only Maya populates.
 
 **Webhook handler** (`apps/customer/src/routes/api/webhooks/payment/+server.ts`)
-- After signature verification, records **every** event into `payment_transactions` via
+- A per-IP flood cap (120/min) runs first — every call triggers an outbound re-fetch to Maya,
+  so this blunts request-amplification. Then `verifyWebhook` re-fetches and authenticates.
+- After verification, records **every** event into `payment_transactions` via
   `onConflictDoUpdate` (NOT `DoNothing`) — Maya can resend or send a later status transition
   for the same tx id, and we must keep the latest state, not freeze the first.
 - Crediting is unchanged and still happens **only** for `paid` events; `addCredits` remains

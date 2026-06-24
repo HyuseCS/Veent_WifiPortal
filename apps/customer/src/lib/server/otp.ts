@@ -90,48 +90,66 @@ export function maskPhone(phone: string): string {
 }
 
 /**
- * Deliver the OTP via Semaphore (https://semaphore.co), the PH SMS gateway.
+ * Deliver the OTP via iTexMo (https://itexmo.com), the PH SMS gateway, Broadcast-OTP API.
  * THE SINGLE SMS INTEGRATION POINT — wired into the phoneNumber plugin's `sendOTP`.
- * The phone is already E.164 (e.g. +639171234567); Semaphore accepts that.
+ * The phone arrives E.164 (+639171234567); iTexMo wants the LOCAL form (09171234567),
+ * so we convert.
  *
- * Config (customer env):
- *   SEMAPHORE_API_KEY      (required to send) — from the Semaphore dashboard
- *   SEMAPHORE_SENDER_NAME  (optional) — an APPROVED sender name; omit to use the
- *                           account default ("SEMAPHORE" until you register one)
+ * Config (customer env — first three required to send, from the iTexMo dashboard):
+ *   ITEXMO_API_CODE
+ *   ITEXMO_EMAIL
+ *   ITEXMO_PASSWORD
+ *   ITEXMO_SENDER_ID  (optional) — an approved sender id; on a TRIAL account this MUST
+ *                      be "ITM.TEST3". Omit to use the account default.
  *
  * Not configured → dev prints the code to the server console (so you can still log
- * in); production treats a missing key as a hard error (an OTP MUST be delivered —
+ * in); production treats missing config as a hard error (an OTP MUST be delivered —
  * never silently swallow it, that would let anyone "log in" with no code).
  */
 export async function sendOtp(phone: string, code: string): Promise<void> {
-	const apikey = env.SEMAPHORE_API_KEY;
+	const apiCode = env.ITEXMO_API_CODE;
+	const email = env.ITEXMO_EMAIL;
+	const password = env.ITEXMO_PASSWORD;
 
-	if (!apikey) {
+	if (!apiCode || !email || !password) {
 		if (dev) {
-			console.info(`[otp] Semaphore not configured — code for ${phone}: ${code}`);
+			console.info(`[otp] iTexMo not configured — code for ${phone}: ${code}`);
 			return;
 		}
-		throw new Error('Semaphore not configured: set SEMAPHORE_API_KEY');
+		throw new Error('iTexMo not configured: set ITEXMO_API_CODE / ITEXMO_EMAIL / ITEXMO_PASSWORD');
 	}
 
-	// Semaphore's send endpoint takes form-encoded params. We send our own code
-	// (better-auth generates it) via /messages, NOT the auto-code /otp endpoint.
-	const params = new URLSearchParams({
-		apikey,
-		number: phone,
-		message: `Your Veent code is ${code}. It expires in 5 minutes.`
-	});
-	const sender = env.SEMAPHORE_SENDER_NAME;
-	if (sender) params.set('sendername', sender);
+	// iTexMo expects the local PH format (09xxxxxxxxx), not E.164.
+	const recipient = phone.replace(/^\+?63/, '0');
 
-	const res = await fetch('https://api.semaphore.co/api/v4/messages', {
+	const payload: Record<string, unknown> = {
+		ApiCode: apiCode,
+		Email: email,
+		Password: password,
+		Recipients: [recipient],
+		Message: `Your Veent code is ${code}. It expires in 5 minutes.`
+	};
+	const senderId = env.ITEXMO_SENDER_ID;
+	if (senderId) payload.SenderId = senderId;
+
+	const res = await fetch('https://api.itexmo.com/api/broadcast-otp', {
 		method: 'POST',
-		headers: { 'content-type': 'application/x-www-form-urlencoded' },
-		body: params
+		headers: { 'content-type': 'application/json' },
+		body: JSON.stringify(payload)
 	});
+
+	// Transport-level failure.
 	if (!res.ok) {
-		// Semaphore returns JSON (an array on success, an error object on failure).
 		const detail = await res.text().catch(() => '');
-		throw new Error(`Semaphore SMS send failed (${res.status}): ${detail}`);
+		throw new Error(`iTexMo SMS send failed (${res.status}): ${detail}`);
+	}
+	// API-level result: { Error, Accepted, Failed, ReferenceId, Message? }. Treat a
+	// gateway error OR a recipient that wasn't accepted as a failure — a 200 with
+	// Accepted: 0 means the code never went out.
+	const body = (await res.json().catch(() => null)) as
+		| { Error?: boolean; Accepted?: number; Message?: string }
+		| null;
+	if (!body || body.Error || (body.Accepted ?? 0) < 1) {
+		throw new Error(`iTexMo SMS rejected: ${body?.Message ?? 'no recipient accepted'}`);
 	}
 }

@@ -1,14 +1,266 @@
-import { and, desc, eq, gt, lte } from 'drizzle-orm';
+import { and, asc, desc, eq, isNotNull, lte } from 'drizzle-orm';
 import { type DB, customerProfile, networkHealth, networkSessions, packages } from '@veent/db';
 import type { NetworkController } from '../integrations/network';
-import { SESSION_STATUS } from '../config';
+import { MAX_DEVICES_PER_ACCOUNT, SESSION_STATUS } from '../config';
 import { getFreeTimeStatus } from './freeTime';
+import { spendCreditsTx, type Tx } from './credits';
 
 function expiry(durationMinutes: number, now: Date) {
 	return new Date(now.getTime() + durationMinutes * 60 * 1000);
 }
 
-export interface StartSessionInput {
+/**
+ * ACCOUNT-OWNED ACCESS MODEL
+ *
+ * Internet time belongs to the ACCOUNT (`customer_profile.access_expires_at`), not to a
+ * device. Devices are MACs bound under that window via `network_sessions` (one active row
+ * per (user, MAC)); they all share the account's expiry. The router still enforces by
+ * MAC-bypass — binding writes a bypass, expiry/revoke removes it — but the authoritative
+ * "is this account online and until when" is the profile window.
+ *
+ * A per-account device cap (MAX_DEVICES_PER_ACCOUNT) with least-recently-seen eviction keeps
+ * Apple per-SSID MAC rotation from locking users out: a rotated MAC just evicts the stalest
+ * binding instead of being refused.
+ *
+ * Atomicity (business rule #1): the router grant runs INSIDE the DB transaction, so a failed
+ * grant rolls back the window extension, the binding row, AND any credit spend together — a
+ * charged user is never left without access. (ponytail: holds the tx open across the grant
+ * call — fine at captive-portal volume; if grant latency ever starves the pool, switch to a
+ * reserve→grant→confirm saga.)
+ */
+
+export interface BindResult {
+	ok: boolean;
+	/** 'no_access' when a pure bind was attempted but the account has no live window. */
+	reason?: 'no_access';
+	accessExpiresAt: Date | null;
+	/** MACs evicted to make room (already revoked on the router). */
+	evicted: string[];
+}
+
+type BindPlan =
+	| { skip: true }
+	| { skip: false; prevWindow: Date | null; newWindow: Date; rowId: number; evicted: string[] };
+
+/**
+ * DB-only part of binding a MAC under the account window, run inside a caller's transaction.
+ * Locks the profile row `FOR UPDATE` (serializes concurrent binds/buys for the account so the
+ * cap check + LRU eviction can't race), extends the window if `addMinutes > 0`, upserts the
+ * device row, evicts least-recently-seen bindings over the cap (marked revoked — their router
+ * revoke happens after commit), and mirrors the window onto all the account's active rows.
+ */
+async function bindMacTx(
+	tx: Tx,
+	now: Date,
+	opts: {
+		userId: string;
+		macAddress: string;
+		addMinutes: number;
+		requireLiveWindow: boolean;
+		packageId?: number;
+	}
+): Promise<BindPlan> {
+	const [profile] = await tx
+		.select({ accessExpiresAt: customerProfile.accessExpiresAt })
+		.from(customerProfile)
+		.where(eq(customerProfile.userId, opts.userId))
+		.for('update')
+		.limit(1);
+
+	const prevWindow = profile?.accessExpiresAt ?? null;
+	const liveWindow = prevWindow && prevWindow > now ? prevWindow : null;
+	if (opts.requireLiveWindow && !liveWindow) return { skip: true };
+
+	const base = liveWindow ?? now;
+	const newWindow = expiry(opts.addMinutes, base);
+
+	if (opts.addMinutes > 0) {
+		// The window AND its package are account-level: the most recent extend sets both, so
+		// every bound device reads one consistent package (paid tier, or null = Free Time).
+		await tx
+			.update(customerProfile)
+			.set({ accessExpiresAt: newWindow, accessPackageId: opts.packageId ?? null })
+			.where(eq(customerProfile.userId, opts.userId));
+	}
+
+	// Upsert the binding row for this (user, MAC).
+	const [existing] = await tx
+		.select({ id: networkSessions.id })
+		.from(networkSessions)
+		.where(
+			and(
+				eq(networkSessions.userId, opts.userId),
+				eq(networkSessions.macAddress, opts.macAddress),
+				eq(networkSessions.status, SESSION_STATUS.active)
+			)
+		)
+		.limit(1);
+
+	const evicted: string[] = [];
+	let rowId: number;
+
+	if (existing) {
+		await tx
+			.update(networkSessions)
+			.set({
+				expiresAt: newWindow,
+				lastSeenAt: now,
+				...(opts.packageId !== undefined ? { packageId: opts.packageId } : {})
+			})
+			.where(eq(networkSessions.id, existing.id));
+		rowId = existing.id;
+	} else {
+		// Make room for the new device: evict least-recently-seen bindings over the cap.
+		const activeRows = await tx
+			.select({ id: networkSessions.id, macAddress: networkSessions.macAddress })
+			.from(networkSessions)
+			.where(
+				and(
+					eq(networkSessions.userId, opts.userId),
+					eq(networkSessions.status, SESSION_STATUS.active)
+				)
+			)
+			.orderBy(asc(networkSessions.lastSeenAt));
+
+		const overBy = activeRows.length - (MAX_DEVICES_PER_ACCOUNT - 1);
+		for (let i = 0; i < overBy; i++) {
+			const e = activeRows[i];
+			await tx
+				.update(networkSessions)
+				.set({ status: SESSION_STATUS.revoked })
+				.where(eq(networkSessions.id, e.id));
+			if (e.macAddress) evicted.push(e.macAddress);
+		}
+
+		const [row] = await tx
+			.insert(networkSessions)
+			.values({
+				userId: opts.userId,
+				macAddress: opts.macAddress,
+				packageId: opts.packageId,
+				status: SESSION_STATUS.active,
+				startedAt: now,
+				boundAt: now,
+				lastSeenAt: now,
+				expiresAt: newWindow
+			})
+			.returning({ id: networkSessions.id });
+		rowId = row.id;
+	}
+
+	// Mirror the window onto every active binding so all of the account's devices share it.
+	await tx
+		.update(networkSessions)
+		.set({ expiresAt: newWindow })
+		.where(
+			and(
+				eq(networkSessions.userId, opts.userId),
+				eq(networkSessions.status, SESSION_STATUS.active)
+			)
+		);
+
+	return { skip: false, prevWindow, newWindow, rowId, evicted };
+}
+
+/**
+ * Post-commit side effects shared by every bind path: revoke evicted MACs on the router
+ * (idempotent — reconcileGuestBindings sweeps any miss) and best-effort AP attribution.
+ */
+async function afterBind(
+	db: DB,
+	network: NetworkController,
+	rowId: number,
+	macAddress: string,
+	evicted: string[]
+): Promise<void> {
+	for (const mac of evicted) {
+		try {
+			await network.revoke(mac);
+		} catch {
+			// reconcileGuestBindings will drop an orphaned binding on the next cron.
+		}
+	}
+	await attributeAp(db, network, rowId, macAddress);
+}
+
+/**
+ * Ensure the account window, bind one MAC under it, grant on the router — all atomically.
+ * Used by free time, the dashboard auto-bind / reconnect, and the admin comp (no credit
+ * spend). For the paid path use `startPaidAccessAndBindDevice` (adds the spend in the same tx).
+ */
+async function bindMacToAccount(
+	db: DB,
+	network: NetworkController,
+	opts: {
+		userId: string;
+		macAddress: string;
+		addMinutes: number;
+		requireLiveWindow: boolean;
+		packageId?: number;
+		bandwidthMbps?: number;
+	}
+): Promise<BindResult> {
+	const now = new Date();
+
+	const plan = await db.transaction(async (tx) => {
+		const p = await bindMacTx(tx, now, opts);
+		if (p.skip) return p;
+		// Grant INSIDE the tx: a failed grant rolls the window + binding back.
+		await network.grant({
+			macAddress: opts.macAddress,
+			durationMinutes: opts.addMinutes,
+			bandwidthMbps: opts.bandwidthMbps
+		});
+		return p;
+	});
+
+	if (plan.skip) return { ok: false, reason: 'no_access', accessExpiresAt: null, evicted: [] };
+
+	await afterBind(db, network, plan.rowId, opts.macAddress, plan.evicted);
+	return { ok: true, accessExpiresAt: plan.newWindow, evicted: plan.evicted };
+}
+
+/**
+ * Best-effort: tag the binding row with the AP the device is on, so the Networks view can
+ * count active users per AP. Never throws — attribution is a reporting nicety and many setups
+ * (wired clients, stub/dev) can't resolve it.
+ */
+async function attributeAp(
+	db: DB,
+	network: NetworkController,
+	rowId: number,
+	macAddress: string
+): Promise<void> {
+	if (!network.resolveApForMac) return;
+	try {
+		const apName = await network.resolveApForMac(macAddress);
+		if (!apName) return;
+		const [bound] = await db
+			.select({ id: networkHealth.id })
+			.from(networkHealth)
+			.where(eq(networkHealth.interfaceName, apName))
+			.limit(1);
+		const ap =
+			bound ??
+			(
+				await db
+					.select({ id: networkHealth.id })
+					.from(networkHealth)
+					.where(eq(networkHealth.name, apName))
+					.limit(1)
+			)[0];
+		if (ap) {
+			await db
+				.update(networkSessions)
+				.set({ networkId: ap.id })
+				.where(eq(networkSessions.id, rowId));
+		}
+	} catch {
+		// Non-critical: leave networkId null.
+	}
+}
+
+export interface ExtendAccessInput {
 	userId: string;
 	macAddress: string;
 	durationMinutes: number;
@@ -17,169 +269,195 @@ export interface StartSessionInput {
 }
 
 /**
- * Creates an active network session and grants access on the controller. Records
- * the row first (source of truth for the revoke cron), then drops the firewall;
- * if the grant throws, the session is marked revoked so we never report access
- * that wasn't actually opened.
+ * Extend the ACCOUNT's access window by `durationMinutes` and bind the calling device, WITHOUT
+ * spending credits (free time after the eligibility claim, and the dev admin comp). For a paid
+ * tier use `startPaidAccessAndBindDevice`, which spends + extends + grants in one transaction.
  */
-export async function startSession(db: DB, network: NetworkController, input: StartSessionInput) {
+export async function extendAccessAndBindDevice(
+	db: DB,
+	network: NetworkController,
+	input: ExtendAccessInput
+): Promise<BindResult> {
+	return bindMacToAccount(db, network, {
+		userId: input.userId,
+		macAddress: input.macAddress,
+		addMinutes: input.durationMinutes,
+		requireLiveWindow: false,
+		packageId: input.packageId,
+		bandwidthMbps: input.bandwidthMbps
+	});
+}
+
+export interface StartPaidAccessResult {
+	ok: boolean;
+	/** Set when ok=false. */
+	reason?: 'insufficient_balance';
+	balance: number;
+	accessExpiresAt?: Date | null;
+	evicted?: string[];
+}
+
+/**
+ * Buy a tier: spend its credits, extend the ACCOUNT window, bind the device, and grant — all in
+ * ONE transaction. If the grant (or anything after the spend) throws, the whole transaction
+ * rolls back, so a charged user is never left without access (business rule #1). Returns
+ * `{ ok: false, reason: 'insufficient_balance' }` for a committed no-op (nothing deducted).
+ */
+export async function startPaidAccessAndBindDevice(
+	db: DB,
+	network: NetworkController,
+	input: {
+		userId: string;
+		macAddress: string;
+		packageId: number;
+		amount: number;
+		durationMinutes: number;
+		bandwidthMbps?: number;
+	}
+): Promise<StartPaidAccessResult> {
 	const now = new Date();
 
-	// Stack onto a running session for the SAME device instead of opening a parallel
-	// one: bought time ACCUMULATES (new expiry = current remaining + this duration).
-	// Parallel sessions per MAC would each run their own clock and — worse — the revoke
-	// cron would re-block the shared MAC the moment the FIRST expires, cutting access the
-	// others still cover. One row per device keeps both the countdown and the cron correct.
-	const [existing] = await db
-		.select({ id: networkSessions.id, expiresAt: networkSessions.expiresAt })
-		.from(networkSessions)
-		.where(
-			and(
-				eq(networkSessions.userId, input.userId),
-				eq(networkSessions.macAddress, input.macAddress),
-				eq(networkSessions.status, SESSION_STATUS.active),
-				gt(networkSessions.expiresAt, now)
-			)
-		)
-		.orderBy(desc(networkSessions.expiresAt))
-		.limit(1);
+	const outcome = await db.transaction(async (tx) => {
+		const spend = await spendCreditsTx(tx, {
+			userId: input.userId,
+			amount: input.amount,
+			packageId: input.packageId
+		});
+		if (!spend.ok) return { ok: false as const, balance: spend.balance };
 
-	const previousExpiry = existing?.expiresAt ?? null;
-	let session;
-	if (existing && previousExpiry) {
-		// Extend from the current expiry so no remaining time is lost. packageId tracks
-		// the latest grant so the dashboard names the most recent tier.
-		[session] = await db
-			.update(networkSessions)
-			.set({ expiresAt: expiry(input.durationMinutes, previousExpiry), packageId: input.packageId })
-			.where(eq(networkSessions.id, existing.id))
-			.returning();
-	} else {
-		[session] = await db
-			.insert(networkSessions)
-			.values({
-				userId: input.userId,
-				macAddress: input.macAddress,
-				packageId: input.packageId,
-				status: SESSION_STATUS.active,
-				startedAt: now,
-				expiresAt: expiry(input.durationMinutes, now)
-			})
-			.returning();
-	}
+		const plan = await bindMacTx(tx, now, {
+			userId: input.userId,
+			macAddress: input.macAddress,
+			addMinutes: input.durationMinutes,
+			requireLiveWindow: false,
+			packageId: input.packageId
+		});
+		// requireLiveWindow is false, so plan is never `skip`.
+		if (plan.skip) throw new Error('startPaidAccessAndBindDevice: unexpected skip');
 
-	try {
+		// Grant INSIDE the tx — a failed grant rolls back the spend too.
 		await network.grant({
 			macAddress: input.macAddress,
 			durationMinutes: input.durationMinutes,
 			bandwidthMbps: input.bandwidthMbps
 		});
-	} catch (err) {
-		if (previousExpiry) {
-			// Restore the prior expiry — a failed extend must not forfeit already-granted time.
-			await db
-				.update(networkSessions)
-				.set({ expiresAt: previousExpiry })
-				.where(eq(networkSessions.id, session.id));
-		} else {
-			await db
-				.update(networkSessions)
-				.set({ status: SESSION_STATUS.revoked })
-				.where(eq(networkSessions.id, session.id));
-		}
-		throw err;
-	}
 
-	// Best-effort: tag the session with the AP the device is on, so the Networks
-	// view can count active users per AP. Never fails the grant — attribution is
-	// a reporting nicety, and many setups (wired clients, stub/dev) can't resolve it.
-	if (network.resolveApForMac) {
-		try {
-			const apName = await network.resolveApForMac(input.macAddress);
-			if (apName) {
-				// Prefer an explicit pin→interface binding (set on the Networks page);
-				// fall back to a name match for the auto-discovered interface row.
-				const [bound] = await db
-					.select({ id: networkHealth.id })
-					.from(networkHealth)
-					.where(eq(networkHealth.interfaceName, apName))
-					.limit(1);
-				const ap =
-					bound ??
-					(
-						await db
-							.select({ id: networkHealth.id })
-							.from(networkHealth)
-							.where(eq(networkHealth.name, apName))
-							.limit(1)
-					)[0];
-				if (ap) {
-					await db
-						.update(networkSessions)
-						.set({ networkId: ap.id })
-						.where(eq(networkSessions.id, session.id));
-					session.networkId = ap.id;
-				}
-			}
-		} catch {
-			// Non-critical: leave networkId null.
-		}
-	}
+		return {
+			ok: true as const,
+			balance: spend.balance,
+			newWindow: plan.newWindow,
+			rowId: plan.rowId,
+			evicted: plan.evicted
+		};
+	});
 
-	return session;
-}
+	if (!outcome.ok) return { ok: false, reason: 'insufficient_balance', balance: outcome.balance };
 
-export interface ActiveSession {
-	id: number;
-	/** null for a Free Time session; set for a bought tier. */
-	packageId: number | null;
-	/** Tier name (e.g. "3 Hours"); null for Free Time. */
-	name: string | null;
-	startedAt: Date;
-	expiresAt: Date;
-	/** Convenience flag for the UI's free-vs-paid band styling. */
-	isFree: boolean;
+	await afterBind(db, network, outcome.rowId, input.macAddress, outcome.evicted);
+	return {
+		ok: true,
+		balance: outcome.balance,
+		accessExpiresAt: outcome.newWindow,
+		evicted: outcome.evicted
+	};
 }
 
 /**
- * The user's currently-running session, if any. `status = active` AND
- * `expiresAt > now` — the time guard hides a session the revoke cron hasn't swept
- * to `expired` yet, so the dashboard never shows a stale "active" band. Joins
- * `packages` for the tier name; a null packageId means Free Time. Newest first.
+ * Bind a device to the account's EXISTING live window without adding time. Returns
+ * `{ ok: false, reason: 'no_access' }` if the account has no live window (so we never grant a
+ * MAC for an account with no time). Used by the dashboard auto-bind / explicit reconnect /
+ * "replace oldest device".
  */
-export async function getActiveSession(
+export async function bindDevice(
+	db: DB,
+	network: NetworkController,
+	input: { userId: string; macAddress: string }
+): Promise<BindResult> {
+	return bindMacToAccount(db, network, {
+		userId: input.userId,
+		macAddress: input.macAddress,
+		addMinutes: 0,
+		requireLiveWindow: true
+	});
+}
+
+export interface AccountDevice {
+	id: number;
+	macAddress: string | null;
+	boundAt: Date;
+	lastSeenAt: Date;
+}
+
+export interface ActiveAccess {
+	/** The account's access window end. */
+	expiresAt: Date;
+	/** Earliest bound device's start, for the progress bar. */
+	startedAt: Date;
+	/** Most-recent binding's tier (null = Free Time). */
+	packageId: number | null;
+	name: string | null;
+	isFree: boolean;
+	/** Devices currently bound under this window. */
+	devices: AccountDevice[];
+}
+
+/**
+ * The account's live access window + its bound devices, or null if no live window. The
+ * authoritative gate is `customer_profile.access_expires_at`; device rows are the registry.
+ */
+export async function getActiveAccess(
 	db: DB,
 	userId: string,
 	now: Date = new Date()
-): Promise<ActiveSession | null> {
-	const [row] = await db
+): Promise<ActiveAccess | null> {
+	// Account-level window + its package (one tier for the whole account, shared by every
+	// device — not derived per device row).
+	const [profile] = await db
 		.select({
-			id: networkSessions.id,
-			packageId: networkSessions.packageId,
-			name: packages.name,
-			startedAt: networkSessions.startedAt,
-			expiresAt: networkSessions.expiresAt
+			accessExpiresAt: customerProfile.accessExpiresAt,
+			accessPackageId: customerProfile.accessPackageId,
+			packageName: packages.name
 		})
-		.from(networkSessions)
-		.leftJoin(packages, eq(networkSessions.packageId, packages.id))
-		.where(
-			and(
-				eq(networkSessions.userId, userId),
-				eq(networkSessions.status, SESSION_STATUS.active),
-				gt(networkSessions.expiresAt, now)
-			)
-		)
-		.orderBy(desc(networkSessions.startedAt))
+		.from(customerProfile)
+		.leftJoin(packages, eq(packages.id, customerProfile.accessPackageId))
+		.where(eq(customerProfile.userId, userId))
 		.limit(1);
 
-	if (!row?.expiresAt) return null;
+	const window = profile?.accessExpiresAt ?? null;
+	if (!window || window <= now) return null;
+
+	const devices = await db
+		.select({
+			id: networkSessions.id,
+			macAddress: networkSessions.macAddress,
+			boundAt: networkSessions.boundAt,
+			lastSeenAt: networkSessions.lastSeenAt,
+			startedAt: networkSessions.startedAt
+		})
+		.from(networkSessions)
+		.where(
+			and(eq(networkSessions.userId, userId), eq(networkSessions.status, SESSION_STATUS.active))
+		)
+		.orderBy(desc(networkSessions.startedAt));
+
+	// Earliest bound device's start drives the progress bar.
+	const startedAt = devices.reduce(
+		(min, d) => (d.startedAt < min ? d.startedAt : min),
+		devices[0]?.startedAt ?? now
+	);
+
 	return {
-		id: row.id,
-		packageId: row.packageId ?? null,
-		name: row.name ?? null,
-		startedAt: row.startedAt,
-		expiresAt: row.expiresAt,
-		isFree: row.packageId == null
+		expiresAt: window,
+		startedAt,
+		packageId: profile.accessPackageId ?? null,
+		name: profile.packageName ?? null,
+		isFree: (profile.accessPackageId ?? null) == null,
+		devices: devices.map((d) => ({
+			id: d.id,
+			macAddress: d.macAddress,
+			boundAt: d.boundAt,
+			lastSeenAt: d.lastSeenAt
+		}))
 	};
 }
 
@@ -187,14 +465,16 @@ export interface StartFreeSessionResult {
 	ok: boolean;
 	reason?: 'not_eligible';
 	nextEligibleAt?: Date | null;
-	session?: Awaited<ReturnType<typeof startSession>>;
+	accessExpiresAt?: Date | null;
 }
 
 /**
- * Starts a Free Time session if eligible. Stamps `last_free_session_at` inside a
- * conditional update so two concurrent requests can't both claim the free window.
+ * Claim the account's free window if eligible, then bind the calling device. Free time is now
+ * ONE account-wide 15-min window (all the account's devices share it), gated by the existing
+ * account-scoped 12h cooldown. The conditional `last_free_session_at` stamp prevents two
+ * concurrent requests from both claiming.
  */
-export async function startFreeSession(
+export async function startFreeAccessAndBindDevice(
 	db: DB,
 	network: NetworkController,
 	input: { userId: string; macAddress: string }
@@ -223,53 +503,59 @@ export async function startFreeSession(
 		return { ok: false, reason: 'not_eligible', nextEligibleAt: claimed.nextEligibleAt };
 	}
 
-	const session = await startSession(db, network, {
+	const result = await extendAccessAndBindDevice(db, network, {
 		userId: input.userId,
 		macAddress: input.macAddress,
 		durationMinutes: claimed.durationMinutes
 	});
-	return { ok: true, session };
+	return { ok: true, accessExpiresAt: result.accessExpiresAt };
 }
 
 /**
- * Revokes every active session whose time is up: re-blocks the MAC on the
- * controller and flips the row to `expired`. Drives /api/network/revoke (cron).
- * Returns the count revoked.
+ * Revoke every device of any account whose access window has lapsed, then clear the window.
+ * Drives /api/network/revoke (cron). Account-level now: one lapsed window drops ALL its
+ * devices. Nulls `access_expires_at` so a lapsed account isn't re-selected every minute.
+ * Returns the count of device MACs revoked.
  */
-export async function expireDueSessions(
+export async function expireDueAccounts(
 	db: DB,
 	network: NetworkController,
 	now: Date = new Date()
 ): Promise<number> {
 	const due = await db
-		.select({ id: networkSessions.id, macAddress: networkSessions.macAddress })
-		.from(networkSessions)
-		.where(
-			and(eq(networkSessions.status, SESSION_STATUS.active), lte(networkSessions.expiresAt, now))
-		);
+		.select({ userId: customerProfile.userId })
+		.from(customerProfile)
+		.where(and(isNotNull(customerProfile.accessExpiresAt), lte(customerProfile.accessExpiresAt, now)));
 
 	let revoked = 0;
-	for (const s of due) {
-		if (s.macAddress) await network.revoke(s.macAddress);
+	for (const { userId } of due) {
+		const rows = await db
+			.select({ id: networkSessions.id, macAddress: networkSessions.macAddress })
+			.from(networkSessions)
+			.where(
+				and(eq(networkSessions.userId, userId), eq(networkSessions.status, SESSION_STATUS.active))
+			);
+		for (const s of rows) {
+			if (s.macAddress) await network.revoke(s.macAddress);
+			await db
+				.update(networkSessions)
+				.set({ status: SESSION_STATUS.expired })
+				.where(eq(networkSessions.id, s.id));
+			revoked++;
+		}
 		await db
-			.update(networkSessions)
-			.set({ status: SESSION_STATUS.expired })
-			.where(eq(networkSessions.id, s.id));
-		revoked++;
+			.update(customerProfile)
+			.set({ accessExpiresAt: null })
+			.where(eq(customerProfile.userId, userId));
 	}
 	return revoked;
 }
 
 /**
- * Removes guest bypass bindings on the router that no longer map to an active
- * session — self-heals DB↔router drift the row-based revoke cron can't catch:
- * customer wipes (which cascade-delete sessions), crashed grants, or a manual DB
- * delete. Without this, such a binding grants internet forever with no DB trace.
- *
- * Only touches our guest-tagged bindings; admin bypasses and operator-added
- * bindings are left alone. Safe against live grants: startSession inserts the
- * (active) session row *before* it creates the binding, so a binding the router
- * reports always has its session row already committed. Returns the count removed.
+ * Removes guest bypass bindings on the router that no longer map to an active binding row —
+ * self-heals DB↔router drift the cron can't catch (customer wipes that cascade-delete rows,
+ * crashed grants, manual deletes, a failed eviction revoke). Only touches guest-tagged
+ * bindings; admin bypasses and operator-added bindings are left alone. Returns the count.
  */
 export async function reconcileGuestBindings(
 	db: DB,
@@ -298,10 +584,77 @@ export async function reconcileGuestBindings(
 }
 
 /**
- * Immediately revokes all active sessions for one user (admin kick / block).
- * Re-blocks each MAC and marks the rows `revoked`. Returns the count.
+ * Immediately disconnect ALL of a user's devices AND end their access window (admin kick /
+ * block, or account logout-everywhere with revoke). Nulls `access_expires_at` so the dashboard
+ * auto-bind can't silently re-grant a kicked account. Returns the count of devices dropped.
  */
 export async function revokeUserSessions(
+	db: DB,
+	network: NetworkController,
+	userId: string
+): Promise<number> {
+	const active = await db
+		.select({ id: networkSessions.id, macAddress: networkSessions.macAddress })
+		.from(networkSessions)
+		.where(
+			and(eq(networkSessions.userId, userId), eq(networkSessions.status, SESSION_STATUS.active))
+		);
+
+	let revoked = 0;
+	for (const s of active) {
+		if (s.macAddress) await network.revoke(s.macAddress);
+		await db
+			.update(networkSessions)
+			.set({ status: SESSION_STATUS.revoked })
+			.where(eq(networkSessions.id, s.id));
+		revoked++;
+	}
+
+	await db
+		.update(customerProfile)
+		.set({ accessExpiresAt: null })
+		.where(eq(customerProfile.userId, userId));
+
+	return revoked;
+}
+
+/**
+ * Unbind ONE device (customer "remove this device"). Verifies the row belongs to the user
+ * (never trust a client-supplied id), revokes its MAC, marks it revoked. Leaves the account
+ * window intact so other devices stay online. Returns the unbound MAC, or null if not found.
+ */
+export async function unbindDevice(
+	db: DB,
+	network: NetworkController,
+	input: { userId: string; sessionId: number }
+): Promise<{ ok: boolean; macAddress?: string | null }> {
+	const [row] = await db
+		.select({ id: networkSessions.id, macAddress: networkSessions.macAddress })
+		.from(networkSessions)
+		.where(
+			and(
+				eq(networkSessions.id, input.sessionId),
+				eq(networkSessions.userId, input.userId),
+				eq(networkSessions.status, SESSION_STATUS.active)
+			)
+		)
+		.limit(1);
+	if (!row) return { ok: false };
+
+	if (row.macAddress) await network.revoke(row.macAddress);
+	await db
+		.update(networkSessions)
+		.set({ status: SESSION_STATUS.revoked })
+		.where(eq(networkSessions.id, row.id));
+	return { ok: true, macAddress: row.macAddress };
+}
+
+/**
+ * Disconnect ALL of the account's devices but KEEP the access window (customer "disconnect all
+ * devices" — the lever for a lost/spoofed device). The user can immediately rebind their
+ * current device via auto-bind. Returns the count dropped.
+ */
+export async function unbindAllDevices(
 	db: DB,
 	network: NetworkController,
 	userId: string

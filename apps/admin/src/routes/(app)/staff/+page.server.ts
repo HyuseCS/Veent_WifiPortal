@@ -10,6 +10,7 @@ import {
 import { adminProfile } from '@veent/db';
 import { auth, inviteSendFailures } from '$lib/server/auth';
 import { db } from '$lib/server/db';
+import { checkAdminEmailLimit } from '$lib/server/emailRateLimit';
 import { listStaff } from '$lib/server/queries';
 import type { Actions, PageServerLoad } from './$types';
 
@@ -50,6 +51,18 @@ export const actions: Actions = {
 
 		if (!name || !email) return fail(400, { error: 'Name and email are required.' });
 		if (!emailPattern.test(email)) return fail(400, { error: 'Enter a valid email address.' });
+
+		// Cap invite emails per recipient + per owner BEFORE creating anything, so a
+		// mail-bomb attempt can't mint pending accounts or send a flood of Resend mail.
+		const limited = await checkAdminEmailLimit(email, event.locals.user?.id);
+		if (limited) {
+			return fail(429, {
+				error:
+					limited.scope === 'recipient'
+						? 'Too many invitations sent to that address recently. Try again later.'
+						: 'Too many invitations sent recently. Try again later.'
+			});
+		}
 
 		// Create ONLY the user row, directly via better-auth's internal adapter. We
 		// deliberately do NOT use signUpEmail: it auto-signs-in the new account

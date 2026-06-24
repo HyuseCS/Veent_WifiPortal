@@ -9,6 +9,7 @@ import {
 	parsePending,
 	serializePending
 } from '$lib/server/otp';
+import { enforceOtpSendLimit, RateLimitError, retryAfterMessage } from '$lib/server/otpRateLimit';
 import { dev } from '$app/environment';
 
 export const load: PageServerLoad = (event) => {
@@ -58,6 +59,17 @@ export const actions: Actions = {
 		const pending = parsePending(event.cookies.get(PENDING_COOKIE));
 		if (!pending) {
 			return redirect(303, '/login');
+		}
+
+		// Same per-phone + per-MAC throttle as the initial send — resend is the
+		// other unauthenticated path into the SMS gateway.
+		try {
+			await enforceOtpSendLimit(pending.phone, pending.mac);
+		} catch (error) {
+			if (error instanceof RateLimitError) {
+				return fail(429, { message: retryAfterMessage(error.retryAfterSec) });
+			}
+			throw error;
 		}
 
 		await auth.api.sendPhoneNumberOTP({ body: { phoneNumber: pending.phone } });

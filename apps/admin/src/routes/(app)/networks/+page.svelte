@@ -128,8 +128,6 @@
 	// Selecting a card flies the coverage map to that AP (and rings the card), and
 	// scrolls the map into view so the focus is visible on small/scrolled layouts.
 	let selectedId = $state<string | null>(null);
-	// Only one card may edit at a time, so at most one MapPicker (Leaflet) mounts.
-	let editingId = $state<string | null>(null);
 	let mapEl: HTMLDivElement;
 	function focusAp(id: string) {
 		selectedId = id;
@@ -239,13 +237,7 @@
 			style="grid-template-columns: repeat(auto-fill, minmax(330px, 1fr));"
 		>
 			{#each visible as ap (ap.id)}
-				<NetworkHealthCard
-					{ap}
-					selected={ap.id === selectedId}
-					onfocus={focusAp}
-					editing={ap.id === editingId}
-					onedit={(id) => (editingId = id)}
-				/>
+				<NetworkHealthCard {ap} selected={ap.id === selectedId} onfocus={focusAp} />
 			{/each}
 		</section>
 	{/if}

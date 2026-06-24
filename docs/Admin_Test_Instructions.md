@@ -196,6 +196,43 @@ All staff share the password **`password123`**.
 
 ---
 
+## Backend hardening — what to test (Phases 0–3)
+
+The hardening pass (grant atomicity, rate limiting, env validation) is mostly covered by
+**unit tests that need no server and no DB** — run those first; the manual steps only confirm
+each limiter is actually *wired into* its endpoint.
+
+### Automated (no server, no DB)
+
+```bash
+# from repo root — fake-db/fake-tx Proxy pattern, real Postgres not required
+bunx vitest run grant-atomic      # spend+grant rolls back together
+bunx vitest run rateLimit         # rate-limit + cron-allowlist decision logic
+bunx vitest run maya-webhook      # re-fetch verification, status mapping, centavo conversion
+```
+
+### Manual wiring confirmations (need the relevant dev server)
+
+| What | How | Expect |
+|------|-----|--------|
+| **Admin login limit** (10 / 15 min per IP) | POST `/login` with a wrong password 11× from one IP | 11th response is `429` |
+| **Finance export limit** (20 / hr per admin) | Click CSV export >20× in an hour | eventually `429` |
+| **SSE stream cap** (6 / user) | Open `/dashboard` in 7 tabs as one user | 7th SSE connection rejected `429` |
+| **Admin email limit** | Request a wipe code 6× (owner) | 6th returns `429` (no email sent) |
+| **Grant atomicity** | (customer app) buy a tier with the network controller forced to fail | balance **unchanged**, 502/503 "credits were not charged" |
+| **Cron allowlist** | set `CRON_IP_ALLOWLIST="1.2.3.4"` in `apps/customer/.env`, restart, then `curl -i -X POST localhost:<port>/api/network/revoke -H "x-cron-secret: $CRON_SECRET"` | `403` (request IP not allowlisted) |
+
+> The cron + grant rows exercise the **customer** app, so they need `cd apps/customer && bun run dev`
+> (and the env change requires a restart). The login/export/SSE/email rows are admin-app.
+
+### Env validation (boot fail-fast)
+
+Temporarily unset a required var (e.g. `BETTER_AUTH_SECRET`) and start the app **as a prod build**
+(`bun run build && node apps/admin/build`): it should abort at boot with a clear message. In
+`bun run dev` the same condition only **warns** (dev convenience).
+
+---
+
 ## Clearing test data
 
 Stop the simulator first (Ctrl+C). Then pick based on what you want left behind:

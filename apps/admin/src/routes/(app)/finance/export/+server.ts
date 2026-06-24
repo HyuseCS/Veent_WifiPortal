@@ -1,6 +1,8 @@
+import { error } from '@sveltejs/kit';
 import { db } from '$lib/server/db';
 import { listTransactions } from '$lib/server/queries';
 import { parsePeriod } from '$lib/server/period';
+import { rateLimit } from '$lib/server/rateLimit';
 import type { RequestHandler } from './$types';
 
 /** RFC-4180 cell: wrap in quotes and double inner quotes when it contains , " or newline. */
@@ -13,8 +15,13 @@ function cell(v: string): string {
  * This is a GET endpoint (not a form action) because SvelteKit actions can't return a
  * downloadable Response. The page links to it with a plain `<a download>`.
  */
-export const GET: RequestHandler = async ({ url }) => {
-	const { from, to } = parsePeriod(url.searchParams.get('period'));
+export const GET: RequestHandler = async (event) => {
+	// Each export scans up to 10k rows; cap per admin so it can't be hammered into a DB DoS.
+	// (The (app) layout already guarantees an authenticated staff user.)
+	const rl = await rateLimit('finance_export', event.locals.user!.id, 20);
+	if (!rl.allowed) error(429, 'Too many exports. Please wait a bit and try again.');
+
+	const { from, to } = parsePeriod(event.url.searchParams.get('period'));
 	const { rows } = await listTransactions(db, { from, to, page: 1, pageSize: 10_000 });
 
 	const csv = [

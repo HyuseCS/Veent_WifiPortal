@@ -4,6 +4,7 @@
 	import type { SubmitFunction } from '@sveltejs/kit';
 	import { toasts } from '$lib/toasts.svelte';
 	import Icon from '$lib/Icon.svelte';
+	import DeviceList from '$lib/DeviceList.svelte';
 	import { resolve } from '$app/paths';
 	import type { PageServerData, ActionData } from './$types';
 	import logo from '$lib/assets/parafiber-logo.webp';
@@ -54,39 +55,55 @@
 			: null
 	);
 
-	// Unified active-session band — the live remaining-time counter for whatever
-	// internet access is currently running (Free Time or a bought tier). Free vs
-	// paid only changes the band colour and label; the countdown is shared.
-	const active = $derived(data.activeSession);
-	// The server loaded this row as active (expiresAt > now at load). Once the live
+	// The ACCOUNT's access window — one countdown shared across all the account's
+	// devices (Free Time or a bought tier). Free vs paid only changes the band colour
+	// and label; the countdown is shared.
+	const access = $derived(data.access);
+	const devices = $derived(data.devices);
+	// The server loaded the window as live (expiresAt > now at load). Once the live
 	// ticker crosses expiresAt, flip to the "ended" frame locally — the real access
 	// cut-off is enforced server-side by the revoke cron, so this is cosmetic.
-	const isExpired = $derived(!!active && now >= new Date(active.expiresAt).getTime());
-	const activeLabel = $derived(
-		active ? (active.isFree ? 'Free Time' : (active.name ?? 'Access')) : ''
+	const isExpired = $derived(
+		access.active && !!access.expiresAt && now >= new Date(access.expiresAt).getTime()
 	);
+	const activeLabel = $derived(access.label ?? 'Access');
 	const activeRemaining = $derived(
-		active ? formatHMS(new Date(active.expiresAt).getTime() - now) : ''
+		access.expiresAt ? formatHMS(new Date(access.expiresAt).getTime() - now) : ''
 	);
 	const activeEndsAt = $derived(
-		active
-			? new Date(active.expiresAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+		access.expiresAt
+			? new Date(access.expiresAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
 			: ''
 	);
 	const activeProgress = $derived.by(() => {
-		if (!active) return 0;
-		const start = new Date(active.startedAt).getTime();
-		const total = new Date(active.expiresAt).getTime() - start;
+		if (!access.active || !access.startedAt || !access.expiresAt) return 0;
+		const start = new Date(access.startedAt).getTime();
+		const total = new Date(access.expiresAt).getTime() - start;
 		if (total <= 0) return 100;
 		return Math.min(100, Math.max(0, ((now - start) / total) * 100));
 	});
+
+	// This device has live account time but isn't bound (auto-bind hit the cap, or a
+	// router hiccup). Surface a connect/replace prompt.
+	const needsConnect = $derived(access.active && hasMac && !devices.thisDeviceBound);
+	// The app-bar dot reflects THIS device — account time alone isn't "online" if this
+	// device isn't actually bound.
+	const thisOnline = $derived(access.active && devices.thisDeviceBound && !isExpired);
 
 	const startFreeTime: SubmitFunction = () => {
 		const minutes = data.freeTime.durationMinutes;
 		return async ({ result, update }) => {
 			if (result.type === 'success') {
-				toasts.show(`You're now connected. Enjoy your free ${minutes} minutes.`);
+				toasts.show(`You're online — ${minutes} min of free account time, shared across your devices.`);
 			}
+			await update();
+		};
+	};
+
+	const reconnect: SubmitFunction = () => {
+		return async ({ result, update }) => {
+			if (result.type === 'success') toasts.show("You're online on this device.");
+			else if (result.type === 'failure') toasts.show('Could not connect this device.', 'error');
 			await update();
 		};
 	};
@@ -122,14 +139,14 @@
 		<div class="flex items-center justify-between px-3 py-3 lg:px-8 lg:py-4">
 			<img src={logo} alt="parafiber by parasat logo" class="h-8 w-auto lg:h-[30px]" />
 			<div class="flex items-center gap-3 lg:gap-[18px]">
-				<!-- live online/offline status -->
+				<!-- live online/offline status (this device) -->
 				<span class="flex items-center gap-1.5">
-					{#if active && isExpired}
-						<span class="h-2 w-2 rounded-full bg-blocked"></span>
-						<span class="text-xs font-medium opacity-90 lg:text-[13px]">Offline</span>
-					{:else}
+					{#if thisOnline}
 						<span class="h-2 w-2 rounded-full bg-online/80"></span>
 						<span class="text-xs font-medium opacity-90 lg:text-[13px]">Online</span>
+					{:else}
+						<span class="h-2 w-2 rounded-full bg-blocked"></span>
+						<span class="text-xs font-medium opacity-90 lg:text-[13px]">Offline</span>
 					{/if}
 				</span>
 				<!-- desktop balance pill -->
@@ -202,8 +219,48 @@
 						</h1>
 					</div>
 
-					<!-- Active session — unified remaining-time band (Free Time or paid tier) -->
-					{#if active && isExpired}
+					{#if needsConnect}
+						<!-- This device has account time but isn't connected (cap or hiccup) -->
+						<section
+							class="mb-4 rounded-2xl border border-warning/30 bg-warning/[0.12] p-[15px] lg:p-5"
+						>
+							<div class="flex items-start gap-3">
+								<div
+									class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-warning/20"
+								>
+									<Icon name="alert-triangle" size={18} class="text-warning" />
+								</div>
+								<div class="min-w-0 flex-1">
+									{#if devices.atCap}
+										<div class="text-[14px] font-bold text-ink">Device limit reached</div>
+										<div class="mb-3 text-[12.5px] text-muted">
+											Your account is on {devices.cap} devices. Connect this one by replacing the device
+											you've used least recently{devices.oldest?.macTail
+												? ` (··${devices.oldest.macTail})`
+												: ''}.
+										</div>
+									{:else}
+										<div class="text-[14px] font-bold text-ink">This device isn't connected</div>
+										<div class="mb-3 text-[12.5px] text-muted">
+											You have account time left — connect this device to get online.
+										</div>
+									{/if}
+									<form method="post" action="?/bindThisDevice" use:enhance={reconnect}>
+										<input type="hidden" name="mac" value={mac} />
+										<button
+											class="flex h-11 items-center gap-2 rounded-xl bg-brand px-4 text-sm font-bold text-white transition-colors hover:bg-brand-hover hover:cursor-pointer"
+										>
+											<Icon name="refresh-cw" size={16} />
+											{devices.atCap ? 'Replace oldest device' : 'Connect this device'}
+										</button>
+									</form>
+								</div>
+							</div>
+						</section>
+					{/if}
+
+					<!-- Active access — ACCOUNT remaining-time band (Free Time or paid tier) -->
+					{#if access.active && isExpired}
 						<!-- Ended: timer hit zero locally; re-surface buying another block -->
 						<section
 							class="mb-6 rounded-2xl border border-border bg-surface p-[17px] lg:mb-0 lg:bg-bg lg:p-7"
@@ -246,8 +303,8 @@
 							</div>
 							<div class="h-[7px] overflow-hidden rounded-full bg-border lg:h-[9px]"></div>
 						</section>
-					{:else if active}
-						{@const isFree = active.isFree}
+					{:else if access.active}
+						{@const isFree = access.isFree}
 						<section
 							class="mb-6 rounded-2xl border p-[17px] lg:mb-0 lg:p-7 {isFree
 								? 'border-brand/20 bg-brand-tint-2'
@@ -278,7 +335,7 @@
 												? 'text-brand'
 												: 'text-cta'}"
 										>
-											Ends at <strong>{activeEndsAt}</strong>
+											Ends at <strong>{activeEndsAt}</strong> · shared across your devices
 										</div>
 									</div>
 								</div>
@@ -322,7 +379,7 @@
 										Free Time available
 									</div>
 									<div class="text-xs font-medium text-brand lg:text-[13.5px]">
-										{data.freeTime.durationMinutes} minutes · once per 12 hours
+										{data.freeTime.durationMinutes} minutes for your whole account · once per 12 hours
 									</div>
 								</div>
 							</div>
@@ -347,7 +404,9 @@
 									<Icon name="clock" size={21} class="text-warning" />
 								</div>
 								<div>
-									<div class="text-[15px] font-bold text-ink lg:text-[19px]">Free time used</div>
+									<div class="text-[15px] font-bold text-ink lg:text-[19px]">
+									Free time used (this account)
+								</div>
 									<div class="text-xs font-medium text-muted lg:text-[13.5px]">
 										{#if nextFreeTime}Next session at <strong class="text-ink"
 												>{nextFreeTime}</strong
@@ -364,8 +423,13 @@
 								>
 							</div>
 
-							
+
 						</section>
+					{/if}
+
+					<!-- Devices bound under the account window -->
+					{#if access.active}
+						<DeviceList {devices} />
 					{/if}
 				</div>
 
@@ -374,8 +438,8 @@
 					class="flex flex-col lg:max-w-[380px] lg:flex-[0.85] lg:self-center lg:rounded-2xl lg:border lg:border-border lg:bg-bg lg:p-6"
 				>
 					<div class="mb-2.5 text-[11px] font-semibold tracking-wider text-muted uppercase">
-						{#if isExpired}Get back online — spend credits{:else if active}Keep going — spend
-							credits{:else}Buy access — spend credits{/if}
+						{#if isExpired}Get back online — spend credits{:else if access.active}Keep going —
+							spend credits{:else}Buy access — spend credits{/if}
 					</div>
 					<section class="mb-6 flex flex-col gap-2.5">
 						{#each data.tiers as tier (tier.id)}

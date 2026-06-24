@@ -8,6 +8,8 @@
 	import ArrowUpDown from 'lucide-svelte/icons/arrow-up-down';
 	import TriangleAlert from 'lucide-svelte/icons/triangle-alert';
 	import X from 'lucide-svelte/icons/x';
+	import Smartphone from 'lucide-svelte/icons/smartphone';
+	import ChevronDown from 'lucide-svelte/icons/chevron-down';
 	import type { Component, Snippet } from 'svelte';
 	import { fade } from 'svelte/transition';
 	import { SvelteSet } from 'svelte/reactivity';
@@ -47,7 +49,9 @@
 		let rows = users.filter((u) => filter === 'all' || u.tone === filter);
 		if (q) {
 			rows = rows.filter((u) =>
-				`${u.name} ${u.email} ${u.lastMac ?? ''}`.toLowerCase().includes(q)
+				`${u.name} ${u.email} ${u.lastMac ?? ''} ${u.devices.map((d) => d.mac ?? '').join(' ')}`
+					.toLowerCase()
+					.includes(q)
 			);
 		}
 		return [...rows].sort((a, b) =>
@@ -61,6 +65,20 @@
 
 	// Set of selected user ids. SvelteSet so mutations stay reactive.
 	const selected = new SvelteSet<string>();
+	// Set of user ids whose device list is expanded into a detail row.
+	const expanded = new SvelteSet<string>();
+	function toggleExpand(id: string) {
+		if (expanded.has(id)) expanded.delete(id);
+		else expanded.add(id);
+	}
+	function seenAgo(iso: string | null): string {
+		if (!iso) return 'unknown';
+		const m = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
+		if (m < 1) return 'just now';
+		if (m < 60) return `${m}m ago`;
+		const h = Math.floor(m / 60);
+		return h < 24 ? `${h}h ago` : `${Math.floor(h / 24)}d ago`;
+	}
 	// Select-all reflects the *visible* (filtered) rows so it tracks the current view.
 	const allShown = $derived(filtered.length > 0 && filtered.every((u) => selected.has(u.id)));
 
@@ -85,8 +103,8 @@
 	const columns = [
 		{ label: 'User' },
 		{ label: 'Balance' },
-		{ label: 'Usage' },
-		{ label: 'Last MAC' },
+		{ label: 'Time Left' },
+		{ label: 'Devices' },
 		{ label: 'Status' },
 		{ label: 'Actions', srOnly: true }
 	];
@@ -184,8 +202,33 @@
 					{/if}
 				</span>
 			</td>
-			<td class="px-4 py-3 font-mono text-ink">{user.usage}</td>
-			<td class="px-4 py-3 font-mono text-xs text-muted">{user.lastMac ?? '—'}</td>
+			<td class="px-4 py-3 font-mono text-ink">{user.timeLeft ?? '—'}</td>
+			<td class="px-4 py-3">
+				{#if user.deviceCount > 0}
+					<button
+						type="button"
+						onclick={() => toggleExpand(user.id)}
+						aria-expanded={expanded.has(user.id)}
+						aria-label="{user.deviceCount} device{user.deviceCount === 1
+							? ''
+							: 's'} for {user.name}"
+						class="inline-flex min-h-9 cursor-pointer items-center gap-1.5 rounded-lg border border-border bg-bg px-2.5 text-xs font-semibold text-ink transition-colors duration-150 hover:border-brand/40"
+					>
+						<Smartphone class="h-3.5 w-3.5 text-muted" aria-hidden="true" />
+						<span class="font-mono">{user.deviceCount}</span>
+						<ChevronDown
+							class="h-3.5 w-3.5 text-muted transition-transform duration-150 {expanded.has(
+								user.id
+							)
+								? 'rotate-180'
+								: ''}"
+							aria-hidden="true"
+						/>
+					</button>
+				{:else}
+					<span class="font-mono text-xs text-muted">—</span>
+				{/if}
+			</td>
 			<td class="px-4 py-3">
 				<StatusBadge tone={user.tone} label={user.status} />
 			</td>
@@ -221,7 +264,7 @@
 							<IconButton
 								type="submit"
 								icon={WifiOff as unknown as Component}
-								label="Kick {user.name} off the network"
+								label="Disconnect all of {user.name}'s devices"
 							/>
 						</form>
 						<form method="post" action="?/block" use:enhance>
@@ -229,7 +272,7 @@
 							<IconButton
 								type="submit"
 								icon={Ban as unknown as Component}
-								label="Block {user.name}"
+								label="Block {user.name} (disconnects all devices)"
 								tone="danger"
 							/>
 						</form>
@@ -237,6 +280,22 @@
 				</div>
 			</td>
 		</tr>
+		{#if expanded.has(user.id) && user.deviceCount > 0}
+			<tr class="bg-surface">
+				<td></td>
+				<td colspan={columns.length} class="px-4 pt-0 pb-3">
+					<ul class="flex flex-col gap-1.5 rounded-lg border border-border bg-bg p-3">
+						{#each user.devices as d, i (d.mac ?? i)}
+							<li class="flex items-center gap-2 text-xs">
+								<span class="h-1.5 w-1.5 rounded-full bg-online" aria-hidden="true"></span>
+								<span class="font-mono text-ink">{d.mac ?? '—'}</span>
+								<span class="text-muted">· seen {seenAgo(d.lastSeenAt)}</span>
+							</li>
+						{/each}
+					</ul>
+				</td>
+			</tr>
+		{/if}
 	{/each}
 
 	{#if filtered.length === 0}

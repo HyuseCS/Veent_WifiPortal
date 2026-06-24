@@ -33,6 +33,18 @@ export const customerProfile = pgTable('customer_profile', {
 	// Phone lives on customer_user (better-auth phoneNumber plugin); no duplicate here.
 	creditBalance: numeric('credit_balance', { precision: 12, scale: 2 }).notNull().default('0'),
 	lastFreeSessionAt: timestamp('last_free_session_at'),
+	// The ACCOUNT's internet access window — authoritative source of truth for "is this
+	// account online and until when". Buying a tier / claiming free time extends it; the
+	// revoke cron drives off it. Null or in the past = no live access. Devices bind under
+	// this window (network_sessions); they share it rather than each holding their own time.
+	accessExpiresAt: timestamp('access_expires_at'),
+	// The tier backing the current access window (null = Free Time, or no window). Lives on
+	// the ACCOUNT, not the device row, so every bound device shows the SAME package — a device
+	// that joined during Free Time and one that bought a tier share one account window, so they
+	// must read one package. Set by the most recent window-extending purchase/free claim.
+	accessPackageId: integer('access_package_id').references(() => packages.id, {
+		onDelete: 'set null'
+	}),
 	// Admin "block": when true, grant paths refuse to start sessions for this user.
 	blocked: boolean('blocked').notNull().default(false)
 });
@@ -163,6 +175,14 @@ export const networkSessions = pgTable(
 		networkId: integer('network_id'),
 		status: text('status').notNull(),
 		startedAt: timestamp('started_at').notNull().defaultNow(),
+		// Device-binding registry: one active row per (user, MAC) = "this device is
+		// currently bypassed for this account". boundAt = first bind under the current
+		// window; lastSeenAt = refreshed on every (re)bind/dashboard land, drives LRU
+		// eviction when the per-account device cap is exceeded. expiresAt mirrors the
+		// account window (customer_profile.access_expires_at) so the cron index + router
+		// sweep keep working — but the profile window is the authoritative gate.
+		boundAt: timestamp('bound_at').notNull().defaultNow(),
+		lastSeenAt: timestamp('last_seen_at').notNull().defaultNow(),
 		expiresAt: timestamp('expires_at')
 	},
 	(t) => [
@@ -171,7 +191,9 @@ export const networkSessions = pgTable(
 		// Per-AP active-user count: "active sessions grouped by network".
 		index('network_sessions_network_id_idx').on(t.networkId),
 		// Drives the revoke cron: "find active sessions whose time is up".
-		index('network_sessions_status_expires_at_idx').on(t.status, t.expiresAt)
+		index('network_sessions_status_expires_at_idx').on(t.status, t.expiresAt),
+		// List an account's bound devices + find the least-recently-seen one to evict.
+		index('network_sessions_user_status_lastseen_idx').on(t.userId, t.status, t.lastSeenAt)
 	]
 );
 
@@ -185,12 +207,19 @@ export const rateLimits = pgTable(
 		id: serial('id').primaryKey(),
 		macAddress: text('mac_address'),
 		phoneNumber: text('phone_number'),
+		// Generic key for non-OTP limiters (e.g. admin email): `scope` namespaces the
+		// counter ('admin_email'), `identifier` is the keyed value (recipient address).
+		// Kept alongside mac/phone so each limiter uses its own column pair and never
+		// shares a row — a scoped counter can't collide with a mac/phone one.
+		scope: text('scope'),
+		identifier: text('identifier'),
 		attempts: integer('attempts').notNull().default(0),
 		lastAttemptAt: timestamp('last_attempt_at').notNull().defaultNow()
 	},
-	// Looked up on every OTP request, by one identifier or the other.
+	// Looked up on every OTP request (mac/phone) or scoped check (scope+identifier).
 	(t) => [
 		index('rate_limits_mac_address_idx').on(t.macAddress),
-		index('rate_limits_phone_number_idx').on(t.phoneNumber)
+		index('rate_limits_phone_number_idx').on(t.phoneNumber),
+		index('rate_limits_scope_identifier_idx').on(t.scope, t.identifier)
 	]
 );

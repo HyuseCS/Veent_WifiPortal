@@ -62,10 +62,5 @@
 		<p class="text-center text-xs text-muted">
 			Staff accounts are created by invitation. Contact the owner for access.
 		</p>
-
-		<!-- TEMP: remove with /register -->
-		<p class="text-center text-xs text-muted">
-			<a href="/register" class="font-medium text-brand hover:underline">Create an account</a>
-		</p>
 	</div>
 </main>

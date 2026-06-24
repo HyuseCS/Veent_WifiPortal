@@ -3,6 +3,10 @@ import { building } from '$app/environment';
 import { auth } from '$lib/server/auth';
 import { svelteKitHandler } from 'better-auth/svelte-kit';
 import { capturePortalContext } from '$lib/server/portal';
+import { validateEnv } from '$lib/server/validateEnv';
+
+// Fail fast at boot on a misconfigured production deploy (no-op during build; warns in dev).
+validateEnv();
 
 const handleBetterAuth: Handle = async ({ event, resolve }) => {
 	// Stash the device MAC / callback from the captive-portal redirect before the

@@ -56,34 +56,42 @@ export async function listUsers(db: DB, now: Date = new Date()): Promise<AdminUs
 			name: customerUser.name,
 			email: customerUser.email,
 			balance: customerProfile.creditBalance,
-			blocked: customerProfile.blocked
+			blocked: customerProfile.blocked,
+			// Account-owned access window (source of truth for online + time-left).
+			accessExpiresAt: customerProfile.accessExpiresAt
 		})
 		.from(customerUser)
 		.leftJoin(customerProfile, eq(customerProfile.userId, customerUser.id))
 		.orderBy(customerUser.name);
 
-	// One pass over sessions (newest first) yields both signals: who's online now
-	// (active + unexpired) and each user's most recent device MAC.
+	// One pass over sessions (newest first) yields: the most recent device MAC (any
+	// status, for the dev Allow-WiFi grant) and the list of currently-BOUND devices
+	// (active rows) per account, with their last-seen times.
 	const sessions = await db
 		.select({
 			userId: networkSessions.userId,
 			mac: networkSessions.macAddress,
 			status: networkSessions.status,
-			expiresAt: networkSessions.expiresAt
+			lastSeenAt: networkSessions.lastSeenAt
 		})
 		.from(networkSessions)
 		.orderBy(desc(networkSessions.startedAt));
-	const onlineUsers = new Set<string>();
 	const lastMacByUser = new Map<string, string>();
+	const devicesByUser = new Map<string, { mac: string | null; lastSeenAt: string | null }[]>();
 	for (const s of sessions) {
 		if (s.mac && !lastMacByUser.has(s.userId)) lastMacByUser.set(s.userId, s.mac);
-		if (s.status === SESSION_STATUS.active && s.expiresAt && s.expiresAt.getTime() > now.getTime()) {
-			onlineUsers.add(s.userId);
+		if (s.status === SESSION_STATUS.active) {
+			if (!devicesByUser.has(s.userId)) devicesByUser.set(s.userId, []);
+			devicesByUser
+				.get(s.userId)!
+				.push({ mac: s.mac, lastSeenAt: s.lastSeenAt ? s.lastSeenAt.toISOString() : null });
 		}
 	}
 
 	return rows.map((r) => {
 		const balance = Number(r.balance ?? 0);
+		const online = !!r.accessExpiresAt && r.accessExpiresAt.getTime() > now.getTime();
+		const devices = online ? (devicesByUser.get(r.id) ?? []) : [];
 		let tone: StatusTone = 'online';
 		let status = 'Active';
 		if (r.blocked) {
@@ -101,14 +109,22 @@ export async function listUsers(db: DB, now: Date = new Date()): Promise<AdminUs
 			usage: '—', // byte-level usage isn't tracked yet (needs accounting feed)
 			tone,
 			status,
-			online: onlineUsers.has(r.id),
-			lastMac: lastMacByUser.get(r.id) ?? null
+			online,
+			lastMac: lastMacByUser.get(r.id) ?? null,
+			deviceCount: devices.length,
+			devices,
+			timeLeft:
+				online && r.accessExpiresAt
+					? formatTimeLeft(r.accessExpiresAt.getTime() - now.getTime())
+					: null
 		};
 	});
 }
 
 /** Currently-connected sessions (initial snapshot; SSE streams updates). */
 export async function listActiveSessions(db: DB, now: Date = new Date()): Promise<ActiveSession[]> {
+	// Package is account-level (customer_profile.access_package_id), so every device bound
+	// under one account's window shows the SAME tier — not each device's own bind-time package.
 	const rows = await db
 		.select({
 			id: networkSessions.id,
@@ -117,7 +133,8 @@ export async function listActiveSessions(db: DB, now: Date = new Date()): Promis
 			packageName: packages.name
 		})
 		.from(networkSessions)
-		.leftJoin(packages, eq(packages.id, networkSessions.packageId))
+		.leftJoin(customerProfile, eq(customerProfile.userId, networkSessions.userId))
+		.leftJoin(packages, eq(packages.id, customerProfile.accessPackageId))
 		.where(eq(networkSessions.status, SESSION_STATUS.active))
 		.orderBy(desc(networkSessions.startedAt));
 
