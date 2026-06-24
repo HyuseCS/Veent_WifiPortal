@@ -1,20 +1,31 @@
 <script lang="ts">
 	import type { Component } from 'svelte';
-	import { Card, FilterTabs } from '$lib/components/ui';
-	import { NetworkHealthCard, RouterLogPanel, CoverageMap, KpiCard } from '$lib/components/feature';
+	import { Card, FilterTabs, Button } from '$lib/components/ui';
+	import {
+		NetworkHealthCard,
+		RouterLogPanel,
+		CoverageMap,
+		KpiCard,
+		WipeDialog
+	} from '$lib/components/feature';
 	import Router from 'lucide-svelte/icons/router';
 	import Users from 'lucide-svelte/icons/users';
 	import Gauge from 'lucide-svelte/icons/gauge';
 	import Timer from 'lucide-svelte/icons/timer';
 	import TriangleAlert from 'lucide-svelte/icons/triangle-alert';
+	import Trash2 from 'lucide-svelte/icons/trash-2';
 	import type { NetworkAp, StatusTone } from '$lib/types';
-	import type { PageData } from './$types';
+	import type { PageData, ActionData } from './$types';
 
 	// lucide types don't match Svelte's `Component` structurally; cast as dashboard/nav do.
 	const icon = (c: unknown) => c as Component;
 
-	let { data }: { data: PageData } = $props();
+	let { data, form }: { data: PageData; form: ActionData } = $props();
 	const networks = $derived(data.networks);
+
+	// Owner-only, step-up-verified wipe of every access point. The two-step flow lives in
+	// the shared <WipeDialog> (same component the Users page uses).
+	let wipeOpen = $state(false);
 
 	// All KPIs/counts derive purely from the loaded AP list — no extra data sources.
 	const total = $derived(networks.length);
@@ -217,7 +228,15 @@
 			<h2 class="text-base font-semibold text-ink">Access Points</h2>
 			<p class="mt-0.5 text-xs text-muted">Health per access point across the venue</p>
 		</div>
-		<FilterTabs tabs={filterDefs} active={filter} onselect={(key) => (filter = key)} />
+		<div class="flex flex-wrap items-center gap-3">
+			<FilterTabs tabs={filterDefs} active={filter} onselect={(key) => (filter = key)} />
+			{#if data.isOwner}
+				<Button variant="danger" onclick={() => (wipeOpen = true)}>
+					<Trash2 class="h-4 w-4" aria-hidden="true" />
+					Wipe database
+				</Button>
+			{/if}
+		</div>
 	</div>
 
 	{#if visible.length === 0}
@@ -242,3 +261,14 @@
 		</section>
 	{/if}
 </div>
+
+{#if data.isOwner}
+	<WipeDialog
+		bind:open={wipeOpen}
+		title="Wipe network database"
+		count={networks.length}
+		noun="access points"
+		detail="their health and location data"
+		{form}
+	/>
+{/if}

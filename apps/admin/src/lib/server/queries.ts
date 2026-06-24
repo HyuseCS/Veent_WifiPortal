@@ -638,3 +638,10 @@ export async function updateNetworkPlace(
 export async function deleteNetworkPlace(db: DB, id: number): Promise<void> {
 	await db.delete(networkHealth).where(eq(networkHealth.id, id));
 }
+
+/** Wipe every access point / health row. Same loose-link safety as deleteNetworkPlace —
+ * no FK to violate. Caller owns authorization (owner-only + step-up code). Returns count. */
+export async function wipeNetworks(db: DB): Promise<number> {
+	const removed = await db.delete(networkHealth).returning({ id: networkHealth.id });
+	return removed.length;
+}

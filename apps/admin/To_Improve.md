@@ -1,44 +1,46 @@
 **System**
-- Make sidebar collapsible
-- Make it responsive to all screen sizes
-- Explore TOTP viability
-- Make admins and owners activate TOTP/MFA on registration.
+- [ ] Make sidebar collapsible
+- [ ] Make it responsive to all screen sizes
+- [ ] Explore TOTP viability
+- [ ] Make admins and owners activate TOTP/MFA on registration.
 
 **Dashboard Page**
-- Make the dashboard page even more responsive and update more often. 
-- Remove Two Columns and Stacked Layout, only bento remains
+- [ ] Make the dashboard page even more responsive and update more often. 
+- [ ] Remove Two Columns and Stacked Layout, only bento remains
 
 - Active Sessions Table
-  - make scrollable on all layouts
-  - make it show which network the user is connected
+  - [ ] make scrollable on all layouts
+  - [ ] make it show which network the user is connected
 
 
 - Network Health Table
-  - make scrollable on all layouts
-  - make the table scrollable
+  - [ ] make scrollable on all layouts
+  - [ ] make the table scrollable
 
 **Network Page**
-- Add delete network button
-- Add wipe network database button (similar to how its done in the wipe user database in /users)
+- [ ] Add delete network button
+- [x] Add wipe network database button (similar to how its done in the wipe user database in /users)
+      — owner-only, step-up email-code flow via shared `WipeDialog`; `wipeNetworks` query
 
 **Map Page**
-- Make adding a pin a double click so that no accidental pins appear on the map
-- Modularize NetworkMap.svelte file, it is nearly 1.5k lines long💀
+- [ ] Make adding a pin a double click so that no accidental pins appear on the map
+- [ ] Modularize NetworkMap.svelte file, it is nearly 1.5k lines long💀
 
 **Users Page**
-- Add a column "Location" to the table, where it will show which network the user is connected to.
-- The table is what should be scrollable not the page
-- Change the "Wipe User Database" button to color red so that it will bring caution to users.
+- [ ] Add a column "Location" to the table, where it will show which network the user is connected to.
+- [x] The table is what should be scrollable not the page
+- [x] Change the "Wipe User Database" button to color red so that it will bring caution to users.
+      — new `danger`/`danger-solid` Button variants; trigger outlined-red, modal confirm solid-red
 
 **Finance Page**
-- Make table scrollable not page
-- Move Export CSV Button else where
-- Move time range filter else where
-- Add which network locations the payments are comming from (if possible)
+- [x] Make table scrollable not page — moved to dedicated `/finance/transactions`, capped internal scroll
+- [x] Move Export CSV Button else where — Topbar dropdown (`FinanceHeaderControls`)
+- [x] Move time range filter else where — Topbar dropdown (`FinanceHeaderControls`)
+- [ ] Add which network locations the payments are comming from (if possible)
 
 **Staff Page**
-- Make table scrollable not page
-- Add mass invite feature
+- [ ] Make table scrollable not page
+- [ ] Add mass invite feature
 
 ---
 
@@ -99,5 +101,7 @@ Backend/security work is phased; the UI/page items above are a separate, ongoing
 
 ### 🎨 Frontend / page polish — ongoing (separate track)
 The per-page items at the top of this file (System, Dashboard, Network, Map, Users, Finance, Staff). Independent of the backend phases — pick up alongside or between them.
+
+Done so far: Finance (table → `/finance/transactions`, filter + Export moved to Topbar dropdown), Users (table scroll, red wipe button), Network (wipe-database button) — plus shared `WipeDialog` component and `danger`/`danger-solid` Button variants.
 
 _Out of scope for us: OTP / SMS rate limiting (teammate-owned, already landed)._
