@@ -30,7 +30,7 @@ cron config under `./deploy/` (systemd units on Linux, NSSM script on Windows) w
 the exact privileged commands to finish. It never runs sudo/admin itself.
 
 It does **not** install system packages (bun/node/Postgres), fill external secrets
-(Maya/Semaphore/Resend/MikroTik/`OWNER_*`), configure the router, or set up TLS — do
+(Maya/iTexMo/Resend/MikroTik/`OWNER_*`), configure the router, or set up TLS — do
 those by hand (the script prints the checklist). The manual walkthrough below documents
 every step the script performs, for when you want to understand or override it.
 
@@ -71,7 +71,7 @@ Minimum for production:
 - `CRON_SECRET` — shared secret for the revoke cron
 - `MAYA_PUBLIC_KEY` / `MAYA_SECRET_KEY` — your **live** account keys
 - `MAYA_SANDBOX="false"`
-- `SEMAPHORE_API_KEY` (+ optional `SEMAPHORE_SENDER_NAME`) — SMS OTP delivery
+- `ITEXMO_API_CODE` / `ITEXMO_EMAIL` / `ITEXMO_PASSWORD` — SMS OTP delivery (all three)
 
 **`apps/admin/.env`**
 - `DATABASE_URL` — same DB
@@ -173,7 +173,7 @@ header set to each app's `CRON_SECRET`:
       (Anyone reaching it can mint an owner.) Create the real owner with `bootstrap:owner`.
 - [ ] `BETTER_AUTH_SECRET` set (distinct per app), real `CRON_SECRET`s.
 - [ ] Maya **live** keys + `MAYA_SANDBOX="false"`.
-- [ ] `SEMAPHORE_API_KEY` set (otherwise prod refuses the OTP flow).
+- [ ] `ITEXMO_API_CODE` / `ITEXMO_EMAIL` / `ITEXMO_PASSWORD` set (otherwise prod refuses the OTP flow).
 - [ ] Built + running via `node build` (not `vite dev`).
 - [ ] TLS in front; `ORIGIN` matches the public URL.
 - [ ] Router `login.html` points at prod; walled garden provisioned; crons scheduled.

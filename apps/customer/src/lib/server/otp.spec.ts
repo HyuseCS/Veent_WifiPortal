@@ -27,9 +27,24 @@ const PHONE = '+639171234567';
 const CODE = '123456';
 
 function mockFetch(response: Partial<Response> & { ok: boolean }) {
-	const fn = vi.fn().mockResolvedValue(response);
+	// Default a successful iTexMo body (Error: false, one recipient Accepted).
+	const full = {
+		json: async () => ({ Error: false, Accepted: 1, Failed: 0 }),
+		text: async () => '',
+		...response
+	} as Response;
+	const fn = vi.fn().mockResolvedValue(full);
 	vi.stubGlobal('fetch', fn);
 	return fn;
+}
+
+const LOCAL = '09171234567'; // PHONE converted to iTexMo's local format
+
+/** Set all three iTexMo credentials so sendOtp attempts a real send. */
+function configure() {
+	state.env.ITEXMO_API_CODE = 'test-code';
+	state.env.ITEXMO_EMAIL = 'me@example.com';
+	state.env.ITEXMO_PASSWORD = 'secret';
 }
 
 beforeEach(() => {
@@ -39,48 +54,63 @@ beforeEach(() => {
 	vi.clearAllMocks();
 });
 
-describe('sendOtp (Semaphore)', () => {
-	it('POSTs the code to Semaphore with form params when configured', async () => {
-		state.env.SEMAPHORE_API_KEY = 'test-key';
+describe('sendOtp (iTexMo)', () => {
+	it('POSTs the code to the iTexMo broadcast API with a JSON body when configured', async () => {
+		configure();
 		const fetchFn = mockFetch({ ok: true });
 
 		await sendOtp(PHONE, CODE);
 
 		expect(fetchFn).toHaveBeenCalledTimes(1);
 		const [url, opts] = fetchFn.mock.calls[0];
-		expect(url).toBe('https://api.semaphore.co/api/v4/messages');
+		expect(url).toBe('https://api.itexmo.com/api/broadcast');
 		expect(opts.method).toBe('POST');
-		const body = opts.body as URLSearchParams;
-		expect(body.get('apikey')).toBe('test-key');
-		expect(body.get('number')).toBe(PHONE);
-		expect(body.get('message')).toContain(CODE);
-		// No sender name configured → param omitted (uses account default).
-		expect(body.get('sendername')).toBeNull();
+		const body = JSON.parse(opts.body as string);
+		expect(body.ApiCode).toBe('test-code');
+		expect(body.Email).toBe('me@example.com');
+		expect(body.Password).toBe('secret');
+		expect(body.Recipients).toEqual([LOCAL]); // E.164 converted to local 09… format
+		expect(body.Message).toContain(CODE);
+		expect(body.SenderId).toBeUndefined(); // omitted unless ITEXMO_SENDER_ID is set
 	});
 
-	it('includes sendername when SEMAPHORE_SENDER_NAME is set', async () => {
-		state.env.SEMAPHORE_API_KEY = 'test-key';
-		state.env.SEMAPHORE_SENDER_NAME = 'VEENT';
+	it('includes SenderId when ITEXMO_SENDER_ID is set', async () => {
+		configure();
+		state.env.ITEXMO_SENDER_ID = 'ITM.TEST3';
 		const fetchFn = mockFetch({ ok: true });
 
 		await sendOtp(PHONE, CODE);
 
-		const body = fetchFn.mock.calls[0][1].body as URLSearchParams;
-		expect(body.get('sendername')).toBe('VEENT');
+		const body = JSON.parse(fetchFn.mock.calls[0][1].body as string);
+		expect(body.SenderId).toBe('ITM.TEST3');
 	});
 
-	it('throws (with the gateway error body) on a non-OK response', async () => {
-		state.env.SEMAPHORE_API_KEY = 'test-key';
-		mockFetch({ ok: false, status: 402, text: async () => 'insufficient credits' });
+	it('throws when the API accepts no recipient (Accepted: 0)', async () => {
+		configure();
+		mockFetch({ ok: true, json: async () => ({ Error: false, Accepted: 0, Failed: 1 }) });
 
-		await expect(sendOtp(PHONE, CODE)).rejects.toThrow(/402.*insufficient credits/);
+		await expect(sendOtp(PHONE, CODE)).rejects.toThrow(/iTexMo SMS rejected/);
+	});
+
+	it('throws (with the gateway body) on a non-OK HTTP response', async () => {
+		configure();
+		mockFetch({ ok: false, status: 500, text: async () => 'gateway down' });
+
+		await expect(sendOtp(PHONE, CODE)).rejects.toThrow(/500.*gateway down/);
+	});
+
+	it('throws when the API responds with Error: true', async () => {
+		configure();
+		mockFetch({ ok: true, json: async () => ({ Error: true, Message: 'invalid api code' }) });
+
+		await expect(sendOtp(PHONE, CODE)).rejects.toThrow(/invalid api code/);
 	});
 
 	it('throws in production when unconfigured and never calls the gateway', async () => {
 		state.dev = false; // production
 		const fetchFn = mockFetch({ ok: true });
 
-		await expect(sendOtp(PHONE, CODE)).rejects.toThrow(/Semaphore not configured/);
+		await expect(sendOtp(PHONE, CODE)).rejects.toThrow(/iTexMo not configured/);
 		expect(fetchFn).not.toHaveBeenCalled();
 	});
 
