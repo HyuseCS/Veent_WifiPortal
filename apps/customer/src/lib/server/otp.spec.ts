@@ -63,7 +63,7 @@ describe('sendOtp (iTexMo)', () => {
 
 		expect(fetchFn).toHaveBeenCalledTimes(1);
 		const [url, opts] = fetchFn.mock.calls[0];
-		expect(url).toBe('https://api.itexmo.com/api/broadcast');
+		expect(url).toBe('https://api.itexmo.com/api/broadcast-otp');
 		expect(opts.method).toBe('POST');
 		const body = JSON.parse(opts.body as string);
 		expect(body.ApiCode).toBe('test-code');

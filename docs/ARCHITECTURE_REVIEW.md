@@ -8,15 +8,19 @@
 
 ## The headline finding: the rate limiter is dead code
 
-`consumeRateLimit` (`packages/core/src/services/rateLimit.ts`) is fully built — DB-backed
-sliding window, one row per MAC/phone, transactional, exported from the barrel — and
-**wired into nothing**. Repo-wide there is not a single call site. Its own docstring says
-it's "used to cap grace-period grants and OTP sends," but `sendOtp`
-(`apps/customer/src/lib/server/otp.ts:106`) and the grant endpoint
-(`apps/customer/src/routes/api/network/grant/+server.ts`) never touch it.
+> **Update 2026-06-24 — partly resolved.** `consumeRateLimit` is now wired into the OTP
+> send path (`/login` + verify-page `resend`) via
+> `apps/customer/src/lib/server/otpRateLimit.ts`. The **grant endpoint** still doesn't use
+> it — see "Other improvements" below. Tracked in [`SECURITY_RISKS.md`](./SECURITY_RISKS.md) R1/R2.
 
-That's the highest-leverage fix on the board: the hard part is already written. Wire it in
-before anything else.
+`consumeRateLimit` (`packages/core/src/services/rateLimit.ts`) is fully built — DB-backed
+sliding window, one row per MAC/phone, transactional, exported from the barrel. As of the
+review it was **wired into nothing**: `sendOtp`
+(`apps/customer/src/lib/server/otp.ts:106`) and the grant endpoint
+(`apps/customer/src/routes/api/network/grant/+server.ts`) never touched it.
+
+That was the highest-leverage fix on the board — the hard part was already written. The OTP
+send path is now done; the grant path remains.
 
 ---
 

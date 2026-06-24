@@ -90,7 +90,7 @@ export function maskPhone(phone: string): string {
 }
 
 /**
- * Deliver the OTP via iTexMo (https://itexmo.com), the PH SMS gateway, Broadcast API.
+ * Deliver the OTP via iTexMo (https://itexmo.com), the PH SMS gateway, Broadcast-OTP API.
  * THE SINGLE SMS INTEGRATION POINT — wired into the phoneNumber plugin's `sendOTP`.
  * The phone arrives E.164 (+639171234567); iTexMo wants the LOCAL form (09171234567),
  * so we convert.
@@ -132,7 +132,7 @@ export async function sendOtp(phone: string, code: string): Promise<void> {
 	const senderId = env.ITEXMO_SENDER_ID;
 	if (senderId) payload.SenderId = senderId;
 
-	const res = await fetch('https://api.itexmo.com/api/broadcast', {
+	const res = await fetch('https://api.itexmo.com/api/broadcast-otp', {
 		method: 'POST',
 		headers: { 'content-type': 'application/json' },
 		body: JSON.stringify(payload)
