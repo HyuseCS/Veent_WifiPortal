@@ -110,7 +110,7 @@
 	];
 </script>
 
-<Table {columns}>
+<Table {columns} class="min-h-0 flex-1">
 	<!-- Toolbar: search + status filter + sort, with any owner action (Wipe) on the right. -->
 	{#snippet toolbar()}
 		<div class="flex flex-wrap items-center gap-3 px-4 py-3">

@@ -59,12 +59,12 @@
 	);
 </script>
 
-<Card class="group flex flex-col gap-4 hover:-translate-y-0.5 hover:border-brand/30 hover:shadow-md">
+<Card padding="p-3.5" class="group flex flex-col gap-2 hover:-translate-y-0.5 hover:border-brand/30 hover:shadow-md">
 	<div class="flex items-start justify-between gap-2">
 		<p class="text-xs font-semibold tracking-wide text-muted uppercase">{kpi.label}</p>
 		{#if Icon}
 			<span
-				class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand/10 text-brand transition-[background-color,transform,color] duration-200 group-hover:scale-105 group-hover:bg-brand/20"
+				class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand/10 text-brand transition-[background-color,transform,color] duration-200 group-hover:scale-105 group-hover:bg-brand/20"
 				aria-hidden="true"
 			>
 				<Icon class="h-4 w-4" />
@@ -72,8 +72,8 @@
 		{/if}
 	</div>
 
-	<div class="flex flex-col gap-2">
-		<p class="font-mono text-3xl font-bold tracking-tight {valueTone[tone]}">
+	<div class="flex flex-col gap-1">
+		<p class="font-mono text-2xl font-bold tracking-tight {valueTone[tone]}">
 			{kpi.value}{#if unit}<span class="ml-1 text-sm font-semibold text-muted">{unit}</span>{/if}
 		</p>
 		{#if helper || kpi.delta || period}
