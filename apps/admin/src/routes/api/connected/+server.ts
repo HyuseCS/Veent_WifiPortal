@@ -12,8 +12,30 @@ import type { RequestHandler } from './$types';
  */
 const HEARTBEAT_MS = 25_000;
 
+// Cap concurrent SSE streams per user: each open stream holds a connection + a feed
+// subscription and re-renders on every dashboard notify, so an unbounded fan-out is a cheap
+// resource-exhaustion vector. A handful of tabs is normal; far more is abuse or a leak.
+// ponytail: per-process in-memory count — with multiple app instances the cap is per
+// instance; fine until horizontally scaled (then move the count to a shared store).
+const MAX_STREAMS_PER_USER = 6;
+const openStreams = new Map<string, number>();
+
 export const GET: RequestHandler = async (event) => {
 	if (!event.locals.user) error(401, 'Not authenticated');
+	const userId = event.locals.user.id;
+
+	if ((openStreams.get(userId) ?? 0) >= MAX_STREAMS_PER_USER) {
+		error(429, 'Too many open dashboard connections. Close some tabs and try again.');
+	}
+	openStreams.set(userId, (openStreams.get(userId) ?? 0) + 1);
+	let released = false;
+	const release = () => {
+		if (released) return;
+		released = true;
+		const n = (openStreams.get(userId) ?? 1) - 1;
+		if (n <= 0) openStreams.delete(userId);
+		else openStreams.set(userId, n);
+	};
 
 	const encoder = new TextEncoder();
 
@@ -44,6 +66,7 @@ export const GET: RequestHandler = async (event) => {
 
 			event.request.signal.addEventListener('abort', () => {
 				closed = true;
+				release();
 				unsubscribe();
 				clearInterval(heartbeat);
 				// The controller may already be closed when the client disconnects;

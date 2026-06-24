@@ -4,6 +4,7 @@ import { customerUser, packages, paymentCheckouts, paymentTransactions } from '@
 import { creditCheckoutIfUnsettled } from '@veent/core';
 import { db } from '$lib/server/db';
 import { payments } from '$lib/server/payments';
+import { rateLimit, clientIp } from '$lib/server/rateLimit';
 import type { RequestHandler } from './$types';
 
 const STATUS_DB: Record<string, string> = {
@@ -30,6 +31,12 @@ const STATUS_DB: Record<string, string> = {
  * `referenceId` is the value we set at checkout: `${userId}:${packageId}:${nonce}`.
  */
 export const POST: RequestHandler = async (event) => {
+	// Per-IP flood cap. Every call triggers an outbound authoritative re-fetch to Maya, so
+	// this blunts request-amplification abuse. Deliberately generous (120/min/IP) — far above
+	// any real Maya webhook volume from a single source, so legit events are never dropped.
+	const flood = await rateLimit('payment_webhook_ip', clientIp(event), 120, 60_000);
+	if (!flood.allowed) error(429, 'Too many requests');
+
 	const raw = await event.request.text();
 
 	let evt;
