@@ -1,5 +1,5 @@
 import { redirect, fail } from '@sveltejs/kit';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, asc } from 'drizzle-orm';
 import { packages, paymentCheckouts } from '@veent/db';
 import { getAccount, getLatestLedgerId } from '@veent/core';
 import { db } from '$lib/server/db';
@@ -19,7 +19,8 @@ export const load: PageServerLoad = async (event) => {
 	const bundles = await db
 		.select()
 		.from(packages)
-		.where(and(eq(packages.type, 'bundle'), eq(packages.isActive, true)));
+		.where(and(eq(packages.type, 'bundle'), eq(packages.isActive, true)))
+		.orderBy(asc(packages.fiatCost));
 
 	return { user, balance: account?.balance ?? 0, bundles };
 };
