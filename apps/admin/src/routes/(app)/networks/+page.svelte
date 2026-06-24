@@ -256,7 +256,12 @@
 			style="grid-template-columns: repeat(auto-fill, minmax(330px, 1fr));"
 		>
 			{#each visible as ap (ap.id)}
-				<NetworkHealthCard {ap} selected={ap.id === selectedId} onfocus={focusAp} />
+				<NetworkHealthCard
+					{ap}
+					selected={ap.id === selectedId}
+					canDelete={data.isOwner}
+					onfocus={focusAp}
+				/>
 			{/each}
 		</section>
 	{/if}

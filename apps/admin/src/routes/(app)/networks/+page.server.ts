@@ -7,17 +7,22 @@ import { mailer } from '$lib/server/email';
 import { checkAdminEmailLimit } from '$lib/server/emailRateLimit';
 import { wipeCodeEmail } from '$lib/server/emails/wipe-code';
 import { issueWipeCode, consumeWipeCode } from '$lib/server/wipe-verification';
-import { listNetworkHealth, setNetworkInterface, wipeNetworks } from '$lib/server/queries';
+import {
+	listNetworkHealth,
+	setNetworkInterface,
+	wipeNetworks,
+	deleteNetworkPlace
+} from '$lib/server/queries';
 import type { Actions, PageServerLoad } from './$types';
 
 /** Step-up key namespace: keeps the network-wipe code from clobbering the customer-wipe
  * code for the same owner (both share the in-memory wipe-verification store, keyed by id). */
 const wipeKey = (userId: string) => `network:${userId}`;
 
-/** Re-asserts owner from the DB (never trust client state) for the wipe actions. */
+/** Re-asserts owner from the DB (never trust client state) for the destructive actions. */
 async function requireOwner(userId: string | undefined) {
 	if (!userId || (await getAdminRole(db, userId)) !== STAFF_ROLE.owner) {
-		return fail(403, { error: 'Only the owner can wipe the network database.' });
+		return fail(403, { error: 'Only the owner can modify the network database.' });
 	}
 	return null;
 }
@@ -46,6 +51,20 @@ export const actions: Actions = {
 		const interfaceName = String(form.get('interfaceName') ?? '').trim() || null;
 		await setNetworkInterface(db, id, interfaceName);
 		return { id, boundInterface: true };
+	},
+
+	/** Delete a single access point. Owner-only (a stray-pin cleanup is still destructive —
+	 *  it drops the AP's health + location). Safe: network_sessions.network_id is a loose
+	 *  link (no FK), so attributed sessions just stop matching — no constraint to violate. */
+	deleteNetwork: async (event) => {
+		const denied = await requireOwner(event.locals.user?.id);
+		if (denied) return denied;
+
+		const id = Number((await event.request.formData()).get('id'));
+		if (!Number.isInteger(id)) return fail(400, { error: 'Invalid access point.' });
+
+		await deleteNetworkPlace(db, id);
+		return { ok: true, action: 'deleteNetwork', id };
 	},
 
 	/** Step 1 of the network wipe: owner requests a one-time code emailed to their own

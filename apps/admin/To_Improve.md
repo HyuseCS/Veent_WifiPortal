@@ -1,5 +1,6 @@
 **System**
-- [ ] Make sidebar collapsible
+- [x] Make sidebar collapsible — toggle in the sidebar header (PanelLeftClose/Open);
+      collapses to icon-only `w-16`, persists in `localStorage` (`radius-admin-sidebar`)
 - [ ] Make it responsive to all screen sizes
 - [ ] Explore TOTP viability
 - [ ] Make admins and owners activate TOTP/MFA on registration.
@@ -20,13 +21,17 @@
   - [x] make the table scrollable
 
 **Network Page**
-- [ ] Add delete network button
+- [x] Add delete network button — per-AP delete on `NetworkHealthCard` (owner-only, native
+      confirm); `?/deleteNetwork` action → `deleteNetworkPlace` (loose-link safe, no FK)
 - [x] Add wipe network database button (similar to how its done in the wipe user database in /users)
       — owner-only, step-up email-code flow via shared `WipeDialog`; `wipeNetworks` query
 
 **Map Page**
-- [ ] Make adding a pin a double click so that no accidental pins appear on the map
-- [ ] Modularize NetworkMap.svelte file, it is nearly 1.5k lines long💀
+- [x] Make adding a pin a double click so that no accidental pins appear on the map
+      — `map.on('dblclick')` adds the pin; disabled Leaflet `doubleClickZoom` so it doesn't also zoom
+- [x] Modularize NetworkMap.svelte file, it is nearly 1.5k lines long💀
+      — Phase 0: extracted `clustering`/`reach`/`geocode` to tested `$lib` modules,
+        split `PinPanel.svelte` + `networkMap.controller.ts`; 1419 → 929 lines
 
 **Users Page**
 - [x] Add a column "Location" to the table, where it will show which network the user is connected to.
