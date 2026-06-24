@@ -81,10 +81,13 @@ export class NetworkMapController {
 		const L = mod.default;
 		this.L = L;
 
-		const map = L.map(el, { attributionControl: true, zoomControl: false }).setView(
-			FALLBACK_CENTER,
-			11
-		);
+		// doubleClickZoom off: dblclick is reserved for dropping a pin (see below), so it
+		// must not also zoom. Single-click no longer adds pins (avoids accidental drops).
+		const map = L.map(el, {
+			attributionControl: true,
+			zoomControl: false,
+			doubleClickZoom: false
+		}).setView(FALLBACK_CENTER, 11);
 		// Dome pane sits above tiles (200) but below markers (600) — default zIndex 400.
 		map.createPane('domes');
 
@@ -150,8 +153,9 @@ export class NetworkMapController {
 		this.markerGroup = L.featureGroup().addTo(map);
 		this.domeGroup = L.layerGroup().addTo(map);
 
-		// Click empty map → drop a new AP pin (suppressed right after a marker drag).
-		map.on('click', (e) => {
+		// Double-click empty map → drop a new AP pin (suppressed right after a marker drag).
+		// Double (not single) so a stray click while panning/inspecting can't drop a pin.
+		map.on('dblclick', (e) => {
 			if (!this.suppressClick) this.cb.onMapClick(e.latlng.lat, e.latlng.lng);
 		});
 		// When the popup is dismissed, restore all domes.

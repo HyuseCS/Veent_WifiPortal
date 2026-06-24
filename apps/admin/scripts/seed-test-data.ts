@@ -86,6 +86,8 @@ const minutesAhead = (m: number) => new Date(now.getTime() + m * 60_000);
 const daysAgoRandom = (maxDays: number) => minutesAgo(randInt(0, maxDays * 24 * 60));
 
 // ───────────────────────────── fixed source data ─────────────────────────────
+// Human names — NOT used as account identity (customers are phone-only); only as the
+// gateway-reported payer name on payment_transactions (buyerName/buyerEmail).
 const FIRST = [
 	'Ana', 'Ben', 'Carlos', 'Divya', 'Erin', 'Felix', 'Grace', 'Hugo', 'Ines', 'Jomar',
 	'Kira', 'Leo', 'Maya', 'Noel', 'Olive', 'Paolo', 'Quinn', 'Rina', 'Sami', 'Tonio'
@@ -202,7 +204,10 @@ async function main() {
 	type Cohort = 'normal' | 'low' | 'blocked';
 	interface Cust {
 		id: string;
-		name: string;
+		phone: string;
+		/** Gateway-reported payer name (card/e-wallet holder) — used only for the payment
+		 *  buyer fields, separate from the phone-only account identity. */
+		payerName: string;
 		cohort: Cohort;
 		online: boolean;
 		mac: string;
@@ -210,8 +215,10 @@ async function main() {
 	const customers: Cust[] = [];
 	for (let i = 0; i < CUSTOMER_COUNT; i++) {
 		const id = crypto.randomUUID();
-		const name = `${FIRST[i % FIRST.length]} ${LAST[i % LAST.length]}`;
-		const email = `${FIRST[i % FIRST.length].toLowerCase()}.${LAST[i % LAST.length].toLowerCase()}${i}@example.com`;
+		// Customers register by phone only (no name/email). Mirror the customer app's
+		// better-auth signUpOnVerification: name = phone, email = synthesized OTP alias.
+		const phone = `+6391${String(i).padStart(8, '0')}`;
+		const payerName = `${FIRST[i % FIRST.length]} ${LAST[i % LAST.length]}`;
 		// First 3 blocked, next 4 low-balance, rest normal. ~40% of non-blocked online.
 		const cohort: Cohort = i < 3 ? 'blocked' : i < 7 ? 'low' : 'normal';
 		const online = cohort !== 'blocked' && rand() < 0.45;
@@ -219,10 +226,10 @@ async function main() {
 
 		await db.insert(customerUser).values({
 			id,
-			name,
-			email,
-			emailVerified: true,
-			phoneNumber: `+6391${String(i).padStart(8, '0')}`,
+			name: phone,
+			email: `${phone}@otp.veent.local`,
+			emailVerified: false,
+			phoneNumber: phone,
 			phoneNumberVerified: true,
 			createdAt: daysAgoRandom(PAYMENT_WINDOW_DAYS),
 			updatedAt: now
@@ -235,7 +242,7 @@ async function main() {
 			// Vary free-time cooldown: some recently used (in cooldown), some eligible.
 			lastFreeSessionAt: rand() < 0.5 ? minutesAgo(randInt(5, 60 * 24)) : null
 		});
-		customers.push({ id, name, cohort, online, mac });
+		customers.push({ id, phone, payerName, cohort, online, mac });
 	}
 
 	// Phase 5a — payments + matching topup ledger. The ledger drives the Dashboard's
@@ -273,8 +280,8 @@ async function main() {
 			referenceNo: cust ? `ref_${cust.id.slice(0, 8)}` : null,
 			errorCode: success ? null : status === PAYMENT_STATUS.failed ? 'PAYMENT_DECLINED' : null,
 			errorMessage: status === PAYMENT_STATUS.failed ? 'Card was declined by issuer.' : null,
-			buyerName: cust?.name ?? 'Guest Checkout',
-			buyerEmail: cust ? `${cust.name.split(' ')[0].toLowerCase()}@example.com` : null,
+			buyerName: cust?.payerName ?? 'Guest Checkout',
+			buyerEmail: cust ? `${cust.payerName.split(' ')[0].toLowerCase()}@example.com` : null,
 			userId: cust?.id ?? null,
 			packageId: bundle.id,
 			createdAt
