@@ -5,16 +5,6 @@
 	import logo from '$lib/assets/parafiber-logo.webp';
 
 	let { data }: { data: PageServerData } = $props();
-
-	// Credits-per-peso decides the honest "Best value" badge — biggest bundle wins.
-	const bestBundleId = $derived.by(() => {
-		let best: { id: number; rate: number } | null = null;
-		for (const b of data.bundles) {
-			const rate = (b.creditsProvided ?? 0) / (b.fiatCost || Infinity);
-			if (!best || rate > best.rate) best = { id: b.id, rate };
-		}
-		return best?.id ?? null;
-	});
 </script>
 
 <svelte:head>
@@ -152,24 +142,14 @@
 					</div>
 					<div class="mb-[18px] overflow-hidden rounded-2xl border border-border lg:mb-5">
 						{#each data.bundles as bundle, i (bundle.id)}
-							{@const best = bundle.id === bestBundleId}
 							<div
-								class="flex items-center justify-between px-[15px] py-3.5 {best
-									? 'border-l-[3px] border-brand bg-brand-tint-2'
-									: ''} {i < data.bundles.length - 1 ? 'border-b border-border' : ''}"
+								class="flex items-center justify-between px-[15px] py-3.5 {i < data.bundles.length - 1 ? 'border-b border-border' : ''}"
 							>
 								<div class="flex items-center gap-2.5">
 									<span class="font-mono text-[17px] font-bold text-ink">₱{bundle.fiatCost}</span>
-									{#if best}
-										<span
-											class="rounded-full bg-brand px-2 py-[3px] text-[10px] font-semibold tracking-wide text-white uppercase"
-										>
-											Best value
-										</span>
-									{/if}
 								</div>
 								<div
-									class="font-mono text-[13px] font-semibold {best ? 'text-brand' : 'text-muted'}"
+									class="font-mono text-[13px] font-semibold text-muted"
 								>
 									{bundle.creditsProvided} credits
 								</div>

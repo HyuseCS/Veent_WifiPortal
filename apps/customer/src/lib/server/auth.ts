@@ -21,7 +21,12 @@ export const auth = betterAuth({
 	baseURL: env.ORIGIN,
 	secret: env.BETTER_AUTH_SECRET,
 	database: drizzleAdapter(db, { provider: 'pg', schema: customerAuthSchema }),
-	emailAndPassword: { enabled: true },
+	// The portal is phone+OTP only (phoneNumber plugin owns account creation via
+	// signUpOnVerification below). better-auth still needs an email/password config
+	// object, but public email sign-up is DISABLED — otherwise `POST /api/auth/sign-up/email`
+	// would mint fully-authenticated accounts with no phone, no OTP, and none of the SMS
+	// rate-limiting, defeating the phone-only identity model.
+	emailAndPassword: { enabled: true, disableSignUp: true },
 	// Sessions expire a fixed 24h after login (was defaulting to 7 days). Refresh
 	// is disabled so the expiry is pinned to login time and never slides on
 	// activity — a guest who logs in today must re-authenticate ~24h later.
