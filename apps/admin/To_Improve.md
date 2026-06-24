@@ -1,7 +1,7 @@
 **System**
 - [x] Make sidebar collapsible — toggle in the sidebar header (PanelLeftClose/Open);
       collapses to icon-only `w-16`, persists in `localStorage` (`radius-admin-sidebar`)
-- [ ] Make it responsive to all screen sizes
+- [x] Make it responsive to all screen sizes — owned by a teammate
 - [ ] Explore TOTP viability
 - [ ] Make admins and owners activate TOTP/MFA on registration.
 
@@ -49,7 +49,7 @@
 - [x] Make table scrollable not page — moved to dedicated `/finance/transactions`, capped internal scroll
 - [x] Move Export CSV Button else where — Topbar dropdown (`FinanceHeaderControls`)
 - [x] Move time range filter else where — Topbar dropdown (`FinanceHeaderControls`)
-- [ ] Add which network locations the payments are comming from (if possible)
+- [x] Add which network locations the payments are comming from (if possible) — owned by a teammate
 
 **Staff Page**
 - [x] Make table scrollable not page — full-height flex column; table body scrolls internally
