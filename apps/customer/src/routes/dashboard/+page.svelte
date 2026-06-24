@@ -5,6 +5,7 @@
 	import { toasts } from '$lib/toasts.svelte';
 	import Icon from '$lib/Icon.svelte';
 	import DeviceList from '$lib/DeviceList.svelte';
+	import { liveAccount, connectAccountLive } from '$lib/live.svelte';
 	import { resolve } from '$app/paths';
 	import type { PageServerData, ActionData } from './$types';
 	import logo from '$lib/assets/parafiber-logo.webp';
@@ -20,7 +21,14 @@
 	const mac = $derived(data.mac ?? '');
 	const hasMac = $derived(!!data.mac);
 
-	const balance = $derived(data.balance);
+	// Live per-account view over SSE (pause/resume, purchases, bind/unbind, balance — pushed
+	// from ANY of the account's devices). Until the first frame lands, fall back to `load` data.
+	$effect(() => connectAccountLive(mac));
+	const live = $derived(liveAccount.view);
+
+	const balance = $derived(live?.balance ?? data.balance);
+	const blocked = $derived(live?.blocked ?? data.blocked);
+	const freeTime = $derived(live?.freeTime ?? data.freeTime);
 	const affordable = (t: Tier) => balance >= (t.creditCost ?? 0);
 
 	// Confirm-before-spend (and a soft wall for tiers the guest can't afford yet).
@@ -44,7 +52,7 @@
 	}
 
 	const nextEligibleAt = $derived(
-		data.freeTime.nextEligibleAt ? new Date(data.freeTime.nextEligibleAt) : null
+		freeTime.nextEligibleAt ? new Date(freeTime.nextEligibleAt) : null
 	);
 	const cooldownClock = $derived(
 		nextEligibleAt ? formatHMS(nextEligibleAt.getTime() - now) : '0:00:00'
@@ -58,8 +66,8 @@
 	// The ACCOUNT's access window — one countdown shared across all the account's
 	// devices (Free Time or a bought tier). Free vs paid only changes the band colour
 	// and label; the countdown is shared.
-	const access = $derived(data.access);
-	const devices = $derived(data.devices);
+	const access = $derived(live?.access ?? data.access);
+	const devices = $derived(live?.devices ?? data.devices);
 	// Paused: the window is frozen and all devices are unbound. `expiresAt` is the FROZEN end
 	// (may be in the past), so countdown/expiry logic must ignore it and use the held remaining.
 	const paused = $derived(access.paused);
@@ -97,7 +105,7 @@
 	const thisOnline = $derived(access.active && devices.thisDeviceBound && !isExpired);
 
 	const startFreeTime: SubmitFunction = () => {
-		const minutes = data.freeTime.durationMinutes;
+		const minutes = freeTime.durationMinutes;
 		return async ({ result, update }) => {
 			if (result.type === 'success') {
 				toasts.show(`You're online — ${minutes} min of free account time, shared across your devices.`);
@@ -215,7 +223,7 @@
 			</p>
 		{/if}
 
-		{#if data.blocked}
+		{#if blocked}
 			<p class="rounded-xl bg-blocked/10 px-4 py-3 text-sm text-blocked">
 				Your account is blocked. Please contact venue staff.
 			</p>
@@ -427,7 +435,7 @@
 							{/if}
 						</section>
 						<!-- Free Time -->
-					{:else if data.freeTime.eligible}
+					{:else if freeTime.eligible}
 						<section
 							class="mb-6 rounded-2xl border border-brand/20 bg-brand-tint-2 p-[17px] lg:mb-0 lg:p-7"
 						>
@@ -442,7 +450,7 @@
 										Free Time available
 									</div>
 									<div class="text-xs font-medium text-brand lg:text-[13.5px]">
-										{data.freeTime.durationMinutes} minutes for your whole account · once per 12 hours
+										{freeTime.durationMinutes} minutes for your whole account · once per 12 hours
 									</div>
 								</div>
 							</div>
@@ -452,7 +460,7 @@
 									disabled={!hasMac}
 									class="flex h-[50px] w-full items-center justify-center rounded-xl bg-cta text-[15px] font-bold text-white transition-colors hover:bg-cta-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cta hover:cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 lg:h-14 lg:text-base"
 								>
-									Start {data.freeTime.durationMinutes}-min Free Access
+									Start {freeTime.durationMinutes}-min Free Access
 								</button>
 							</form>
 						</section>
