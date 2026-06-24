@@ -5,17 +5,18 @@
 - [ ] Make admins and owners activate TOTP/MFA on registration.
 
 **Dashboard Page**
-- [ ] Make the dashboard page even more responsive and update more often. 
-- [ ] Remove Two Columns and Stacked Layout, only bento remains
+- [x] Make the dashboard page even more responsive and update more often. 
+- [x] Remove Two Columns and Stacked Layout, only bento remains — deleted the layout switcher,
+      `dashboard-layout.ts`, layout cookie/context; dashboard grid is now bento-only
 
 - Active Sessions Table
-  - [ ] make scrollable on all layouts
+  - [x] make scrollable on all layouts — renders the full row set; Table body scrolls internally
   - [ ] make it show which network the user is connected
 
 
 - Network Health Table
-  - [ ] make scrollable on all layouts
-  - [ ] make the table scrollable
+  - [x] make scrollable on all layouts — renders the full row set; Table body scrolls internally
+  - [x] make the table scrollable
 
 **Network Page**
 - [ ] Add delete network button

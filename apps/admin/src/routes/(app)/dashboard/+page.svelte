@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { getContext, type Component } from 'svelte';
+	import { type Component } from 'svelte';
 	import { Card, SectionHeading, Table, StatusBadge, EmptyState } from '$lib/components/ui';
 	import { KpiCard, RevenueChart } from '$lib/components/feature';
 	import Wallet from 'lucide-svelte/icons/wallet';
@@ -9,7 +9,6 @@
 	import Router from 'lucide-svelte/icons/router';
 	import ReceiptText from 'lucide-svelte/icons/receipt-text';
 	import { live, connectLive } from '$lib/live.svelte';
-	import { DASH_LAYOUT_CTX, type DashLayoutCtx } from '$lib/dashboard-layout';
 	import type { ActiveSession, StatusTone } from '$lib/types';
 	import type { PageData } from './$types';
 
@@ -63,29 +62,8 @@
 	const networks = $derived(live.snapshot?.networks ?? data.networks);
 	const total = $derived(revenue.reduce((sum, p) => sum + p.amount, 0));
 
-	// Chosen arrangement comes from the header switcher via shared context (see (app)/+layout).
-	const layoutCtx = getContext<DashLayoutCtx>(DASH_LAYOUT_CTX);
-
-	// Single-screen budget: show only as many rows as the panel actually has room for, so
-	// nothing pushes the page past one viewport. Overflow rows collapse into a "+N more"
-	// affordance instead of a scrollbar (panels are overflow-hidden). The cap is NOT fixed —
-	// each Table reports its live scroll-body height (`bind:bodyHeight`) and we fit rows to
-	// it, so the count grows/shrinks with the chosen layout (Bento / Two-column / Stacked).
-	let sessionBodyH = $state(0);
-	let netBodyH = $state(0);
-	// Sticky header (~38px) sits inside the scroll body; each row is ~44px (px-4 py-3 + border).
-	// Rounded slightly generous so the last visible row never clips. Fallbacks seed SSR/first
-	// paint before the body is measured.
-	const THEAD_H = 38;
-	const ROW_H = 44;
-	const rowsThatFit = (bodyH: number, fallback: number) =>
-		bodyH > 0 ? Math.max(1, Math.floor((bodyH - THEAD_H) / ROW_H)) : fallback;
-	const sessionCap = $derived(rowsThatFit(sessionBodyH, 6));
-	const netCap = $derived(rowsThatFit(netBodyH, 4));
-	const shownSessions = $derived(activeSessions.slice(0, sessionCap));
-	const moreSessions = $derived(Math.max(0, activeSessions.length - sessionCap));
-	const shownNetworks = $derived(networks.slice(0, netCap));
-	const moreNetworks = $derived(Math.max(0, networks.length - netCap));
+	// Each panel has a fixed share of the grid height; the full row set renders and the
+	// Table's body scrolls internally (sticky header) when it overflows — no row cap.
 
 	// Network Health header badge — real online/total counts (no fabricated data).
 	const onlineCount = $derived(networks.filter((ap) => ap.tone === 'online').length);
@@ -106,7 +84,7 @@
 	];
 </script>
 
-<div class="dash dash-{layoutCtx.current}">
+<div class="dash">
 	<!-- KPIs + Revenue share the left column: KPIs keep their natural height, revenue fills
 	     the rest — so the sessions/network rows on the right can split the height evenly. -->
 	<div class="leftcol flex min-h-0 flex-col gap-4">
@@ -146,7 +124,7 @@
 
 	<!-- Active Sessions -->
 	<section class="sessions flex min-h-0 flex-col">
-		<Table title="Active Sessions" columns={sessionCols} class="min-h-0 flex-1" bind:bodyHeight={sessionBodyH}>
+		<Table title="Active Sessions" columns={sessionCols} class="min-h-0 flex-1">
 			{#snippet aside()}
 				{#if activeSessions.length > 0}
 					<span
@@ -157,7 +135,7 @@
 					</span>
 				{/if}
 			{/snippet}
-			{#each shownSessions as session (session.id)}
+			{#each activeSessions as session (session.id)}
 				{@const t = liveTimer(session, now)}
 				<tr class="transition-colors hover:bg-surface">
 					<td class="px-4 py-3 font-mono text-xs text-ink">{session.mac}</td>
@@ -172,7 +150,7 @@
 					</td>
 				</tr>
 			{/each}
-			{#if shownSessions.length === 0}
+			{#if activeSessions.length === 0}
 				<tr>
 					<td colspan={sessionCols.length} class="p-0">
 						<EmptyState
@@ -185,11 +163,8 @@
 				</tr>
 			{/if}
 			{#snippet footer()}
-				<div class="flex items-center justify-between gap-2 px-4 py-2.5">
+				<div class="px-4 py-2.5">
 					<span class="text-xs text-muted">Streaming via RADIUS accounting</span>
-					{#if moreSessions > 0}
-						<span class="text-xs text-muted">+{moreSessions} more active</span>
-					{/if}
 				</div>
 			{/snippet}
 		</Table>
@@ -197,7 +172,7 @@
 
 	<!-- Network Health -->
 	<section class="network flex min-h-0 flex-col">
-		<Table title="Network Health" columns={netCols} class="min-h-0 flex-1" bind:bodyHeight={netBodyH}>
+		<Table title="Network Health" columns={netCols} class="min-h-0 flex-1">
 			{#snippet aside()}
 				<div class="flex items-center gap-2">
 					{#if apTotal > 0}
@@ -206,7 +181,7 @@
 					<a href="/networks" class="text-xs font-medium text-brand hover:underline">View all</a>
 				</div>
 			{/snippet}
-			{#each shownNetworks as ap (ap.id)}
+			{#each networks as ap (ap.id)}
 				<tr class="transition-colors hover:bg-surface">
 					<td class="px-4 py-3 font-medium text-ink">{ap.name}</td>
 					<td class="px-4 py-3">
@@ -217,7 +192,7 @@
 					<td class="px-4 py-3 font-mono text-ink">{ap.throughput}</td>
 				</tr>
 			{/each}
-			{#if shownNetworks.length === 0}
+			{#if networks.length === 0}
 				<tr>
 					<td colspan={netCols.length} class="p-0">
 						<EmptyState
@@ -230,11 +205,8 @@
 				</tr>
 			{/if}
 			{#snippet footer()}
-				<div class="flex items-center justify-between gap-2 px-4 py-2.5">
+				<div class="px-4 py-2.5">
 					<span class="text-xs text-muted">ICMP ping · 30s interval</span>
-					{#if moreNetworks > 0}
-						<span class="text-xs text-muted">+{moreNetworks} more access points</span>
-					{/if}
 				</div>
 			{/snippet}
 		</Table>
@@ -267,32 +239,12 @@
 	@media (min-width: 1024px) {
 		/* Bento: KPIs+revenue fill the left column; sessions over network on the right, with
 		   two equal rows so the two tables split the right column's height 50/50. */
-		.dash-bento {
+		.dash {
 			grid-template-columns: 1fr 1fr;
 			grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
 			grid-template-areas:
 				'leftcol sessions'
 				'leftcol network';
-		}
-
-		/* Two columns: left is KPIs+revenue over network, right is sessions at full height. */
-		.dash-split {
-			grid-template-columns: 1.4fr 1fr;
-			grid-template-rows: minmax(0, 1fr) auto;
-			grid-template-areas:
-				'leftcol sessions'
-				'network sessions';
-		}
-
-		/* Stacked: single column — KPIs+revenue, then sessions and network split the rest.
-		   leftcol keeps a definite height (so the chart fills a known box, no aspect-ratio
-		   feedback loop) but with a min floor so KPIs + chart can't squeeze the chart to
-		   nothing on short viewports; on tall ones all three rows share the height equally.
-		   The tables shrink first, and <main> scrolls only if the floor outgrows the screen. */
-		.dash-stacked {
-			grid-template-columns: 1fr;
-			grid-template-rows: minmax(360px, 1fr) minmax(0, 1fr) minmax(0, 1fr);
-			grid-template-areas: 'leftcol' 'sessions' 'network';
 		}
 	}
 </style>
