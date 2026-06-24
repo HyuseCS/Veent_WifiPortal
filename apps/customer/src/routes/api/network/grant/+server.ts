@@ -1,7 +1,12 @@
 import { json, error } from '@sveltejs/kit';
 import { eq } from 'drizzle-orm';
 import { packages } from '@veent/db';
-import { getAccount, startFreeAccessAndBindDevice, startPaidAccessAndBindDevice } from '@veent/core';
+import {
+	getAccount,
+	isValidMac,
+	startFreeAccessAndBindDevice,
+	startPaidAccessAndBindDevice
+} from '@veent/core';
 import { db } from '$lib/server/db';
 import { network } from '$lib/server/network';
 import { rateLimit } from '$lib/server/rateLimit';
@@ -26,7 +31,12 @@ export const POST: RequestHandler = async (event) => {
 		macAddress?: string;
 		packageId?: number;
 	};
-	if (!body.macAddress) error(400, 'macAddress is required');
+	// Validate the MAC shape (six hex octets) — same guard the dashboard action applies.
+	// An unchecked value would let a caller grant access for an arbitrary device and would
+	// flow junk/oversized input into the DB and the router controller (500 / binding-table
+	// pollution). Format-validating here doesn't bind the MAC to the caller's own device,
+	// but it closes the malformed-input vector and matches the captive-portal path.
+	if (!isValidMac(body.macAddress)) error(400, 'A valid macAddress is required');
 
 	// Throttle grant attempts per user so a client can't hammer the spend→grant path.
 	const rl = await rateLimit('grant_user', user.id, 20);

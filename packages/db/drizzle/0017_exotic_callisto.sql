@@ -1,0 +1,1 @@
+ALTER TABLE "customer_profile" ADD COLUMN "access_paused_at" timestamp;
