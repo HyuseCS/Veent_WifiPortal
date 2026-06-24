@@ -13,11 +13,11 @@
 | R1 | OTP send had no rate limit (SMS-bomb / credit drain) | High | ✅ Resolved | — |
 | R2 | `rate_limits` table built but never wired in | High | ✅ Resolved | — |
 | R3 | `emailAndPassword` enabled on a phone-only portal + guessable temp email | Medium | 🟡 In progress | teammate (email rate-limit work) |
-| R4 | `/api/network/grant` spend→grant is not transactional | Medium | 🔴 Open | unassigned |
-| R5 | Maya webhook signature scheme is an unconfirmed assumption | Medium | 🔴 Open | unassigned |
-| R6 | `/register` admin hole mints an active owner per submit | High (dev-only) | 🔴 Open (must remove before prod) | unassigned |
-| R7 | No rate limit on login/register, webhook, cron, SSE, Finance export | Low–Med | 🔴 Open | unassigned |
-| R8 | No config fail-fast for `CRON_SECRET` / payment keys / `DATABASE_URL` | Low | 🔴 Open | unassigned |
+| R4 | `/api/network/grant` spend→grant is not transactional | Medium | ✅ Resolved | — |
+| R5 | Maya webhook signature scheme is an unconfirmed assumption | Medium | ✅ Resolved (moot by design) | — |
+| R6 | `/register` admin hole mints an active owner per submit | High (dev-only) | ✅ Resolved (deleted) | — |
+| R7 | No rate limit on login/register, webhook, cron, SSE, Finance export | Low–Med | ✅ Resolved | — |
+| R8 | No config fail-fast for `CRON_SECRET` / payment keys / `DATABASE_URL` | Low | ✅ Resolved | — |
 | R9 | Router management plane (Winbox/Dude/API) reachable from the internet | High | 🟡 Mitigated | — |
 | R10 | Portal↔router API runs in cleartext (port 8728, no TLS) | Medium | 🔵 Deferred (TODO) | unassigned |
 
@@ -69,42 +69,61 @@ rate-limit work — left untouched here to avoid a merge conflict.*
 
 ---
 
-## R4 — Grant path is not transactional 🔴 Open
+## R4 — Grant path is not transactional ✅ Resolved (2026-06-24)
 
-In `grant/+server.ts`, `spendCredits` and `startSession` are two separate awaits.
-If `startSession` (or the firewall drop) fails after credits are deducted, the
-user paid and got nothing. Wrap them in one transaction with a compensating path,
-or make the grant *claim* the spend the way the webhook claims the checkout
-(`creditCheckoutIfUnsettled`). See ARCHITECTURE_REVIEW → "Other improvements".
+**Was:** in `grant/+server.ts`, `spendCredits` and `startSession` were two separate
+awaits. If `startSession` (or the firewall drop) failed after credits were deducted,
+the user paid and got nothing.
 
-## R5 — Maya webhook signature assumption 🔴 Open
+**Fix:** `startPaidSession` (`packages/core/src/services/sessions.ts`) wraps spend +
+session-open + router grant in **one `db.transaction`**; a failed grant throws and
+rolls back the spend (no charge stands). Wired into `/api/network/grant` and the
+dashboard buy-tier action, both with try/catch → 502/503 "credits were not charged".
+Covered by `apps/customer/src/lib/server/grant-atomic.spec.ts`.
 
-`maya.ts` carries a `ponytail:` comment: the HMAC algorithm + header name for
-webhook verification is an **assumption**. This is the credit-granting trust
-boundary — confirm against the Maya dashboard before go-live. Wrong → reject all
-real webhooks, or (worse) accept forged ones. (See also CLAUDE.md → Finance.)
+## R5 — Maya webhook signature assumption ✅ Resolved (moot by design)
 
-## R6 — `/register` admin hole 🔴 Open (remove before prod)
+The HMAC assumption is gone. `verifyWebhook` (`maya.ts`) does **no** signature check:
+Maya Checkout webhooks are unsigned, so it takes only the payment id from the
+(untrusted) body and **re-fetches the authoritative payment from Maya's API with the
+secret key**, trusting that response. A spoofed body can't produce a real paid payment
+under our account. Covered by `maya-webhook.spec.ts`. Residual hardening (the per-IP
+flood cap on the webhook endpoint) landed under R7.
 
-`apps/admin/src/routes/register/` is an **ungated** open admin signup that creates
-an active `owner` on every submit. CLAUDE.md already flags it as temp-delete-before-prod.
-Until removed, at minimum rate-limit it; ideally just delete it (two-step removal
-documented in CLAUDE.md).
+## R6 — `/register` admin hole ✅ Resolved (deleted 2026-06-24)
 
-## R7 — Remaining unthrottled endpoints 🔴 Open
+`apps/admin/src/routes/register/` was **deleted** along with the `<!-- TEMP: remove
+with /register -->` link in `login/+page.svelte`. Owners are now created only via
+`bun run --filter radius-admin bootstrap:owner`; all other staff via the owner-only
+`/staff` invite flow.
 
-Ranked in ARCHITECTURE_REVIEW → "What to rate limit": login/register form actions
-(per IP, enumeration/credential throttle), `/api/network/grant` + free-time grant
-(per user/MAC), webhook (cheap per-IP cap on unsigned junk) + IP-allowlist crons,
-Finance CSV export/range queries (authenticated but heavy), and SSE connections
-(cap concurrent streams per user). The same `consumeRateLimit` primitive now
-proven on the OTP path covers most of these.
+## R7 — Remaining unthrottled endpoints ✅ Resolved (2026-06-24)
 
-## R8 — Config fail-fast 🔴 Open
+A shared `rateLimit(scope, identifier, max, windowMs)` helper
+(`apps/{customer,admin}/src/lib/server/rateLimit.ts`, over the `rate_limits` table with
+additive `scope`/`identifier` columns — migration `0014`) was wired into:
+- **Admin login** — per IP (10 / 15 min). *(Customer auth is OTP — teammate-owned.)*
+- **`/api/network/grant`** — per user (20 / hr).
+- **Finance CSV export** — per admin (20 / hr).
+- **Payment webhook** — per-IP flood cap (120 / min).
+- **SSE `/api/connected`** — concurrent-stream cap per user (6, in-memory).
+- **Admin email sends** (staff invite + wipe code) — `checkAdminEmailLimit`, per
+  recipient (5 / hr) and per actor (20 / hr).
+- **Crons** (`/api/network/revoke`, `/api/payments/reconcile`) — optional
+  `CRON_IP_ALLOWLIST` source-IP gate on top of `x-cron-secret`.
 
-`BETTER_AUTH_SECRET` already fails fast (`otp.ts:36`). Extend the same boot-time
-validation to `CRON_SECRET`, `DATABASE_URL`, and the payment keys so a
-misconfigured deploy dies immediately instead of half-working.
+Logic covered by `apps/customer/src/lib/server/rateLimit.spec.ts`. The `/register`
+form action item is moot — the route was deleted (R6).
+
+## R8 — Config fail-fast ✅ Resolved (2026-06-24)
+
+`validateEnv()` (`apps/{customer,admin}/src/lib/server/validateEnv.ts`) is called at the
+top of each app's `hooks.server.ts`. It **hard-fails in production** on any missing
+required var (customer: `DATABASE_URL`, `BETTER_AUTH_SECRET`, `CRON_SECRET`,
+`MAYA_PUBLIC_KEY`, `MAYA_SECRET_KEY`, + `MIKROTIK_*` when `NETWORK_CONTROLLER=mikrotik`;
+admin: `DATABASE_URL`, `BETTER_AUTH_SECRET`, `ORIGIN`, + mikrotik conditional), **warns
+in dev**, and **no-ops during build**. So a misconfigured deploy dies at boot, not on
+first request.
 
 ## R9 — Router management plane exposed to the internet 🟡 Mitigated
 

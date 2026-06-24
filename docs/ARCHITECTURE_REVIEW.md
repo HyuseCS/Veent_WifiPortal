@@ -4,6 +4,12 @@
 > the Redis question, and what to rate limit. Grounded in the actual code paths, not
 > generic best-practice boilerplate. Date: 2026-06-24.
 
+> **✅ STATUS (2026-06-24): the actionable findings below have been implemented** in the
+> backend-hardening pass (Phases 0–3 — roadmap at the bottom of `apps/admin/To_Improve.md`,
+> risk ledger in `docs/SECURITY_RISKS.md`). The analysis is kept as the *rationale*; ✅ markers
+> note what shipped. Still open by design: the Redis verdict (No — not built), and the
+> dashboard delta/index optimizations (only-when-it-bites). OTP/SMS limiting is teammate-owned.
+
 ---
 
 ## The headline finding: the rate limiter is dead code
@@ -16,6 +22,12 @@ touch it.
 
 That's the highest-leverage fix on the board: the hard part is already written. Wire it in
 before anything else.
+
+> **✅ Done.** A shared `rateLimit(scope, identifier, max, windowMs)` helper
+> (`apps/{customer,admin}/src/lib/server/rateLimit.ts`) now wraps the core limiter (extended
+> with additive `scope`/`identifier` columns, migration `0014`) and is wired into admin login,
+> grant, finance export, the payment webhook, SSE, and admin email sends (`checkAdminEmailLimit`).
+> See the ranked list below for the per-endpoint policies.
 
 > **Out of scope here:** OTP / SMS rate limiting (`sendOtp` →
 > `apps/customer/src/lib/server/otp.ts:106`, and OTP verify attempts) is owned by a teammate
@@ -87,37 +99,39 @@ already solved.
 
 ## What to rate limit (ranked by actual risk)
 
-1. **Email send (Resend / SMTP) — top priority, it costs real money.** `mailer.send` hits
+> **✅ All implemented** (policies in parentheses below reflect what shipped). Item 4 (`/register`)
+> is moot — the route was deleted.
+
+1. **Email send (Resend / SMTP) — top priority, it costs real money.** *(✅ `checkAdminEmailLimit`: 5/hr per recipient, 20/hr per actor.)* `mailer.send` hits
    Resend (staff invite `apps/admin/src/lib/server/auth.ts:45`; user notifications
    `apps/admin/src/routes/(app)/users/+page.server.ts:118`). With no throttle this is a
    cost-amplification / mail-bomb attack and risks the sender domain's reputation. Limit per
    **recipient** *and* per **sender/account**.
    *(OTP / SMS rate limiting is owned by a teammate — out of scope here.)*
-2. **Login / register form actions** — per IP. Credential / enumeration throttle.
+2. **Login / register form actions** — per IP. Credential / enumeration throttle. *(✅ admin login: 10/15min per IP. Customer login is OTP — teammate-owned.)*
 3. **`/api/network/grant` + free-time grant** — per user/MAC. `startFreeSession` enforces the
    12h cooldown logically, but the endpoint itself should be throttled so a client can't
-   hammer the spend→grant path (see transactionality note below).
-4. **The `/register` admin hole** — CLAUDE.md already flags it as temp-delete-before-prod.
-   Until it's gone it mints an active owner per submit; at minimum rate-limit it, ideally
-   just delete it.
+   hammer the spend→grant path (see transactionality note below). *(✅ 20/hr per user.)*
+4. **The `/register` admin hole** — ~~CLAUDE.md already flags it as temp-delete-before-prod.~~
+   *(✅ Deleted — see SECURITY_RISKS R6.)*
 5. **Admin Finance CSV export / range queries** — authenticated but heavy. Cap so one
-   operator can't DoS the DB with export spam.
+   operator can't DoS the DB with export spam. *(✅ 20/hr per admin.)*
 6. **Webhook + cron endpoints** — `verifyWebhook` already rejects bad signatures and the
    crons use `x-cron-secret`, so low-risk. Add a cheap per-IP cap on the webhook to keep
-   unsigned junk from flooding logs/DB inserts, and IP-allowlist the cron endpoints.
+   unsigned junk from flooding logs/DB inserts, and IP-allowlist the cron endpoints. *(✅ webhook 120/min per IP; crons gated by optional `CRON_IP_ALLOWLIST`.)*
 7. **SSE connections** (`/api/connected`) — cap concurrent streams per user. Each open stream
-   holds a connection and participates in every snapshot fanout.
+   holds a connection and participates in every snapshot fanout. *(✅ 6 streams per user, in-memory.)*
 
 ---
 
 ## Other improvements (leverage-ordered)
 
-- **Check grant transactionality.** In `grant/+server.ts`, `spendCredits` and `startSession`
-  are two separate awaits. If `startSession` (or the firewall drop) fails after credits are
-  deducted, the user paid and got nothing. Wrap them in one DB transaction with a
-  compensating path, or make the grant claim the spend the way the webhook claims the
-  checkout. Same idempotency discipline already applied on the payment side
-  (`creditCheckoutIfUnsettled`) — it just hasn't reached the grant path.
+- **Check grant transactionality. ✅ Done.** ~~In `grant/+server.ts`, `spendCredits` and
+  `startSession` are two separate awaits.~~ `startPaidSession`
+  (`packages/core/src/services/sessions.ts`) now wraps spend + session + router grant in one
+  `db.transaction`; a failed grant rolls back the spend. Wired into the grant endpoint + the
+  dashboard buy-tier action (try/catch → 502/503 "credits were not charged"). Covered by
+  `grant-atomic.spec.ts`.
 - **Maya webhook verification — RESOLVED by design (no HMAC).** `verifyWebhook` no longer
   depends on an unconfirmed HMAC scheme: Maya Checkout webhooks are unsigned, so the provider
   takes only the payment id from the (untrusted) body and **re-fetches the authoritative
@@ -126,29 +140,30 @@ already solved.
   (status mapping, centavo conversion, re-fetch-required). Residual: the webhook endpoint is
   unauthenticated and does an outbound fetch per call → add a per-IP cap (see rate-limit #6)
   to blunt request-amplification.
-- **Fail-fast config validation at boot.** Already done for `BETTER_AUTH_SECRET`
-  (`otp.ts:36`). Extend the same pattern to `CRON_SECRET`, `DATABASE_URL`, and the payment
-  keys — validate once at startup, not on first request, so a misconfigured deploy dies
-  immediately instead of half-working.
-- **Indexes for the query shapes actually run.** Verify indexes on
-  `rate_limits(mac_address)` / `(phone_number)` (point lookup per request),
-  `payment_transactions(status, created_at)` (every Finance range query filters this), and
-  the active-session lookup on `network_sessions`. Cheap; the difference between fine and
-  falling over.
-- **Observability.** No structured logging or metrics anywhere. The three numbers that page
-  you at 3am: webhook success rate, OTP delivery-failure rate, open SSE connection count.
-  Emit them.
-- **Bound the main connection pool.** The LISTEN client is correctly isolated
-  (`postgres(url, { max: 1 })` in `dashboard-feed.ts`). Confirm the primary Drizzle pool has
-  an explicit max so a connection leak under load can't exhaust Postgres.
+- **Fail-fast config validation at boot. ✅ Done.** `validateEnv()` per app
+  (`apps/{customer,admin}/src/lib/server/validateEnv.ts`), called in `hooks.server.ts`:
+  hard-fails in prod on missing required vars (`DATABASE_URL`, `BETTER_AUTH_SECRET`,
+  `CRON_SECRET`, payment + mikrotik keys as applicable), warns in dev, no-ops during build.
+- **Indexes for the query shapes actually run. ✅ Verified present.** `payment_transactions(status)`
+  + `(created_at)`, `network_sessions(status, expires_at)`, and the `rate_limits` lookups all
+  already had covering indexes — no migration needed.
+- **Observability. ✅ Done (structured logs).** Added one-line structured logs at the seams that
+  page you: webhook outcome + verify-fail (`[webhook] …`), email-send failures (`[email] …`),
+  and open SSE connection count (`[sse] …`). No metrics backend yet — logs are the lazy first
+  step; wire to a collector when one exists.
+- **Bound the main connection pool. ✅ Done.** `createDb` (`packages/db/src/client.ts`) sets an
+  explicit pool `max` (default 10); the LISTEN client stays isolated at `max:1` in
+  `dashboard-feed.ts`.
 
 ---
 
 ## Net assessment
 
 The architecture is genuinely sound for its scale — NOTIFY-over-Redis and idempotent webhooks
-are the calls a senior would make. The gaps are: a built-but-unwired rate limiter, one
-non-transactional money path, and an unconfirmed signature assumption. Fix those three and the
-system is in good shape **without adding a single new dependency**.
+are the calls a senior would make. The three gaps called out — a built-but-unwired rate limiter,
+one non-transactional money path, and an unconfirmed signature assumption — **have all been
+closed** (rate limiter wired, `startPaidSession` made the grant atomic, Maya verification
+re-fetches instead of trusting a signature), **without adding a single new dependency**.
 
-**First thing to do:** wire `consumeRateLimit` into the email-send + grant paths.
+**Done.** The remaining open items are deliberate "only-when-it-bites" optimizations (dashboard
+deltas/indexes) and the standing Redis verdict (No — not built at current scale).
