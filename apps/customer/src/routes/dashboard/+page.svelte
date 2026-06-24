@@ -60,16 +60,21 @@
 	// and label; the countdown is shared.
 	const access = $derived(data.access);
 	const devices = $derived(data.devices);
+	// Paused: the window is frozen and all devices are unbound. `expiresAt` is the FROZEN end
+	// (may be in the past), so countdown/expiry logic must ignore it and use the held remaining.
+	const paused = $derived(access.paused);
 	// The server loaded the window as live (expiresAt > now at load). Once the live
 	// ticker crosses expiresAt, flip to the "ended" frame locally — the real access
-	// cut-off is enforced server-side by the revoke cron, so this is cosmetic.
+	// cut-off is enforced server-side by the revoke cron, so this is cosmetic. Never while paused.
 	const isExpired = $derived(
-		access.active && !!access.expiresAt && now >= new Date(access.expiresAt).getTime()
+		access.active && !paused && !!access.expiresAt && now >= new Date(access.expiresAt).getTime()
 	);
 	const activeLabel = $derived(access.label ?? 'Access');
 	const activeRemaining = $derived(
 		access.expiresAt ? formatHMS(new Date(access.expiresAt).getTime() - now) : ''
 	);
+	// What the band shows: the frozen hold while paused (static), else the live countdown.
+	const displayRemaining = $derived(paused ? formatHMS(access.remainingMs) : activeRemaining);
 	const activeEndsAt = $derived(
 		access.expiresAt
 			? new Date(access.expiresAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
@@ -84,8 +89,9 @@
 	});
 
 	// This device has live account time but isn't bound (auto-bind hit the cap, or a
-	// router hiccup). Surface a connect/replace prompt.
-	const needsConnect = $derived(access.active && hasMac && !devices.thisDeviceBound);
+	// router hiccup). Surface a connect/replace prompt. Suppressed while paused — the band
+	// offers Resume instead, which reconnects the device.
+	const needsConnect = $derived(access.active && !paused && hasMac && !devices.thisDeviceBound);
 	// The app-bar dot reflects THIS device — account time alone isn't "online" if this
 	// device isn't actually bound.
 	const thisOnline = $derived(access.active && devices.thisDeviceBound && !isExpired);
@@ -121,6 +127,22 @@
 				}
 				await update();
 			};
+	};
+
+	const pauseTime: SubmitFunction = () => {
+		return async ({ result, update }) => {
+			if (result.type === 'success') toasts.show('Your time is paused and held.');
+			else if (result.type === 'failure') toasts.show('Could not pause your time.', 'error');
+			await update();
+		};
+	};
+
+	const resumeTime: SubmitFunction = () => {
+		return async ({ result, update }) => {
+			if (result.type === 'success') toasts.show("You're back online — time resumed.");
+			else if (result.type === 'failure') toasts.show('Could not resume your time.', 'error');
+			await update();
+		};
 	};
 
 	const signOut: SubmitFunction =
@@ -306,62 +328,103 @@
 					{:else if access.active}
 						{@const isFree = access.isFree}
 						<section
-							class="mb-6 rounded-2xl border p-[17px] lg:mb-0 lg:p-7 {isFree
-								? 'border-brand/20 bg-brand-tint-2'
-								: 'border-cta/25 bg-cta/10'}"
+							class="mb-6 rounded-2xl border p-[17px] lg:mb-0 lg:p-7 {paused
+								? 'border-warning/30 bg-warning/10'
+								: isFree
+									? 'border-brand/20 bg-brand-tint-2'
+									: 'border-cta/25 bg-cta/10'}"
 						>
 							<div class="mb-3.5 flex items-center justify-between lg:mb-6">
 								<div class="flex items-center gap-3 lg:gap-3.5">
 									<div
-										class="flex h-10 w-10 items-center justify-center rounded-xl lg:h-[52px] lg:w-[52px] lg:rounded-2xl {isFree
-											? 'bg-brand'
-											: 'bg-cta'}"
+										class="flex h-10 w-10 items-center justify-center rounded-xl lg:h-[52px] lg:w-[52px] lg:rounded-2xl {paused
+											? 'bg-warning'
+											: isFree
+												? 'bg-brand'
+												: 'bg-cta'}"
 									>
-										<Icon name="clock" size={21} class="text-white" />
+										<Icon name={paused ? 'pause' : 'clock'} size={21} class="text-white" />
 									</div>
 									<div>
 										<div class="flex items-center gap-2">
 											<span class="text-[15px] font-bold text-ink lg:text-[19px]"
 												>{activeLabel}</span
 											>
-											<span
-												class="rounded-full bg-online px-2 py-[3px] text-[10px] font-semibold tracking-wide text-white uppercase"
+											{#if paused}
+												<span
+													class="rounded-full bg-warning px-2 py-[3px] text-[10px] font-semibold tracking-wide text-white uppercase"
+												>
+													Paused
+												</span>
+											{:else}
+												<span
+													class="rounded-full bg-online px-2 py-[3px] text-[10px] font-semibold tracking-wide text-white uppercase"
+												>
+													Active
+												</span>
+											{/if}
+										</div>
+										{#if paused}
+											<div class="text-xs font-medium text-warning lg:text-[13.5px]">
+												Time held — resume anytime
+											</div>
+										{:else}
+											<div
+												class="text-xs font-medium lg:text-[13.5px] {isFree
+													? 'text-brand'
+													: 'text-cta'}"
 											>
-												Active
-											</span>
-										</div>
-										<div
-											class="text-xs font-medium lg:text-[13.5px] {isFree
-												? 'text-brand'
-												: 'text-cta'}"
-										>
-											Ends at <strong>{activeEndsAt}</strong> · shared across your devices
-										</div>
+												Ends at <strong>{activeEndsAt}</strong> · shared across your devices
+											</div>
+										{/if}
 									</div>
 								</div>
 								<div class="text-right">
 									<div
 										class="font-mono text-[22px] font-semibold tracking-tight text-ink lg:text-[44px] lg:leading-none"
 									>
-										{activeRemaining}
+										{displayRemaining}
 									</div>
 									<div
 										class="text-[10.5px] font-medium tracking-wide text-muted uppercase lg:mt-1.5"
 									>
-										left
+										{paused ? 'held' : 'left'}
 									</div>
 								</div>
 							</div>
-							<div
-								class="h-[7px] overflow-hidden rounded-full lg:h-[9px] {isFree
-									? 'bg-brand/15'
-									: 'bg-cta/15'}"
-							>
+							{#if !paused}
 								<div
-									class="h-full rounded-full {isFree ? 'bg-brand' : 'bg-cta'}"
-									style="width:{activeProgress}%"
-								></div>
-							</div>
+									class="h-[7px] overflow-hidden rounded-full lg:h-[9px] {isFree
+										? 'bg-brand/15'
+										: 'bg-cta/15'}"
+								>
+									<div
+										class="h-full rounded-full {isFree ? 'bg-brand' : 'bg-cta'}"
+										style="width:{activeProgress}%"
+									></div>
+								</div>
+							{/if}
+
+							<!-- Pause is paid-only; Free Time can't be paused (it would game the cooldown). -->
+							{#if paused}
+								<form method="post" action="?/resumeAccess" use:enhance={resumeTime}>
+									<button
+										class="mt-4 flex h-[50px] w-full items-center justify-center gap-2 rounded-xl bg-cta text-[15px] font-bold text-white transition-colors hover:bg-cta-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cta hover:cursor-pointer"
+									>
+										<Icon name="play" size={17} />
+										Resume access
+									</button>
+								</form>
+							{:else if !isFree}
+								<form method="post" action="?/pauseAccess" use:enhance={pauseTime}>
+									<button
+										class="mt-4 flex h-[50px] w-full items-center justify-center gap-2 rounded-xl border border-cta/30 bg-surface text-[15px] font-semibold text-cta transition-colors hover:bg-cta/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cta hover:cursor-pointer"
+									>
+										<Icon name="pause" size={17} />
+										Pause my time
+									</button>
+								</form>
+							{/if}
 						</section>
 						<!-- Free Time -->
 					{:else if data.freeTime.eligible}
@@ -427,8 +490,8 @@
 						</section>
 					{/if}
 
-					<!-- Devices bound under the account window -->
-					{#if access.active}
+					<!-- Devices bound under the account window (none while paused). -->
+					{#if access.active && !paused}
 						<DeviceList {devices} />
 					{/if}
 				</div>

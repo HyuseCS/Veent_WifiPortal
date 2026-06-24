@@ -9,6 +9,8 @@ import {
 	getFreeTimeStatus,
 	startFreeAccessAndBindDevice,
 	startPaidAccessAndBindDevice,
+	pauseAccountAccess,
+	resumeAccountAccess,
 	bindDevice,
 	unbindDevice,
 	unbindAllDevices,
@@ -105,8 +107,10 @@ export const load: PageServerLoad = async (event) => {
 	let access = await getActiveAccess(db, user.id);
 
 	// Auto-bind: a returning device with live account time should get online with zero
-	// taps. Best-effort — a router hiccup must never break the dashboard render.
-	if (access && mac && !blocked) {
+	// taps. Best-effort — a router hiccup must never break the dashboard render. Skipped while
+	// PAUSED: auto-binding would re-grant internet and defeat the pause (devices stay off until
+	// the user resumes).
+	if (access && !access.paused && mac && !blocked) {
 		const macU = mac.toUpperCase();
 		const bound = access.devices.find((d) => d.macAddress?.toUpperCase() === macU);
 		const underCap = access.devices.length < MAX_DEVICES_PER_ACCOUNT;
@@ -134,6 +138,10 @@ export const load: PageServerLoad = async (event) => {
 		access: {
 			active: !!access,
 			isFree: access?.isFree ?? false,
+			paused: access?.paused ?? false,
+			// Frozen hold while paused; live remaining otherwise. The client shows this directly
+			// when paused (no countdown) and falls back to expiresAt − now when running.
+			remainingMs: access?.remainingMs ?? 0,
 			label: access ? (access.isFree ? 'Free Time' : access.name) : null,
 			startedAt: access?.startedAt.toISOString() ?? null,
 			expiresAt: access?.expiresAt.toISOString() ?? null
@@ -269,6 +277,52 @@ export const actions: Actions = {
 			return fail(502, { error: 'Could not reach the network controller. Please try again.' });
 		}
 		return { removed: true };
+	},
+
+	// Pause the account's PAID access window: freeze the remaining time and disconnect every
+	// device. The held time survives until resume (the revoke cron skips paused accounts).
+	pauseAccess: async (event) => {
+		const user = event.locals.user;
+		if (!user) return redirect(302, '/login');
+
+		let result;
+		try {
+			result = await pauseAccountAccess(db, network, user.id);
+		} catch (err) {
+			console.error('[customer] pauseAccess failed:', err);
+			return fail(502, { error: 'Could not reach the network controller. Please try again.' });
+		}
+		if (!result.ok) {
+			const error =
+				result.reason === 'free_not_pausable'
+					? 'Free Time can’t be paused.'
+					: 'No active access to pause.';
+			return fail(409, { error });
+		}
+		return { paused: true };
+	},
+
+	// Resume a paused window: restore the held time into a fresh window. The current device
+	// reconnects via the dashboard auto-bind on the resulting reload.
+	resumeAccess: async (event) => {
+		const user = event.locals.user;
+		if (!user) return redirect(302, '/login');
+
+		let result;
+		try {
+			result = await resumeAccountAccess(db, user.id);
+		} catch (err) {
+			console.error('[customer] resumeAccess failed:', err);
+			return fail(502, { error: 'Could not resume access. Please try again.' });
+		}
+		if (!result.ok) {
+			const error =
+				result.reason === 'no_remaining'
+					? 'No held time left to resume.'
+					: 'Nothing to resume.';
+			return fail(409, { error });
+		}
+		return { resumed: true };
 	},
 
 	signOut: async (event) => {
