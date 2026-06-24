@@ -7,23 +7,10 @@
 
 	let { data, form }: { data: PageServerData; form: ActionData } = $props();
 
-	// Credits-per-peso decides the honest "Best value" badge: bigger bundles give
-	// a better rate, so the highest ratio wins it. No fake "most popular".
-	function bestValueOf(bundles: PageServerData['bundles']): number | null {
-		let best: { id: number; rate: number } | null = null;
-		for (const b of bundles) {
-			const rate = (b.creditsProvided ?? 0) / (b.fiatCost || Infinity);
-			if (!best || rate > best.rate) best = { id: b.id, rate };
-		}
-		return best?.id ?? null;
-	}
-
-	const bestValueId = $derived(bestValueOf(data.bundles));
-
 	// The user's explicit choice; null until they tap one. The effective selection
 	// falls back to the best-value bundle so a one-tap path to payment always exists.
 	let userPick = $state<number | null>(null);
-	const selectedId = $derived(userPick ?? bestValueId);
+	const selectedId = $derived(userPick);
 
 	let pending = $state(false);
 
@@ -109,13 +96,6 @@
 							></span>
 							<span class="flex flex-1 items-center gap-2">
 								<span class="font-mono text-lg font-bold text-ink">₱{bundle.fiatCost}</span>
-								{#if bundle.id === bestValueId}
-									<span
-										class="rounded-full bg-brand px-2 py-[3px] text-[9.5px] font-semibold tracking-wide text-white uppercase"
-									>
-										Best value
-									</span>
-								{/if}
 							</span>
 							<span
 								class="font-mono text-[13px] font-semibold {selected ? 'text-brand' : 'text-muted'}"
@@ -129,7 +109,7 @@
 				<button
 					type="submit"
 					disabled={pending || selectedId === null}
-					class="flex h-[54px] w-full items-center justify-center gap-2 rounded-xl bg-cta text-base font-bold text-white transition-colors hover:bg-cta-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cta disabled:cursor-not-allowed disabled:opacity-50"
+					class="flex h-[54px] w-full items-center justify-center gap-2 rounded-xl bg-cta text-base font-bold text-white transition-colors hover:bg-cta-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cta disabled:cursor-not-allowed disabled:opacity-50 hover:cursor-pointer"
 				>
 					{#if pending}
 						<span

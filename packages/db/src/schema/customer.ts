@@ -38,6 +38,19 @@ export const customerProfile = pgTable('customer_profile', {
 	// revoke cron drives off it. Null or in the past = no live access. Devices bind under
 	// this window (network_sessions); they share it rather than each holding their own time.
 	accessExpiresAt: timestamp('access_expires_at'),
+	// The tier backing the current access window (null = Free Time, or no window). Lives on
+	// the ACCOUNT, not the device row, so every bound device shows the SAME package — a device
+	// that joined during Free Time and one that bought a tier share one account window, so they
+	// must read one package. Set by the most recent window-extending purchase/free claim.
+	accessPackageId: integer('access_package_id').references(() => packages.id, {
+		onDelete: 'set null'
+	}),
+	// Pause: when non-null, the access window is FROZEN — held remaining time is
+	// `access_expires_at − access_paused_at`, all devices are unbound (no internet flows),
+	// and the revoke cron skips the account so the held time isn't swept away. Resume sets
+	// `access_expires_at = now + held` and clears this. Any window-extending buy/free claim
+	// also clears it (adding time un-pauses). Paid windows only.
+	accessPausedAt: timestamp('access_paused_at'),
 	// Admin "block": when true, grant paths refuse to start sessions for this user.
 	blocked: boolean('blocked').notNull().default(false)
 });

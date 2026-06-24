@@ -7,9 +7,12 @@ export { createStubNetworkController } from './stub';
 export {
 	createMikrotikController,
 	provisionWalledGarden,
+	restrictApiService,
 	type MikrotikConfig,
 	type WalledGardenInput,
-	type WalledGardenResult
+	type WalledGardenResult,
+	type RestrictApiInput,
+	type RestrictApiResult
 } from './mikrotik';
 
 export type NetworkConfig =
