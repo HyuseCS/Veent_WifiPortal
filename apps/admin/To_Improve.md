@@ -64,3 +64,38 @@
   - Cheaper dashboard optimizations first: (1) send deltas not the whole snapshot, (2) index/lighten `dashboardSnapshot`.
   - Dashboard would justify Redis only at horizontal scale (~10+ instances → one worker computes, pub/subs the result) or a new cross-instance presence feature ("who's viewing what").
 
+---
+
+# 🗺️ ROADMAP — where we are
+
+Backend/security work is phased; the UI/page items above are a separate, ongoing track.
+
+### ✅ Phase 0 — NetworkMap refactor & fixes — DONE (committed `cc99bfb`)
+- [x] Extract pure logic to tested `$lib` modules (`clustering`, `reach`, `geocode`); server reuses `reach`
+- [x] Split components: `PinPanel.svelte` + Leaflet controller (`networkMap.controller.ts`); `NetworkMap.svelte` 1419 → 929 lines
+- [x] Fix `/networks` → "Edit location" 404 (dead `setLocation` form → `/map?ap=<id>` deep-link)
+
+### ✅ Phase 1 — Money/security backend — DONE (committed)
+- [x] Grant transactionality — `startPaidSession` (spend + grant atomic) · `grant-atomic.spec.ts`
+- [x] Admin email rate limiting — `rate_limits` (scope,identifier) migration `0014` + `checkAdminEmailLimit` on staff-invite & wipe-code · `rateLimit.test.ts`
+- [x] Maya webhook — verified re-fetch design is sound (no HMAC needed); added `maya-webhook.spec.ts`
+
+### ✅ Phase 2 — Rate-limiting breadth + remove temp hole — DONE
+- [x] Admin login — per IP (10 / 15 min); customer auth is OTP (teammate-owned)
+- [x] `/api/network/grant` — per user (20 / hr)
+- [x] `/register` admin hole — **deleted** (route dir + login link removed)
+- [x] Finance CSV export — per admin (20 / hr)
+- [x] Payment webhook — per-IP flood cap (120 / min); crons — optional `CRON_IP_ALLOWLIST`
+- [x] SSE `/api/connected` — concurrent-stream cap per user (6, in-memory)
+- Helpers: `apps/{customer,admin}/src/lib/server/rateLimit.ts` · test `rateLimit.spec.ts`
+
+### ⬜ Phase 3 — Hardening — NEXT  ◀ YOU ARE HERE
+- [ ] Fail-fast config validation at boot (`CRON_SECRET`, `DATABASE_URL`, payment keys)
+- [ ] Verify/add indexes (`payment_transactions(status, created_at)`, active-session lookup, etc.)
+- [ ] Observability (webhook success rate, email-delivery failures, open SSE count)
+- [ ] Explicit `max` on the primary Drizzle connection pool
+
+### 🎨 Frontend / page polish — ongoing (separate track)
+The per-page items at the top of this file (System, Dashboard, Network, Map, Users, Finance, Staff). Independent of the backend phases — pick up alongside or between them.
+
+_Out of scope for us: OTP / SMS rate limiting (teammate-owned, already landed)._

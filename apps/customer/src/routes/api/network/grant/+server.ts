@@ -4,6 +4,7 @@ import { packages } from '@veent/db';
 import { getAccount, startFreeSession, startPaidSession } from '@veent/core';
 import { db } from '$lib/server/db';
 import { network } from '$lib/server/network';
+import { rateLimit } from '$lib/server/rateLimit';
 import type { RequestHandler } from './$types';
 
 /**
@@ -26,6 +27,10 @@ export const POST: RequestHandler = async (event) => {
 		packageId?: number;
 	};
 	if (!body.macAddress) error(400, 'macAddress is required');
+
+	// Throttle grant attempts per user so a client can't hammer the spend→grant path.
+	const rl = await rateLimit('grant_user', user.id, 20);
+	if (!rl.allowed) error(429, 'Too many access requests. Please wait a moment and try again.');
 
 	const account = await getAccount(db, user.id);
 	if (account?.blocked) error(403, 'Account is blocked');

@@ -5,6 +5,7 @@ import { APIError } from 'better-auth/api';
 import { getStaffStatus, STAFF_STATUS, grantAdminAccess, resolveDeviceMac } from '@veent/core';
 import { db } from '$lib/server/db';
 import { network } from '$lib/server/network';
+import { rateLimit, clientIp } from '$lib/server/rateLimit';
 
 export const load: PageServerLoad = (event) => {
 	if (event.locals.user) {
@@ -15,6 +16,12 @@ export const load: PageServerLoad = (event) => {
 
 export const actions: Actions = {
 	signInEmail: async (event) => {
+		// Per-IP credential throttle: 10 sign-in attempts per 15 min from one address.
+		const rl = await rateLimit('admin_login_ip', clientIp(event), 10, 15 * 60 * 1000);
+		if (!rl.allowed) {
+			return fail(429, { message: 'Too many sign-in attempts. Please wait a few minutes.' });
+		}
+
 		const formData = await event.request.formData();
 		const email = formData.get('email')?.toString() ?? '';
 		const password = formData.get('password')?.toString() ?? '';
