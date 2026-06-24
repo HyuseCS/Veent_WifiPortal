@@ -75,9 +75,11 @@ async function bindMacTx(
 	const newWindow = expiry(opts.addMinutes, base);
 
 	if (opts.addMinutes > 0) {
+		// The window AND its package are account-level: the most recent extend sets both, so
+		// every bound device reads one consistent package (paid tier, or null = Free Time).
 		await tx
 			.update(customerProfile)
-			.set({ accessExpiresAt: newWindow })
+			.set({ accessExpiresAt: newWindow, accessPackageId: opts.packageId ?? null })
 			.where(eq(customerProfile.userId, opts.userId));
 	}
 
@@ -408,9 +410,16 @@ export async function getActiveAccess(
 	userId: string,
 	now: Date = new Date()
 ): Promise<ActiveAccess | null> {
+	// Account-level window + its package (one tier for the whole account, shared by every
+	// device — not derived per device row).
 	const [profile] = await db
-		.select({ accessExpiresAt: customerProfile.accessExpiresAt })
+		.select({
+			accessExpiresAt: customerProfile.accessExpiresAt,
+			accessPackageId: customerProfile.accessPackageId,
+			packageName: packages.name
+		})
 		.from(customerProfile)
+		.leftJoin(packages, eq(packages.id, customerProfile.accessPackageId))
 		.where(eq(customerProfile.userId, userId))
 		.limit(1);
 
@@ -423,30 +432,26 @@ export async function getActiveAccess(
 			macAddress: networkSessions.macAddress,
 			boundAt: networkSessions.boundAt,
 			lastSeenAt: networkSessions.lastSeenAt,
-			startedAt: networkSessions.startedAt,
-			packageId: networkSessions.packageId,
-			name: packages.name
+			startedAt: networkSessions.startedAt
 		})
 		.from(networkSessions)
-		.leftJoin(packages, eq(networkSessions.packageId, packages.id))
 		.where(
 			and(eq(networkSessions.userId, userId), eq(networkSessions.status, SESSION_STATUS.active))
 		)
 		.orderBy(desc(networkSessions.startedAt));
 
-	// Most-recent binding names the tier; earliest start drives the progress bar.
-	const latest = devices[0];
+	// Earliest bound device's start drives the progress bar.
 	const startedAt = devices.reduce(
 		(min, d) => (d.startedAt < min ? d.startedAt : min),
-		latest?.startedAt ?? now
+		devices[0]?.startedAt ?? now
 	);
 
 	return {
 		expiresAt: window,
 		startedAt,
-		packageId: latest?.packageId ?? null,
-		name: latest?.name ?? null,
-		isFree: (latest?.packageId ?? null) == null,
+		packageId: profile.accessPackageId ?? null,
+		name: profile.packageName ?? null,
+		isFree: (profile.accessPackageId ?? null) == null,
 		devices: devices.map((d) => ({
 			id: d.id,
 			macAddress: d.macAddress,

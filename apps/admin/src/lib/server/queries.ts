@@ -123,6 +123,8 @@ export async function listUsers(db: DB, now: Date = new Date()): Promise<AdminUs
 
 /** Currently-connected sessions (initial snapshot; SSE streams updates). */
 export async function listActiveSessions(db: DB, now: Date = new Date()): Promise<ActiveSession[]> {
+	// Package is account-level (customer_profile.access_package_id), so every device bound
+	// under one account's window shows the SAME tier — not each device's own bind-time package.
 	const rows = await db
 		.select({
 			id: networkSessions.id,
@@ -131,7 +133,8 @@ export async function listActiveSessions(db: DB, now: Date = new Date()): Promis
 			packageName: packages.name
 		})
 		.from(networkSessions)
-		.leftJoin(packages, eq(packages.id, networkSessions.packageId))
+		.leftJoin(customerProfile, eq(customerProfile.userId, networkSessions.userId))
+		.leftJoin(packages, eq(packages.id, customerProfile.accessPackageId))
 		.where(eq(networkSessions.status, SESSION_STATUS.active))
 		.orderBy(desc(networkSessions.startedAt));
 
