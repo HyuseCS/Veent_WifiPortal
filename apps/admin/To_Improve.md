@@ -39,8 +39,11 @@
 - [ ] Add which network locations the payments are comming from (if possible)
 
 **Staff Page**
-- [ ] Make table scrollable not page
-- [ ] Add mass invite feature
+- [x] Make table scrollable not page — full-height flex column; table body scrolls internally
+- [x] Add mass invite feature — "Add staff" toolbar button opens a modal with add/remove rows
+      (up to 10); `?/invite` loops, reporting per-row sent/failed (replaced the collapsible form)
+- [x] Sortable columns — clickable Member/Role/Status/Last-active headers (asc/desc toggle,
+      arrow indicator); added raw `lastActiveAt` to the row for chronological sort
 
 ---
 

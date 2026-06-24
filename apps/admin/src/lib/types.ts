@@ -149,6 +149,8 @@ export interface StaffMember {
 	status: StaffStatus;
 	/** Last-active label, pre-formatted (e.g. "2h ago", "—"). */
 	lastActive: string;
+	/** Raw last-active time (epoch ms) for sorting; null if never active. */
+	lastActiveAt: number | null;
 }
 
 /** One slice of the Finance "revenue by payment method" donut. */

@@ -262,7 +262,8 @@ export async function listStaff(db: DB): Promise<StaffMember[]> {
 		role: r.role as StaffRole,
 		roleLabel: r.roleLabel,
 		status: r.status as StaffStatus,
-		lastActive: formatLastActive(r.lastActiveAt)
+		lastActive: formatLastActive(r.lastActiveAt),
+		lastActiveAt: r.lastActiveAt ? r.lastActiveAt.getTime() : null
 	}));
 }
 
