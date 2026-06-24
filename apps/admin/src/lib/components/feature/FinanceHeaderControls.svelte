@@ -57,16 +57,16 @@
 	});
 </script>
 
-<div class="flex items-center gap-2 sm:gap-3">
+<div class="flex items-center gap-2">
 	{#if onList}
 		<a href="/finance?period={period}" class={ghostBtn}>
 			<ChartColumn class="h-4 w-4 shrink-0" aria-hidden="true" />
-			<span class="hidden sm:inline">Overview</span>
+			Overview
 		</a>
 	{:else}
 		<a href="/finance/transactions?period={period}" class={brandBtn}>
 			<Receipt class="h-4 w-4 shrink-0" aria-hidden="true" />
-			<span class="hidden sm:inline">Transactions</span>
+			Transactions
 		</a>
 	{/if}
 
@@ -79,7 +79,7 @@
 			onclick={() => (open = !open)}
 		>
 			<SlidersHorizontal class="h-4 w-4 shrink-0" aria-hidden="true" />
-			<span class="hidden sm:inline">{periodLabel[period]}</span>
+			{periodLabel[period]}
 			<ChevronDown
 				class="h-4 w-4 transition-transform duration-150 {open ? 'rotate-180' : ''}"
 				aria-hidden="true"

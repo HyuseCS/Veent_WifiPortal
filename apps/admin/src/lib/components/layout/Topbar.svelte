@@ -7,13 +7,15 @@
 	import { live, connectLive } from '$lib/live.svelte';
 
 	// `actions` renders page-specific controls on the right (e.g. the dashboard layout switcher).
+	// `subbar` renders a second row below the main bar — used on mobile when actions need labels.
 	// `ontoggleMenu` is called by the hamburger button; only rendered on mobile (lg:hidden).
 	let {
 		title,
 		subtitle,
 		actions,
+		subbar,
 		ontoggleMenu
-	}: { title: string; subtitle?: string; actions?: Snippet; ontoggleMenu?: () => void } = $props();
+	}: { title: string; subtitle?: string; actions?: Snippet; subbar?: Snippet; ontoggleMenu?: () => void } = $props();
 
 	$effect(connectLive);
 
@@ -53,41 +55,48 @@
 	}
 </script>
 
-<header
-	class="flex h-16 shrink-0 items-center justify-between gap-4 border-b border-border bg-bg px-4 sm:px-6"
->
-	<div class="flex min-w-0 items-center gap-3">
-		<!-- Hamburger: only visible on mobile (below lg breakpoint where sidebar is always shown) -->
-		{#if ontoggleMenu}
+<header class="shrink-0 border-b border-border bg-bg">
+	<!-- Main row: always visible -->
+	<div class="flex h-16 items-center justify-between gap-4 px-4 sm:px-6">
+		<div class="flex min-w-0 items-center gap-3">
+			{#if ontoggleMenu}
+				<button
+					type="button"
+					onclick={ontoggleMenu}
+					aria-label="Toggle navigation menu"
+					class="flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted transition-colors duration-150 hover:bg-surface hover:text-ink lg:hidden"
+				>
+					<Menu class="h-5 w-5" aria-hidden="true" />
+				</button>
+			{/if}
+			<div class="min-w-0">
+				<h1 class="truncate text-lg font-semibold tracking-tight text-ink sm:text-xl">{title}</h1>
+				{#if subtitle}
+					<p class="truncate text-xs text-muted">{subtitle}</p>
+				{/if}
+			</div>
+			<LiveStatusPill status={live.status} />
+		</div>
+
+		<div class="flex shrink-0 items-center gap-2 sm:gap-3">
+			<span class="hidden text-xs text-muted sm:inline">Updated {updatedLabel}</span>
 			<button
 				type="button"
-				onclick={ontoggleMenu}
-				aria-label="Toggle navigation menu"
-				class="flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted transition-colors duration-150 hover:bg-surface hover:text-ink lg:hidden"
+				onclick={refresh}
+				disabled={refreshing}
+				aria-label="Refresh data"
+				class="flex h-11 w-11 cursor-pointer items-center justify-center rounded-md border border-border bg-bg text-muted outline-none transition-[background-color,color,transform,border-color] duration-150 hover:border-brand/40 hover:bg-surface hover:text-ink focus-visible:ring-2 focus-visible:ring-brand/40 active:scale-95 disabled:cursor-not-allowed disabled:opacity-60"
 			>
-				<Menu class="h-5 w-5" aria-hidden="true" />
+				<RefreshCw class="h-4 w-4 {refreshing ? 'animate-spin' : ''}" aria-hidden="true" />
 			</button>
-		{/if}
-		<div class="min-w-0">
-			<h1 class="truncate text-lg font-semibold tracking-tight text-ink sm:text-xl">{title}</h1>
-			{#if subtitle}
-				<p class="truncate text-xs text-muted">{subtitle}</p>
-			{/if}
+			{#if actions}{@render actions()}{/if}
 		</div>
-		<LiveStatusPill status={live.status} />
 	</div>
 
-	<div class="flex shrink-0 items-center gap-2 sm:gap-3">
-		<span class="hidden text-xs text-muted sm:inline">Updated {updatedLabel}</span>
-		<button
-			type="button"
-			onclick={refresh}
-			disabled={refreshing}
-			aria-label="Refresh data"
-			class="flex h-11 w-11 cursor-pointer items-center justify-center rounded-md border border-border bg-bg text-muted outline-none transition-[background-color,color,transform,border-color] duration-150 hover:border-brand/40 hover:bg-surface hover:text-ink focus-visible:ring-2 focus-visible:ring-brand/40 active:scale-95 disabled:cursor-not-allowed disabled:opacity-60"
-		>
-			<RefreshCw class="h-4 w-4 {refreshing ? 'animate-spin' : ''}" aria-hidden="true" />
-		</button>
-		{#if actions}{@render actions()}{/if}
-	</div>
+	<!-- Subbar: optional second row for page-specific controls (mobile only) -->
+	{#if subbar}
+		<div class="border-t border-border px-4 py-2 sm:hidden">
+			{@render subbar()}
+		</div>
+	{/if}
 </header>

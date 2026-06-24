@@ -39,7 +39,17 @@
 	<div class="flex min-w-0 flex-1 flex-col overflow-hidden">
 		<Topbar {title} {subtitle} ontoggleMenu={() => (sidebarOpen = !sidebarOpen)}>
 			{#snippet actions()}
-				{#if onFinance}<FinanceHeaderControls />{/if}
+				{#if onFinance}
+					<!-- Hidden on mobile — shown in the subbar row instead -->
+					<div class="hidden sm:flex sm:items-center sm:gap-3">
+						<FinanceHeaderControls />
+					</div>
+				{/if}
+			{/snippet}
+			{#snippet subbar()}
+				{#if onFinance}
+					<FinanceHeaderControls />
+				{/if}
 			{/snippet}
 		</Topbar>
 		<main class="min-w-0 flex-1 overflow-x-hidden overflow-y-auto bg-canvas p-4 sm:p-6">
