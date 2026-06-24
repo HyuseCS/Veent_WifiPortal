@@ -1,28 +1,21 @@
 <script lang="ts">
-	import { enhance } from '$app/forms';
 	import Wifi from 'lucide-svelte/icons/wifi';
 	import MapPin from 'lucide-svelte/icons/map-pin';
 	import Pencil from 'lucide-svelte/icons/pencil';
 	import type { NetworkAp } from '$lib/types';
-	import { Button, Field, StatusBadge } from '$lib/components/ui';
-	import MapPicker from './MapPicker.svelte';
+	import { StatusBadge } from '$lib/components/ui';
 
 	// `selected` rings the card and mirrors the coverage-map focus; clicking the card
-	// (or its onfocus) selects this AP on the page-level map.
-	// `editing`/`onedit` are owned by the page so only one card edits at a time
-	// (→ at most one MapPicker/Leaflet map mounted). onedit(id) opens, onedit(null) closes.
+	// (or its onfocus) selects this AP on the page-level map. Location editing happens on
+	// the unified /map page (the "Edit on map" link deep-links to this AP's editor).
 	let {
 		ap,
 		selected = false,
-		onfocus,
-		editing = false,
-		onedit
+		onfocus
 	}: {
 		ap: NetworkAp;
 		selected?: boolean;
 		onfocus?: (id: string) => void;
-		editing?: boolean;
-		onedit?: (id: string | null) => void;
 	} = $props();
 
 	// tone → token classes for the status icon tile + accents.
@@ -70,42 +63,16 @@
 		placed ? `${Number(ap.latitude).toFixed(4)}, ${Number(ap.longitude).toFixed(4)}` : 'Not placed on map'
 	);
 
-	// A placed AP shows its coords + "Edit"; editing (page-owned) reveals the form.
-
-	// Edits (typed or map-picked) override the saved value; null = show the saved
-	// coord. Cleared on a successful save so the field re-syncs to the fresh `ap`.
-	let editLat = $state<string | null>(null);
-	let editLng = $state<string | null>(null);
-	const latitude = $derived(editLat ?? ap.latitude ?? '');
-	const longitude = $derived(editLng ?? ap.longitude ?? '');
-
-	const toNum = (s: string): number | null => {
-		const n = Number(s);
-		return s.trim() !== '' && Number.isFinite(n) ? n : null;
-	};
-
-	function cancelEdit() {
-		onedit?.(null);
-		editLat = null;
-		editLng = null;
-		msg = null;
-	}
-
-	let saving = $state(false);
-	let msg = $state<{ ok: boolean; text: string } | null>(null);
+	// A placed AP deep-links to its editor on the map (?ap=<id>); an unplaced one just opens
+	// the map, where it's offered in the new-pin name combobox.
+	const mapHref = $derived(placed ? `/map?ap=${ap.id}` : '/map');
 </script>
 
 <div
 	role="button"
 	tabindex="0"
-	onclick={(e) => {
-		// Clicks inside the open location form shouldn't re-focus the map.
-		if ((e.target as HTMLElement).closest('form')) return;
-		onfocus?.(ap.id);
-	}}
+	onclick={() => onfocus?.(ap.id)}
 	onkeydown={(e) => {
-		// Don't hijack keys (esp. Space) bubbling up from the nested location form's inputs.
-		if ((e.target as HTMLElement).closest('form')) return;
 		if (e.key === 'Enter' || e.key === ' ') {
 			e.preventDefault();
 			onfocus?.(ap.id);
@@ -160,100 +127,14 @@
 			/>
 			<span class="truncate">{coordText}</span>
 		</span>
-		<!-- Reveals the location form; stops the card's focus click. -->
-		<button
-			type="button"
-			onclick={(e) => {
-				e.stopPropagation();
-				onedit?.(editing ? null : ap.id);
-			}}
+		<!-- Edit this AP's location on the unified map editor (deep-links via ?ap=<id>). -->
+		<a
+			href={mapHref}
+			onclick={(e) => e.stopPropagation()}
 			class="flex min-h-[44px] shrink-0 cursor-pointer items-center gap-1.5 rounded-lg border border-border px-3 text-xs font-semibold text-muted transition-colors duration-150 hover:border-brand/40 hover:text-ink"
 		>
 			<Pencil class="h-3.5 w-3.5" aria-hidden="true" />
-			Edit
-		</button>
+			{placed ? 'Edit on map' : 'Place on map'}
+		</a>
 	</div>
-
-	{#if editing}
-		<!-- Click/drag the map or type to set this AP's location. Same setLocation action.
-		     Card-focus is suppressed for clicks inside this form (see the card's onclick). -->
-		<form
-			method="POST"
-			action="?/setLocation"
-			class="space-y-3 border-t border-border pt-3"
-			use:enhance={() => {
-				saving = true;
-				msg = null;
-				return async ({ result, update }) => {
-					saving = false;
-					if (result.type === 'success') {
-						msg = { ok: true, text: 'Saved.' };
-						editLat = null;
-						editLng = null;
-						onedit?.(null); // back to the coords view
-					} else if (result.type === 'failure') {
-						msg = { ok: false, text: String(result.data?.error ?? 'Could not save.') };
-					}
-					await update({ reset: false });
-				};
-			}}
-		>
-			<input type="hidden" name="id" value={ap.id} />
-
-			<MapPicker
-				height="h-40"
-				autolocate={false}
-				lat={toNum(latitude)}
-				lng={toNum(longitude)}
-				onpick={(c) => {
-					editLat = String(c.lat);
-					editLng = String(c.lng);
-				}}
-			/>
-
-			<!-- 2-col grid is page-specific layout; the inputs themselves reuse the shared Field. -->
-			<div class="grid grid-cols-2 gap-3">
-				<Field
-					id="lat-{ap.id}"
-					label="Latitude"
-					name="latitude"
-					type="text"
-					inputmode="decimal"
-					placeholder="14.5560"
-					value={latitude}
-					oninput={(e) => (editLat = e.currentTarget.value)}
-				/>
-				<Field
-					id="lng-{ap.id}"
-					label="Longitude"
-					name="longitude"
-					type="text"
-					inputmode="decimal"
-					placeholder="121.0244"
-					value={longitude}
-					oninput={(e) => (editLng = e.currentTarget.value)}
-				/>
-			</div>
-			<Field
-				id="addr-{ap.id}"
-				name="address"
-				label="Address"
-				type="text"
-				placeholder="Venue, City"
-				value={ap.address ?? ''}
-			/>
-			<div class="flex items-center gap-3">
-				<Button type="submit" loading={saving}>Save location</Button>
-				<Button type="button" variant="secondary" onclick={cancelEdit}>Cancel</Button>
-				{#if msg}
-					<span
-						class="animate-fade-in text-xs"
-						style="color: {msg.ok ? 'var(--color-online)' : 'var(--color-blocked)'}"
-					>
-						{msg.text}
-					</span>
-				{/if}
-			</div>
-		</form>
-	{/if}
 </div>
