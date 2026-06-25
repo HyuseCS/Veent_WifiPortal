@@ -2,6 +2,7 @@ import { env } from '$env/dynamic/private';
 import { betterAuth } from 'better-auth/minimal';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 import { sveltekitCookies } from 'better-auth/svelte-kit';
+import { twoFactor } from 'better-auth/plugins/two-factor';
 import { getRequestEvent } from '$app/server';
 import { adminAuthSchema } from '@veent/db';
 import { activateStaff } from '@veent/core';
@@ -58,6 +59,9 @@ export const auth = betterAuth({
 	},
 	advanced: { cookiePrefix: 'radius-admin' },
 	plugins: [
+		// Mandatory TOTP second factor for staff (enrollment gate in (app)/+layout.server.ts).
+		// secret + backupCodes are stored encrypted (BETTER_AUTH_SECRET) in admin_two_factor.
+		twoFactor({ issuer: 'RADIUS Admin' }),
 		sveltekitCookies(getRequestEvent) // make sure this is the last plugin in the array
 	]
 });

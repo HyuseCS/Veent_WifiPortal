@@ -33,12 +33,19 @@ async function requireOwner(userId: string | undefined) {
  * we show the last-known rows. (The (app) layout already guards auth.) */
 export const load: PageServerLoad = async (event) => {
 	const { user } = await event.parent();
-	try {
-		await refreshNetworkHealth(db, network);
-	} catch (err) {
-		console.error('[admin] network health refresh failed:', err);
-	}
-	return { networks: await listNetworkHealth(db), isOwner: user.role === STAFF_ROLE.owner };
+	// STREAM the router-backed health instead of awaiting it: the slow part is the live
+	// router refresh (api-ssl round-trip), and awaiting it here blocks the whole tab
+	// switch. Returning the promise un-awaited lets SvelteKit navigate immediately and
+	// render a skeleton while the refresh + read resolve in the background.
+	const networks = (async () => {
+		try {
+			await refreshNetworkHealth(db, network);
+		} catch (err) {
+			console.error('[admin] network health refresh failed:', err);
+		}
+		return listNetworkHealth(db);
+	})();
+	return { networks, isOwner: user.role === STAFF_ROLE.owner };
 };
 
 export const actions: Actions = {

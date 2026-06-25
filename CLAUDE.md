@@ -61,6 +61,22 @@ The only ways to create staff now:
   (`apps/admin/scripts/bootstrap-owner.ts`, uses `OWNER_*` env).
 - **All other staff:** the owner-only `/staff` invite flow.
 
+### Admin TOTP / MFA (mandatory)
+
+The "TOTP (admin)" in the stack is real: staff sign-in requires a second factor, via
+better-auth's **two-factor plugin** (no new dependency), wired server-side through
+`auth.api.*` (admin has no `createAuthClient`).
+- **Enrollment is mandatory.** `(app)/+layout.server.ts` redirects any active staff with
+  `twoFactorEnabled === false` to `/enroll-2fa` (password → QR + one-time backup codes →
+  confirm a code). The bootstrap owner hits this gate on first login — no special-casing.
+- **Two-step login.** `signInEmail` returns `{ twoFactorRedirect: true }` for enrolled
+  users (no session yet); `/login/2fa` verifies a 6-digit TOTP **or** a backup code, and
+  only *then* runs the active-status check + device internet grant (shared
+  `$lib/server/postLogin.ts` — never grant on an unverified half-login).
+- Secret + backup codes are stored **encrypted at rest** (`BETTER_AUTH_SECRET`) in
+  `admin_two_factor` (admin-only; migration `0020`). The QR is rendered server-side to an
+  SVG string (`uqr`) — no client QR component. Self-serve disable is out of scope.
+
 ### Backend hardening (Phases 0–3 — complete)
 
 A senior-review-driven hardening pass landed; the rationale is in

@@ -178,17 +178,19 @@ export async function listActiveSessions(db: DB, now: Date = new Date()): Promis
 	});
 }
 
-/** The full dashboard in one frame: KPIs + revenue + active sessions + network
- * health. Pure composition of the four queries below — seeds SSR and is what the
- * live feed re-queries per DB notify. */
+/** The full admin live frame: KPIs + revenue + active sessions + network health +
+ * the user table. Pure composition of the queries below — seeds SSR and is what the
+ * live feed re-queries per DB notify, so the Dashboard, Networks, and Users pages all
+ * read one stream. */
 export async function dashboardSnapshot(db: DB): Promise<DashboardSnapshot> {
-	const [kpis, revenue, activeSessions, networks] = await Promise.all([
+	const [kpis, revenue, activeSessions, networks, users] = await Promise.all([
 		dashboardKpis(db),
 		revenueByDay(db),
 		listActiveSessions(db),
-		listNetworkHealth(db)
+		listNetworkHealth(db),
+		listUsers(db)
 	]);
-	return { kpis, revenue, activeSessions, networks };
+	return { kpis, revenue, activeSessions, networks, users };
 }
 
 /** Headline KPIs. Deltas are omitted (no period-over-period baseline yet).
@@ -256,6 +258,17 @@ function formatLastActive(at: Date | null, now: Date = new Date()): string {
 	return `${Math.floor(days / 7)}w ago`;
 }
 
+/** Display name for one staff member, or null if no such user. Used by the promote
+ *  step-up to enforce the type-to-confirm gate server-side (not just in the UI). */
+export async function getStaffName(db: DB, userId: string): Promise<string | null> {
+	const [row] = await db
+		.select({ name: adminUser.name })
+		.from(adminUser)
+		.where(eq(adminUser.id, userId))
+		.limit(1);
+	return row?.name ?? null;
+}
+
 /** Staff-management table rows (admin_user joined to its admin_profile). */
 export async function listStaff(db: DB): Promise<StaffMember[]> {
 	const rows = await db
@@ -286,6 +299,11 @@ export async function listStaff(db: DB): Promise<StaffMember[]> {
 		lastActiveAt: r.lastActiveAt ? r.lastActiveAt.getTime() : null
 	}));
 }
+
+/** Latency (ms) at/above which an AP is flagged "Degraded". Real internet RTT to
+ * the probe host runs ~40–80ms on a healthy link, so the bar sits well above that
+ * — only a genuinely slow path (>100ms) raises an alert, not normal jitter. */
+const LATENCY_DEGRADED_MS = 100;
 
 /** Per-AP health cards. Raw metrics → display tone/labels (presentation lives here).
  * `users` is the live count of active, unexpired sessions attributed to each AP
@@ -342,7 +360,7 @@ export async function listNetworkHealth(db: DB, now: Date = new Date()): Promise
 		if (!r.online) {
 			tone = 'blocked';
 			status = 'Offline';
-		} else if (uptime < 99 || (r.latencyMs ?? 0) >= 40) {
+		} else if (uptime < 99 || (r.latencyMs ?? 0) > LATENCY_DEGRADED_MS) {
 			tone = 'warning';
 			status = 'Degraded';
 		}

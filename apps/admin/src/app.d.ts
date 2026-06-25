@@ -5,7 +5,9 @@ import type { User, Session } from 'better-auth';
 declare global {
 	namespace App {
 		interface Locals {
-			user?: User;
+			// `twoFactorEnabled` is added to the user by the better-auth two-factor plugin
+			// (returned field); the base `User` type doesn't include it.
+			user?: User & { twoFactorEnabled?: boolean | null };
 			session?: Session;
 		}
 

@@ -229,6 +229,17 @@ shared-segment sniff/MITM exposure.
 years; no rotation needed soon, but note it exists. Pin `10.0.0.147` to a static
 DHCP lease so the *Available From* restriction can't break on a lease change.
 
+**Diagnosed 2026-06-25 — "api-ssl hangs" was the Available From restriction, not a
+code/cert bug.** When the apps' host drifts off `10.0.0.147` (DHCP lease change),
+api-ssl (8729) silently drops the SYN → node-routeros connect hangs to its timeout,
+so the Networks page shows no health and latency stays `—`. Plain `api` (8728) kept
+working because it was never actually disabled (see the "final step" above — it
+wasn't applied). Verified directly: from `10.0.0.147`, api-ssl connects in ~120–200ms
+and `/ping` works; raw `openssl s_client` and Node `tls.connect` both handshake in
+~115ms, proving the cert/TLS path is fine. **Action items:** (1) pin the static DHCP
+lease for the apps' host (the durable fix), and (2) actually disable plain `api` 8728
+on the router, since it's still live and undercuts this control.
+
 ## R11 — A router connection timeout crashes the app server ✅ Resolved
 
 **Was:** `createMikrotikController` (`packages/core/src/integrations/network/mikrotik.ts`)
