@@ -138,6 +138,13 @@ cards update without refreshing. Each simulator action also prints a timestamped
 
 All staff share the password **`password123`**.
 
+> **Mandatory TOTP (2FA).** Seeded staff have no authenticator enrolled yet, so the
+> **first** login for any account is redirected to `/enroll-2fa` (confirm password → scan
+> the QR / enter the key in an authenticator app → save backup codes → enter a code). After
+> that, sign-in is two-step: password → `/login/2fa` (6-digit code **or** a backup code).
+> You'll need a TOTP app (Google Authenticator, 1Password, Authy, …) to test as any staff
+> member. The active-status check + device grant run only **after** the code is verified.
+
 | Email | Role | Status | Expected behaviour |
 |-------|------|--------|--------------------|
 | `owner@veent.test` | owner | active | Full access — incl. **Staff** page and customer **wipe** |
@@ -151,10 +158,14 @@ All staff share the password **`password123`**.
 
 ## Page-by-page test checklist
 
-### `/login`
-- [ ] `owner@veent.test` / `password123` → redirects to `/dashboard`.
-- [ ] `pia@veent.test` (pending) → rejected with an "not activated" message.
-- [ ] `dane@veent.test` (disabled) → rejected with an "not active" message.
+### `/login` + 2FA
+- [ ] **First login** `owner@veent.test` / `password123` → redirected to `/enroll-2fa`;
+      enroll (QR/key + backup codes + a code) → lands on `/dashboard`.
+- [ ] **Later logins** (enrolled) → password → `/login/2fa` → enter a 6-digit code → `/dashboard`.
+- [ ] A **backup code** works at `/login/2fa` in place of the TOTP (single-use).
+- [ ] Wrong/expired code → "Invalid or expired code"; 10 bad codes / 15 min per IP → `429`.
+- [ ] `pia@veent.test` (pending) → rejected "not activated" (after code verify, never before).
+- [ ] `dane@veent.test` (disabled) → rejected "not active".
 - [ ] Wrong password → "Sign in failed".
 
 ### `/dashboard`
@@ -192,7 +203,17 @@ All staff share the password **`password123`**.
 ### `/staff` (owner only)
 - [ ] Visiting as a non-owner (`adrian@veent.test`) → **403**.
 - [ ] As owner: table shows active / pending / disabled badges.
-- [ ] Invite a new admin, enable/disable a member, promote an active admin to owner.
+- [ ] Invite a new admin; enable/disable a member.
+- [ ] **Promote admin→owner** — Crown opens a dialog requiring you to type the member's
+      name **and** your TOTP code; wrong name keeps the button disabled, wrong code is
+      rejected; correct both → they become owner.
+- [ ] **Owner demotion/removal (needs ≥2 owners)** — promote a second admin first. An
+      owner-row action opens a request (demote or remove) gated by type-name + TOTP; the
+      "Pending owner changes" panel shows approval progress. The change executes only once
+      **every other owner** approves (each via a TOTP step-up), then takes effect on the
+      target's next request. With exactly 2 owners the initiator is already unanimous, so it
+      executes immediately. The last owner can never be demoted/removed. Only the initiator
+      can cancel a pending request.
 
 ---
 
@@ -216,6 +237,8 @@ bunx vitest run maya-webhook      # re-fetch verification, status mapping, centa
 | What | How | Expect |
 |------|-----|--------|
 | **Admin login limit** (10 / 15 min per IP) | POST `/login` with a wrong password 11× from one IP | 11th response is `429` |
+| **2FA verify limit** (10 / 15 min per IP) | Enter a wrong code at `/login/2fa` 11× | 11th response is `429` |
+| **Role step-up limit** (5 / 15 min per IP) | Submit a wrong TOTP on promote / owner-change 6× | 6th response is `429` |
 | **Finance export limit** (20 / hr per admin) | Click CSV export >20× in an hour | eventually `429` |
 | **SSE stream cap** (6 / user) | Open `/dashboard` in 7 tabs as one user | 7th SSE connection rejected `429` |
 | **Admin email limit** | Request a wipe code 6× (owner) | 6th returns `429` (no email sent) |
