@@ -208,7 +208,7 @@
 			</Card>
 
 			<!-- Right column: fleet status + router log -->
-			<div class="flex min-w-0 flex-col gap-5">
+			<div class="flex min-w-0 flex-col gap-5 xl:h-[65vh]">
 				<Card class="flex flex-col gap-4">
 					<h2 class="text-base font-semibold text-ink">Fleet Status</h2>
 					<div class="flex items-center gap-5">
@@ -233,7 +233,7 @@
 					</div>
 				</Card>
 
-				<div class="min-h-65 max-h-[65vh] flex-1">
+				<div class="h-[37vh] xl:h-auto xl:min-h-0 xl:flex-1">
 					<RouterLogPanel />
 				</div>
 			</div>
@@ -276,7 +276,7 @@
 			     width instead of stretching across the whole row. -->
 			<section
 				class="grid items-start gap-4"
-				style="grid-template-columns: repeat(auto-fill, minmax(330px, 1fr));"
+				style="grid-template-columns: repeat(auto-fill, minmax(min(330px, 100%), 1fr));"
 			>
 				{#each visible as ap (ap.id)}
 					<NetworkHealthCard
