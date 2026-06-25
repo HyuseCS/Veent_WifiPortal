@@ -1,5 +1,8 @@
-import { and, eq, ne } from 'drizzle-orm';
+import { and, eq, ne, sql } from 'drizzle-orm';
 import { type DB, adminUser, adminProfile } from '@veent/db';
+
+/** Transaction advisory-lock key serializing all owner-count mutations (arbitrary constant). */
+const OWNER_CHANGE_LOCK = 0x6f776e72; // "ownr"
 import { STAFF_ROLE, STAFF_STATUS, type StaffRole, type StaffStatus } from '../config';
 
 /** An owner's contact row, for approval emails and the owner-count invariant. */
@@ -122,6 +125,12 @@ export async function executeOwnerChange(
 	target: { targetUserId: string; action: 'demote' | 'remove' }
 ): Promise<boolean> {
 	return db.transaction(async (tx) => {
+		// Serialize the owner-count check: a transaction-scoped advisory lock makes
+		// concurrent owner changes run one-at-a-time, so two can't both read "2 owners",
+		// both pass the last-owner guard, and drop the org to zero (READ COMMITTED, the
+		// default, would otherwise allow that race). Released automatically at commit.
+		await tx.execute(sql`select pg_advisory_xact_lock(${OWNER_CHANGE_LOCK})`);
+
 		const owners = await tx
 			.select({ userId: adminProfile.userId })
 			.from(adminProfile)

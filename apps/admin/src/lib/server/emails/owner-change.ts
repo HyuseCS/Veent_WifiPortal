@@ -15,6 +15,10 @@ function escapeHtml(value: string): string {
 
 const actionVerb = (a: 'demote' | 'remove') => (a === 'demote' ? 'demote to admin' : 'remove');
 
+/** Collapse CRLF/whitespace — names go into the Subject header, which must be single-line
+ *  (a raw \r\n would allow header injection). */
+const headerSafe = (value: string) => value.replace(/\s+/g, ' ').trim();
+
 function shell(body: string): string {
 	return `<!doctype html>
 <html>
@@ -57,7 +61,7 @@ export function ownerChangeRequestedEmail({
 	const brand = '#0f766e';
 
 	const subject = isApprover
-		? `Approval needed: ${verb} ${targetName.trim() || 'an owner'}`
+		? `Approval needed: ${verb} ${headerSafe(targetName) || 'an owner'}`
 		: `A request to ${verb} your owner account was opened`;
 
 	const lead = isApprover
@@ -104,7 +108,7 @@ export function ownerChangeExecutedEmail({
 	const safeName = escapeHtml(recipientName.trim() || 'there');
 	const safeTarget = escapeHtml(targetName.trim() || 'an owner');
 	const past = action === 'demote' ? 'demoted to admin' : 'removed';
-	const subject = `Owner change completed: ${targetName.trim() || 'an owner'} ${past}`;
+	const subject = `Owner change completed: ${headerSafe(targetName) || 'an owner'} ${past}`;
 
 	const html = shell(
 		`<tr><td style="font-size:14px;line-height:22px;color:#334155;padding:8px 0 24px;">Hi ${safeName}, all owners approved and <strong>${safeTarget} has been ${past}</strong>. This is now in effect.</td></tr>

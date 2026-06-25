@@ -111,8 +111,8 @@
 					}}
 					class="space-y-3 border-t border-border pt-4"
 				>
-					<!-- Carry the one-time display data so a mistyped code re-renders it -->
-					<input type="hidden" name="qrSvg" value={form?.qrSvg ?? ''} />
+					<!-- Carry the one-time display data so a mistyped code re-renders it. The QR
+					     is NOT carried (it's {@html}-rendered, so only the server may emit it). -->
 					<input type="hidden" name="secret" value={form?.secret ?? ''} />
 					<input type="hidden" name="backupCodes" value={(form?.backupCodes ?? []).join('\n')} />
 

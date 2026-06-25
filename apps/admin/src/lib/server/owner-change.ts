@@ -1,11 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { and, desc, eq } from 'drizzle-orm';
-import {
-	adminOwnerChangeRequest,
-	adminOwnerChangeApproval,
-	adminUser,
-	type DB
-} from '@veent/db';
+import { adminOwnerChangeRequest, adminOwnerChangeApproval, adminUser } from '@veent/db';
 import { listOwners, executeOwnerChange, type Owner } from '@veent/core';
 import { db } from '$lib/server/db';
 import { isUnanimous } from '$lib/owner-change-rules';
@@ -79,7 +74,7 @@ export async function createRequest(input: {
 	}
 
 	const [existing] = await db
-		.select({ id: adminOwnerChangeRequest.id })
+		.select({ id: adminOwnerChangeRequest.id, expiresAt: adminOwnerChangeRequest.expiresAt })
 		.from(adminOwnerChangeRequest)
 		.where(
 			and(
@@ -88,7 +83,15 @@ export async function createRequest(input: {
 			)
 		)
 		.limit(1);
-	if (existing) return { ok: false, error: 'A request is already open for this owner.' };
+	if (existing) {
+		// A still-live request blocks a duplicate. An EXPIRED one (past its TTL but never
+		// flipped) would otherwise wedge the target forever via the partial-unique index —
+		// retire it so a fresh request can be opened.
+		if (existing.expiresAt.getTime() > Date.now()) {
+			return { ok: false, error: 'A request is already open for this owner.' };
+		}
+		await markStatus(existing.id, 'cancelled');
+	}
 
 	const id = randomUUID();
 	const expiresAt = new Date(Date.now() + REQUEST_TTL_MS);
@@ -202,13 +205,20 @@ export async function evaluate(requestId: string): Promise<boolean> {
 	return did;
 }
 
-/** Cancel a pending request (any owner; UI restricts the button to the initiator). */
-export async function cancelRequest(requestId: string): Promise<boolean> {
+/**
+ * Cancel a pending request. ONLY the initiator may cancel — the `initiatedBy` predicate
+ * stops a target owner from forging a POST to cancel the request against themselves.
+ */
+export async function cancelRequest(requestId: string, actorId: string): Promise<boolean> {
 	const updated = await db
 		.update(adminOwnerChangeRequest)
 		.set({ status: 'cancelled', updatedAt: new Date() })
 		.where(
-			and(eq(adminOwnerChangeRequest.id, requestId), eq(adminOwnerChangeRequest.status, 'pending'))
+			and(
+				eq(adminOwnerChangeRequest.id, requestId),
+				eq(adminOwnerChangeRequest.status, 'pending'),
+				eq(adminOwnerChangeRequest.initiatedBy, actorId)
+			)
 		)
 		.returning({ id: adminOwnerChangeRequest.id });
 	return updated.length > 0;

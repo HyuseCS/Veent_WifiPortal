@@ -399,15 +399,17 @@ export const actions: Actions = {
 		return { ok: true, action: 'approveOwnerChange', executed: res.executed };
 	},
 
-	/** Cancel a pending owner-change request. Owner-only (UI shows it to the initiator). */
+	/** Cancel a pending owner-change request. Owner-only, and only the initiator (enforced
+	 *  in cancelRequest) — so a target can't cancel the request against themselves. */
 	cancelOwnerChange: async (event) => {
-		const denied = await requireOwner(event.locals.user?.id);
-		if (denied) return denied;
+		const actorId = event.locals.user?.id;
+		const denied = await requireOwner(actorId);
+		if (denied || !actorId) return denied ?? fail(403, { action: 'cancelOwnerChange', error: 'Forbidden' });
 
 		const form = await event.request.formData();
 		const requestId = String(form.get('requestId') ?? '');
 		if (!requestId) return fail(400, { action: 'cancelOwnerChange', error: 'Missing request.' });
-		await cancelRequest(requestId);
+		await cancelRequest(requestId, actorId);
 		return { ok: true, action: 'cancelOwnerChange' };
 	}
 };

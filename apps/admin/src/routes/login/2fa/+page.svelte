@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
+	import { resolve } from '$app/paths';
 	import { Button, Field } from '$lib/components/ui';
 	import type { ActionData } from './$types';
 
@@ -53,7 +54,7 @@
 		</form>
 
 		<p class="text-center text-xs text-muted">
-			<a href="/login" class="hover:text-ink">Back to sign in</a>
+			<a href={resolve('/login')} class="hover:text-ink">Back to sign in</a>
 		</p>
 	</div>
 </main>

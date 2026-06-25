@@ -16,7 +16,11 @@
 </script>
 
 {#if onclick}
-	<button type="button" {onclick} class="{base} {padding} {klass} w-full cursor-pointer text-left">
+	<button
+		type="button"
+		{onclick}
+		class="{base} {padding} {klass} min-h-[44px] w-full cursor-pointer text-left"
+	>
 		{@render children()}
 	</button>
 {:else}

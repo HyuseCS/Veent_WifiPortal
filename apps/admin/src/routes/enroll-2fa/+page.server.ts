@@ -53,12 +53,12 @@ export const actions: Actions = {
 		const formData = await event.request.formData();
 		const code = formData.get('code')?.toString().trim() ?? '';
 		// Enrollment confirm only accepts a freshly-generated TOTP (not a backup code).
-		// The QR + backup codes are shown only once (from ?/enable). Carry them through
-		// hidden fields so a mistyped code re-renders them instead of losing them — the
-		// secret is already stored server-side, only the display would otherwise vanish.
+		// The secret + backup codes are shown once (from ?/enable); carry them through so a
+		// mistyped code keeps them on screen. NB: the QR is deliberately NOT round-tripped —
+		// it's rendered via {@html}, so re-emitting client-posted markup would be an injection
+		// vector. The manual key (secret, text) stays available for re-entry instead.
 		const echo = {
 			step: 'confirm' as const,
-			qrSvg: formData.get('qrSvg')?.toString() ?? '',
 			secret: formData.get('secret')?.toString() ?? '',
 			backupCodes: (formData.get('backupCodes')?.toString() ?? '').split('\n').filter(Boolean)
 		};

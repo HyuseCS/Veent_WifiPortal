@@ -207,7 +207,7 @@
 	     so the tab paints instantly while the streamed router health resolves. -->
 	<div class="animate-pulse space-y-5" aria-hidden="true">
 		<section class="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-5">
-			{#each Array.from({ length: 5 }) as _, i (i)}{@render skelCard()}{/each}
+			{#each Array.from({ length: 5 }, (_, i) => i) as i (i)}{@render skelCard()}{/each}
 		</section>
 		<div class="grid gap-5 xl:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)]">
 			<div class="min-h-107.5 rounded-xl border border-border bg-bg shadow-sm"></div>
@@ -220,7 +220,7 @@
 			class="grid items-start gap-4"
 			style="grid-template-columns: repeat(auto-fill, minmax(330px, 1fr));"
 		>
-			{#each Array.from({ length: 3 }) as _, i (i)}
+			{#each Array.from({ length: 3 }, (_, i) => i) as i (i)}
 				<div class="h-48 rounded-xl border border-border bg-bg shadow-sm"></div>
 			{/each}
 		</section>
