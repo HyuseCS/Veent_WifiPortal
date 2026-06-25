@@ -4,7 +4,7 @@ import { packages } from '@veent/db';
 import { getTopupSince, reconcileCheckout } from '@veent/core';
 import { db } from '$lib/server/db';
 import { payments } from '$lib/server/payments';
-import { getPortalContext } from '$lib/server/portal';
+import { resolveMacForUser } from '$lib/server/network-location';
 import type { PageServerLoad } from './$types';
 
 /**
@@ -54,8 +54,12 @@ export const load: PageServerLoad = async (event) => {
 
 	// Keep the device MAC on the dashboard/try-again links so it survives back into the
 	// dashboard even when the system-browser cookie jar dropped it after the gateway hop.
-	const ctx = getPortalContext(event);
-	const portalQuery = ctx?.mac ? `?mac=${encodeURIComponent(ctx.mac)}` : '';
+	// resolveMacForUser: portal cookie → router IP→MAC → the account's last-known device MAC.
+	// After the Maya hop the system browser has no portal cookie, and behind a NAT'ing hotspot
+	// the IP→MAC lookup sees the router's IP, not the device — so without the last-known
+	// fallback this returned '' and "Back to dashboard" landed on "device not detected".
+	const mac = await resolveMacForUser(event, user.id);
+	const portalQuery = mac ? `?mac=${encodeURIComponent(mac)}` : '';
 
 	return { settled, balance, creditsAdded, expectedCredits, fiatCost, portalQuery };
 };

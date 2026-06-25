@@ -4,8 +4,7 @@ import { packages, paymentCheckouts } from '@veent/db';
 import { getAccount, getLatestLedgerId } from '@veent/core';
 import { db } from '$lib/server/db';
 import { payments } from '$lib/server/payments';
-import { resolveCheckoutNetworkId } from '$lib/server/network-location';
-import { getPortalContext } from '$lib/server/portal';
+import { resolveCheckoutNetworkId, resolveMacForUser } from '$lib/server/network-location';
 import type { Actions, PageServerLoad } from './$types';
 
 /**
@@ -24,10 +23,12 @@ export const load: PageServerLoad = async (event) => {
 		.where(and(eq(packages.type, 'bundle'), eq(packages.isActive, true)))
 		.orderBy(asc(packages.fiatCost));
 
-	// Keep the device MAC on the "Dashboard" link so it survives back into the dashboard
-	// even when the captive/system-browser cookie jar dropped it (same pattern as `/`).
-	const ctx = getPortalContext(event);
-	const portalQuery = ctx?.mac ? `?mac=${encodeURIComponent(ctx.mac)}` : '';
+	// Keep the device MAC on the "Dashboard" link so it survives back into the dashboard even
+	// when the captive/system-browser cookie jar dropped it. resolveMacForUser adds the
+	// last-known-device fallback so this still works behind a NAT'ing hotspot (where IP→MAC
+	// can't see the device) and after the cookie is gone.
+	const mac = await resolveMacForUser(event, user.id);
+	const portalQuery = mac ? `?mac=${encodeURIComponent(mac)}` : '';
 
 	return { user, balance: account?.balance ?? 0, bundles, portalQuery };
 };
@@ -50,8 +51,10 @@ export const actions: Actions = {
 		// so the `veent_portal` cookie holding the MAC is GONE on return, and the dashboard
 		// can't detect the device ("can't detect device" warning) even on a cancel. Carrying
 		// the MAC in the return URLs lets `capturePortalContext` (hooks) re-stash it in
-		// whichever browser the buyer lands back in, success or cancel.
-		const mac = getPortalContext(event)?.mac;
+		// whichever browser the buyer lands back in, success or cancel. resolveMacForUser adds
+		// the last-known-device fallback so the round-trip carries a MAC even when the cookie is
+		// already gone and IP→MAC can't help (NAT'ing hotspot).
+		const mac = await resolveMacForUser(event, user.id);
 		const macQuery = mac ? `&mac=${encodeURIComponent(mac)}` : '';
 		const cancelMacQuery = mac ? `?mac=${encodeURIComponent(mac)}` : '';
 		// Watermark the ledger now; the processing page polls for a topup row above

@@ -16,7 +16,7 @@ import {
 import { db } from '$lib/server/db';
 import { network } from '$lib/server/network';
 import { buildAccountView } from '$lib/server/account-view';
-import { resolveMac } from '$lib/server/network-location';
+import { resolveMacForUser } from '$lib/server/network-location';
 import { maskPhone } from '$lib/server/otp';
 import type { Actions, PageServerLoad } from './$types';
 import { auth } from '$lib/server/auth';
@@ -65,7 +65,12 @@ export const load: PageServerLoad = async (event) => {
 
 	const account = await getAccount(db, user.id);
 	const blocked = account?.blocked ?? false;
-	let mac = await resolveMac(event);
+	// resolveMacForUser falls back to the account's last-known device MAC when the portal
+	// cookie is gone (CNA/system-browser split, Maya hop) AND the router IP→MAC lookup can't
+	// help — which it can't behind a hotspot that NATs client traffic to its own IP (we'd see
+	// the router's address, not the device). Without this fallback the dashboard shows the
+	// "device not detected" warning on every return-to-dashboard in those setups.
+	const mac = await resolveMacForUser(event, user.id);
 
 	const tiers = await db
 		.select()
@@ -73,16 +78,6 @@ export const load: PageServerLoad = async (event) => {
 		.where(and(eq(packages.type, 'tier'), eq(packages.isActive, true)));
 
 	let access = await getActiveAccess(db, user.id);
-
-	// Edge-case fallback for "can't detect device": after the gateway hop (Maya bounces to
-	// the system browser, dropping the portal cookie) AND when the router IP→MAC lookup is
-	// unavailable, neither path knows the device — yet it's plainly online. If the account
-	// has EXACTLY ONE bound device, that device IS this one, so adopt its MAC. Gated to a
-	// single device so we can never mis-label "this device" (or wire disconnect/buy to the
-	// wrong MAC) on a multi-device account — those still fall through to the honest warning.
-	if (!mac && access && !access.paused && access.devices.length === 1) {
-		mac = access.devices[0].macAddress ?? mac;
-	}
 
 	// Auto-bind: a returning device with live account time should get online with zero
 	// taps. Best-effort — a router hiccup must never break the dashboard render. Skipped while
@@ -133,7 +128,7 @@ export const actions: Actions = {
 		if (!user) return redirect(302, '/login');
 
 		const form = await event.request.formData();
-		const mac = String(form.get('mac') ?? '') || (await resolveMac(event)) || '';
+		const mac = String(form.get('mac') ?? '') || (await resolveMacForUser(event, user.id)) || '';
 		if (!MAC_RE.test(mac)) return fail(400, { error: NO_DEVICE });
 
 		const account = await getAccount(db, user.id);
@@ -157,7 +152,7 @@ export const actions: Actions = {
 		if (!user) return redirect(302, '/login');
 
 		const form = await event.request.formData();
-		const mac = String(form.get('mac') ?? '') || (await resolveMac(event)) || '';
+		const mac = String(form.get('mac') ?? '') || (await resolveMacForUser(event, user.id)) || '';
 		const packageId = Number(form.get('packageId'));
 		if (!Number.isFinite(packageId)) return fail(400, { error: 'Missing package' });
 		// Validate the device BEFORE spending credits — otherwise a bad MAC debits the
@@ -198,7 +193,7 @@ export const actions: Actions = {
 		if (!user) return redirect(302, '/login');
 
 		const form = await event.request.formData();
-		const mac = String(form.get('mac') ?? '') || (await resolveMac(event)) || '';
+		const mac = String(form.get('mac') ?? '') || (await resolveMacForUser(event, user.id)) || '';
 		if (!MAC_RE.test(mac)) return fail(400, { error: NO_DEVICE });
 
 		const account = await getAccount(db, user.id);
