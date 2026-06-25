@@ -69,7 +69,7 @@
 		const key = sortKey;
 		const dir = sortDir === 'asc' ? 1 : -1;
 		return [...filtered].sort((a, b) => {
-			let cmp = 0;
+			let cmp: number;
 			if (key === 'phone') cmp = a.phone.localeCompare(b.phone);
 			else if (key === 'balance') cmp = a.balance - b.balance;
 			else if (key === 'timeLeft') cmp = (a.timeLeftMs ?? -Infinity) - (b.timeLeftMs ?? -Infinity);

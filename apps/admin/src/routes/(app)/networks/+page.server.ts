@@ -60,8 +60,13 @@ export const actions: Actions = {
 		const denied = await requireOwner(event.locals.user?.id);
 		if (denied) return denied;
 
-		const id = Number((await event.request.formData()).get('id'));
-		if (!Number.isInteger(id)) return fail(400, { error: 'Invalid access point.' });
+		// Number(null)/Number('') both coerce to 0 and pass Number.isInteger, so a missing id
+		// would run a destructive delete against AP 0 — validate the raw value, require a real id.
+		const raw = (await event.request.formData()).get('id');
+		const id = Number(raw);
+		if (typeof raw !== 'string' || !Number.isInteger(id) || id <= 0) {
+			return fail(400, { error: 'Invalid access point.' });
+		}
 
 		await deleteNetworkPlace(db, id);
 		return { ok: true, action: 'deleteNetwork', id };
@@ -78,7 +83,10 @@ export const actions: Actions = {
 		// Cap wipe-code emails so the owner's inbox can't be flooded with codes.
 		const limited = await checkAdminEmailLimit(owner.email, owner.id);
 		if (limited) {
-			return fail(429, { error: 'Too many verification codes requested. Try again later.' });
+			return fail(429, {
+				action: 'requestWipeCode',
+				error: 'Too many verification codes requested. Try again later.'
+			});
 		}
 
 		const code = issueWipeCode(wipeKey(owner.id));
@@ -88,12 +96,15 @@ export const actions: Actions = {
 			target: 'network database'
 		});
 		// Dev affordance: the stub mailer never logs bodies, so surface the code here.
-		if (dev) console.log(`[wipe] network verification code for ${owner.email}: ${code}`);
+		if (dev) console.log(`[wipe] network verification code: ${code}`);
 		try {
 			await mailer.send({ to: owner.email, subject, html, text });
 		} catch (err) {
 			console.warn('[email] network wipe code send failed:', (err as Error)?.message);
-			return fail(502, { error: "Couldn't send the verification code. Please try again." });
+			return fail(502, {
+				action: 'requestWipeCode',
+				error: "Couldn't send the verification code. Please try again."
+			});
 		}
 		return { ok: true, action: 'requestWipeCode' };
 	},
@@ -106,7 +117,7 @@ export const actions: Actions = {
 
 		const code = String((await event.request.formData()).get('code') ?? '').trim();
 		if (!consumeWipeCode(wipeKey(event.locals.user!.id), code)) {
-			return fail(400, { error: 'Invalid or expired code.' });
+			return fail(400, { action: 'wipe', error: 'Invalid or expired code.' });
 		}
 		const removed = await wipeNetworks(db);
 		return { ok: true, action: 'wipe', removed };

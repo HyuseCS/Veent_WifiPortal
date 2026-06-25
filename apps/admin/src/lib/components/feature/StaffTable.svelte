@@ -71,7 +71,7 @@
 		const key = sortKey;
 		const dir = sortDir === 'asc' ? 1 : -1;
 		return [...filtered].sort((a, b) => {
-			let cmp = 0;
+			let cmp: number;
 			if (key === 'name') cmp = a.name.localeCompare(b.name);
 			else if (key === 'role') cmp = a.roleLabel.localeCompare(b.roleLabel);
 			else if (key === 'status') cmp = statusRank[a.status] - statusRank[b.status];

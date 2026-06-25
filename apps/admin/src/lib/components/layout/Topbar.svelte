@@ -50,14 +50,14 @@
 <header
 	class="flex h-16 shrink-0 items-center justify-between gap-4 border-b border-border bg-bg px-4 sm:px-6"
 >
-	<div class="flex min-w-0 items-center gap-3">
-		<div class="min-w-0">
+	<div class="min-w-0">
+		<div class="flex min-w-0 items-center gap-3">
 			<h1 class="truncate text-lg font-semibold tracking-tight text-ink sm:text-xl">{title}</h1>
-			{#if subtitle}
-				<p class="truncate text-xs text-muted">{subtitle}</p>
-			{/if}
+			<LiveStatusPill status={live.status} />
 		</div>
-		<LiveStatusPill status={live.status} />
+		{#if subtitle}
+			<p class="truncate text-xs text-muted">{subtitle}</p>
+		{/if}
 	</div>
 
 	<div class="flex shrink-0 items-center gap-2 sm:gap-3">
