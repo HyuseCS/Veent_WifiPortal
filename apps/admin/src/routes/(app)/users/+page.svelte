@@ -9,10 +9,16 @@
 	import { UsersTable, KpiCard, WipeDialog } from '$lib/components/feature';
 	import { Button } from '$lib/components/ui';
 	import type { StatusTone } from '$lib/types';
+	import { live, connectLive } from '$lib/live.svelte';
 	import type { PageData, ActionData } from './$types';
 
 	let { data, form }: { data: PageData; form: ActionData } = $props();
-	const users = $derived(data.users);
+
+	// Realtime: read the shared live snapshot (the same /api/connected stream the Topbar
+	// already opens) so online status, balances, and block state update without a reload —
+	// falling back to the SSR-loaded list until the first frame (business rule #5).
+	$effect(connectLive);
+	const users = $derived(live.snapshot?.users ?? data.users);
 
 	// lucide types don't match Svelte's `Component` structurally; cast as the other pages do.
 	const icon = (c: unknown) => c as Component;

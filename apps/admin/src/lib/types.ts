@@ -57,6 +57,9 @@ export interface DashboardSnapshot {
 	revenue: RevenuePoint[];
 	activeSessions: ActiveSession[];
 	networks: NetworkAp[];
+	/** Full user-management table, so the Users page can read the same live stream
+	 * (online status, balances, block state) instead of a reload. */
+	users: AdminUserRow[];
 }
 
 /** Health snapshot for one access point. */

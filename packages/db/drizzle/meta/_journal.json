@@ -134,6 +134,13 @@
       "when": 1782285300817,
       "tag": "0018_account_notify_triggers",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1782350226463,
+      "tag": "0019_dashboard_profile_trigger",
+      "breakpoints": true
     }
   ]
 }
