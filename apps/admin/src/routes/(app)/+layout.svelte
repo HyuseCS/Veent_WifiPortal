@@ -20,6 +20,7 @@
 		'/map': 'Access point locations',
 		'/users': 'Guests, credits & sessions',
 		'/finance': 'Settled revenue & payments',
+		'/packages': 'Bundles, tiers & free time',
 		'/staff': 'Admin access management'
 	};
 	const subtitle = $derived(
