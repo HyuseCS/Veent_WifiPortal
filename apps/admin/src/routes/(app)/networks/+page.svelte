@@ -15,13 +15,42 @@
 	import TriangleAlert from 'lucide-svelte/icons/triangle-alert';
 	import Trash2 from 'lucide-svelte/icons/trash-2';
 	import type { NetworkAp, StatusTone } from '$lib/types';
+	import { live, connectLive } from '$lib/live.svelte';
 	import type { PageData, ActionData } from './$types';
 
 	// lucide types don't match Svelte's `Component` structurally; cast as dashboard/nav do.
 	const icon = (c: unknown) => c as Component;
 
 	let { data, form }: { data: PageData; form: ActionData } = $props();
-	const networks = $derived(data.networks);
+
+	// Two data sources, both non-blocking:
+	//  • `data.networks` is STREAMED (a promise) so the tab switches instantly (see `load`),
+	//    and carries router-fresh health (the load refreshes the router first).
+	//  • the shared LIVE snapshot — the same /api/connected stream the Topbar already opens —
+	//    pushes every AP/session change in realtime (business rule #5, no polling).
+	// We prefer live, falling back to the streamed SSR seed until the first frame lands.
+	$effect(connectLive);
+	let streamedNetworks = $state<NetworkAp[]>([]);
+	let streamResolved = $state(false);
+	$effect(() => {
+		const pending = data.networks;
+		let cancelled = false;
+		Promise.resolve(pending)
+			.then((n) => {
+				if (cancelled) return;
+				streamedNetworks = n;
+				streamResolved = true;
+			})
+			.catch(() => {
+				if (!cancelled) streamResolved = true; // surface the empty state rather than hang
+			});
+		return () => {
+			cancelled = true;
+		};
+	});
+	const networks = $derived(live.snapshot?.networks ?? streamedNetworks);
+	// Skeleton until data arrives from EITHER source (live frame or the streamed seed).
+	const ready = $derived(streamResolved || live.snapshot != null);
 
 	// Owner-only, step-up-verified wipe of every access point. The two-step flow lives in
 	// the shared <WipeDialog> (same component the Users page uses).
@@ -147,7 +176,7 @@
 	// Selecting a card flies the coverage map to that AP (and rings the card), and
 	// scrolls the map into view so the focus is visible on small/scrolled layouts.
 	let selectedId = $state<string | null>(null);
-	let mapEl: HTMLDivElement;
+	let mapEl = $state<HTMLDivElement>();
 	function focusAp(id: string) {
 		selectedId = id;
 		mapEl?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -155,13 +184,48 @@
 
 	// Alerts KPI drill-down: filter the AP grid to the offending APs and scroll the grid
 	// into view so the click visibly lands on "what it's talking about".
-	let apSectionEl: HTMLDivElement;
+	let apSectionEl = $state<HTMLDivElement>();
 	function showAlerts() {
 		filter = 'alerts';
 		apSectionEl?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 	}
 </script>
 
+{#snippet skelCard()}
+	<div class="flex flex-col gap-4 rounded-xl border border-border bg-bg p-5 shadow-sm">
+		<div class="flex items-start justify-between gap-2">
+			<div class="h-3 w-20 rounded bg-surface"></div>
+			<div class="h-9 w-9 rounded-lg bg-surface"></div>
+		</div>
+		<div class="h-7 w-16 rounded bg-surface"></div>
+		<div class="h-3 w-24 rounded bg-surface"></div>
+	</div>
+{/snippet}
+
+{#if !ready}
+	<!-- Skeleton silhouette: mirrors the real layout (KPI strip · map + panels · AP grid)
+	     so the tab paints instantly while the streamed router health resolves. -->
+	<div class="animate-pulse space-y-5" aria-hidden="true">
+		<section class="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-5">
+			{#each Array.from({ length: 5 }) as _, i (i)}{@render skelCard()}{/each}
+		</section>
+		<div class="grid gap-5 xl:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)]">
+			<div class="min-h-107.5 rounded-xl border border-border bg-bg shadow-sm"></div>
+			<div class="flex flex-col gap-5">
+				<div class="h-44 rounded-xl border border-border bg-bg shadow-sm"></div>
+				<div class="min-h-80 rounded-xl border border-border bg-bg shadow-sm"></div>
+			</div>
+		</div>
+		<section
+			class="grid items-start gap-4"
+			style="grid-template-columns: repeat(auto-fill, minmax(330px, 1fr));"
+		>
+			{#each Array.from({ length: 3 }) as _, i (i)}
+				<div class="h-48 rounded-xl border border-border bg-bg shadow-sm"></div>
+			{/each}
+		</section>
+	</div>
+{:else}
 <div class="contents">
 	<!-- SCREEN 1: KPIs + coverage map + side panels -->
 	<div class="min-h-full snap-start space-y-5 pt-5 pb-5">
@@ -262,34 +326,35 @@
 			</div>
 		</div>
 
-		{#if visible.length === 0}
-			<p
-				class="rounded-xl border border-dashed border-border px-4 py-8 text-center text-sm text-muted"
-			>
-				No access points match this filter.
-				<button onclick={() => (filter = 'all')} class="cursor-pointer text-brand underline">
-					Show all
-				</button>
-			</p>
-		{:else}
-			<!-- auto-fill (not auto-fit): keeps empty tracks so a lone card stays its natural
-			     width instead of stretching across the whole row. -->
-			<section
-				class="grid items-start gap-4"
-				style="grid-template-columns: repeat(auto-fill, minmax(min(330px, 100%), 1fr));"
-			>
-				{#each visible as ap (ap.id)}
-					<NetworkHealthCard
-						{ap}
-						selected={ap.id === selectedId}
-						canDelete={data.isOwner}
-						onfocus={focusAp}
-					/>
-				{/each}
-			</section>
-		{/if}
+	{#if visible.length === 0}
+		<p
+			class="rounded-xl border border-dashed border-border px-4 py-8 text-center text-sm text-muted"
+		>
+			No access points match this filter.
+			<button onclick={() => (filter = 'all')} class="cursor-pointer text-brand underline">
+				Show all
+			</button>
+		</p>
+	{:else}
+		<!-- auto-fill (not auto-fit): keeps empty tracks so a lone card stays its natural
+		     width instead of stretching across the whole row. -->
+		<section
+			class="grid items-start gap-4"
+			style="grid-template-columns: repeat(auto-fill, minmax(min(330px, 100%), 1fr));"
+		>
+			{#each visible as ap (ap.id)}
+				<NetworkHealthCard
+					{ap}
+					selected={ap.id === selectedId}
+					canDelete={data.isOwner}
+					onfocus={focusAp}
+				/>
+			{/each}
+		</section>
+	{/if}
 	</div>
 </div>
+{/if}
 
 {#if data.isOwner}
 	<WipeDialog
