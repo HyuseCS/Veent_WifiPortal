@@ -100,7 +100,22 @@ const PAYMENT_HOSTS = [
 	'*.xendit.co'
 ];
 
-const hosts = new Set([...splitList(ADMIN_WG_HOSTS), ...PAYMENT_HOSTS]);
+/**
+ * Third-party assets the gateway's OWN checkout page loads. Without these the page
+ * renders but its CAPTCHA never appears, soft-locking the buyer on a captive-portal
+ * (walled-garden-only) device — the payment can't be submitted. Maya Checkout uses
+ * Google reCAPTCHA, served from these hosts (NOT under *.maya.ph, so the payment
+ * wildcards above don't cover them). Symptom this fixes: "captcha doesn't show on
+ * phone but works on a device with full internet".
+ */
+const CHECKOUT_ASSET_HOSTS = [
+	'www.google.com', // reCAPTCHA API + challenge iframe
+	'www.gstatic.com', // reCAPTCHA static JS/images
+	'recaptcha.net', // reCAPTCHA alternate host (some networks/regions)
+	'www.recaptcha.net'
+];
+
+const hosts = new Set([...splitList(ADMIN_WG_HOSTS), ...PAYMENT_HOSTS, ...CHECKOUT_ASSET_HOSTS]);
 const ips = new Set(splitList(ADMIN_WG_IPS));
 
 // Derive the admin host from ORIGIN and slot it into the right layer.
