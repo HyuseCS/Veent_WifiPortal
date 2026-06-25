@@ -18,6 +18,7 @@
 	import { dev } from '$app/environment';
 	import { enhance } from '$app/forms';
 	import type { AdminUserRow, StatusTone } from '$lib/types';
+	import { createSort } from '$lib/sortable.svelte';
 	import { EmptyState, IconButton, SearchInput, StatusBadge, Table } from '$lib/components/ui';
 
 	// `actions` lets the page slot owner-only controls (the Wipe button) into the toolbar
@@ -39,46 +40,30 @@
 		);
 	});
 
-	// Clickable-header sorting. `null` key keeps the server order (by phone). Clicking a
-	// header sorts by it; clicking the active header flips direction.
+	// Clickable-header sorting (shared $lib/sortable). `null` key keeps the server order (by
+	// phone); first-click direction per column is set below (e.g. biggest balance first).
 	type SortKey = 'phone' | 'balance' | 'timeLeft' | 'devices' | 'location' | 'status';
-	let sortKey = $state<SortKey | null>(null);
-	let sortDir = $state<'asc' | 'desc'>('asc');
-	// Sensible first-click direction per column (e.g. soonest-to-expire / biggest balance first).
-	const defaultDir: Record<SortKey, 'asc' | 'desc'> = {
+	// Logical status order via tone (online → warning → blocked), not alphabetical.
+	const toneRank: Record<StatusTone, number> = { online: 0, warning: 1, blocked: 2 };
+	const sort = createSort<SortKey>({
 		phone: 'asc',
 		balance: 'desc',
 		timeLeft: 'asc',
 		devices: 'desc',
 		location: 'asc',
 		status: 'asc'
-	};
-	// Logical status order via tone (online → warning → blocked), not alphabetical.
-	const toneRank: Record<StatusTone, number> = { online: 0, warning: 1, blocked: 2 };
-
-	function toggleSort(key: SortKey) {
-		if (sortKey === key) sortDir = sortDir === 'asc' ? 'desc' : 'asc';
-		else {
-			sortKey = key;
-			sortDir = defaultDir[key];
-		}
-	}
-
-	const sorted = $derived.by(() => {
-		if (!sortKey) return filtered;
-		const key = sortKey;
-		const dir = sortDir === 'asc' ? 1 : -1;
-		return [...filtered].sort((a, b) => {
-			let cmp: number;
-			if (key === 'phone') cmp = a.phone.localeCompare(b.phone);
-			else if (key === 'balance') cmp = a.balance - b.balance;
-			else if (key === 'timeLeft') cmp = (a.timeLeftMs ?? -Infinity) - (b.timeLeftMs ?? -Infinity);
-			else if (key === 'devices') cmp = a.deviceCount - b.deviceCount;
-			else if (key === 'location') cmp = (a.location ?? '').localeCompare(b.location ?? '');
-			else cmp = toneRank[a.tone] - toneRank[b.tone]; // status
-			return cmp * dir;
-		});
 	});
+
+	const sorted = $derived(
+		sort.apply(filtered, (a, b, key) => {
+			if (key === 'phone') return a.phone.localeCompare(b.phone);
+			if (key === 'balance') return a.balance - b.balance;
+			if (key === 'timeLeft') return (a.timeLeftMs ?? -Infinity) - (b.timeLeftMs ?? -Infinity);
+			if (key === 'devices') return a.deviceCount - b.deviceCount;
+			if (key === 'location') return (a.location ?? '').localeCompare(b.location ?? '');
+			return toneRank[a.tone] - toneRank[b.tone]; // status
+		})
+	);
 
 	// Pretty-print an E.164 PH mobile (+63 then 10 digits) as "+63 917 654 4521"; raw otherwise.
 	function fmtPhone(p: string): string {
@@ -159,8 +144,8 @@
 					class="px-4 py-2.5 text-left text-[11px] font-semibold tracking-wider text-muted uppercase {h.srOnly
 						? 'text-right'
 						: ''}"
-					aria-sort={sortKey === h.key
-						? sortDir === 'asc'
+					aria-sort={sort.key === h.key
+						? sort.dir === 'asc'
 							? 'ascending'
 							: 'descending'
 						: undefined}
@@ -170,15 +155,15 @@
 					{:else if h.key}
 						<button
 							type="button"
-							onclick={() => toggleSort(h.key!)}
-							class="group inline-flex items-center gap-1 tracking-wider uppercase transition-colors hover:text-ink {sortKey ===
+							onclick={() => sort.toggle(h.key!)}
+							class="group inline-flex items-center gap-1 tracking-wider uppercase transition-colors hover:text-ink {sort.key ===
 							h.key
 								? 'text-ink'
 								: ''}"
 						>
 							{h.label}
-							{#if sortKey === h.key}
-								{#if sortDir === 'asc'}
+							{#if sort.key === h.key}
+								{#if sort.dir === 'asc'}
 									<ChevronUp class="h-3.5 w-3.5" aria-hidden="true" />
 								{:else}
 									<ChevronDown class="h-3.5 w-3.5" aria-hidden="true" />

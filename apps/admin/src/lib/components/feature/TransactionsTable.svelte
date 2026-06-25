@@ -5,6 +5,7 @@
 	import ChevronsUpDown from 'lucide-svelte/icons/chevrons-up-down';
 	import type { Component } from 'svelte';
 	import type { TransactionRow, StatusTone } from '$lib/types';
+	import { createSort } from '$lib/sortable.svelte';
 	import { EmptyState, SearchInput, StatusBadge, Table } from '$lib/components/ui';
 
 	// The Finance transactions panel. Mirrors <UsersTable>: client-side search + clickable-header
@@ -36,12 +37,14 @@
 		);
 	});
 
-	// Clickable-header sorting (mirrors <UsersTable>). `null` key keeps the server order.
+	// Clickable-header sorting (shared $lib/sortable). `null` key keeps the server order.
 	type SortKey = 'date' | 'status' | 'amount' | 'method' | 'buyer' | 'apName' | 'receipt';
-	let sortKey = $state<SortKey | null>(null);
-	let sortDir = $state<'asc' | 'desc'>('asc');
-	// Sensible first-click direction per column (e.g. newest / biggest first).
-	const defaultDir: Record<SortKey, 'asc' | 'desc'> = {
+	// Logical status order via tone (online/success → warning → blocked), not alphabetical.
+	const toneRank: Record<StatusTone, number> = { online: 0, warning: 1, blocked: 2 };
+	// `amount` is a pre-formatted peso string ("₱1,200") — parse digits back for numeric sort.
+	const amountNum = (a: string) => Number(a.replace(/[^\d.]/g, '')) || 0;
+	// First-click direction per column (e.g. newest / biggest first).
+	const sort = createSort<SortKey>({
 		date: 'desc',
 		status: 'asc',
 		amount: 'desc',
@@ -49,36 +52,19 @@
 		buyer: 'asc',
 		apName: 'asc',
 		receipt: 'asc'
-	};
-	// Logical status order via tone (online/success → warning → blocked), not alphabetical.
-	const toneRank: Record<StatusTone, number> = { online: 0, warning: 1, blocked: 2 };
-	// `amount` is a pre-formatted peso string ("₱1,200") — parse digits back for numeric sort.
-	const amountNum = (a: string) => Number(a.replace(/[^\d.]/g, '')) || 0;
-
-	function toggleSort(key: SortKey) {
-		if (sortKey === key) sortDir = sortDir === 'asc' ? 'desc' : 'asc';
-		else {
-			sortKey = key;
-			sortDir = defaultDir[key];
-		}
-	}
-
-	const sorted = $derived.by(() => {
-		if (!sortKey) return filtered;
-		const key = sortKey;
-		const dir = sortDir === 'asc' ? 1 : -1;
-		return [...filtered].sort((a, b) => {
-			let cmp: number;
-			if (key === 'date') cmp = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
-			else if (key === 'status') cmp = toneRank[a.statusTone] - toneRank[b.statusTone];
-			else if (key === 'amount') cmp = amountNum(a.amount) - amountNum(b.amount);
-			else if (key === 'method') cmp = a.fundSourceType.localeCompare(b.fundSourceType);
-			else if (key === 'buyer') cmp = a.buyerName.localeCompare(b.buyerName);
-			else if (key === 'apName') cmp = (a.apName ?? '').localeCompare(b.apName ?? '');
-			else cmp = (a.receiptNo ?? '').localeCompare(b.receiptNo ?? ''); // receipt
-			return cmp * dir;
-		});
 	});
+
+	const sorted = $derived(
+		sort.apply(filtered, (a, b, key) => {
+			if (key === 'date') return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+			if (key === 'status') return toneRank[a.statusTone] - toneRank[b.statusTone];
+			if (key === 'amount') return amountNum(a.amount) - amountNum(b.amount);
+			if (key === 'method') return a.fundSourceType.localeCompare(b.fundSourceType);
+			if (key === 'buyer') return a.buyerName.localeCompare(b.buyerName);
+			if (key === 'apName') return (a.apName ?? '').localeCompare(b.apName ?? '');
+			return (a.receiptNo ?? '').localeCompare(b.receiptNo ?? ''); // receipt
+		})
+	);
 
 	// Header config: `key` makes a column a clickable sort toggle.
 	const headers: { label: string; key: SortKey }[] = [
@@ -123,23 +109,23 @@
 			{#each headers as h (h.label)}
 				<th
 					class="px-4 py-2.5 text-left text-[11px] font-semibold tracking-wider text-muted uppercase"
-					aria-sort={sortKey === h.key
-						? sortDir === 'asc'
+					aria-sort={sort.key === h.key
+						? sort.dir === 'asc'
 							? 'ascending'
 							: 'descending'
 						: undefined}
 				>
 					<button
 						type="button"
-						onclick={() => toggleSort(h.key)}
-						class="group inline-flex items-center gap-1 tracking-wider uppercase transition-colors hover:text-ink {sortKey ===
+						onclick={() => sort.toggle(h.key)}
+						class="group inline-flex items-center gap-1 tracking-wider uppercase transition-colors hover:text-ink {sort.key ===
 						h.key
 							? 'text-ink'
 							: ''}"
 					>
 						{h.label}
-						{#if sortKey === h.key}
-							{#if sortDir === 'asc'}
+						{#if sort.key === h.key}
+							{#if sort.dir === 'asc'}
 								<ChevronUp class="h-3.5 w-3.5" aria-hidden="true" />
 							{:else}
 								<ChevronDown class="h-3.5 w-3.5" aria-hidden="true" />

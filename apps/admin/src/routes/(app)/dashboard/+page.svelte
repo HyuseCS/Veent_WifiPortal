@@ -12,6 +12,7 @@
 	import ChevronUp from 'lucide-svelte/icons/chevron-up';
 	import ChevronsUpDown from 'lucide-svelte/icons/chevrons-up-down';
 	import { live, connectLive } from '$lib/live.svelte';
+	import { createSort } from '$lib/sortable.svelte';
 	import type { ActiveSession, StatusTone } from '$lib/types';
 	import type { PageData } from './$types';
 
@@ -78,62 +79,48 @@
 	const num = (s: string) => Number(s.replace(/[^\d.]/g, '')) || 0; // "45 Mbps" → 45
 
 	type SessSort = 'mac' | 'network' | 'package' | 'timeLeft';
-	const sessionCols: { label: string; key: SessSort; dir: 'asc' | 'desc' }[] = [
-		{ label: 'MAC Address', key: 'mac', dir: 'asc' },
-		{ label: 'Network', key: 'network', dir: 'asc' },
-		{ label: 'Package', key: 'package', dir: 'asc' },
-		{ label: 'Time Left', key: 'timeLeft', dir: 'asc' }
+	const sessionCols: { label: string; key: SessSort }[] = [
+		{ label: 'MAC Address', key: 'mac' },
+		{ label: 'Network', key: 'network' },
+		{ label: 'Package', key: 'package' },
+		{ label: 'Time Left', key: 'timeLeft' }
 	];
-	let sessSort = $state<SessSort | null>(null);
-	let sessDir = $state<'asc' | 'desc'>('asc');
-	function sortSessions(c: { key: SessSort; dir: 'asc' | 'desc' }) {
-		if (sessSort === c.key) sessDir = sessDir === 'asc' ? 'desc' : 'asc';
-		else ((sessSort = c.key), (sessDir = c.dir));
-	}
+	const sessSort = createSort<SessSort>({ mac: 'asc', network: 'asc', package: 'asc', timeLeft: 'asc' });
 	// Remaining ms from expiresAt (live-sorts by soonest expiry); no expiry sinks to the bottom.
 	const sessExpiry = (s: ActiveSession) => (s.expiresAt ? new Date(s.expiresAt).getTime() : Infinity);
-	const sortedSessions = $derived.by(() => {
-		if (!sessSort) return activeSessions;
-		const key = sessSort;
-		const d = sessDir === 'asc' ? 1 : -1;
-		return [...activeSessions].sort((a, b) => {
-			let cmp: number;
-			if (key === 'mac') cmp = a.mac.localeCompare(b.mac);
-			else if (key === 'network') cmp = (a.network ?? '').localeCompare(b.network ?? '');
-			else if (key === 'package') cmp = a.package.localeCompare(b.package);
-			else cmp = sessExpiry(a) - sessExpiry(b); // timeLeft
-			return cmp * d;
-		});
-	});
+	const sortedSessions = $derived(
+		sessSort.apply(activeSessions, (a, b, key) => {
+			if (key === 'mac') return a.mac.localeCompare(b.mac);
+			if (key === 'network') return (a.network ?? '').localeCompare(b.network ?? '');
+			if (key === 'package') return a.package.localeCompare(b.package);
+			return sessExpiry(a) - sessExpiry(b); // timeLeft
+		})
+	);
 
 	type NetSort = 'name' | 'status' | 'uptime' | 'latency' | 'speed';
-	const netCols: { label: string; key: NetSort; dir: 'asc' | 'desc' }[] = [
-		{ label: 'Access Point', key: 'name', dir: 'asc' },
-		{ label: 'Status', key: 'status', dir: 'asc' },
-		{ label: 'Uptime', key: 'uptime', dir: 'desc' },
-		{ label: 'Latency', key: 'latency', dir: 'asc' },
-		{ label: 'Speed', key: 'speed', dir: 'desc' }
+	const netCols: { label: string; key: NetSort }[] = [
+		{ label: 'Access Point', key: 'name' },
+		{ label: 'Status', key: 'status' },
+		{ label: 'Uptime', key: 'uptime' },
+		{ label: 'Latency', key: 'latency' },
+		{ label: 'Speed', key: 'speed' }
 	];
-	let netSort = $state<NetSort | null>(null);
-	let netDir = $state<'asc' | 'desc'>('asc');
-	function sortNetworks(c: { key: NetSort; dir: 'asc' | 'desc' }) {
-		if (netSort === c.key) netDir = netDir === 'asc' ? 'desc' : 'asc';
-		else ((netSort = c.key), (netDir = c.dir));
-	}
-	const sortedNetworks = $derived.by(() => {
-		if (!netSort) return networks;
-		const key = netSort;
-		const d = netDir === 'asc' ? 1 : -1;
-		return [...networks].sort((a, b) => {
-			let cmp: number;
-			if (key === 'name') cmp = a.name.localeCompare(b.name);
-			else if (key === 'status') cmp = toneRank[a.tone] - toneRank[b.tone];
-			else if (key === 'uptime') cmp = num(a.uptime) - num(b.uptime);
-			else if (key === 'latency') cmp = num(a.latency) - num(b.latency);
-			else cmp = num(a.throughput) - num(b.throughput); // speed
-			return cmp * d;
-		});
+	const netSort = createSort<NetSort>({
+		name: 'asc',
+		status: 'asc',
+		uptime: 'desc',
+		latency: 'asc',
+		speed: 'desc'
 	});
+	const sortedNetworks = $derived(
+		netSort.apply(networks, (a, b, key) => {
+			if (key === 'name') return a.name.localeCompare(b.name);
+			if (key === 'status') return toneRank[a.tone] - toneRank[b.tone];
+			if (key === 'uptime') return num(a.uptime) - num(b.uptime);
+			if (key === 'latency') return num(a.latency) - num(b.latency);
+			return num(a.throughput) - num(b.throughput); // speed
+		})
+	);
 </script>
 
 <!-- Shared sortable header cell, reused by both dashboard tables (mirrors <UsersTable>). -->
@@ -220,7 +207,7 @@
 			{#snippet headRow()}
 				<tr class="border-b border-border bg-surface">
 					{#each sessionCols as c (c.key)}
-						{@render sortTh(c.label, sessSort === c.key, sessDir, () => sortSessions(c))}
+						{@render sortTh(c.label, sessSort.key === c.key, sessSort.dir, () => sessSort.toggle(c.key))}
 					{/each}
 				</tr>
 			{/snippet}
@@ -271,7 +258,7 @@
 			{#snippet headRow()}
 				<tr class="border-b border-border bg-surface">
 					{#each netCols as c (c.key)}
-						{@render sortTh(c.label, netSort === c.key, netDir, () => sortNetworks(c))}
+						{@render sortTh(c.label, netSort.key === c.key, netSort.dir, () => netSort.toggle(c.key))}
 					{/each}
 				</tr>
 			{/snippet}
