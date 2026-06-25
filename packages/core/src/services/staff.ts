@@ -2,6 +2,13 @@ import { and, eq, ne } from 'drizzle-orm';
 import { type DB, adminUser, adminProfile } from '@veent/db';
 import { STAFF_ROLE, STAFF_STATUS, type StaffRole, type StaffStatus } from '../config';
 
+/** An owner's contact row, for approval emails and the owner-count invariant. */
+export interface Owner {
+	id: string;
+	name: string;
+	email: string;
+}
+
 /**
  * Staff-domain operations over `admin_profile`. Pure DB writes — account creation
  * and activation are better-auth's job and live in the admin app, not here.
@@ -90,6 +97,60 @@ export async function promoteToOwner(db: DB, userId: string): Promise<boolean> {
 		)
 		.returning({ userId: adminProfile.userId });
 	return updated.length > 0;
+}
+
+/** All current owners (id/name/email), for approval routing + the owner-count guard. */
+export async function listOwners(db: DB): Promise<Owner[]> {
+	return db
+		.select({ id: adminUser.id, name: adminUser.name, email: adminUser.email })
+		.from(adminUser)
+		.innerJoin(adminProfile, eq(adminProfile.userId, adminUser.id))
+		.where(eq(adminProfile.role, STAFF_ROLE.owner));
+}
+
+/**
+ * Execute a unanimously-approved owner change. The ONLY path that demotes or removes
+ * an owner. Runs in a transaction and re-asserts the invariants atomically, so it's
+ * safe against races (two requests both reaching unanimity) and stale approvals:
+ *   - the target must still be an owner (else the change is moot — return false);
+ *   - there must be at least one OTHER owner left afterwards (never zero owners).
+ * `demote` flips the role owner→admin (keeping the account); `remove` deletes the
+ * `admin_user` (cascades to profile/sessions/account). Returns true iff it executed.
+ */
+export async function executeOwnerChange(
+	db: DB,
+	target: { targetUserId: string; action: 'demote' | 'remove' }
+): Promise<boolean> {
+	return db.transaction(async (tx) => {
+		const owners = await tx
+			.select({ userId: adminProfile.userId })
+			.from(adminProfile)
+			.where(eq(adminProfile.role, STAFF_ROLE.owner));
+
+		const isOwner = owners.some((o) => o.userId === target.targetUserId);
+		// Last-owner guard: refuse if target isn't an owner, or is the only owner left.
+		if (!isOwner || owners.length <= 1) return false;
+
+		if (target.action === 'demote') {
+			const updated = await tx
+				.update(adminProfile)
+				.set({ role: STAFF_ROLE.admin })
+				.where(
+					and(
+						eq(adminProfile.userId, target.targetUserId),
+						eq(adminProfile.role, STAFF_ROLE.owner)
+					)
+				)
+				.returning({ userId: adminProfile.userId });
+			return updated.length > 0;
+		}
+
+		const removed = await tx
+			.delete(adminUser)
+			.where(eq(adminUser.id, target.targetUserId))
+			.returning({ id: adminUser.id });
+		return removed.length > 0;
+	});
 }
 
 /**

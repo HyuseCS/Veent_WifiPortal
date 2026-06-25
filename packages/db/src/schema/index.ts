@@ -3,5 +3,6 @@
 export * from './auth-customer';
 export * from './auth-admin';
 export * from './admin-two-factor';
+export * from './admin-owner-change';
 export * from './customer';
 export * from './admin';

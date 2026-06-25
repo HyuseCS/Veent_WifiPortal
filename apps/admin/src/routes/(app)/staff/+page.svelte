@@ -4,7 +4,7 @@
 	import UserX from 'lucide-svelte/icons/user-x';
 	import Users from 'lucide-svelte/icons/users';
 	import type { Component } from 'svelte';
-	import { AddStaffForm, KpiCard, StaffTable } from '$lib/components/feature';
+	import { AddStaffForm, KpiCard, OwnerChangePanel, StaffTable } from '$lib/components/feature';
 	import type { StatusTone } from '$lib/types';
 	import type { ActionData, PageData } from './$types';
 
@@ -82,7 +82,13 @@
 		{/each}
 	</section>
 
-	<StaffTable {staff} {form} onadd={() => (inviteOpen = true)} />
+	<OwnerChangePanel
+		requests={data.ownerChanges}
+		currentUserId={data.currentUserId}
+		{form}
+	/>
+
+	<StaffTable {staff} {form} currentUserId={data.currentUserId} onadd={() => (inviteOpen = true)} />
 </div>
 
 <AddStaffForm bind:open={inviteOpen} />

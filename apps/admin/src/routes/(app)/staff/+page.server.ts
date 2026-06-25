@@ -1,21 +1,35 @@
-import { error, fail } from '@sveltejs/kit';
+import { error, fail, type RequestEvent } from '@sveltejs/kit';
+import { env } from '$env/dynamic/private';
 import {
 	getAdminRole,
 	setStaffStatus,
 	removeStaff,
 	promoteToOwner,
 	STAFF_ROLE,
-	STAFF_STATUS
+	STAFF_STATUS,
+	type Owner
 } from '@veent/core';
 import { adminProfile } from '@veent/db';
 import { APIError } from 'better-auth/api';
 import { auth, inviteSendFailures } from '$lib/server/auth';
 import { db } from '$lib/server/db';
+import { mailer } from '$lib/server/email';
 import { checkAdminEmailLimit } from '$lib/server/emailRateLimit';
 import { listStaff, getStaffName } from '$lib/server/queries';
 import { rateLimit, clientIp } from '$lib/server/rateLimit';
 import { isTotpCode } from '$lib/server/twoFactor';
 import { namesMatch } from '$lib/confirm';
+import {
+	createRequest,
+	recordApproval,
+	cancelRequest,
+	listOpenRequests,
+	type OwnerChangeAction
+} from '$lib/server/owner-change';
+import {
+	ownerChangeRequestedEmail,
+	ownerChangeExecutedEmail
+} from '$lib/server/emails/owner-change';
 import type { Actions, PageServerLoad } from './$types';
 
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -29,7 +43,12 @@ export const load: PageServerLoad = async (event) => {
 	if (user.role !== STAFF_ROLE.owner) {
 		throw error(403, 'Only the owner can manage staff.');
 	}
-	return { staff: await listStaff(db) };
+	return {
+		staff: await listStaff(db),
+		ownerChanges: await listOpenRequests(),
+		// So the UI can show which pending requests THIS owner still needs to approve.
+		currentUserId: user.id
+	};
 };
 
 /** Re-asserts owner from the DB (never trust client state) for every mutation. */
@@ -38,6 +57,91 @@ async function requireOwner(userId: string | undefined) {
 		return fail(403, { error: 'Only the owner can manage staff.' });
 	}
 	return null;
+}
+
+/**
+ * TOTP step-up shared by the owner-change actions: per-IP rate limit + verify the
+ * acting owner's authenticator code (same pattern as ?/promote). Returns an
+ * ActionFailure to hand back, or null when verified.
+ */
+async function ownerStepUp(event: RequestEvent, code: string, action: string) {
+	const rl = await rateLimit('admin_owner_change_step_up', clientIp(event), 5, 15 * 60 * 1000);
+	if (!rl.allowed) {
+		return fail(429, { action, error: 'Too many attempts. Please wait a few minutes.' });
+	}
+	if (!isTotpCode(code)) {
+		return fail(400, { action, error: 'Enter the 6-digit code from your authenticator.' });
+	}
+	try {
+		await auth.api.verifyTOTP({ body: { code }, headers: event.request.headers });
+	} catch (err) {
+		if (err instanceof APIError) return fail(400, { action, error: 'Invalid authenticator code.' });
+		return fail(500, { action, error: 'Unexpected error' });
+	}
+	return null;
+}
+
+/** Best-effort: a failed send never blocks the state change (the DB row is truth). */
+async function sendOwnerEmail(to: string, msg: { subject: string; html: string; text: string }) {
+	try {
+		await mailer.send({ to, ...msg });
+	} catch (err) {
+		console.warn('[email] owner-change send failed:', (err as Error)?.message);
+	}
+}
+
+/** Notify required approvers ("approve") + the target ("aware"), each email-rate-limited. */
+async function notifyRequested(
+	approvers: Owner[],
+	target: Owner,
+	action: OwnerChangeAction,
+	actorId: string,
+	url: string
+) {
+	for (const o of approvers) {
+		if (await checkAdminEmailLimit(o.email, actorId)) continue;
+		await sendOwnerEmail(
+			o.email,
+			ownerChangeRequestedEmail({
+				recipientName: o.name,
+				targetName: target.name,
+				action,
+				isApprover: true,
+				url
+			})
+		);
+	}
+	// Inform the target unless they initiated their own exit (they already know).
+	if (target.id !== actorId && !(await checkAdminEmailLimit(target.email, actorId))) {
+		await sendOwnerEmail(
+			target.email,
+			ownerChangeRequestedEmail({
+				recipientName: target.name,
+				targetName: target.name,
+				action,
+				isApprover: false,
+				url
+			})
+		);
+	}
+}
+
+/** Notify everyone (owners + target, captured pre-mutation) that the change executed. */
+async function notifyExecuted(
+	ownersBefore: Owner[],
+	target: Owner,
+	action: OwnerChangeAction,
+	actorId: string
+) {
+	const recipients = new Map(ownersBefore.map((o) => [o.id, o] as const));
+	recipients.set(target.id, target); // ensure the target is included even after removal
+	for (const o of recipients.values()) {
+		if (await checkAdminEmailLimit(o.email, actorId)) continue;
+		await sendOwnerEmail(
+			o.email,
+			ownerChangeExecutedEmail({ recipientName: o.name, targetName: target.name, action })
+		);
+	}
 }
 
 /**
@@ -230,5 +334,80 @@ export const actions: Actions = {
 			return fail(400, { action: 'promote', error: 'Only an active admin can be promoted to owner.' });
 		}
 		return { ok: true, action: 'promote' };
+	},
+
+	/**
+	 * Open a request to demote/remove an owner. Owner-only, two-gate step-up (type the
+	 * target's name + TOTP). The request needs unanimous approval from all OTHER owners
+	 * before it executes — except the 2-owner peer case, where the initiator's approval
+	 * is already unanimous and it executes here. Emails the approvers + target.
+	 */
+	requestOwnerChange: async (event) => {
+		const actorId = event.locals.user?.id;
+		const denied = await requireOwner(actorId);
+		if (denied || !actorId) return denied ?? fail(403, { action: 'requestOwnerChange', error: 'Forbidden' });
+
+		const form = await event.request.formData();
+		const targetUserId = String(form.get('targetUserId') ?? '');
+		const action = String(form.get('action') ?? '') as OwnerChangeAction;
+		const confirmName = String(form.get('confirmName') ?? '');
+		const code = String(form.get('code') ?? '').trim();
+		const reason = String(form.get('reason') ?? '').trim() || null;
+		if (!targetUserId) return fail(400, { action: 'requestOwnerChange', error: 'Missing target.' });
+		if (action !== 'demote' && action !== 'remove') {
+			return fail(400, { action: 'requestOwnerChange', error: 'Invalid action.' });
+		}
+
+		// Gate 1 — type-to-confirm the target's name.
+		const targetName = await getStaffName(db, targetUserId);
+		if (!targetName || !namesMatch(confirmName, targetName)) {
+			return fail(400, { action: 'requestOwnerChange', error: 'The typed name does not match.' });
+		}
+		// Gate 2 — TOTP step-up.
+		const stepFail = await ownerStepUp(event, code, 'requestOwnerChange');
+		if (stepFail) return stepFail;
+
+		const res = await createRequest({ targetUserId, action, initiatedBy: actorId, reason });
+		if (!res.ok) return fail(400, { action: 'requestOwnerChange', error: res.error });
+
+		const url = `${env.ORIGIN ?? ''}/staff`;
+		await notifyRequested(res.approvers, res.target, res.action, actorId, url);
+		if (res.executed) await notifyExecuted(res.owners, res.target, res.action, actorId);
+
+		return { ok: true, action: 'requestOwnerChange', executed: res.executed };
+	},
+
+	/** Approve a pending owner-change. Owner-only + TOTP step-up. Executes when unanimous. */
+	approveOwnerChange: async (event) => {
+		const actorId = event.locals.user?.id;
+		const denied = await requireOwner(actorId);
+		if (denied || !actorId) return denied ?? fail(403, { action: 'approveOwnerChange', error: 'Forbidden' });
+
+		const form = await event.request.formData();
+		const requestId = String(form.get('requestId') ?? '');
+		const code = String(form.get('code') ?? '').trim();
+		if (!requestId) return fail(400, { action: 'approveOwnerChange', error: 'Missing request.' });
+
+		const stepFail = await ownerStepUp(event, code, 'approveOwnerChange');
+		if (stepFail) return stepFail;
+
+		const res = await recordApproval(requestId, actorId);
+		if (!res.ok) return fail(400, { action: 'approveOwnerChange', error: res.error });
+		if (res.executed && res.target) {
+			await notifyExecuted(res.owners, res.target, res.action, actorId);
+		}
+		return { ok: true, action: 'approveOwnerChange', executed: res.executed };
+	},
+
+	/** Cancel a pending owner-change request. Owner-only (UI shows it to the initiator). */
+	cancelOwnerChange: async (event) => {
+		const denied = await requireOwner(event.locals.user?.id);
+		if (denied) return denied;
+
+		const form = await event.request.formData();
+		const requestId = String(form.get('requestId') ?? '');
+		if (!requestId) return fail(400, { action: 'cancelOwnerChange', error: 'Missing request.' });
+		await cancelRequest(requestId);
+		return { ok: true, action: 'cancelOwnerChange' };
 	}
 };

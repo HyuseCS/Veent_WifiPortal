@@ -8,6 +8,7 @@
 	import RotateCcw from 'lucide-svelte/icons/rotate-ccw';
 	import Search from 'lucide-svelte/icons/search';
 	import Trash2 from 'lucide-svelte/icons/trash-2';
+	import UserCog from 'lucide-svelte/icons/user-cog';
 	import UserPlus from 'lucide-svelte/icons/user-plus';
 	import X from 'lucide-svelte/icons/x';
 	import type { Component } from 'svelte';
@@ -22,6 +23,7 @@
 		Table
 	} from '$lib/components/ui';
 	import PromoteDialog from './PromoteDialog.svelte';
+	import OwnerChangeDialog from './OwnerChangeDialog.svelte';
 
 	// Presentational table for the owner-only Staff page. Row actions post directly to
 	// the page's form actions (?/setStatus, ?/remove, ?/promote); the route enforces
@@ -31,12 +33,15 @@
 	let {
 		staff,
 		onadd,
-		form
+		form,
+		currentUserId
 	}: {
 		staff: StaffMember[];
 		onadd?: () => void;
-		/** Page form result — passed to PromoteDialog for its action error (action === 'promote'). */
+		/** Page form result — passed to the dialogs for their action errors. */
 		form?: { error?: string; action?: string } | null;
+		/** The signed-in owner's id — distinguishes self-exit from targeting a peer. */
+		currentUserId?: string;
 	} = $props();
 
 	// Inline two-step confirm for remove. Promotion (the highest-privilege grant) uses the
@@ -44,6 +49,21 @@
 	let confirmingId = $state<string | null>(null); // remove
 	let promoteOpen = $state(false);
 	let promoteMember = $state<StaffMember | null>(null);
+
+	// Owner demotion/removal (needs unanimous other-owner approval) via <OwnerChangeDialog>.
+	let ownerChangeOpen = $state(false);
+	let ownerChangeMember = $state<StaffMember | null>(null);
+	let ownerChangeIsSelf = $state(false);
+
+	// Only meaningful with ≥2 owners (a sole owner can't be demoted/removed — last-owner
+	// guard), so the owner-row action is hidden otherwise.
+	const ownerCount = $derived(staff.filter((m) => m.role === 'owner').length);
+
+	function openOwnerChange(member: StaffMember) {
+		ownerChangeMember = member;
+		ownerChangeIsSelf = member.id === currentUserId;
+		ownerChangeOpen = true;
+	}
 
 	// Client-side text search over the loaded rows (status is reachable via the Status column
 	// sorter now, so the old status-filter pills were dropped from the toolbar).
@@ -291,6 +311,18 @@
 							/>
 						</div>
 					{/if}
+				{:else if ownerCount >= 2}
+					<!-- Owner row: demote/remove needs unanimous other-owner approval. -->
+					<div class="flex items-center justify-end gap-1">
+						<IconButton
+							icon={UserCog as unknown as Component}
+							label={member.id === currentUserId
+								? 'Step down as owner'
+								: `Demote or remove ${member.name}`}
+							tone="danger"
+							onclick={() => openOwnerChange(member)}
+						/>
+					</div>
 				{/if}
 			</td>
 		</tr>
@@ -319,3 +351,11 @@
 
 <!-- Step-up confirmation for promotion: type-the-name + TOTP, re-enforced server-side. -->
 <PromoteDialog bind:open={promoteOpen} member={promoteMember} {form} />
+
+<!-- Owner demotion/removal request (unanimous other-owner approval; TOTP step-up). -->
+<OwnerChangeDialog
+	bind:open={ownerChangeOpen}
+	member={ownerChangeMember}
+	isSelf={ownerChangeIsSelf}
+	{form}
+/>
