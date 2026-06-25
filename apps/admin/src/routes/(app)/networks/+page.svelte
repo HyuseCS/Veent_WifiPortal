@@ -61,6 +61,7 @@
 		unit?: string;
 		tone?: StatusTone;
 		captionTone?: StatusTone;
+		onclick?: () => void;
 	};
 	const kpis = $derived<NetKpi[]>([
 		{
@@ -94,9 +95,12 @@
 			label: 'Alerts',
 			value: String(alerts),
 			icon: icon(TriangleAlert),
-			caption: 'needs attention',
-			tone: 'blocked',
-			captionTone: 'blocked'
+			// Honest at zero: green "all clear" instead of a red "needs attention" on 0.
+			caption: alerts > 0 ? 'view affected APs' : 'all clear',
+			tone: alerts > 0 ? 'blocked' : 'online',
+			captionTone: alerts > 0 ? 'blocked' : 'online',
+			// Clicking drills into the offending APs (degraded + offline). No-op at zero.
+			onclick: alerts > 0 ? showAlerts : undefined
 		}
 	]);
 
@@ -120,17 +124,24 @@
 		{ dot: 'bg-blocked', label: 'Offline' }
 	];
 
-	// Status filter for the AP grid. 'all' shows everything; otherwise filter by tone.
-	type Filter = 'all' | StatusTone;
+	// Status filter for the AP grid. 'all' shows everything; 'alerts' is the union of the
+	// two problem tones (degraded + offline) — the drill-down target of the Alerts KPI;
+	// otherwise filter by a single tone. The 'alerts' tab only appears when there are any.
+	type Filter = 'all' | 'alerts' | StatusTone;
 	let filter = $state<Filter>('all');
 	const filterDefs = $derived([
 		{ key: 'all' as const, label: 'All', count: total },
+		...(alerts > 0 ? [{ key: 'alerts' as const, label: 'Alerts', count: alerts }] : []),
 		{ key: 'online' as const, label: 'Healthy', count: cntHealthy },
 		{ key: 'warning' as const, label: 'Degraded', count: cntDegraded },
 		{ key: 'blocked' as const, label: 'Offline', count: cntOffline }
 	]);
 	const visible = $derived(
-		filter === 'all' ? networks : networks.filter((n: NetworkAp) => n.tone === filter)
+		filter === 'all'
+			? networks
+			: filter === 'alerts'
+				? networks.filter((n: NetworkAp) => n.tone === 'warning' || n.tone === 'blocked')
+				: networks.filter((n: NetworkAp) => n.tone === filter)
 	);
 
 	// Selecting a card flies the coverage map to that AP (and rings the card), and
@@ -140,6 +151,14 @@
 	function focusAp(id: string) {
 		selectedId = id;
 		mapEl?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+	}
+
+	// Alerts KPI drill-down: filter the AP grid to the offending APs and scroll the grid
+	// into view so the click visibly lands on "what it's talking about".
+	let apSectionEl: HTMLDivElement;
+	function showAlerts() {
+		filter = 'alerts';
+		apSectionEl?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 	}
 </script>
 
@@ -156,6 +175,7 @@
 					helper={k.caption}
 					tone={k.tone}
 					captionTone={k.captionTone}
+					onclick={k.onclick}
 					compact
 				/>
 			{/each}
@@ -223,7 +243,10 @@
 	<!-- SCREEN 2: access point cards -->
 	<div class="min-h-full snap-start space-y-5 pt-1">
 		<!-- AP CARDS -->
-		<div class="flex flex-wrap items-center justify-between gap-3">
+		<div
+			bind:this={apSectionEl}
+			class="flex scroll-mt-4 flex-wrap items-center justify-between gap-3"
+		>
 			<div>
 				<h2 class="text-base font-semibold text-ink">Access Points</h2>
 				<p class="mt-0.5 text-xs text-muted">Health per access point across the venue</p>

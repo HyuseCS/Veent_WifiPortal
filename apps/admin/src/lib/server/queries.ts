@@ -287,6 +287,11 @@ export async function listStaff(db: DB): Promise<StaffMember[]> {
 	}));
 }
 
+/** Latency (ms) at/above which an AP is flagged "Degraded". Real internet RTT to
+ * the probe host runs ~40–80ms on a healthy link, so the bar sits well above that
+ * — only a genuinely slow path (>100ms) raises an alert, not normal jitter. */
+const LATENCY_DEGRADED_MS = 100;
+
 /** Per-AP health cards. Raw metrics → display tone/labels (presentation lives here).
  * `users` is the live count of active, unexpired sessions attributed to each AP
  * (network_sessions.network_id), not the router's coarse per-interface sample. */
@@ -342,7 +347,7 @@ export async function listNetworkHealth(db: DB, now: Date = new Date()): Promise
 		if (!r.online) {
 			tone = 'blocked';
 			status = 'Offline';
-		} else if (uptime < 99 || (r.latencyMs ?? 0) >= 40) {
+		} else if (uptime < 99 || (r.latencyMs ?? 0) > LATENCY_DEGRADED_MS) {
 			tone = 'warning';
 			status = 'Degraded';
 		}
