@@ -8,10 +8,14 @@ import {
 	STAFF_STATUS
 } from '@veent/core';
 import { adminProfile } from '@veent/db';
+import { APIError } from 'better-auth/api';
 import { auth, inviteSendFailures } from '$lib/server/auth';
 import { db } from '$lib/server/db';
 import { checkAdminEmailLimit } from '$lib/server/emailRateLimit';
-import { listStaff } from '$lib/server/queries';
+import { listStaff, getStaffName } from '$lib/server/queries';
+import { rateLimit, clientIp } from '$lib/server/rateLimit';
+import { isTotpCode } from '$lib/server/twoFactor';
+import { namesMatch } from '$lib/confirm';
 import type { Actions, PageServerLoad } from './$types';
 
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -178,21 +182,52 @@ export const actions: Actions = {
 	},
 
 	/**
-	 * Promote an existing active admin to owner. Owner-only. The service scopes the
-	 * change to active admins, so promoting an owner / pending / disabled row is a
-	 * no-op. (The "all owners must confirm" gate is deferred — direct for now.)
+	 * Promote an existing active admin to owner. Owner-only, plus a two-gate step-up:
+	 * the owner must (1) type the target's name and (2) re-enter their own TOTP code.
+	 * Both are enforced here, not just in the UI. The service scopes the change to
+	 * active admins, so promoting an owner / pending / disabled row is a no-op.
+	 * (The "all owners must confirm" gate is deferred — direct for now.)
 	 */
 	promote: async (event) => {
 		const denied = await requireOwner(event.locals.user?.id);
 		if (denied) return denied;
 
+		// Throttle the TOTP step-up to blunt code brute-forcing (per source IP).
+		const rl = await rateLimit('admin_promote_step_up', clientIp(event), 5, 15 * 60 * 1000);
+		if (!rl.allowed) {
+			return fail(429, { action: 'promote', error: 'Too many attempts. Please wait a few minutes.' });
+		}
+
 		const form = await event.request.formData();
 		const userId = String(form.get('userId') ?? '');
-		if (!userId) return fail(400, { error: 'Missing userId' });
+		const confirmName = String(form.get('confirmName') ?? '');
+		const code = String(form.get('code') ?? '').trim();
+		if (!userId) return fail(400, { action: 'promote', error: 'Missing userId' });
+
+		// Gate 1 — type-to-confirm: the typed name must match the target's name.
+		const targetName = await getStaffName(db, userId);
+		if (!targetName || !namesMatch(confirmName, targetName)) {
+			return fail(400, { action: 'promote', error: 'The typed name does not match.' });
+		}
+
+		// Gate 2 — TOTP step-up: re-verify the acting owner's authenticator code. On an
+		// authenticated session, verifyTOTP checks the code against the stored secret and
+		// throws on mismatch (no login two-factor cookie needed). headers → reads the session.
+		if (!isTotpCode(code)) {
+			return fail(400, { action: 'promote', error: 'Enter the 6-digit code from your authenticator.' });
+		}
+		try {
+			await auth.api.verifyTOTP({ body: { code }, headers: event.request.headers });
+		} catch (error) {
+			if (error instanceof APIError) {
+				return fail(400, { action: 'promote', error: 'Invalid authenticator code.' });
+			}
+			return fail(500, { action: 'promote', error: 'Unexpected error' });
+		}
 
 		const promoted = await promoteToOwner(db, userId);
 		if (!promoted) {
-			return fail(400, { error: 'Only an active admin can be promoted to owner.' });
+			return fail(400, { action: 'promote', error: 'Only an active admin can be promoted to owner.' });
 		}
 		return { ok: true, action: 'promote' };
 	}

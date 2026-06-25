@@ -6,11 +6,11 @@
 	import type { Component } from 'svelte';
 	import { AddStaffForm, KpiCard, StaffTable } from '$lib/components/feature';
 	import type { StatusTone } from '$lib/types';
-	import type { PageData } from './$types';
+	import type { ActionData, PageData } from './$types';
 
 	// Owner-only page (the route guards access server-side). Staff and all mutations
 	// are DB-backed: AddStaffForm posts to ?/invite, StaffTable to ?/setStatus & ?/remove.
-	let { data }: { data: PageData } = $props();
+	let { data, form }: { data: PageData; form: ActionData } = $props();
 	const staff = $derived(data.staff);
 
 	// The invite form is a modal, opened from the "Add staff" button in the table toolbar.
@@ -82,7 +82,7 @@
 		{/each}
 	</section>
 
-	<StaffTable {staff} onadd={() => (inviteOpen = true)} />
+	<StaffTable {staff} {form} onadd={() => (inviteOpen = true)} />
 </div>
 
 <AddStaffForm bind:open={inviteOpen} />

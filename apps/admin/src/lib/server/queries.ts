@@ -258,6 +258,17 @@ function formatLastActive(at: Date | null, now: Date = new Date()): string {
 	return `${Math.floor(days / 7)}w ago`;
 }
 
+/** Display name for one staff member, or null if no such user. Used by the promote
+ *  step-up to enforce the type-to-confirm gate server-side (not just in the UI). */
+export async function getStaffName(db: DB, userId: string): Promise<string | null> {
+	const [row] = await db
+		.select({ name: adminUser.name })
+		.from(adminUser)
+		.where(eq(adminUser.id, userId))
+		.limit(1);
+	return row?.name ?? null;
+}
+
 /** Staff-management table rows (admin_user joined to its admin_profile). */
 export async function listStaff(db: DB): Promise<StaffMember[]> {
 	const rows = await db
