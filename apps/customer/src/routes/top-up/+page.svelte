@@ -74,7 +74,18 @@
 		{:else}
 			<h1 class="mb-3.5 text-[21px] font-bold tracking-tight text-ink">Choose a bundle</h1>
 
-			<form method="post" action="?/checkout" use:enhance={checkout}>
+			<!-- `group` + data-pending drive the submit button's spinner via CSS, so it shows the
+			instant the button is tapped — even before hydration. `data-pending` is set by the
+			pre-hydration inline script (app.html) on a native submit, and by Svelte's `pending`
+			state once hydrated; both feed the same `group-data-[pending]` styles below. -->
+			<form
+				method="post"
+				action="?/checkout"
+				use:enhance={checkout}
+				data-pending-form
+				data-pending={pending ? '' : null}
+				class="group"
+			>
 				<fieldset class="mb-6 flex flex-col gap-2.5" disabled={pending}>
 					<legend class="sr-only">Choose a credit bundle</legend>
 					{#each data.bundles as bundle (bundle.id)}
@@ -106,21 +117,28 @@
 					{/each}
 				</fieldset>
 
+				<!-- `selectedId` defaults to the cheapest bundle, so the button is enabled and
+				submittable on first paint (pre-hydration). Both the busy and idle labels are always
+				rendered; the form's `group-data-[pending]` state shows exactly one — so a native
+				pre-hydration submit gets the spinner via the inline script, and a hydrated submit
+				gets it via `pending`. The `group-data-[pending]` pointer/opacity also blocks a
+				double-tap before `disabled` (JS-only) can. -->
 				<button
 					type="submit"
 					disabled={pending || selectedId === null}
-					class="flex h-[54px] w-full items-center justify-center gap-2 rounded-xl bg-cta text-base font-bold text-white transition-colors hover:bg-cta-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cta disabled:cursor-not-allowed disabled:opacity-50 hover:cursor-pointer"
+					class="flex h-[54px] w-full items-center justify-center gap-2 rounded-xl bg-cta text-base font-bold text-white transition-colors hover:cursor-pointer hover:bg-cta-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cta disabled:cursor-not-allowed disabled:opacity-50 group-data-[pending]:pointer-events-none group-data-[pending]:opacity-50"
 				>
-					{#if pending}
+					<span class="hidden items-center gap-2 group-data-[pending]:inline-flex">
 						<span
 							class="inline-block h-[18px] w-[18px] animate-spin rounded-full border-[2.5px] border-white/40 border-t-white"
 							aria-hidden="true"
 						></span>
 						Redirecting to payment…
-					{:else}
+					</span>
+					<span class="inline-flex items-center gap-2 group-data-[pending]:hidden">
 						Continue to payment
 						<Icon name="arrow-right" size={18} strokeWidth={2.4} />
-					{/if}
+					</span>
 				</button>
 			</form>
 
