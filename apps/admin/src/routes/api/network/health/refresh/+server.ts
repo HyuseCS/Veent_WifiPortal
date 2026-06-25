@@ -1,8 +1,8 @@
-import { json, error } from '@sveltejs/kit';
-import { env } from '$env/dynamic/private';
+import { json } from '@sveltejs/kit';
 import { refreshNetworkHealth } from '@veent/core';
 import { db } from '$lib/server/db';
 import { network } from '$lib/server/network';
+import { requireCron } from '$lib/server/cron';
 import type { RequestHandler } from './$types';
 
 /**
@@ -17,8 +17,7 @@ import type { RequestHandler } from './$types';
  * No-op count of 0 on the stub controller (nothing to sample).
  */
 export const POST: RequestHandler = async (event) => {
-	const secret = event.request.headers.get('x-cron-secret');
-	if (!env.CRON_SECRET || secret !== env.CRON_SECRET) error(401, 'Unauthorized');
+	requireCron(event);
 
 	const interfaces = await refreshNetworkHealth(db, network);
 	return json({ ok: true, interfaces });

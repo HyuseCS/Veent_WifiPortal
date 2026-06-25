@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX IF NOT EXISTS "network_health_name_key" ON "network_health" USING btree ("name");

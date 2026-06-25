@@ -6,6 +6,10 @@
 > below carries a **Status** line confirmed against the live code (line numbers updated
 > where the merge moved them).
 >
+> **Remediation pass 2026-06-25:** D, E, F, G, H, K, L, M, N, O, P fixed; J improved (admin
+> IP gate); Q half-fixed (NaN guard; column-type deferred). See the closeout at the bottom.
+> Remaining open: Q column-type, J (XFF), R, S1–S4, I (teammate-owned).
+>
 > **Excluded by design:** "any signed-in admin can block/kick/hard-delete customers"
 > (no owner gate on `users` actions) is intentional and is **not** tracked here.
 
@@ -26,20 +30,20 @@ None of these touched the payments-correctness (D–H, M–O, Q) or quality (P, 
 | A | Customer email/password signup bypass | 🔴 | ✅ Fixed |
 | B | Disabled admin keeps access | 🔴 | ✅ Fixed |
 | C | `/api/network/grant` MAC validation | 🔴 | ✅ Fixed |
-| D | Credited amount not bound to amount paid | 🟠 | ⬜ Open |
-| E | Legacy `u:p` split credits with no checkout row | 🟠 | ⬜ Open |
-| F | Re-fetch reference→checkout not ownership-bound | 🟠 | ⬜ Open |
-| G | Cron secret compared with non-timing-safe `!==` | 🟡 | ⬜ Open |
-| H | Claim + credit not in one transaction | 🟡 | ⬜ Open |
+| D | Credited amount not bound to amount paid | 🟠 | ✅ Fixed |
+| E | Legacy `u:p` split credits with no checkout row | 🟠 | ✅ Fixed |
+| F | Re-fetch reference→checkout not ownership-bound | 🟠 | ✅ Fixed (via D+E) |
+| G | Cron secret compared with non-timing-safe `!==` | 🟡 | ✅ Fixed |
+| H | Claim + credit not in one transaction | 🟡 | ✅ Fixed |
 | I | OTP rate-limit double-consumes phone+MAC | 🟡 | ⬜ Open — teammate-owned |
-| J | Rate-limit / cron-IP keyed on spoofable IP | 🟡 | ◐ Partially mitigated |
-| K | Network-health no unique constraint on `name` | 🟡 | ⬜ Open |
-| L | Serialized router revokes strand the sweep | 🟡 | ⬜ Open (moved) |
-| M | `PAYMENT_CANCELLED` recorded as `PAYMENT_FAILED` | 🟢 | ⬜ Open |
-| N | `verifyWebhook` populates no detail fields | 🟢 | ⬜ Open |
-| O | Upsert `set{}` drops detail on transition | 🟢 | ⬜ Open |
-| P | Finance period bounds not calendar-aligned | 🟢 | ⬜ Open |
-| Q | Float vs fixed-decimal money columns | 🟢 | ◐ Partially fixed |
+| J | Rate-limit / cron-IP keyed on spoofable IP | 🟡 | ◐ Improved (admin gate added; XFF open) |
+| K | Network-health no unique constraint on `name` | 🟡 | ✅ Fixed |
+| L | Serialized router revokes strand the sweep | 🟡 | ✅ Fixed |
+| M | `PAYMENT_CANCELLED` recorded as `PAYMENT_FAILED` | 🟢 | ✅ Fixed |
+| N | `verifyWebhook` populates no detail fields | 🟢 | ✅ Fixed |
+| O | Upsert `set{}` drops detail on transition | 🟢 | ✅ Fixed |
+| P | Finance period bounds not calendar-aligned | 🟢 | ✅ Fixed |
+| Q | Float vs fixed-decimal money columns | 🟢 | ◐ NaN→0 guard fixed; column-type deferred |
 | R | `listNetworkHealth` global LIMIT starves APs | 🟢 | ⬜ Open |
 | S | Maintainability (Lucide cast, mikrotik dup, docs, polling) | 🟢 | ◐ Mixed |
 
@@ -108,9 +112,13 @@ None of these touched the payments-correctness (D–H, M–O, Q) or quality (P, 
 - **Fix:** Assert `evt.amountMinor === Math.round(checkout.amount * 100)` and currency
   match before crediting; reject/flag mismatches. `paymentCheckouts.amount` is already
   persisted.
-- **Status (verified 2026-06-24): ⬜ Open.** `creditCheckoutIfUnsettled`
-  (`reconcilePayments.ts`) still credits `pkg.creditsProvided` from the checkout's
-  `packageId`; `CreditArgs` carries no amount, so the paid amount is never compared.
+- **✅ Fixed 2026-06-25.** `CreditArgs` now carries `amountMinor`; `creditCheckoutIfUnsettled`
+  (`reconcilePayments.ts`) asserts it equals the claimed checkout's recorded `amount`
+  (`Math.round(Number(checkout.amount) * 100)`) before crediting. A mismatch keeps the claim
+  settled (so it can't be retried into a credit) but returns `reason: 'amount_mismatch'` and
+  logs a warning — never credits. All three callers (webhook + both reconcile paths) pass
+  `evt.amountMinor`. Currency is PHP-only and not stored per-checkout, so amount is the
+  authoritative check.
 
 ### E. Legacy `userId:packageId` reference-split path credits with no checkout binding
 - **Where:** `packages/core/src/services/reconcilePayments.ts:48-58`;
@@ -121,9 +129,11 @@ None of these touched the payments-correctness (D–H, M–O, Q) or quality (P, 
   credit an arbitrary package.
 - **Fix:** Require a matching `paymentCheckouts` row now that all new checkouts use the
   opaque token; remove or feature-flag the legacy split fallback.
-- **Status (verified 2026-06-24): ⬜ Open.** The `ref.includes(':')` fallback is still in
-  the webhook handler, and `creditCheckoutIfUnsettled` falls through to crediting when no
-  checkout row exists (relying only on `addCredits` idempotency).
+- **✅ Fixed 2026-06-25.** The `ref.includes(':')` credit-attribution fallback was removed from
+  the webhook handler, and `creditCheckoutIfUnsettled` no longer credits when no checkout row
+  exists — the atomic claim returns nothing → `reason: 'no_checkout'`, no credit. A paid event
+  with no matching checkout is still recorded for Finance (unattributed), just never credited.
+  Crediting now strictly requires the per-attempt-nonce checkout row.
 
 ### F. Re-fetch reference→checkout binding doesn't verify ownership; `ponytail:` assumptions unconfirmed
 - **Where:** `packages/core/src/integrations/payments/maya.ts:59-67, 128-173`.
@@ -134,10 +144,11 @@ None of these touched the payments-correctness (D–H, M–O, Q) or quality (P, 
 - **Fix:** Confirm the real Maya webhook auth in the dashboard before prod. Verify the
   re-fetched payment's `requestReferenceNumber` maps to a checkout owned by the resolved
   user, with a matching amount (ties into D/E).
-- **Status (verified 2026-06-24): ⬜ Open.** Webhooks are server-to-server (no end-user
-  session), so attribution is by-reference only — the real exposure is E (no required
-  checkout row) + D (no amount check). The `ponytail:` payment-id-field assumption
-  remains in `maya.ts` `getCheckoutStatus`. Fix by collapsing into E/D.
+- **✅ Fixed 2026-06-25 (via D+E).** The real exposure (no required checkout row + no amount
+  check) is closed by E and D above: crediting now requires a matching checkout row whose
+  amount equals the gateway charge. The `ponytail:` payment-id-field assumption still rides in
+  `maya.ts` `getCheckoutStatus` but is used only for tracing, never for the credit decision.
+  The live Maya webhook auth scheme should still be confirmed in the dashboard before prod.
 
 ---
 
@@ -149,9 +160,11 @@ None of these touched the payments-correctness (D–H, M–O, Q) or quality (P, 
   `apps/admin/src/routes/api/network/health/refresh/+server.ts:21`.
 - **Fix:** Use length-checked `crypto.timingSafeEqual` (already used in `otp.ts` /
   `wipe-verification.ts`); factor into one shared `verifyCronSecret(event)` helper.
-- **Status (verified 2026-06-24): ⬜ Open.** All three endpoints still use `secret !==
-  env.CRON_SECRET`. The merge added `rateLimit.ts` with `cronIpAllowed` but no
-  timing-safe secret helper.
+- **✅ Fixed 2026-06-25.** Added a shared `requireCron(event)` helper (`$lib/server/cron.ts`
+  in both apps) that does the IP allowlist + a length-checked `timingSafeEqual` on
+  `x-cron-secret`, fail-closed when `CRON_SECRET` is unset. All three endpoints
+  (revoke, reconcile, admin `health/refresh`) now call it; the non-timing-safe `!==` checks
+  are gone.
 
 ### H. Claim + credit run in two separate transactions (settled-but-uncredited window)
 - **Where:** `packages/core/src/services/reconcilePayments.ts:42-92`.
@@ -161,9 +174,10 @@ None of these touched the payments-correctness (D–H, M–O, Q) or quality (P, 
   isn't.)
 - **Fix:** Wrap the claim + `addCredits` in a single `db.transaction` and pass `tx`
   through; drop the manual revert dance.
-- **Status (verified 2026-06-24): ⬜ Open.** Still two separate statements with a
-  catch-only `revert()` (a crash bypasses it). The doc comment in `reconcilePayments.ts`
-  still falsely claims "Everything runs inside a transaction."
+- **✅ Fixed 2026-06-25.** `creditCheckoutIfUnsettled` now runs the pending→settled claim and
+  the credit in ONE `db.transaction` (new `addCreditsTx(tx, …)` core shared with `addCredits`).
+  A throw between them rolls the claim back, so the next pass retries — never settled-but-
+  uncredited. The manual `revert()` dance is gone and the doc comment now matches the code.
 
 ### I. OTP rate-limit double-consumes phone + MAC quota
 - **Where:** `apps/customer/src/lib/server/otpRateLimit.ts:35-47` (`Promise.all`
@@ -183,18 +197,21 @@ None of these touched the payments-correctness (D–H, M–O, Q) or quality (P, 
   Defense-in-depth — `CRON_SECRET` still gates cron.
 - **Fix:** Only honor XFF from known proxy hops; keep the IP allowlist as a secondary
   control; require `CRON_SECRET` in prod (already fail-closed if missing).
-- **Status (verified 2026-06-24): ◐ Partially mitigated.** The merge added
-  `CRON_IP_ALLOWLIST` wired into the two customer crons (revoke, reconcile), but the admin
-  `health/refresh` endpoint has **no** IP gate, and there's still no trusted-proxy / XFF
-  config, so `clientIp()` (rate-limit + allowlist key) remains spoofable behind a bad proxy.
+- **Status (2026-06-25): ◐ Improved.** The admin `health/refresh` IP gate is now closed —
+  `cronIpAllowed` was added to the admin `rateLimit.ts` and the endpoint goes through the
+  shared `requireCron` (IP allowlist + timing-safe secret), matching the customer crons. Still
+  open: there's no trusted-proxy / XFF config, so `clientIp()` (rate-limit + allowlist key)
+  remains spoofable behind a misconfigured proxy. `CRON_SECRET` still gates cron either way.
 
 ### K. Network-health: select-then-insert per sample, no unique constraint
 - **Where:** `packages/core/src/services/networkHealth.ts:24-43`; `network_health.name`
   has no unique index.
 - **Risk:** N+1 round-trips; concurrent sweeps can create duplicate AP rows.
 - **Fix:** Add a unique constraint on `name`; use `onConflictDoUpdate`.
-- **Status (verified 2026-06-24): ⬜ Open.** `networkHealth.ts` still does select-then-
-  insert per sample; no migration ever added a unique index on `network_health.name`.
+- **✅ Fixed 2026-06-25.** Added a `uniqueIndex('network_health_name_key')` on
+  `network_health.name` (schema + idempotent migration `0023`, verified on a throwaway DB);
+  `refreshNetworkHealth` now does a single `onConflictDoUpdate` per sample instead of
+  select-then-insert, so concurrent sweeps can't create duplicate AP rows.
 
 ### L. Serialized router revokes in cron loops; one failure strands the rest
 - **Where:** `packages/core/src/services/sessions.ts:309-317` (`expireDueSessions`),
@@ -202,11 +219,12 @@ None of these touched the payments-correctness (D–H, M–O, Q) or quality (P, 
 - **Risk:** Each loop awaits `network.revoke()` then a per-row UPDATE; an unhandled throw
   aborts the sweep, leaving later due sessions `active` (still online).
 - **Fix:** try/catch per-MAC; batch the status UPDATE with `inArray(ids)`.
-- **Status (verified 2026-06-24): ⬜ Open (moved).** The session model was refactored to
-  the account window, so the loops are now `expireDueAccounts` (`sessions.ts` ~672),
-  `reconcileGuestBindings` (~712), and `revokeUserSessions` (~738) — all still bare
-  `await network.revoke()` with no per-MAC try/catch, while `afterBind` in the same file
-  already wraps revoke safely (the pattern to copy).
+- **✅ Fixed 2026-06-25.** `expireDueAccounts`, `reconcileGuestBindings`, `revokeUserSessions`
+  (`sessions.ts`) and `revokeActiveMacs` (`accounts.ts`) now wrap each `network.revoke()` in a
+  per-MAC try/catch (copying `afterBind`'s pattern) — one router error no longer strands the
+  rest of the sweep. `expireDueAccounts`/`revokeUserSessions` also batch the status UPDATE with
+  `inArray(ids)` instead of one-per-row. A missed revoke is swept next pass by
+  `reconcileGuestBindings`.
 
 ---
 
@@ -217,8 +235,9 @@ None of these touched the payments-correctness (D–H, M–O, Q) or quality (P, 
   collapses cancelled into `'failed'` despite a dedicated `'cancelled'` status and
   `STATUS_DB` support. Corrupts the Finance funnel breakdown.
 - **Fix:** Add `case 'PAYMENT_CANCELLED': return 'cancelled';`.
-- **Status (verified 2026-06-24): ⬜ Open.** `mapStatus` still folds `PAYMENT_CANCELLED`
-  into `'failed'`; no `'cancelled'` branch.
+- **✅ Fixed 2026-06-25.** `mapStatus` now has a dedicated `case 'PAYMENT_CANCELLED': return
+  'cancelled';` branch (split out from `'failed'`), so the Finance funnel separates
+  user-cancelled from gateway-failed. Covered by the webhook spec.
 
 ### N. `verifyWebhook` never populates the detail fields → Finance columns always NULL
 - **Where:** `packages/core/src/integrations/payments/maya.ts:166-172` returns only the
@@ -226,25 +245,31 @@ None of these touched the payments-correctness (D–H, M–O, Q) or quality (P, 
   `errorCode/Message` are never mapped, so every Finance detail column is always null.
 - **Fix:** Extract them from the re-fetched Maya payment (`fundSource`, `receiptNumber`,
   `buyer.firstName/lastName`, `errorCode/errorMessage`) into the `PaymentEvent`.
-- **Status (verified 2026-06-24): ⬜ Open.** `verifyWebhook` still returns only the 5
-  core fields and doesn't even destructure the detail fields from the Maya response.
+- **✅ Fixed 2026-06-25.** A `mapDetail()` helper extracts `fundSource.type` /
+  `fundSource.details.last4|masked`, `receiptNumber`, `buyer.firstName/lastName`,
+  `buyer.contact.email`, and `errorCode/errorMessage` from the re-fetched Maya payment;
+  `verifyWebhook` spreads them (plus `referenceNo`) into the `PaymentEvent`. Best-effort —
+  a missing field is `undefined`, never throws. Covered by a new webhook spec case.
 
 ### O. Webhook upsert `set{}` drops late-arriving detail on status transition
 - **Where:** `apps/customer/src/routes/api/webhooks/payment/+server.ts:113-121` omits
   `referenceNo`, `buyerName`, `buyerEmail` from the `onConflictDoUpdate.set` (the insert
   sets them). Maya's later `SUCCESS` event never backfills them.
 - **Fix:** Add those columns to the `set` clause (meaningful once N is fixed).
-- **Status (verified 2026-06-24): ⬜ Open.** The `set` block still omits `referenceNo`,
-  `buyerName`, `buyerEmail` (and `currency`). Latent until N is fixed (today they're
-  always NULL anyway).
+- **✅ Fixed 2026-06-25.** `recordPaymentTransaction`'s `onConflictDoUpdate.set` now includes
+  `currency`, `referenceNo`, `buyerName`, `buyerEmail` (alongside the existing fund-source /
+  receipt / error fields), so a later status transition (e.g. PENDING→SUCCESS) backfills the
+  detail. `networkId` and the `userId`/`packageId` attribution stay INSERT-only by design.
 
 ### P. Finance period bounds are a rolling-ms window, not calendar-aligned
 - **Where:** `apps/admin/src/lib/server/period.ts:12-14` (`from = now − N*24h`,
   `to = now()`) → partial first/last day buckets under-report (the footgun
   `revenueByDay` avoids via `date_trunc`).
 - **Fix:** Snap `from` to start-of-day (N−1 days back).
-- **Status (verified 2026-06-24): ⬜ Open.** `parsePeriod` still uses
-  `to = new Date()` / `from = to − N*24h` with no start-of-day snap.
+- **✅ Fixed 2026-06-25.** `parsePeriod` now snaps `from` to local start-of-day of the
+  `N−1`-days-back date (`setDate(-(N-1))` + `setHours(0,0,0,0)`), so a range covers N whole
+  calendar days instead of a rolling-ms window — the first/last `date_trunc` buckets are no
+  longer partial.
 
 ### Q. Money columns mix float and fixed-decimal; missing amounts collapse to 0
 - **Where:** `packages/db/src/schema/customer.ts:64` (`amount: doublePrecision`) vs `:34`
@@ -254,10 +279,16 @@ None of these touched the payments-correctness (D–H, M–O, Q) or quality (P, 
   amount silently becomes `0` rather than rejecting.
 - **Fix:** Use `numeric` for monetary `amount`/`fiatCost`, integer for credits; guard the
   NaN→0 collapse (will fail the amount-match check from D once added).
-- **Status (verified 2026-06-24): ◐ Partially fixed.** The newer `payment_transactions`
-  /`payment_checkouts` tables use `numeric`, but `credit_ledger.amount` and
-  `packages.fiatCost` are still `doublePrecision`, and the `Math.round(Number(amount ?? 0)
-  * 100)` missing→0 collapse remains in `maya.ts`.
+- **Status (2026-06-25): ◐ NaN→0 guard fixed; column-type deferred.** The money-correctness
+  half is done: a new `toMinor()` in `maya.ts` returns **NaN** (never a silent 0) for a
+  missing/garbled amount, so the new D amount-check refuses to credit instead of crediting
+  against a bogus 0; `recordPaymentTransaction` writes 0 (not `'NaN'`) for that anomaly while
+  still refusing the credit. **Deferred:** converting `credit_ledger.amount` and
+  `packages.fiatCost` from `doublePrecision` → `numeric`. That's a wide blast radius (numeric
+  reads as a string, so every insert/read site in `credits.ts` + the dashboard/top-up pages +
+  several dev seed scripts must wrap in `String()`/`Number()`), for the review's lowest-severity
+  item, and per CLAUDE.md needs a throwaway-DB migration check. Batch it deliberately, not
+  rushed in with the security pass.
 
 ### R. `listNetworkHealth` global `LIMIT 400` starves later APs of logs
 - **Where:** `apps/admin/src/lib/server/queries.ts:272-301` — one global limit, then
@@ -307,24 +338,31 @@ defensible — but document the exception or move it to SSE for consistency.
 
 ## Closeout — recommended remediation order
 
-**Done:** A, B, C (authorization/identity) — fixed and merged.
+**Done (2026-06-24):** A, B, C (authorization/identity) — fixed and merged.
 
-**Next, highest value for least effort:**
-1. **E + D + F together** (🟠) — require a matching `paymentCheckouts` row before crediting
-   and assert the paid amount matches. One change to the credit path closes all three; it's
-   the largest remaining money-integrity gap.
-2. **M + N + O** (🟢, all in `maya.ts` + the webhook handler) — three small edits that make
-   the Finance feature actually record real data instead of NULLs. Cheap, high payoff.
-3. **G** (🟡) — swap the three cron `!==` checks for a shared `timingSafeEqual` helper.
-4. **H** (🟡) — wrap reconcile claim+credit in one `db.transaction` and correct the comment.
-5. **L** (🟡) — per-MAC try/catch in the three revoke sweeps (copy `afterBind`'s pattern).
+**Done (2026-06-25), this pass:**
+1. **E + D + F** (🟠) — crediting now requires a matching `paymentCheckouts` row AND an amount
+   that equals the gateway charge (`creditCheckoutIfUnsettled`); the legacy `u:p` split credit
+   path is gone. Closed the largest money-integrity gap.
+2. **M + N + O** (🟢) — `maya.ts` maps `cancelled` distinctly, populates all Finance detail
+   fields, and the upsert `set{}` backfills them on transition. Finance records real data now.
+3. **G** (🟡) — shared `requireCron()` helper: IP allowlist + timing-safe `x-cron-secret` on
+   all three cron endpoints (incl. the admin gate that J flagged).
+4. **H** (🟡) — reconcile claim+credit run in one `db.transaction` (`addCreditsTx`); revert
+   dance removed, comment corrected.
+5. **L** (🟡) — per-MAC try/catch + batched `inArray` UPDATE in all four revoke sweeps.
+6. **K** (🟡) — unique index on `network_health.name` + `onConflictDoUpdate` (idempotent
+   migration `0023`, verified on a throwaway DB).
+7. **P** (🟢) — Finance periods snap `from` to start-of-day (calendar-aligned buckets).
+8. **Q (partial)** — the `maya.ts` NaN→0 money-correctness guard (ties into D).
 
-**Schema-touching (batch into one migration):** K (unique index on `network_health.name`),
-Q (`credit_ledger.amount`/`packages.fiatCost` → `numeric`).
-
-**Lower priority / nuanced:** J (trusted-proxy config + IP gate on admin `health/refresh`),
-P (calendar-snap Finance periods), R (per-AP log window), S1–S4 (cleanups), I (defer to the
-OTP/SMS owner).
+**Still open / deliberately deferred:**
+- **Q (column-type)** — `credit_ledger.amount`/`packages.fiatCost` → `numeric`. Wide blast
+  radius (numeric→string read/write sites across core + seed scripts); batch separately.
+- **J (XFF)** — trusted-proxy / `X-Forwarded-For` config so `clientIp()` isn't spoofable
+  behind a bad proxy (the admin IP-gate half is done). `CRON_SECRET` still gates cron.
+- **R** (per-AP log window), **S1–S4** (Lucide cast, mikrotik dup, stale `/docs`, router-log
+  polling), **I** (OTP phone+MAC double-consume — teammate-owned, do not touch).
 
 **Before prod, independent of the above:** confirm the Maya webhook auth scheme in the Maya
 dashboard (the `ponytail:` assumption), per CLAUDE.md.

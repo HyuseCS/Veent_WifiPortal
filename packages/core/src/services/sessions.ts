@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, isNotNull, isNull, lte } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNotNull, isNull, lte } from 'drizzle-orm';
 import { type DB, customerProfile, networkSessions, packages } from '@veent/db';
 import type { NetworkController } from '../integrations/network';
 import { MAX_DEVICES_PER_ACCOUNT, SESSION_STATUS } from '../config';
@@ -657,13 +657,27 @@ export async function expireDueAccounts(
 			.where(
 				and(eq(networkSessions.userId, userId), eq(networkSessions.status, SESSION_STATUS.active))
 			);
+		// Revoke each MAC best-effort: a single router error must not strand the rest of this
+		// account's devices (or later accounts) as active. A missed revoke is swept next pass by
+		// reconcileGuestBindings, which drops router bindings no longer backed by an active row —
+		// so we still mark the rows expired here regardless. One batched UPDATE per account.
+		const ids: number[] = [];
 		for (const s of rows) {
-			if (s.macAddress) await network.revoke(s.macAddress);
+			if (s.macAddress) {
+				try {
+					await network.revoke(s.macAddress);
+				} catch {
+					// reconcileGuestBindings drops the orphaned router binding on the next cron.
+				}
+			}
+			ids.push(s.id);
+		}
+		if (ids.length) {
 			await db
 				.update(networkSessions)
 				.set({ status: SESSION_STATUS.expired })
-				.where(eq(networkSessions.id, s.id));
-			revoked++;
+				.where(inArray(networkSessions.id, ids));
+			revoked += ids.length;
 		}
 		await db
 			.update(customerProfile)
@@ -698,8 +712,12 @@ export async function reconcileGuestBindings(
 	let revoked = 0;
 	for (const { macAddress } of bindings) {
 		if (!activeMacs.has(macAddress.toUpperCase())) {
-			await network.revoke(macAddress);
-			revoked++;
+			try {
+				await network.revoke(macAddress);
+				revoked++;
+			} catch {
+				// One stubborn binding must not abort the sweep — the next pass retries it.
+			}
 		}
 	}
 	return revoked;
@@ -722,15 +740,27 @@ export async function revokeUserSessions(
 			and(eq(networkSessions.userId, userId), eq(networkSessions.status, SESSION_STATUS.active))
 		);
 
-	let revoked = 0;
+	// Best-effort per-MAC revoke (see expireDueAccounts): one router error must not leave the
+	// rest of a kicked account's devices marked active. Mark all rows revoked in one UPDATE;
+	// reconcileGuestBindings sweeps any router binding a failed revoke left behind.
+	const ids: number[] = [];
 	for (const s of active) {
-		if (s.macAddress) await network.revoke(s.macAddress);
+		if (s.macAddress) {
+			try {
+				await network.revoke(s.macAddress);
+			} catch {
+				// reconcileGuestBindings drops the orphaned router binding on the next cron.
+			}
+		}
+		ids.push(s.id);
+	}
+	if (ids.length) {
 		await db
 			.update(networkSessions)
 			.set({ status: SESSION_STATUS.revoked })
-			.where(eq(networkSessions.id, s.id));
-		revoked++;
+			.where(inArray(networkSessions.id, ids));
 	}
+	const revoked = ids.length;
 
 	// Clear the window AND any pause so a kicked/blocked account can't be silently resumed.
 	await db
