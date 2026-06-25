@@ -40,11 +40,53 @@ export async function revokeAdminAccess(
  * the admin path where the captive-portal `?mac=` redirect was bypassed. Returns
  * null when the controller can't resolve it (e.g. the dev stub) so callers can
  * treat the grant as best-effort and never block sign-in on it.
+ *
+ * Resilience (this runs on every dashboard load — it's the cookie-free way to
+ * identify a returning device): a short IP→MAC cache absorbs a transient router-API
+ * blip, and a hard timeout stops a hung API from stalling the page. On a lookup
+ * error we fall back to the last-known MAC for that IP rather than "can't detect".
  */
+const MAC_CACHE_TTL_MS = 60_000;
+const RESOLVE_TIMEOUT_MS = 5_000;
+const macByIpCache = new Map<string, { mac: string; at: number }>();
+
+function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+	return new Promise<T>((resolve, reject) => {
+		const t = setTimeout(() => reject(new Error(`resolveMacByIp timed out after ${ms}ms`)), ms);
+		p.then(
+			(v) => {
+				clearTimeout(t);
+				resolve(v);
+			},
+			(e) => {
+				clearTimeout(t);
+				reject(e);
+			}
+		);
+	});
+}
+
 export async function resolveDeviceMac(
 	network: NetworkController,
 	ipAddress: string | null | undefined
 ): Promise<string | null> {
 	if (!ipAddress || !network.resolveMacByIp) return null;
-	return network.resolveMacByIp(ipAddress);
+	const now = Date.now();
+	const cached = macByIpCache.get(ipAddress);
+	if (cached && now - cached.at < MAC_CACHE_TTL_MS) return cached.mac;
+	try {
+		const mac = await withTimeout(
+			Promise.resolve(network.resolveMacByIp(ipAddress)),
+			RESOLVE_TIMEOUT_MS
+		);
+		if (mac) {
+			macByIpCache.set(ipAddress, { mac, at: now });
+			return mac;
+		}
+		// Clean "not found" (device genuinely absent) — don't resurrect a stale entry.
+		return null;
+	} catch {
+		// Router timed out / errored — last-known beats a false "can't detect device".
+		return cached?.mac ?? null;
+	}
 }

@@ -44,7 +44,7 @@
 		class="flex w-full flex-1 flex-col lg:max-w-[460px] lg:flex-none lg:rounded-2xl lg:border lg:border-border lg:bg-bg lg:p-7 lg:shadow-sm"
 	>
 		<a
-			href={resolve('/dashboard')}
+			href="{resolve('/dashboard')}{data.portalQuery}"
 			class="mb-[22px] flex min-h-[44px] items-center gap-1.5 self-start text-[13px] font-medium text-muted hover:text-ink"
 		>
 			<Icon name="arrow-left" size={18} strokeWidth={2.2} />
