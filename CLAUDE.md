@@ -47,7 +47,7 @@ packages/
 | `/networks` | Network health per AP (uptime, latency, throughput) |
 | `/users` | User list with credit balance, usage, block/kick actions |
 | `/finance` | Payment reporting — settled-revenue KPIs, revenue-over-time chart, payment-method donut, transactions table, CSV export (see **Finance & Payment Reporting** below) |
-| `/staff` | **Owner-only** staff management — invite / enable-disable / remove admins |
+| `/staff` | **Owner-only** staff management — invite / enable-disable / remove admins · promote admin→owner (step-up) · demote/remove an owner (unanimous owner approval). See **Staff governance** below |
 
 ### Owner bootstrap (the `/register` hole was removed)
 
@@ -76,6 +76,33 @@ better-auth's **two-factor plugin** (no new dependency), wired server-side throu
 - Secret + backup codes are stored **encrypted at rest** (`BETTER_AUTH_SECRET`) in
   `admin_two_factor` (admin-only; migration `0020`). The QR is rendered server-side to an
   SVG string (`uqr`) — no client QR component. Self-serve disable is out of scope.
+
+### Staff governance (role changes)
+
+All role mutations are owner-only (`requireOwner` re-reads the role from the DB on every
+action) and step-up protected. Role/status is re-checked every request in
+`hooks.server.ts`, so a change takes effect on the target's next request.
+
+- **Promote admin→owner** — `/staff` Crown action → `PromoteDialog`. Two gates,
+  re-enforced in the `?/promote` action: type the target's name (`namesMatch`,
+  `$lib/confirm.ts`) **and** the acting owner re-enters their TOTP (`auth.api.verifyTOTP`
+  as a step-up). Rate-limited per IP.
+- **Demote / remove an owner** — needs **unanimous approval of all *other* owners** (the
+  long-dormant `admin_role.requiresApproval` intent, now live). Either an owner targets
+  another or requests their own exit; the initiator's request counts as their approval; the
+  target gets no vote. Approval is cast **in-app behind a TOTP step-up** — email only
+  notifies (`emails/owner-change.ts`), so an email compromise alone can't approve.
+  - Tables (migration `0021`): `admin_owner_change_request` (partial-unique → one open
+    request per target) + `admin_owner_change_approval` (composite PK → idempotent votes).
+  - Lifecycle in `$lib/server/owner-change.ts` (create/approve/evaluate/cancel/list);
+    unanimity is the pure `isUnanimous` (`$lib/owner-change-rules.ts`, unit-tested),
+    evaluated against the **live** owner set (departed owners' votes drop, newly-promoted
+    owners become required). Only the **initiator** can cancel.
+  - The actual mutation + **never-zero-owners** guard live atomically in core's
+    `executeOwnerChange` (`packages/core` staff.ts) — a `pg_advisory_xact_lock` serializes
+    the owner-count check so concurrent changes can't both pass it. A sole owner therefore
+    can never be demoted/removed; meaningful approval needs ≥3 owners (with 2, the lone
+    other owner is unanimous on their own).
 
 ### Backend hardening (Phases 0–3 — complete)
 
