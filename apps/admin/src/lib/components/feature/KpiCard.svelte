@@ -20,7 +20,8 @@
 		tone = 'default',
 		captionTone = 'muted',
 		progress,
-		compact = false
+		compact = false,
+		onclick
 	}: {
 		kpi: Kpi;
 		icon?: Component;
@@ -33,6 +34,8 @@
 		progress?: number;
 		/** Denser variant: smaller padding/value/icon so the strip takes less height. */
 		compact?: boolean;
+		/** When set, the whole card becomes a clickable drill-down (e.g. Networks "Alerts"). */
+		onclick?: () => void;
 	} = $props();
 
 	const progressPct = $derived(progress === undefined ? 0 : Math.max(0, Math.min(100, progress)));
@@ -63,10 +66,13 @@
 </script>
 
 <Card
+	{onclick}
 	padding={compact ? 'p-3.5' : 'p-5'}
 	class="group flex flex-col {compact
 		? 'gap-2'
-		: 'gap-4'} hover:-translate-y-0.5 hover:border-brand/30 hover:shadow-md"
+		: 'gap-4'} hover:-translate-y-0.5 hover:border-brand/30 hover:shadow-md {onclick
+		? 'hover:border-brand/40 focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:outline-none'
+		: ''}"
 >
 	<div class="flex items-start justify-between gap-2">
 		<p class="text-xs font-semibold tracking-wide text-muted uppercase">{kpi.label}</p>
