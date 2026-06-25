@@ -2,10 +2,8 @@ import { fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { auth } from '$lib/server/auth';
 import { APIError } from 'better-auth/api';
-import { getStaffStatus, STAFF_STATUS, grantAdminAccess, resolveDeviceMac } from '@veent/core';
-import { db } from '$lib/server/db';
-import { network } from '$lib/server/network';
 import { rateLimit, clientIp } from '$lib/server/rateLimit';
+import { finishStaffSignIn } from '$lib/server/postLogin';
 
 export const load: PageServerLoad = (event) => {
 	if (event.locals.user) {
@@ -26,10 +24,9 @@ export const actions: Actions = {
 		const email = formData.get('email')?.toString() ?? '';
 		const password = formData.get('password')?.toString() ?? '';
 
-		let userId: string;
+		let res;
 		try {
-			const res = await auth.api.signInEmail({ body: { email, password } });
-			userId = res.user.id;
+			res = await auth.api.signInEmail({ body: { email, password } });
 		} catch (error) {
 			if (error instanceof APIError) {
 				return fail(400, { message: error.message || 'Sign in failed' });
@@ -37,28 +34,19 @@ export const actions: Actions = {
 			return fail(500, { message: 'Unexpected error' });
 		}
 
-		// Only active staff may sign in. Pending invitees and disabled members are
-		// signed straight back out (the cookie was just set by signInEmail).
-		const status = await getStaffStatus(db, userId);
-		if (status !== STAFF_STATUS.active) {
-			await auth.api.signOut({ headers: event.request.headers });
-			const message =
-				status === STAFF_STATUS.pending
-					? 'Your account is not activated yet — check your activation email.'
-					: 'Your account is not active. Contact the owner.';
-			return fail(403, { message });
+		// 2FA-enabled staff get NO session here — only a signed two-factor cookie and
+		// this redirect signal. The post-login work (status check + device grant) must
+		// wait until TOTP is verified, so hand off to /login/2fa and stop here. (Kept
+		// outside the try: redirect() throws and the catch above would swallow it.)
+		if ('twoFactorRedirect' in res && res.twoFactorRedirect) {
+			return redirect(303, '/login/2fa');
 		}
+		const userId = res.user.id;
 
-		// Active staff get instant internet on their device: resolve the MAC from
-		// the LAN IP (the admin URL is walled-garden-whitelisted, so there's no
-		// captive-portal `?mac=` to read) and drop the firewall. Best-effort — a
-		// failed/​unsupported grant (e.g. dev stub) must never block sign-in.
-		try {
-			const mac = await resolveDeviceMac(network, event.getClientAddress());
-			if (mac) await grantAdminAccess(network, mac);
-		} catch (err) {
-			console.error('[admin] device internet grant on sign-in failed:', err);
-		}
+		// Not-yet-enrolled staff have a real session now; run the shared gate inline.
+		// (They'll be sent to /enroll-2fa by the (app) layout once on the dashboard.)
+		const denied = await finishStaffSignIn(event, userId);
+		if (denied) return denied;
 
 		return redirect(302, '/dashboard');
 	}

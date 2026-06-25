@@ -1,187 +1,126 @@
-# Plan: Admin TOTP / MFA
+# Plan: Admin TOTP / MFA — Implementation Checklist
 
-Research + implementation plan for **two-factor auth (TOTP)** on the admin dashboard.
+> **Status (2026-06-25): implemented.** Phases 0–3 done — schema + migration `0020`,
+> two-factor plugin, two-step `/login/2fa`, mandatory `/enroll-2fa` gate with server-rendered
+> QR + backup codes, unit tests (`twoFactor.test.ts`), docs updated. `svelte-check` clean
+> (only the pre-existing MapPicker/leaflet error remains); 21/21 admin tests pass.
+> **Remaining (human handoff):** manual browser E2E + a throwaway-DB migration apply (the
+> SQL is guarded with `IF NOT EXISTS`/`DO`-block per convention, but the cross-machine apply
+> hasn't been run).
+
+Mandatory TOTP second factor for admin staff. Research complete; decisions locked.
+Built on better-auth's **two-factor plugin** (already in `better-auth ~1.4.21`) — no
+new auth dependency. Wired **server-side** via `auth.api.*` (admin has no
+`createAuthClient`). Work top-to-bottom; each phase ships something testable.
+
 Source task: `To_Improve.md` → *System* → "Explore TOTP viability" + "Make admins and
 owners activate TOTP/MFA on registration."
 
-Status: **research complete, not yet implemented.** Locked decisions captured in §1.
+## Locked decisions
+- [ ] **Enforcement:** mandatory — active staff with `twoFactorEnabled === false` are
+      gated to enrollment, can't reach the dashboard until enrolled.
+- [ ] **Secret display:** QR (scannable) + manual-key fallback.
+- [ ] **Scope v1:** schema → plugin → login verify → enrollment → gate → QR. No
+      self-serve disable, no trust-device, no SMS/WebAuthn (see Out of scope).
 
 ---
 
-## 0. Findings (is it viable?) — **Yes, cleanly. No new dependency.**
+## Phase 0 — Verify plugin + schema/migration (DB)
+**Gate: migration applies cleanly to a throwaway DB; admin user has the column,
+customer user does NOT.**
 
-### Current reality vs. the docs
-`CLAUDE.md` describes admin auth as "TOTP (admin)" — that is **aspirational; TOTP does
-not exist yet.** Today `apps/admin/src/lib/server/auth.ts` is plain better-auth
-**email + password** (`better-auth/minimal`), driven entirely by **server form actions**
-(`auth.api.signInEmail`). There is **no `createAuthClient`** anywhere in admin — so TOTP
-must be wired **server-side** via `auth.api.*`, not the client SDK most better-auth docs
-assume.
+- [ ] Confirm `better-auth/plugins/two-factor` imports (it ships with 1.4.21).
+- [ ] `packages/db/src/schema/_auth-factory.ts` — pass admin-only
+      `two_factor_enabled: boolean('two_factor_enabled').default(false)` via the
+      existing `extraUserColumns` arg (factory sig at `_auth-factory.ts:19`). Apply to
+      the **admin** instance only.
+- [ ] `packages/db/src/schema/auth-admin.ts` — add the extra column to the
+      `authTables('admin', { … })` call; keep `adminAuthSchema` exporting
+      `{ user, session, account, verification, twoFactor }`.
+- [ ] New `packages/db/src/schema/admin-two-factor.ts` — define `adminTwoFactor`
+      (`admin_two_factor`): `id`, `secret` (text, encrypted at rest), `backupCodes`
+      (text, encrypted), `userId` FK → `admin_user.id` (cascade). Follow the 1:1
+      `admin_profile` pattern in `packages/db/src/schema/admin.ts:42`.
+- [ ] `packages/db/src/schema/index.ts` — `export * from './admin-two-factor'`.
+- [ ] `bun run db:generate` → `packages/db/drizzle/0020_*.sql` (next free number).
+- [ ] Make it idempotent: `ADD COLUMN IF NOT EXISTS`, `CREATE TABLE IF NOT EXISTS`
+      (matches every existing migration).
+- [ ] `bun run db:migrate`; verify on a throwaway DB; **commit the generated SQL**.
+      Never hand-`ALTER` the live DB.
 
-### The plugin is already installed
-better-auth `~1.4.21` ships the **`two-factor` plugin** (`better-auth/plugins/two-factor`)
-with TOTP + backup codes built in. Endpoints surface as `auth.api.*`:
+## Phase 1 — Plugin + two-step login
+**Gate: a manually-enrolled user completes the two-step login; wrong code rejected.**
 
-| Endpoint | `auth.api` method | Use |
-|---|---|---|
-| `/two-factor/enable` | `enableTwoFactor` | enrollment — returns `totpURI` + `backupCodes` |
-| `/two-factor/get-totp-uri` | `getTOTPURI` | re-fetch the URI |
-| `/two-factor/verify-totp` | `verifyTOTP` | confirm a 6-digit code (enroll + login) |
-| `/two-factor/disable` | `disableTwoFactor` | turn off (password-gated) |
+- [ ] `apps/admin/src/lib/server/auth.ts` — add `twoFactor({ issuer: 'RADIUS Admin' })`
+      to `plugins`, **before** `sveltekitCookies(getRequestEvent)` (that one must stay
+      last — comment at `auth.ts:61`).
+- [ ] `apps/admin/src/routes/login/+page.server.ts` — **branch after `signInEmail`**
+      (`:31`): if result is `{ twoFactorRedirect: true }` → `redirect(303,'/login/2fa')`
+      and run **nothing else** (no session/userId yet). Otherwise (not-yet-enrolled
+      user, real session) keep the current inline status-check (`:42–50`) + device
+      grant (`:56–61`) + `/dashboard` redirect (`:63`) as-is.
+- [ ] New `apps/admin/src/routes/login/2fa/+page.server.ts` + `+page.svelte`:
+  - [ ] `+page.svelte`: 6-digit code form (reuse `Field` + `Button` from
+        `$lib/components/ui/`; `inputmode="numeric"`, `autocomplete="one-time-code"`).
+  - [ ] `?/verify` action: rate-limit first
+        (`rateLimit('admin_login_2fa_ip', clientIp(event), 10, 15*60*1000)`, mirror
+        `login/+page.server.ts:20`), then
+        `auth.api.verifyTOTP({ body:{ code }, headers: event.request.headers })`.
+  - [ ] On success **run the moved post-login work** in this order:
+        `getStaffStatus` → sign-out-if-not-active → best-effort
+        `resolveDeviceMac`/`grantAdminAccess` → `redirect(303,'/dashboard')`. (Copy the
+        exact logic lifted from `login/+page.server.ts:42–61`.)
+  - [ ] Backup codes work here too: `verifyTOTP` accepts a backup code in place of a
+        TOTP — no separate endpoint needed.
 
-- **Secrets encrypted at rest** with `BETTER_AUTH_SECRET` (already set) — `secret` and
-  `backupCodes` columns are stored encrypted, `returned: false`.
-- On sign-in, a 2FA-enabled user makes `signInEmail` return **`{ twoFactorRedirect: true }`**
-  instead of a session; the plugin sets a signed `two-factor` cookie. You complete login
-  by calling `verifyTOTP` with that cookie present.
+## Phase 2 — Enrollment + QR + mandatory gate
+**Gate: a fresh bootstrap owner is forced through enrollment on first login.**
 
----
+- [ ] Add a minimal QR encoder lib to `apps/admin` (SVG-string output, e.g.
+      `qrcode` → `toString(uri,{ type:'svg' })`). *(ponytail: encoder only; SVG string,
+      no canvas/image deps; render with `{@html}` — no client component.)*
+- [ ] New `apps/admin/src/routes/enroll-2fa/+page.server.ts` + `+page.svelte`:
+  - [ ] `?/enable` action: `auth.api.enableTwoFactor({ body:{ password },
+        headers })` → returns `totpURI` + `backupCodes`. Encode `totpURI` to an SVG
+        string server-side; return SVG + the manual secret + backup codes.
+  - [ ] `+page.svelte`: render QR via `{@html svg}`, show the **manual key** fallback,
+        list backup codes with a forced "I've saved these" confirm before the code step.
+  - [ ] `?/confirm` action: `verifyTOTP({ code, headers })` flips
+        `twoFactorEnabled = true` → `redirect(303,'/dashboard')`.
+  - [ ] Reachable by any authenticated-but-unenrolled staff member (no extra role gate).
+- [ ] `apps/admin/src/routes/(app)/+layout.server.ts` — after the `locals.user` check
+      (`:9–11`), if `user.twoFactorEnabled === false` → `redirect(302,'/enroll-2fa')`.
+      (`hooks.server.ts:12–29` already re-checks active status, so the gate only adds the
+      2FA condition.) Ensure `twoFactorEnabled` is exposed on the session/locals user.
 
-## 1. Locked decisions
+## Phase 3 — Tests + docs
+- [ ] Integration test: `enableTwoFactor` → `verifyTOTP` with a code derived from the
+      returned secret flips `twoFactorEnabled`; a wrong code is rejected (mirror
+      `apps/admin/src/**/*.spec.ts` style).
+- [ ] Migration test: apply `0020_*.sql` to a throwaway DB — portable + idempotent.
+- [ ] Manual E2E (browser + human handoff): bootstrap owner → first login → forced
+      enrollment → scan QR in an authenticator → dashboard; sign out → sign in →
+      prompted for code → verify → dashboard; wrong code rejected; backup code works
+      once. *(Interactive/browser change → both an agent browser pass and a human
+      verification handoff.)*
+- [ ] Update `CLAUDE.md` so "TOTP (admin)" is finally accurate; note the enrollment gate.
+- [ ] Tick the two `To_Improve.md` System items (TOTP viability + activate on registration).
 
-| Decision | Choice | Implication |
-|---|---|---|
-| Enforcement | **Mandatory gate** | active staff with `twoFactorEnabled === false` are redirected to enrollment; can't reach the dashboard until enrolled |
-| Secret display | **QR code** | render a scannable QR from the `otpauth://` URI (+ manual-key fallback); needs a small QR generator added to admin |
-| Scope of first pass | Full TOTP (schema → plugin → login verify → enrollment → gate → QR) | — |
+## Gotchas (carried from research)
+- [ ] **Cookie propagation:** every `verifyTOTP`/`enableTwoFactor` call must pass
+      `headers: event.request.headers` so the plugin reads the signed `two-factor`
+      cookie set during `signInEmail` (`sveltekitCookies` wires Set-Cookie already).
+- [ ] **Secrets at rest:** `secret`/`backupCodes` are stored encrypted with
+      `BETTER_AUTH_SECRET` (already required by `validateEnv`, `validateEnv.ts:14`),
+      `returned:false`.
+- [ ] **Order of post-login checks:** never grant device internet on an *unverified*
+      half-login — that's why status-check + grant live in the `/login/2fa` verify
+      action for 2FA users (Phase 1).
+- [ ] **Bootstrap owner** has no TOTP → hits the same gate on first login, no
+      special-casing.
 
----
-
-## 2. Schema change (migration required)
-
-The plugin needs a `twoFactor` table and a `twoFactorEnabled` flag on the user. Both go in
-the **admin** instance only (`packages/db/src/schema/auth-admin.ts` / `_auth-factory.ts`).
-
-Plugin's required shape (from `two-factor/schema.mjs`):
-- `admin_user.two_factor_enabled boolean` (default false)
-- new `admin_two_factor` table: `id`, `secret` (text, encrypted), `backup_codes`
-  (text, encrypted), `user_id` (FK → `admin_user.id`, cascade)
-
-**Migration workflow (per CLAUDE.md — keep `db:migrate` portable):**
-1. Add the `twoFactorEnabled` column to the admin user (via `_auth-factory` `extraUserColumns`,
-   admin-only — the customer instance must NOT get it) and define `adminTwoFactor` in
-   `auth-admin.ts`; add it to `adminAuthSchema` as `twoFactor`.
-2. `bun run db:generate` → `packages/db/drizzle/00NN_*.sql`.
-3. Make it idempotent: `ADD COLUMN IF NOT EXISTS`, `CREATE TABLE IF NOT EXISTS`.
-4. `bun run db:migrate`, verify on a throwaway DB, **commit the generated SQL**.
-5. Never hand-`ALTER` the live DB.
-
----
-
-## 3. Files
-
-### Changed
-- `packages/db/src/schema/_auth-factory.ts` — allow / pass `two_factor_enabled` to the
-  admin user (admin-only extra column).
-- `packages/db/src/schema/auth-admin.ts` — define `adminTwoFactor`, add to `adminAuthSchema`.
-- `packages/db/drizzle/00NN_*.sql` — generated migration (idempotent).
-- `apps/admin/src/lib/server/auth.ts` — add `twoFactor({ issuer: 'RADIUS Admin' })` to the
-  `plugins` array.
-- `apps/admin/src/routes/login/+page.server.ts` — after `signInEmail`, if the result is
-  `{ twoFactorRedirect: true }`, redirect to `/login/2fa` instead of `/dashboard`. (The
-  status check + device-grant logic moves to *after* TOTP verification.)
-- `apps/admin/src/routes/(app)/+layout.server.ts` — **mandatory gate**: active staff with
-  `twoFactorEnabled === false` → redirect to `/enroll-2fa`.
-
-### New
-- `apps/admin/src/routes/login/2fa/+page.{server.ts,svelte}` — 6-digit code form; action
-  calls `auth.api.verifyTOTP({ body: { code }, headers: event.request.headers })`. On
-  success run the existing post-login work (status check, sign-out-if-not-active,
-  best-effort device internet grant) then redirect to `/dashboard`.
-- `apps/admin/src/routes/enroll-2fa/+page.{server.ts,svelte}` — enrollment: action calls
-  `enableTwoFactor({ body: { password }, headers })`, renders the **QR** of `totpURI` +
-  one-time **backup codes**, then confirms with `verifyTOTP`. Reachable by any
-  authenticated-but-unenrolled staff member.
-- A tiny QR renderer — `$lib/components/ui/QrCode.svelte` (SVG from the otpauth URI). See §5.
-
-> Reuse the existing `Field` / `Button` UI components and the `/login` + `/activate` page
-> shells for visual consistency.
-
----
-
-## 4. Flows
-
-**Login (2FA-enabled user)**
-1. `/login` `?/signInEmail` → `auth.api.signInEmail` returns `{ twoFactorRedirect: true }`
-   (plugin sets the signed `two-factor` cookie via `sveltekitCookies`).
-2. Redirect to `/login/2fa`.
-3. `?/verify` → `verifyTOTP({ code, headers })` → session established → run status check +
-   device grant → `/dashboard`.
-
-**Enrollment (mandatory, post-activation)**
-1. Invitee finishes `/activate` (sets password, status → active) and signs in.
-2. Layout gate sees `twoFactorEnabled === false` → redirect to `/enroll-2fa`.
-3. `enableTwoFactor({ password })` → show QR + backup codes (one-time) → user scans →
-   `verifyTOTP({ code })` flips `twoFactorEnabled = true` → `/dashboard`.
-
-**Bootstrap owner** — the script-created first owner has no TOTP; they hit the same gate
-on first login and enroll. No special-casing.
-
----
-
-## 5. Gotchas / watch-items
-
-- **Cookie propagation** — the verify step depends on the signed `two-factor` cookie set
-  during `signInEmail`. `sveltekitCookies(getRequestEvent)` already wires Set-Cookie onto
-  the response; the verify action **must pass `event.request.headers`** so the plugin reads
-  the cookie back. Confirm in manual test.
-- **QR rendering** — `totpURI` is an `otpauth://` string. No QR lib is installed and Lucide
-  has none. Add the smallest viable SVG-QR generator (e.g. a ~single-file lib) confined to
-  `apps/admin`. Always also show the **manual secret key** as a fallback for users who can't
-  scan. *(ponytail: keep the lib tiny / SVG-only; no canvas, no image deps.)*
-- **Backup codes** — shown **once** at enrollment; UX must force a "I've saved these" step
-  before continuing. Recovery uses `verifyTOTP` with a backup code in place of a TOTP.
-- **Order of post-login checks** — the current `signInEmail` action does status-check +
-  device-grant **inline**. With TOTP those must move to **after** `verifyTOTP`, or an
-  unverified half-login could grant internet. Important correctness point.
-- **Rate limiting** — the existing per-IP login throttle covers `signInEmail`; add a similar
-  cap on `/login/2fa` `?/verify` to blunt code brute-forcing (reuse `rateLimit` helper).
-- **Disable path** — out of scope for v1 unless asked; `disableTwoFactor` exists and is
-  password-gated. Mandatory enforcement means a disabled member would just be re-gated, so
-  skip a self-serve disable for now.
-
----
-
-## 6. Out of scope / deferred
-- Self-serve "disable 2FA" UI (owner-driven reset is the recovery story if ever needed).
-- Trust-this-device cookie (`trustDevice`) — the plugin supports it; skip for an admin tool.
-- SMS / email OTP second factor (TOTP only). Customer OTP is a separate, teammate-owned path.
-- WebAuthn / passkeys.
-
----
-
-## 7. Testing
-- **Unit/integration:** enrollment round-trip — `enableTwoFactor` → `verifyTOTP` with a code
-  derived from the returned secret flips `twoFactorEnabled`; a wrong code is rejected.
-- **Migration:** apply `00NN_*.sql` to a throwaway DB to confirm portability + idempotency.
-- **Manual:** bootstrap owner → first login → forced enrollment → scan QR in an authenticator
-  → land on dashboard; sign out → sign in → prompted for code → verify → dashboard; wrong
-  code rejected; backup code works once.
-
----
-
-## 8. Roadmap
-
-Each phase ships something testable on its own; do them in order.
-
-### Phase 0 — Schema + migration (DB)
-- [ ] `_auth-factory.ts`: admin-only `two_factor_enabled` column.
-- [ ] `auth-admin.ts`: `adminTwoFactor` table + add to `adminAuthSchema`.
-- [ ] `db:generate` → idempotent `00NN_*.sql`; `db:migrate`; commit.
-- **Gate:** migration applies cleanly to a throwaway DB.
-
-### Phase 1 — Plugin + login verify
-- [ ] `auth.ts`: add `twoFactor({ issuer })`.
-- [ ] `login/+page.server.ts`: handle `twoFactorRedirect`; move post-login checks out.
-- [ ] `login/2fa/` page: `verifyTOTP` + post-login work; rate-limited.
-- **Gate:** a manually-enrolled user can complete the two-step login.
-
-### Phase 2 — Enrollment + QR + mandatory gate
-- [ ] `QrCode.svelte` (SVG from otpauth URI).
-- [ ] `enroll-2fa/` page: `enableTwoFactor` → QR + backup codes → confirm.
-- [ ] `(app)/+layout.server.ts`: redirect unenrolled active staff to `/enroll-2fa`.
-- **Gate:** fresh owner is forced through enrollment on first login.
-
-### Phase 3 — Tests + docs
-- [ ] Enrollment/verify integration test.
-- [ ] Update `CLAUDE.md` so "TOTP (admin)" is finally true; note the enrollment gate.
+## Out of scope (v1)
+- [ ] Self-serve "disable 2FA" UI (owner-driven reset is the recovery story).
+- [ ] Trust-this-device cookie (`trustDevice`).
+- [ ] SMS/email OTP second factor (TOTP only; customer OTP is teammate-owned).
+- [ ] WebAuthn / passkeys.

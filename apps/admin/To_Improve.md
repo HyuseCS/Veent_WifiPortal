@@ -2,8 +2,11 @@
 - [x] Make sidebar collapsible — toggle in the sidebar header (PanelLeftClose/Open);
       collapses to icon-only `w-16`, persists in `localStorage` (`radius-admin-sidebar`)
 - [x] Make it responsive to all screen sizes — owned by a teammate
-- [ ] Explore TOTP viability
-- [ ] Make admins and owners activate TOTP/MFA on registration.
+- [x] Explore TOTP viability — viable on better-auth's two-factor plugin (no new dep);
+      see `plan.md`
+- [x] Make admins and owners activate TOTP/MFA on registration. — mandatory TOTP: the (app)
+      layout gates unenrolled active staff to `/enroll-2fa`; two-step login via `/login/2fa`
+      (TOTP or backup code). Schema migration `0020`; secret/backup-codes encrypted at rest.
 
 **Dashboard Page**
 - [x] Make the dashboard page even more responsive and update more often. 
