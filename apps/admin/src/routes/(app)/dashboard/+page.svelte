@@ -8,6 +8,9 @@
 	import Wifi from 'lucide-svelte/icons/wifi';
 	import Router from 'lucide-svelte/icons/router';
 	import ReceiptText from 'lucide-svelte/icons/receipt-text';
+	import ChevronDown from 'lucide-svelte/icons/chevron-down';
+	import ChevronUp from 'lucide-svelte/icons/chevron-up';
+	import ChevronsUpDown from 'lucide-svelte/icons/chevrons-up-down';
 	import { live, connectLive } from '$lib/live.svelte';
 	import type { ActiveSession, StatusTone } from '$lib/types';
 	import type { PageData } from './$types';
@@ -69,20 +72,99 @@
 	const onlineCount = $derived(networks.filter((ap) => ap.tone === 'online').length);
 	const apTotal = $derived(networks.length);
 
-	const sessionCols = [
-		{ label: 'MAC Address' },
-		{ label: 'Network' },
-		{ label: 'Package' },
-		{ label: 'Time Left' }
+	// Clickable-header sorting over the live rows (mirrors <UsersTable>/<TransactionsTable>).
+	// `null` key keeps the snapshot order; clicking a header sorts, clicking it again flips.
+	const toneRank: Record<StatusTone, number> = { online: 0, warning: 1, blocked: 2 };
+	const num = (s: string) => Number(s.replace(/[^\d.]/g, '')) || 0; // "45 Mbps" → 45
+
+	type SessSort = 'mac' | 'network' | 'package' | 'timeLeft';
+	const sessionCols: { label: string; key: SessSort; dir: 'asc' | 'desc' }[] = [
+		{ label: 'MAC Address', key: 'mac', dir: 'asc' },
+		{ label: 'Network', key: 'network', dir: 'asc' },
+		{ label: 'Package', key: 'package', dir: 'asc' },
+		{ label: 'Time Left', key: 'timeLeft', dir: 'asc' }
 	];
-	const netCols = [
-		{ label: 'Access Point' },
-		{ label: 'Status' },
-		{ label: 'Uptime' },
-		{ label: 'Latency' },
-		{ label: 'Speed' }
+	let sessSort = $state<SessSort | null>(null);
+	let sessDir = $state<'asc' | 'desc'>('asc');
+	function sortSessions(c: { key: SessSort; dir: 'asc' | 'desc' }) {
+		if (sessSort === c.key) sessDir = sessDir === 'asc' ? 'desc' : 'asc';
+		else ((sessSort = c.key), (sessDir = c.dir));
+	}
+	// Remaining ms from expiresAt (live-sorts by soonest expiry); no expiry sinks to the bottom.
+	const sessExpiry = (s: ActiveSession) => (s.expiresAt ? new Date(s.expiresAt).getTime() : Infinity);
+	const sortedSessions = $derived.by(() => {
+		if (!sessSort) return activeSessions;
+		const key = sessSort;
+		const d = sessDir === 'asc' ? 1 : -1;
+		return [...activeSessions].sort((a, b) => {
+			let cmp: number;
+			if (key === 'mac') cmp = a.mac.localeCompare(b.mac);
+			else if (key === 'network') cmp = (a.network ?? '').localeCompare(b.network ?? '');
+			else if (key === 'package') cmp = a.package.localeCompare(b.package);
+			else cmp = sessExpiry(a) - sessExpiry(b); // timeLeft
+			return cmp * d;
+		});
+	});
+
+	type NetSort = 'name' | 'status' | 'uptime' | 'latency' | 'speed';
+	const netCols: { label: string; key: NetSort; dir: 'asc' | 'desc' }[] = [
+		{ label: 'Access Point', key: 'name', dir: 'asc' },
+		{ label: 'Status', key: 'status', dir: 'asc' },
+		{ label: 'Uptime', key: 'uptime', dir: 'desc' },
+		{ label: 'Latency', key: 'latency', dir: 'asc' },
+		{ label: 'Speed', key: 'speed', dir: 'desc' }
 	];
+	let netSort = $state<NetSort | null>(null);
+	let netDir = $state<'asc' | 'desc'>('asc');
+	function sortNetworks(c: { key: NetSort; dir: 'asc' | 'desc' }) {
+		if (netSort === c.key) netDir = netDir === 'asc' ? 'desc' : 'asc';
+		else ((netSort = c.key), (netDir = c.dir));
+	}
+	const sortedNetworks = $derived.by(() => {
+		if (!netSort) return networks;
+		const key = netSort;
+		const d = netDir === 'asc' ? 1 : -1;
+		return [...networks].sort((a, b) => {
+			let cmp: number;
+			if (key === 'name') cmp = a.name.localeCompare(b.name);
+			else if (key === 'status') cmp = toneRank[a.tone] - toneRank[b.tone];
+			else if (key === 'uptime') cmp = num(a.uptime) - num(b.uptime);
+			else if (key === 'latency') cmp = num(a.latency) - num(b.latency);
+			else cmp = num(a.throughput) - num(b.throughput); // speed
+			return cmp * d;
+		});
+	});
 </script>
+
+<!-- Shared sortable header cell, reused by both dashboard tables (mirrors <UsersTable>). -->
+{#snippet sortTh(label: string, active: boolean, dir: 'asc' | 'desc', onclick: () => void)}
+	<th
+		class="px-4 py-2.5 text-left text-[11px] font-semibold tracking-wider text-muted uppercase"
+		aria-sort={active ? (dir === 'asc' ? 'ascending' : 'descending') : undefined}
+	>
+		<button
+			type="button"
+			{onclick}
+			class="group inline-flex items-center gap-1 tracking-wider uppercase transition-colors hover:text-ink {active
+				? 'text-ink'
+				: ''}"
+		>
+			{label}
+			{#if active}
+				{#if dir === 'asc'}
+					<ChevronUp class="h-3.5 w-3.5" aria-hidden="true" />
+				{:else}
+					<ChevronDown class="h-3.5 w-3.5" aria-hidden="true" />
+				{/if}
+			{:else}
+				<ChevronsUpDown
+					class="h-3.5 w-3.5 opacity-0 transition-opacity group-hover:opacity-50"
+					aria-hidden="true"
+				/>
+			{/if}
+		</button>
+	</th>
+{/snippet}
 
 <div class="dash">
 	<!-- KPIs + Revenue share the left column: KPIs keep their natural height, revenue fills
@@ -124,7 +206,7 @@
 
 	<!-- Active Sessions -->
 	<section class="sessions flex min-h-0 flex-col">
-		<Table title="Active Sessions" columns={sessionCols} class="min-h-0 flex-1">
+		<Table title="Active Sessions" class="min-h-0 flex-1">
 			{#snippet aside()}
 				{#if activeSessions.length > 0}
 					<span
@@ -135,7 +217,14 @@
 					</span>
 				{/if}
 			{/snippet}
-			{#each activeSessions as session (session.id)}
+			{#snippet headRow()}
+				<tr class="border-b border-border bg-surface">
+					{#each sessionCols as c (c.key)}
+						{@render sortTh(c.label, sessSort === c.key, sessDir, () => sortSessions(c))}
+					{/each}
+				</tr>
+			{/snippet}
+			{#each sortedSessions as session (session.id)}
 				{@const t = liveTimer(session, now)}
 				<tr class="transition-colors hover:bg-surface">
 					<td class="px-4 py-3 font-mono text-xs text-ink">{session.mac}</td>
@@ -170,7 +259,7 @@
 
 	<!-- Network Health -->
 	<section class="network flex min-h-0 flex-col">
-		<Table title="Network Health" columns={netCols} class="min-h-0 flex-1">
+		<Table title="Network Health" class="min-h-0 flex-1">
 			{#snippet aside()}
 				<div class="flex items-center gap-2">
 					{#if apTotal > 0}
@@ -179,7 +268,14 @@
 					<a href="/networks" class="text-xs font-medium text-brand hover:underline">View all</a>
 				</div>
 			{/snippet}
-			{#each networks as ap (ap.id)}
+			{#snippet headRow()}
+				<tr class="border-b border-border bg-surface">
+					{#each netCols as c (c.key)}
+						{@render sortTh(c.label, netSort === c.key, netDir, () => sortNetworks(c))}
+					{/each}
+				</tr>
+			{/snippet}
+			{#each sortedNetworks as ap (ap.id)}
 				<tr class="transition-colors hover:bg-surface">
 					<td class="px-4 py-3 font-medium text-ink">{ap.name}</td>
 					<td class="px-4 py-3">
