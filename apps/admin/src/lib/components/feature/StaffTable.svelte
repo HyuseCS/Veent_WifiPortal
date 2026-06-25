@@ -1,17 +1,21 @@
 <script lang="ts">
 	import Ban from 'lucide-svelte/icons/ban';
 	import Check from 'lucide-svelte/icons/check';
+	import ChevronDown from 'lucide-svelte/icons/chevron-down';
+	import ChevronUp from 'lucide-svelte/icons/chevron-up';
+	import ChevronsUpDown from 'lucide-svelte/icons/chevrons-up-down';
 	import Crown from 'lucide-svelte/icons/crown';
 	import RotateCcw from 'lucide-svelte/icons/rotate-ccw';
 	import Search from 'lucide-svelte/icons/search';
 	import Trash2 from 'lucide-svelte/icons/trash-2';
+	import UserPlus from 'lucide-svelte/icons/user-plus';
 	import X from 'lucide-svelte/icons/x';
 	import type { Component } from 'svelte';
 	import { enhance } from '$app/forms';
 	import type { StaffMember, StaffStatus, StatusTone } from '$lib/types';
 	import {
+		Button,
 		EmptyState,
-		FilterTabs,
 		IconButton,
 		SearchInput,
 		StatusBadge,
@@ -23,30 +27,57 @@
 	// owner access. The owner row itself shows no actions (it can't be disabled,
 	// removed, or re-promoted). Search + status filter run client-side over the
 	// already-loaded `staff` (no extra loads), mirroring <UsersTable>/<TransactionsTable>.
-	let { staff }: { staff: StaffMember[] } = $props();
+	let { staff, onadd }: { staff: StaffMember[]; onadd?: () => void } = $props();
 
 	// Two-step inline confirm for the privileged actions — avoids a Modal primitive.
 	let confirmingId = $state<string | null>(null); // remove
 	let promotingId = $state<string | null>(null); // give owner role
 
-	// Client-side view state over the loaded rows: a text query + a status filter.
+	// Client-side text search over the loaded rows (status is reachable via the Status column
+	// sorter now, so the old status-filter pills were dropped from the toolbar).
 	let query = $state('');
-	let filter = $state<'all' | StaffStatus>('all');
-
-	// Status filter pills with live counts off the full set (counts stay stable as you filter).
-	const statusCount = (status: StaffStatus) => staff.filter((m) => m.status === status).length;
-	const tabs = $derived([
-		{ key: 'all' as const, label: 'All', count: staff.length },
-		{ key: 'active' as const, label: 'Active', count: statusCount('active') },
-		{ key: 'pending' as const, label: 'Invited', count: statusCount('pending') },
-		{ key: 'disabled' as const, label: 'Disabled', count: statusCount('disabled') }
-	]);
 
 	const filtered = $derived.by(() => {
 		const q = query.trim().toLowerCase();
-		let rows = staff.filter((m) => filter === 'all' || m.status === filter);
-		if (q) rows = rows.filter((m) => `${m.name} ${m.email}`.toLowerCase().includes(q));
-		return rows;
+		if (!q) return staff;
+		return staff.filter((m) => `${m.name} ${m.email}`.toLowerCase().includes(q));
+	});
+
+	// Clickable-header sorting. `null` key keeps the server order (owner pinned first, then
+	// alphabetical). Clicking a header sorts by it; clicking the active header flips direction.
+	type SortKey = 'name' | 'role' | 'status' | 'lastActive';
+	let sortKey = $state<SortKey | null>(null);
+	let sortDir = $state<'asc' | 'desc'>('asc');
+	// Sensible first-click direction per column (most-recent-active first feels natural).
+	const defaultDir: Record<SortKey, 'asc' | 'desc'> = {
+		name: 'asc',
+		role: 'asc',
+		status: 'asc',
+		lastActive: 'desc'
+	};
+	// Logical status order (not alphabetical) so sorting groups by lifecycle stage.
+	const statusRank: Record<StaffStatus, number> = { active: 0, pending: 1, disabled: 2 };
+
+	function toggleSort(key: SortKey) {
+		if (sortKey === key) sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+		else {
+			sortKey = key;
+			sortDir = defaultDir[key];
+		}
+	}
+
+	const sorted = $derived.by(() => {
+		if (!sortKey) return filtered;
+		const key = sortKey;
+		const dir = sortDir === 'asc' ? 1 : -1;
+		return [...filtered].sort((a, b) => {
+			let cmp: number;
+			if (key === 'name') cmp = a.name.localeCompare(b.name);
+			else if (key === 'role') cmp = a.roleLabel.localeCompare(b.roleLabel);
+			else if (key === 'status') cmp = statusRank[a.status] - statusRank[b.status];
+			else cmp = (a.lastActiveAt ?? -Infinity) - (b.lastActiveAt ?? -Infinity); // never-active sorts last
+			return cmp * dir;
+		});
 	});
 
 	// First two letters of the name, for the avatar chip (shared visual with <UsersTable>).
@@ -58,11 +89,12 @@
 			.join('')
 			.toUpperCase();
 
-	const columns = [
-		{ label: 'Member' },
-		{ label: 'Role' },
-		{ label: 'Status' },
-		{ label: 'Last active' },
+	// Header config: `key` makes a column a clickable sort toggle; Actions stays static.
+	const headers: { label: string; key?: SortKey; srOnly?: boolean }[] = [
+		{ label: 'Member', key: 'name' },
+		{ label: 'Role', key: 'role' },
+		{ label: 'Status', key: 'status' },
+		{ label: 'Last active', key: 'lastActive' },
 		{ label: 'Actions', srOnly: true }
 	];
 
@@ -73,22 +105,74 @@
 	};
 </script>
 
-<Table {columns}>
+<!-- min-h-0 flex-1: the Staff page gives this a full-height flex column, so the table body
+     scrolls internally (sticky header) instead of growing the page. -->
+<Table class="min-h-0 flex-1">
 	<!-- Toolbar: title + status filter + search, matching the Users/Transactions chrome. -->
 	{#snippet toolbar()}
 		<div class="flex flex-wrap items-center gap-3 px-4 py-3">
 			<h2 class="text-base font-semibold text-ink">Members</h2>
-			<FilterTabs {tabs} active={filter} onselect={(key) => (filter = key)} />
 			<SearchInput
 				bind:value={query}
 				placeholder="Search name or email…"
 				label="Search staff"
 				class="ml-auto min-w-60 flex-1 sm:max-w-xs"
 			/>
+			{#if onadd}
+				<!-- Icon-only; "Add staff" shows as a native hover tooltip (title) + a11y label. -->
+				<Button onclick={onadd} title="Add staff" aria-label="Add staff" class="shrink-0">
+					<UserPlus class="h-4 w-4" aria-hidden="true" />
+				</Button>
+			{/if}
 		</div>
 	{/snippet}
 
-	{#each filtered as member (member.id)}
+	<!-- Clickable, sortable column headers (replaces Table's auto-generated header row). -->
+	{#snippet headRow()}
+		<tr class="border-b border-border bg-surface">
+			{#each headers as h (h.label)}
+				<th
+					class="px-4 py-2.5 text-left text-[11px] font-semibold tracking-wider text-muted uppercase"
+					aria-sort={sortKey === h.key
+						? sortDir === 'asc'
+							? 'ascending'
+							: 'descending'
+						: undefined}
+				>
+					{#if h.srOnly}
+						<span class="sr-only">{h.label}</span>
+					{:else if h.key}
+						<button
+							type="button"
+							onclick={() => toggleSort(h.key!)}
+							class="group inline-flex items-center gap-1 tracking-wider uppercase transition-colors hover:text-ink {sortKey ===
+							h.key
+								? 'text-ink'
+								: ''}"
+						>
+							{h.label}
+							{#if sortKey === h.key}
+								{#if sortDir === 'asc'}
+									<ChevronUp class="h-3.5 w-3.5" aria-hidden="true" />
+								{:else}
+									<ChevronDown class="h-3.5 w-3.5" aria-hidden="true" />
+								{/if}
+							{:else}
+								<ChevronsUpDown
+									class="h-3.5 w-3.5 opacity-0 transition-opacity group-hover:opacity-50"
+									aria-hidden="true"
+								/>
+							{/if}
+						</button>
+					{:else}
+						{h.label}
+					{/if}
+				</th>
+			{/each}
+		</tr>
+	{/snippet}
+
+	{#each sorted as member (member.id)}
 		<tr class="hover:bg-surface" class:opacity-60={member.status === 'disabled'}>
 			<td class="px-4 py-3">
 				<div class="flex items-center gap-3">
@@ -224,11 +308,11 @@
 
 	{#if filtered.length === 0}
 		<tr>
-			<td colspan={columns.length} class="p-0">
+			<td colspan={headers.length} class="p-0">
 				<EmptyState
 					icon={Search as unknown as Component}
 					title="No staff members match"
-					description="Try a different search term or status filter."
+					description="Try a different search term."
 					compact
 				/>
 			</td>

@@ -16,8 +16,23 @@
  * left in place, so re-running after an ORIGIN change just adds the new hole.
  *
  * Requires NETWORK_CONTROLLER=mikrotik and reachable RouterOS API credentials.
+ *
+ * SERVER MIGRATION — lock the router API to THIS server's IP (run once the new server
+ * can reach the router; it detects its own source IP and restricts api-ssl to it):
+ *
+ *   bun run --filter radius-admin setup:router --restrict-api               # lock api-ssl to this IP + pin lease
+ *   bun run --filter radius-admin setup:router --restrict-api --disable-plain-api  # also turn off cleartext api (needs MIKROTIK_TLS=true)
+ *   bun run --filter radius-admin setup:router --restrict-api --dry-run     # show what it would do
+ *
+ * The api-ssl cert + service must already exist on the router (see docs/DEPLOYMENT.md §7a).
  */
-import { provisionWalledGarden, type MikrotikConfig } from '@veent/core';
+import { Socket } from 'node:net';
+import { provisionWalledGarden, restrictApiService, type MikrotikConfig } from '@veent/core';
+
+const argv = new Set(process.argv.slice(2));
+const DRY_RUN = argv.has('--dry-run');
+const RESTRICT_API = argv.has('--restrict-api');
+const DISABLE_PLAIN_API = argv.has('--disable-plain-api');
 
 const {
 	NETWORK_CONTROLLER,
@@ -148,4 +163,81 @@ try {
 } catch (err) {
 	console.error('\nFailed to provision walled garden:', err instanceof Error ? err.message : err);
 	process.exit(1);
+}
+
+/**
+ * The LAN IP this machine uses to reach the router — i.e. the source IP the router sees, the
+ * exact value its api-ssl *Available From* must allow. A TCP connect to the API port resolves
+ * it without sending data; we never complete a RouterOS session here.
+ */
+function detectSourceIp(host: string, port: number): Promise<string> {
+	return new Promise((resolve, reject) => {
+		const sock = new Socket();
+		const finish = (fn: () => void) => {
+			sock.removeAllListeners();
+			sock.destroy();
+			fn();
+		};
+		sock.setTimeout(4000);
+		sock.once('timeout', () => finish(() => reject(new Error('timed out connecting to the router'))));
+		sock.once('error', (e) => finish(() => reject(e)));
+		sock.connect(port, host, () => {
+			const ip = sock.localAddress?.replace(/^::ffff:/, '');
+			finish(() => (ip ? resolve(ip) : reject(new Error('could not read local address'))));
+		});
+	});
+}
+
+// Optional migration step: lock the RouterOS API to THIS server's IP.
+if (RESTRICT_API) {
+	const apiPort = config.port ?? (config.tls ? 8729 : 8728);
+	if (DISABLE_PLAIN_API && !config.tls) {
+		console.error(
+			'\nRefusing --disable-plain-api while connected over cleartext api — you would cut your own\n' +
+				'connection. Switch this server to api-ssl first (MIKROTIK_TLS="true", MIKROTIK_PORT="8729").'
+		);
+		process.exit(1);
+	}
+
+	let sourceIp: string;
+	try {
+		sourceIp = await detectSourceIp(config.host, apiPort);
+	} catch (err) {
+		console.error(
+			`\nCould not detect this server's IP to the router (${config.host}:${apiPort}): ` +
+				(err instanceof Error ? err.message : err) +
+				'\nThe router may already restrict api-ssl to a different IP. Temporarily widen its\n' +
+				'Available From (or open it) so this server can connect, then re-run.'
+		);
+		process.exit(1);
+	}
+
+	console.log(`\nLocking RouterOS API to this server: ${sourceIp}/32 (api-ssl Available From)`);
+	if (DISABLE_PLAIN_API) console.log('  + disabling cleartext api (8728)');
+	if (DRY_RUN) {
+		console.log('  [dry-run] no changes made.');
+	} else {
+		try {
+			const r = await restrictApiService(config, {
+				sourceIp,
+				disablePlainApi: DISABLE_PLAIN_API,
+				pinLease: true
+			});
+			console.log(`  api-ssl Available From → ${r.apiSslAddress}`);
+			console.log(`  cleartext api: ${r.plainApiDisabled ? 'disabled' : 'left as-is'}`);
+			console.log(
+				`  DHCP lease: ${
+					r.leasePinned === 'no-lease'
+						? 'no lease found (static IP?) — skipped'
+						: r.leasePinned
+							? 'static (pinned)'
+							: 'skipped'
+				}`
+			);
+			console.log('\nRouter API is now restricted to this server.');
+		} catch (err) {
+			console.error('\nFailed to restrict the API:', err instanceof Error ? err.message : err);
+			process.exit(1);
+		}
+	}
 }

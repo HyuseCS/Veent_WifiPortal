@@ -144,7 +144,12 @@ async function ensureOwner() {
 // ───────────────────────────── live state ─────────────────────────────
 interface Cust {
 	id: string;
-	name: string;
+	/** Phone number (E.164) — the account identity; customers register by phone only. */
+	phone: string;
+	/** Human payer name. The gateway reports the card/e-wallet holder's real name on a
+	 *  payment, which is separate from the phone-only account identity — used for the
+	 *  payment buyer fields and readable logs. */
+	payerName: string;
 	blocked: boolean;
 	mac: string;
 }
@@ -159,7 +164,7 @@ async function loadState() {
 	tiers = pkgRows.filter((p) => p.type === 'tier');
 
 	const rows = await db
-		.select({ id: customerUser.id, name: customerUser.name, blocked: customerProfile.blocked })
+		.select({ id: customerUser.id, phone: customerUser.phoneNumber, blocked: customerProfile.blocked })
 		.from(customerUser)
 		.innerJoin(customerProfile, eq(customerProfile.userId, customerUser.id));
 	// Reuse each existing customer's most recent MAC so the Users "last device" is stable.
@@ -173,7 +178,8 @@ async function loadState() {
 
 	customers = rows.map((c, i) => ({
 		id: c.id,
-		name: c.name,
+		phone: c.phone ?? '',
+		payerName: `${FIRST[i % FIRST.length]} ${LAST[(i * 7) % LAST.length]}`,
 		blocked: c.blocked,
 		mac: macByUser.get(c.id) ?? synthMac(i)
 	}));
@@ -199,22 +205,25 @@ const activeUserIds = async () =>
 /** A brand-new customer signs up (zero balance, no history). Grows the user base. */
 async function signup(): Promise<Cust> {
 	const seq = signupSeq++;
-	const name = `${FIRST[seq % FIRST.length]} ${LAST[(seq * 7) % LAST.length]}`;
+	// Phone-only signup, mirroring the customer app's better-auth signUpOnVerification:
+	// name = phone, email = synthesized OTP alias. payerName is the gateway payer label only.
+	const phone = `+63900${String(seq).padStart(7, '0')}`;
+	const payerName = `${FIRST[seq % FIRST.length]} ${LAST[(seq * 7) % LAST.length]}`;
 	const id = crypto.randomUUID();
 	await db.insert(customerUser).values({
 		id,
-		name,
-		email: `sim${seq}@example.com`,
-		emailVerified: true,
-		phoneNumber: `+63900${String(seq).padStart(7, '0')}`,
+		name: phone,
+		email: `${phone}@otp.veent.local`,
+		emailVerified: false,
+		phoneNumber: phone,
 		phoneNumberVerified: true,
 		createdAt: new Date(),
 		updatedAt: new Date()
 	});
 	await db.insert(customerProfile).values({ userId: id, role: 'user', creditBalance: '0', blocked: false });
-	const cust: Cust = { id, name, blocked: false, mac: synthMac(seq) };
+	const cust: Cust = { id, phone, payerName, blocked: false, mac: synthMac(seq) };
 	customers.push(cust);
-	log('👤', `New signup: ${name}`);
+	log('👤', `New signup: ${phone}`);
 	return cust;
 }
 
@@ -258,7 +267,7 @@ async function arrive() {
 		startedAt: now,
 		expiresAt: new Date(now.getTime() + minutes * 60_000)
 	});
-	log('🟢', `${cust.name} connected — ${how}, ${minutes}m`);
+	log('🟢', `${cust.phone} connected — ${how}, ${minutes}m`);
 }
 
 /** A customer leaves: expire one currently-active session. */
@@ -271,7 +280,7 @@ async function depart() {
 		.limit(1);
 	if (!s) return;
 	await db.update(networkSessions).set({ status: SESSION_STATUS.expired }).where(eq(networkSessions.id, s.id));
-	log('🔴', `${customers.find((c) => c.id === s.userId)?.name ?? s.userId} disconnected`);
+	log('🔴', `${customers.find((c) => c.id === s.userId)?.phone ?? s.userId} disconnected`);
 }
 
 /** A successful top-up: payment_transactions + credit_ledger + balance increment. */
@@ -295,8 +304,8 @@ async function topup() {
 			fundSourceMasked: fund === 'card' ? `**** ${randInt(1000, 9999)}` : null,
 			receiptNo: `RCPT-${randInt(100000, 999999)}`,
 			referenceNo: `ref_${cust.id.slice(0, 8)}`,
-			buyerName: cust.name,
-			buyerEmail: `${cust.name.split(' ')[0].toLowerCase()}@example.com`,
+			buyerName: cust.payerName,
+			buyerEmail: `${cust.payerName.split(' ')[0].toLowerCase()}@example.com`,
 			userId: cust.id,
 			packageId: bundle.id,
 			createdAt: now
@@ -314,7 +323,7 @@ async function topup() {
 			.set({ creditBalance: sql`${customerProfile.creditBalance} + ${credits}` })
 			.where(eq(customerProfile.userId, cust.id));
 	});
-	log('💰', `${cust.name} bought ${bundle.name} via ${fund} (+${credits} cr)`);
+	log('💰', `${cust.payerName} bought ${bundle.name} via ${fund} (+${credits} cr)`);
 }
 
 /** A failed payment — recorded in the funnel (Finance), no credit, no dashboard push. */
@@ -331,13 +340,13 @@ async function failedPayment() {
 		fundSourceType: pick(FUND_SOURCES),
 		errorCode: status === 'PAYMENT_FAILED' ? 'PAYMENT_DECLINED' : null,
 		errorMessage: status === 'PAYMENT_FAILED' ? 'Card was declined by issuer.' : null,
-		buyerName: cust?.name ?? 'Guest Checkout',
-		buyerEmail: cust ? `${cust.name.split(' ')[0].toLowerCase()}@example.com` : null,
+		buyerName: cust?.payerName ?? 'Guest Checkout',
+		buyerEmail: cust ? `${cust.payerName.split(' ')[0].toLowerCase()}@example.com` : null,
 		userId: cust?.id ?? null,
 		packageId: bundle.id,
 		createdAt: new Date()
 	});
-	log('⚠️ ', `${cust?.name ?? 'Guest'} payment ${status.replace('PAYMENT_', '').toLowerCase()}`);
+	log('⚠️ ', `${cust?.payerName ?? 'Guest'} payment ${status.replace('PAYMENT_', '').toLowerCase()}`);
 }
 
 /** AP telemetry flap: new latency/throughput sample, occasionally toggles online. */

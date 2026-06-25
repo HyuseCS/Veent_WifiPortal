@@ -1,44 +1,62 @@
 **System**
-- Make sidebar collapsible
-- Make it responsive to all screen sizes
-- Explore TOTP viability
-- Make admins and owners activate TOTP/MFA on registration.
+- [x] Make sidebar collapsible — toggle in the sidebar header (PanelLeftClose/Open);
+      collapses to icon-only `w-16`, persists in `localStorage` (`radius-admin-sidebar`)
+- [x] Make it responsive to all screen sizes — owned by a teammate
+- [ ] Explore TOTP viability
+- [ ] Make admins and owners activate TOTP/MFA on registration.
 
 **Dashboard Page**
-- Make the dashboard page even more responsive and update more often. 
-- Remove Two Columns and Stacked Layout, only bento remains
+- [x] Make the dashboard page even more responsive and update more often. 
+- [x] Remove Two Columns and Stacked Layout, only bento remains — deleted the layout switcher,
+      `dashboard-layout.ts`, layout cookie/context; dashboard grid is now bento-only
 
 - Active Sessions Table
-  - make scrollable on all layouts
-  - make it show which network the user is connected
+  - [x] make scrollable on all layouts — renders the full row set; Table body scrolls internally
+  - [x] make it show which network the user is connected — new "Network" column;
+        `listActiveSessions` left-joins `network_health` on the existing `network_id`
 
 
 - Network Health Table
-  - make scrollable on all layouts
-  - make the table scrollable
+  - [x] make scrollable on all layouts — renders the full row set; Table body scrolls internally
+  - [x] make the table scrollable
 
 **Network Page**
-- Add delete network button
-- Add wipe network database button (similar to how its done in the wipe user database in /users)
+- [x] Add delete network button — per-AP delete on `NetworkHealthCard` (owner-only, native
+      confirm); `?/deleteNetwork` action → `deleteNetworkPlace` (loose-link safe, no FK)
+- [x] Add wipe network database button (similar to how its done in the wipe user database in /users)
+      — owner-only, step-up email-code flow via shared `WipeDialog`; `wipeNetworks` query
 
 **Map Page**
-- Make adding a pin a double click so that no accidental pins appear on the map
-- Modularize NetworkMap.svelte file, it is nearly 1.5k lines long💀
+- [x] Make adding a pin a double click so that no accidental pins appear on the map
+      — `map.on('dblclick')` adds the pin; disabled Leaflet `doubleClickZoom` so it doesn't also zoom
+- [x] Modularize NetworkMap.svelte file, it is nearly 1.5k lines long💀
+      — Phase 0: extracted `clustering`/`reach`/`geocode` to tested `$lib` modules,
+        split `PinPanel.svelte` + `networkMap.controller.ts`; 1419 → 929 lines
 
 **Users Page**
-- Add a column "Location" to the table, where it will show which network the user is connected to.
-- The table is what should be scrollable not the page
-- Change the "Wipe User Database" button to color red so that it will bring caution to users.
+- [x] Add a column "Location" to the table, where it will show which network the user is connected to.
+      — `listUsers` left-joins `network_health` per active session; distinct AP names, comma-joined
+- [x] The table is what should be scrollable not the page
+- [x] Change the "Wipe User Database" button to color red so that it will bring caution to users.
+      — new `danger`/`danger-solid` Button variants; trigger outlined-red, modal confirm solid-red
+- [x] Sortable column headers (Staff-style) — clickable User/Balance/Time-Left/Devices/Location/Status
+      headers (asc/desc toggle); dropped the status FilterTabs + sort button
+- [x] Show the phone number as the user identity (customers register by phone, not names) —
+      query selects `customerUser.phoneNumber`; seed scripts now populate phone-as-name + synthesized
+      `@otp.veent.local` email, matching the customer app's better-auth signUpOnVerification
 
 **Finance Page**
-- Make table scrollable not page
-- Move Export CSV Button else where
-- Move time range filter else where
-- Add which network locations the payments are comming from (if possible)
+- [x] Make table scrollable not page — moved to dedicated `/finance/transactions`, capped internal scroll
+- [x] Move Export CSV Button else where — Topbar dropdown (`FinanceHeaderControls`)
+- [x] Move time range filter else where — Topbar dropdown (`FinanceHeaderControls`)
+- [x] Add which network locations the payments are comming from (if possible) — owned by a teammate
 
 **Staff Page**
-- Make table scrollable not page
-- Add mass invite feature
+- [x] Make table scrollable not page — full-height flex column; table body scrolls internally
+- [x] Add mass invite feature — "Add staff" toolbar button opens a modal with add/remove rows
+      (up to 10); `?/invite` loops, reporting per-row sent/failed (replaced the collapsible form)
+- [x] Sortable columns — clickable Member/Role/Status/Last-active headers (asc/desc toggle,
+      arrow indicator); added raw `lastActiveAt` to the row for chronological sort
 
 ---
 
@@ -99,5 +117,7 @@ Backend/security work is phased; the UI/page items above are a separate, ongoing
 
 ### 🎨 Frontend / page polish — ongoing (separate track)
 The per-page items at the top of this file (System, Dashboard, Network, Map, Users, Finance, Staff). Independent of the backend phases — pick up alongside or between them.
+
+Done so far: Finance (table → `/finance/transactions`, filter + Export moved to Topbar dropdown), Users (table scroll, red wipe button), Network (wipe-database button) — plus shared `WipeDialog` component and `danger`/`danger-solid` Button variants.
 
 _Out of scope for us: OTP / SMS rate limiting (teammate-owned, already landed)._

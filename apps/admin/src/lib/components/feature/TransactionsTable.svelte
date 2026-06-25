@@ -70,7 +70,9 @@
 	const fmtDate = (iso: string) => dateFmt.format(new Date(iso));
 </script>
 
-<Table {columns}>
+<!-- Fill the parent's height so the rows scroll inside (sticky header) instead of growing the
+     page; the finance page gives this a full-viewport-tall flex column. -->
+<Table {columns} class="min-h-0 flex-1">
 	<!-- Toolbar: search + status filter, matching the Users table chrome exactly. -->
 	{#snippet toolbar()}
 		<div class="flex flex-wrap items-center gap-3 px-4 py-3">

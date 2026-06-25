@@ -42,6 +42,9 @@ export interface ActiveSession {
 	timeLeft: string;
 	tone: StatusTone;
 	status: string;
+	/** AP/network the session is bound to (network_health.name), or null when the
+	 * controller couldn't resolve an AP (stub/dev, wired client). */
+	network: string | null;
 	/** Session expiry as an ISO string, so the client can tick the countdown every
 	 * second instead of waiting on the 5s SSE snapshot. Null if no expiry recorded. */
 	expiresAt: string | null;
@@ -101,8 +104,9 @@ export interface ConnectionLog {
 /** A row in the user-management table. */
 export interface AdminUserRow {
 	id: string;
-	name: string;
-	email: string;
+	/** The guest's phone number in E.164 (e.g. "+639176544521") — customers register by
+	 * phone only (no name/email), so this is the identity shown in the table. */
+	phone: string;
 	/** Credit balance in pesos. */
 	balance: number;
 	/** Lifetime/period usage, pre-formatted (e.g. "4.2 GB"). */
@@ -120,6 +124,11 @@ export interface AdminUserRow {
 	devices: { mac: string | null; lastSeenAt: string | null }[];
 	/** Account access time remaining, pre-formatted (e.g. "1:23:45"); null if offline. */
 	timeLeft: string | null;
+	/** Raw remaining access time in ms (for chronological Time-Left sort); null if offline. */
+	timeLeftMs: number | null;
+	/** Network(s) the user's live device(s) are on (network_health.name, distinct,
+	 * comma-joined). Null if offline or no AP resolved (stub/dev, wired client). */
+	location: string | null;
 }
 
 /**
@@ -149,6 +158,8 @@ export interface StaffMember {
 	status: StaffStatus;
 	/** Last-active label, pre-formatted (e.g. "2h ago", "—"). */
 	lastActive: string;
+	/** Raw last-active time (epoch ms) for sorting; null if never active. */
+	lastActiveAt: number | null;
 }
 
 /** One slice of the Finance "revenue by payment method" donut. */

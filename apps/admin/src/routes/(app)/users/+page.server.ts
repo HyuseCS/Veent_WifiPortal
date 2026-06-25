@@ -118,20 +118,26 @@ export const actions: Actions = {
 		// Cap wipe-code emails so the owner's inbox can't be flooded with codes.
 		const limited = await checkAdminEmailLimit(owner.email, owner.id);
 		if (limited) {
-			return fail(429, { error: 'Too many verification codes requested. Try again later.' });
+			return fail(429, {
+				action: 'requestWipeCode',
+				error: 'Too many verification codes requested. Try again later.'
+			});
 		}
 
 		const code = issueWipeCode(owner.id);
 		const { subject, html, text } = wipeCodeEmail({ code, name: owner.name });
 		// Dev affordance: the stub mailer never logs bodies, so surface the code here
 		// to keep the flow testable until real email (Resend) is wired up.
-		if (dev) console.log(`[wipe] verification code for ${owner.email}: ${code}`);
+		if (dev) console.log(`[wipe] customer verification code: ${code}`);
 		try {
 			await mailer.send({ to: owner.email, subject, html, text });
 		} catch (err) {
 			// Observability: email-delivery failure signal (no address/code logged).
 			console.warn('[email] wipe code send failed:', (err as Error)?.message);
-			return fail(502, { error: "Couldn't send the verification code. Please try again." });
+			return fail(502, {
+				action: 'requestWipeCode',
+				error: "Couldn't send the verification code. Please try again."
+			});
 		}
 		return { ok: true, action: 'requestWipeCode' };
 	},
@@ -144,7 +150,7 @@ export const actions: Actions = {
 
 		const code = String((await event.request.formData()).get('code') ?? '').trim();
 		if (!consumeWipeCode(event.locals.user!.id, code)) {
-			return fail(400, { error: 'Invalid or expired code.' });
+			return fail(400, { action: 'wipe', error: 'Invalid or expired code.' });
 		}
 		const removed = await wipeCustomers(db, network);
 		return { ok: true, action: 'wipe', removed };

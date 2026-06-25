@@ -54,16 +54,19 @@ export async function listUsers(db: DB, now: Date = new Date()): Promise<AdminUs
 	const rows = await db
 		.select({
 			id: customerUser.id,
-			name: customerUser.name,
-			email: customerUser.email,
+			// Customers register by phone only — the canonical identity for the table.
+			phone: customerUser.phoneNumber,
 			balance: customerProfile.creditBalance,
 			blocked: customerProfile.blocked,
 			// Account-owned access window (source of truth for online + time-left).
-			accessExpiresAt: customerProfile.accessExpiresAt
+			accessExpiresAt: customerProfile.accessExpiresAt,
+			// Non-null = window FROZEN (paused): devices unbound, no internet flows, so the
+			// account is not "online" and its time-left is held, not ticking.
+			accessPausedAt: customerProfile.accessPausedAt
 		})
 		.from(customerUser)
 		.leftJoin(customerProfile, eq(customerProfile.userId, customerUser.id))
-		.orderBy(customerUser.name);
+		.orderBy(customerUser.phoneNumber);
 
 	// One pass over sessions (newest first) yields: the most recent device MAC (any
 	// status, for the dev Allow-WiFi grant) and the list of currently-BOUND devices
@@ -73,12 +76,17 @@ export async function listUsers(db: DB, now: Date = new Date()): Promise<AdminUs
 			userId: networkSessions.userId,
 			mac: networkSessions.macAddress,
 			status: networkSessions.status,
-			lastSeenAt: networkSessions.lastSeenAt
+			lastSeenAt: networkSessions.lastSeenAt,
+			network: networkHealth.name
 		})
 		.from(networkSessions)
+		.leftJoin(networkHealth, eq(networkHealth.id, networkSessions.networkId))
 		.orderBy(desc(networkSessions.startedAt));
 	const lastMacByUser = new Map<string, string>();
 	const devicesByUser = new Map<string, { mac: string | null; lastSeenAt: string | null }[]>();
+	// Distinct AP names per user, across their active sessions (Set dedupes a user with
+	// several devices on the same AP; null networkId — unresolved — is skipped).
+	const networksByUser = new Map<string, Set<string>>();
 	for (const s of sessions) {
 		if (s.mac && !lastMacByUser.has(s.userId)) lastMacByUser.set(s.userId, s.mac);
 		if (s.status === SESSION_STATUS.active) {
@@ -86,12 +94,18 @@ export async function listUsers(db: DB, now: Date = new Date()): Promise<AdminUs
 			devicesByUser
 				.get(s.userId)!
 				.push({ mac: s.mac, lastSeenAt: s.lastSeenAt ? s.lastSeenAt.toISOString() : null });
+			if (s.network) {
+				if (!networksByUser.has(s.userId)) networksByUser.set(s.userId, new Set());
+				networksByUser.get(s.userId)!.add(s.network);
+			}
 		}
 	}
 
 	return rows.map((r) => {
 		const balance = Number(r.balance ?? 0);
-		const online = !!r.accessExpiresAt && r.accessExpiresAt.getTime() > now.getTime();
+		// A paused account has no live devices and isn't passing traffic — treat as offline.
+		const online =
+			!r.accessPausedAt && !!r.accessExpiresAt && r.accessExpiresAt.getTime() > now.getTime();
 		const devices = online ? (devicesByUser.get(r.id) ?? []) : [];
 		let tone: StatusTone = 'online';
 		let status = 'Active';
@@ -102,10 +116,11 @@ export async function listUsers(db: DB, now: Date = new Date()): Promise<AdminUs
 			tone = 'warning';
 			status = 'Low Balance';
 		}
+		const timeLeftMs =
+			online && r.accessExpiresAt ? r.accessExpiresAt.getTime() - now.getTime() : null;
 		return {
 			id: r.id,
-			name: r.name,
-			email: r.email,
+			phone: r.phone ?? '—',
 			balance,
 			usage: '—', // byte-level usage isn't tracked yet (needs accounting feed)
 			tone,
@@ -114,10 +129,9 @@ export async function listUsers(db: DB, now: Date = new Date()): Promise<AdminUs
 			lastMac: lastMacByUser.get(r.id) ?? null,
 			deviceCount: devices.length,
 			devices,
-			timeLeft:
-				online && r.accessExpiresAt
-					? formatTimeLeft(r.accessExpiresAt.getTime() - now.getTime())
-					: null
+			timeLeft: timeLeftMs != null ? formatTimeLeft(timeLeftMs) : null,
+			timeLeftMs,
+			location: online ? ([...(networksByUser.get(r.id) ?? [])].join(', ') || null) : null
 		};
 	});
 }
@@ -131,11 +145,13 @@ export async function listActiveSessions(db: DB, now: Date = new Date()): Promis
 			id: networkSessions.id,
 			macAddress: networkSessions.macAddress,
 			expiresAt: networkSessions.expiresAt,
-			packageName: packages.name
+			packageName: packages.name,
+			networkName: networkHealth.name
 		})
 		.from(networkSessions)
 		.leftJoin(customerProfile, eq(customerProfile.userId, networkSessions.userId))
 		.leftJoin(packages, eq(packages.id, customerProfile.accessPackageId))
+		.leftJoin(networkHealth, eq(networkHealth.id, networkSessions.networkId))
 		.where(eq(networkSessions.status, SESSION_STATUS.active))
 		.orderBy(desc(networkSessions.startedAt));
 
@@ -154,6 +170,7 @@ export async function listActiveSessions(db: DB, now: Date = new Date()): Promis
 			id: r.id,
 			mac: r.macAddress ?? '—',
 			package: r.packageName ?? 'Free Time',
+			network: r.networkName ?? null,
 			timeLeft: formatTimeLeft(msLeft),
 			tone,
 			status,
@@ -266,7 +283,8 @@ export async function listStaff(db: DB): Promise<StaffMember[]> {
 		role: r.role as StaffRole,
 		roleLabel: r.roleLabel,
 		status: r.status as StaffStatus,
-		lastActive: formatLastActive(r.lastActiveAt)
+		lastActive: formatLastActive(r.lastActiveAt),
+		lastActiveAt: r.lastActiveAt ? r.lastActiveAt.getTime() : null
 	}));
 }
 
@@ -682,4 +700,11 @@ export async function updateNetworkPlace(
  * so attributed sessions simply stop matching the per-AP count — no constraint to violate. */
 export async function deleteNetworkPlace(db: DB, id: number): Promise<void> {
 	await db.delete(networkHealth).where(eq(networkHealth.id, id));
+}
+
+/** Wipe every access point / health row. Same loose-link safety as deleteNetworkPlace —
+ * no FK to violate. Caller owns authorization (owner-only + step-up code). Returns count. */
+export async function wipeNetworks(db: DB): Promise<number> {
+	const removed = await db.delete(networkHealth).returning({ id: networkHealth.id });
+	return removed.length;
 }

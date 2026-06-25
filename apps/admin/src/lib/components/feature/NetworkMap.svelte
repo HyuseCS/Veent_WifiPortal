@@ -808,7 +808,15 @@
 		</button>
 	{/if}
 
-	<div bind:this={mapEl} class="h-full w-full"></div>
+	<div bind:this={mapEl} class="peer h-full w-full"></div>
+
+	<!-- Hover hint: how to add a pin. CSS-only (peer-hover on the map) — fades in while the
+	     cursor is over the map. Bottom-centre clears the bottom-right zoom control. -->
+	<div
+		class="pointer-events-none absolute bottom-4 left-1/2 z-[500] -translate-x-1/2 rounded-full bg-ink/85 px-3 py-1.5 text-xs font-medium text-white opacity-0 shadow-sm backdrop-blur-sm transition-opacity duration-150 peer-hover:opacity-100"
+	>
+		Double-click on map to add a pin
+	</div>
 
 	<!-- Delete confirmation — only saved (DB) APs reach here; sandbox pins remove instantly. -->
 	<dialog

@@ -5,62 +5,85 @@
 	import Wifi from 'lucide-svelte/icons/wifi';
 	import Trash2 from 'lucide-svelte/icons/trash-2';
 	import Search from 'lucide-svelte/icons/search';
-	import ArrowUpDown from 'lucide-svelte/icons/arrow-up-down';
 	import TriangleAlert from 'lucide-svelte/icons/triangle-alert';
 	import X from 'lucide-svelte/icons/x';
 	import Smartphone from 'lucide-svelte/icons/smartphone';
+	import MapPin from 'lucide-svelte/icons/map-pin';
 	import ChevronDown from 'lucide-svelte/icons/chevron-down';
+	import ChevronUp from 'lucide-svelte/icons/chevron-up';
+	import ChevronsUpDown from 'lucide-svelte/icons/chevrons-up-down';
 	import type { Component, Snippet } from 'svelte';
 	import { fade } from 'svelte/transition';
 	import { SvelteSet } from 'svelte/reactivity';
 	import { dev } from '$app/environment';
 	import { enhance } from '$app/forms';
 	import type { AdminUserRow, StatusTone } from '$lib/types';
-	import {
-		EmptyState,
-		FilterTabs,
-		IconButton,
-		SearchInput,
-		StatusBadge,
-		Table
-	} from '$lib/components/ui';
+	import { EmptyState, IconButton, SearchInput, StatusBadge, Table } from '$lib/components/ui';
 
 	// `actions` lets the page slot owner-only controls (the Wipe button) into the toolbar
 	// without this component owning the gated dialog/flow — data flow stays on the page.
 	let { users, actions }: { users: AdminUserRow[]; actions?: Snippet } = $props();
 
 	// Client-side view state over the already-loaded rows (no extra loads / no DB hits):
-	// a text query, a status filter, and a sort key. All operate on `users` in memory.
+	// a text search + clickable-header sort. Status is reachable via the Status column
+	// sorter, so the old status-filter pills + sort button were dropped (mirrors <StaffTable>).
 	let query = $state('');
-	let filter = $state<'all' | StatusTone>('all');
-	let sortKey = $state<'name' | 'balance'>('name');
-
-	// Status filter pills with live counts off the full set (so counts don't change as you filter).
-	const statusCount = (tone: StatusTone) => users.filter((u) => u.tone === tone).length;
-	const tabs = $derived([
-		{ key: 'all' as const, label: 'All', count: users.length },
-		{ key: 'online' as const, label: 'Active', count: statusCount('online') },
-		{ key: 'warning' as const, label: 'Low', count: statusCount('warning') },
-		{ key: 'blocked' as const, label: 'Blocked', count: statusCount('blocked') }
-	]);
 
 	const filtered = $derived.by(() => {
 		const q = query.trim().toLowerCase();
-		let rows = users.filter((u) => filter === 'all' || u.tone === filter);
-		if (q) {
-			rows = rows.filter((u) =>
-				`${u.name} ${u.email} ${u.lastMac ?? ''} ${u.devices.map((d) => d.mac ?? '').join(' ')}`
-					.toLowerCase()
-					.includes(q)
-			);
-		}
-		return [...rows].sort((a, b) =>
-			sortKey === 'balance' ? b.balance - a.balance : a.name.localeCompare(b.name)
+		if (!q) return users;
+		return users.filter((u) =>
+			`${u.phone} ${u.lastMac ?? ''} ${u.devices.map((d) => d.mac ?? '').join(' ')}`
+				.toLowerCase()
+				.includes(q)
 		);
 	});
-	const sortLabel = $derived(sortKey === 'balance' ? 'Balance' : 'Name');
-	function cycleSort() {
-		sortKey = sortKey === 'name' ? 'balance' : 'name';
+
+	// Clickable-header sorting. `null` key keeps the server order (by phone). Clicking a
+	// header sorts by it; clicking the active header flips direction.
+	type SortKey = 'phone' | 'balance' | 'timeLeft' | 'devices' | 'location' | 'status';
+	let sortKey = $state<SortKey | null>(null);
+	let sortDir = $state<'asc' | 'desc'>('asc');
+	// Sensible first-click direction per column (e.g. soonest-to-expire / biggest balance first).
+	const defaultDir: Record<SortKey, 'asc' | 'desc'> = {
+		phone: 'asc',
+		balance: 'desc',
+		timeLeft: 'asc',
+		devices: 'desc',
+		location: 'asc',
+		status: 'asc'
+	};
+	// Logical status order via tone (online → warning → blocked), not alphabetical.
+	const toneRank: Record<StatusTone, number> = { online: 0, warning: 1, blocked: 2 };
+
+	function toggleSort(key: SortKey) {
+		if (sortKey === key) sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+		else {
+			sortKey = key;
+			sortDir = defaultDir[key];
+		}
+	}
+
+	const sorted = $derived.by(() => {
+		if (!sortKey) return filtered;
+		const key = sortKey;
+		const dir = sortDir === 'asc' ? 1 : -1;
+		return [...filtered].sort((a, b) => {
+			let cmp: number;
+			if (key === 'phone') cmp = a.phone.localeCompare(b.phone);
+			else if (key === 'balance') cmp = a.balance - b.balance;
+			else if (key === 'timeLeft') cmp = (a.timeLeftMs ?? -Infinity) - (b.timeLeftMs ?? -Infinity);
+			else if (key === 'devices') cmp = a.deviceCount - b.deviceCount;
+			else if (key === 'location') cmp = (a.location ?? '').localeCompare(b.location ?? '');
+			else cmp = toneRank[a.tone] - toneRank[b.tone]; // status
+			return cmp * dir;
+		});
+	});
+
+	// Pretty-print an E.164 PH mobile (+63 then 10 digits) as "+63 917 654 4521"; raw otherwise.
+	function fmtPhone(p: string): string {
+		const m = p.match(/^\+63(\d{3})(\d{3})(\d{4})$/);
+		return m ? `+63 ${m[1]} ${m[2]} ${m[3]}` : p;
 	}
 
 	// Set of selected user ids. SvelteSet so mutations stay reactive.
@@ -91,51 +114,35 @@
 		else for (const u of filtered) selected.delete(u.id);
 	}
 
-	// First two letters of the name, for the avatar chip.
-	const initials = (name: string) =>
-		name
-			.split(' ')
-			.map((w) => w[0])
-			.slice(0, 2)
-			.join('')
-			.toUpperCase();
-
-	const columns = [
-		{ label: 'User' },
-		{ label: 'Balance' },
-		{ label: 'Time Left' },
-		{ label: 'Devices' },
-		{ label: 'Status' },
+	// Header config: `key` makes a column a clickable sort toggle; Actions stays static.
+	const headers: { label: string; key?: SortKey; srOnly?: boolean }[] = [
+		{ label: 'User', key: 'phone' },
+		{ label: 'Balance', key: 'balance' },
+		{ label: 'Time Left', key: 'timeLeft' },
+		{ label: 'Devices', key: 'devices' },
+		{ label: 'Location', key: 'location' },
+		{ label: 'Status', key: 'status' },
 		{ label: 'Actions', srOnly: true }
 	];
 </script>
 
-<Table {columns}>
-	<!-- Toolbar: search + status filter + sort, with any owner action (Wipe) on the right. -->
+<Table class="min-h-0 flex-1">
+	<!-- Toolbar: search + any owner action (Wipe) on the right. -->
 	{#snippet toolbar()}
 		<div class="flex flex-wrap items-center gap-3 px-4 py-3">
 			<SearchInput
 				bind:value={query}
-				placeholder="Search name, email or MAC…"
+				placeholder="Search phone or MAC…"
 				label="Search users"
 				class="min-w-60 flex-1"
 			/>
-			<FilterTabs {tabs} active={filter} onselect={(key) => (filter = key)} />
 			<div class="ml-auto flex items-center gap-3">
-				<button
-					type="button"
-					onclick={cycleSort}
-					class="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-lg border border-border bg-bg px-3 text-xs font-bold text-muted transition-colors duration-150 hover:border-brand/40 hover:text-ink"
-				>
-					<ArrowUpDown class="h-4 w-4" aria-hidden="true" />
-					{sortLabel}
-				</button>
 				{@render actions?.()}
 			</div>
 		</div>
 	{/snippet}
 
-	<!-- Custom header row: master select-all checkbox + column labels. -->
+	<!-- Custom header row: master select-all checkbox + clickable, sortable column headers. -->
 	{#snippet headRow()}
 		<tr class="border-b border-border bg-surface">
 			<th class="w-10 px-4 py-2.5">
@@ -147,48 +154,63 @@
 					onchange={(e) => toggleAll(e.currentTarget.checked)}
 				/>
 			</th>
-			{#each columns as col (col.label)}
+			{#each headers as h (h.label)}
 				<th
-					class="px-4 py-2.5 text-left text-[11px] font-semibold tracking-wider text-muted uppercase {col.srOnly
+					class="px-4 py-2.5 text-left text-[11px] font-semibold tracking-wider text-muted uppercase {h.srOnly
 						? 'text-right'
 						: ''}"
+					aria-sort={sortKey === h.key
+						? sortDir === 'asc'
+							? 'ascending'
+							: 'descending'
+						: undefined}
 				>
-					{#if col.srOnly}<span class="sr-only">{col.label}</span>{:else}{col.label}{/if}
+					{#if h.srOnly}
+						<span class="sr-only">{h.label}</span>
+					{:else if h.key}
+						<button
+							type="button"
+							onclick={() => toggleSort(h.key!)}
+							class="group inline-flex items-center gap-1 tracking-wider uppercase transition-colors hover:text-ink {sortKey ===
+							h.key
+								? 'text-ink'
+								: ''}"
+						>
+							{h.label}
+							{#if sortKey === h.key}
+								{#if sortDir === 'asc'}
+									<ChevronUp class="h-3.5 w-3.5" aria-hidden="true" />
+								{:else}
+									<ChevronDown class="h-3.5 w-3.5" aria-hidden="true" />
+								{/if}
+							{:else}
+								<ChevronsUpDown
+									class="h-3.5 w-3.5 opacity-0 transition-opacity group-hover:opacity-50"
+									aria-hidden="true"
+								/>
+							{/if}
+						</button>
+					{:else}
+						{h.label}
+					{/if}
 				</th>
 			{/each}
 		</tr>
 	{/snippet}
 
-	{#each filtered as user (user.id)}
+	{#each sorted as user (user.id)}
 		<tr class="hover:bg-surface" class:bg-surface={selected.has(user.id)}>
 			<td class="px-4 py-3">
 				<input
 					type="checkbox"
 					class="h-4 w-4 accent-brand"
-					aria-label="Select {user.name}"
+					aria-label="Select {user.phone}"
 					checked={selected.has(user.id)}
 					onchange={(e) => toggle(user.id, e.currentTarget.checked)}
 				/>
 			</td>
 			<td class="px-4 py-3">
-				<div class="flex items-center gap-3">
-					<div class="relative shrink-0">
-						<span
-							class="flex h-9 w-9 items-center justify-center rounded-full bg-brand/10 text-xs font-bold text-brand"
-							aria-hidden="true">{initials(user.name)}</span
-						>
-						<span
-							class="absolute -right-0.5 -bottom-0.5 h-3 w-3 rounded-full border-2 border-bg {user.online
-								? 'bg-online'
-								: 'bg-muted/40'}"
-							title={user.online ? 'Online' : 'Offline'}
-						></span>
-					</div>
-					<div class="min-w-0">
-						<div class="truncate font-medium text-ink">{user.name}</div>
-						<div class="truncate text-xs text-muted">{user.email}</div>
-					</div>
-				</div>
+				<span class="truncate font-mono font-medium text-ink">{fmtPhone(user.phone)}</span>
 			</td>
 			<td class="px-4 py-3">
 				<span
@@ -211,15 +233,13 @@
 						aria-expanded={expanded.has(user.id)}
 						aria-label="{user.deviceCount} device{user.deviceCount === 1
 							? ''
-							: 's'} for {user.name}"
+							: 's'} for {user.phone}"
 						class="inline-flex min-h-9 cursor-pointer items-center gap-1.5 rounded-lg border border-border bg-bg px-2.5 text-xs font-semibold text-ink transition-colors duration-150 hover:border-brand/40"
 					>
 						<Smartphone class="h-3.5 w-3.5 text-muted" aria-hidden="true" />
 						<span class="font-mono">{user.deviceCount}</span>
 						<ChevronDown
-							class="h-3.5 w-3.5 text-muted transition-transform duration-150 {expanded.has(
-								user.id
-							)
+							class="h-3.5 w-3.5 text-muted transition-transform duration-150 {expanded.has(user.id)
 								? 'rotate-180'
 								: ''}"
 							aria-hidden="true"
@@ -227,6 +247,16 @@
 					</button>
 				{:else}
 					<span class="font-mono text-xs text-muted">—</span>
+				{/if}
+			</td>
+			<td class="px-4 py-3">
+				{#if user.location}
+					<span class="inline-flex min-w-0 items-center gap-1.5 text-sm text-ink">
+						<MapPin class="h-3.5 w-3.5 shrink-0 text-muted" aria-hidden="true" />
+						<span class="truncate">{user.location}</span>
+					</span>
+				{:else}
+					<span class="text-xs text-muted">—</span>
 				{/if}
 			</td>
 			<td class="px-4 py-3">
@@ -241,7 +271,7 @@
 							<IconButton
 								type="submit"
 								icon={ShieldCheck as unknown as Component}
-								label="Unblock {user.name}"
+								label="Unblock {user.phone}"
 							/>
 						</form>
 					{:else}
@@ -254,7 +284,7 @@
 								<IconButton
 									type="submit"
 									icon={Wifi as unknown as Component}
-									label="Allow WiFi for {user.name} (dev)"
+									label="Allow WiFi for {user.phone} (dev)"
 									disabled={!user.lastMac}
 								/>
 							</form>
@@ -264,7 +294,7 @@
 							<IconButton
 								type="submit"
 								icon={WifiOff as unknown as Component}
-								label="Disconnect all of {user.name}'s devices"
+								label="Disconnect all of {user.phone}'s devices"
 							/>
 						</form>
 						<form method="post" action="?/block" use:enhance>
@@ -272,7 +302,7 @@
 							<IconButton
 								type="submit"
 								icon={Ban as unknown as Component}
-								label="Block {user.name} (disconnects all devices)"
+								label="Block {user.phone} (disconnects all devices)"
 								tone="danger"
 							/>
 						</form>
@@ -283,7 +313,7 @@
 		{#if expanded.has(user.id) && user.deviceCount > 0}
 			<tr class="bg-surface">
 				<td></td>
-				<td colspan={columns.length} class="px-4 pt-0 pb-3">
+				<td colspan={headers.length} class="px-4 pt-0 pb-3">
 					<ul class="flex flex-col gap-1.5 rounded-lg border border-border bg-bg p-3">
 						{#each user.devices as d, i (d.mac ?? i)}
 							<li class="flex items-center gap-2 text-xs">
@@ -300,11 +330,11 @@
 
 	{#if filtered.length === 0}
 		<tr>
-			<td colspan={columns.length + 1} class="p-0">
+			<td colspan={headers.length + 1} class="p-0">
 				<EmptyState
 					icon={Search as unknown as Component}
-					title="No users match your filters"
-					description="Try a different search term or status filter."
+					title="No users match your search"
+					description="Try a different search term."
 					compact
 				/>
 			</td>

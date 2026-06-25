@@ -427,3 +427,79 @@ export async function provisionWalledGarden(
 	}
 	return result;
 }
+
+export interface RestrictApiInput {
+	/** Source IP (or CIDR) allowed to reach the RouterOS API — the app server's LAN IP. */
+	sourceIp: string;
+	/** Also disable the cleartext `api` (8728). Only pass when already connected over api-ssl. */
+	disablePlainApi?: boolean;
+	/** Best-effort: convert the source IP's DHCP lease to static so the IP can't change. */
+	pinLease?: boolean;
+}
+
+export interface RestrictApiResult {
+	apiSslAddress: string;
+	plainApiDisabled: boolean;
+	/** true = pinned/already static, 'no-lease' = no DHCP lease found (likely a static IP). */
+	leasePinned: boolean | 'no-lease';
+}
+
+/**
+ * Lock the RouterOS API to one source IP: restrict `api-ssl`'s *Available From* to
+ * `sourceIp/32` (the api-ssl cert + service must already exist), optionally disable the
+ * cleartext `api` service, and optionally pin the source IP's DHCP lease. Used by the
+ * server-migration helper so the app server's new IP is whitelisted on the router.
+ *
+ * Safe by construction when `sourceIp` is the address THIS process reaches the router from —
+ * restricting api-ssl to your own source IP can't drop your own connection. (Don't disable
+ * cleartext `api` while you're connected over it; the caller guards on that.)
+ */
+export async function restrictApiService(
+	config: MikrotikConfig,
+	input: RestrictApiInput
+): Promise<RestrictApiResult> {
+	const cidr = input.sourceIp.includes('/') ? input.sourceIp : `${input.sourceIp}/32`;
+	const conn = await openConn(config);
+	try {
+		const services = await conn.write('/ip/service/print');
+		const apiSsl = services.find((s) => s.name === 'api-ssl');
+		if (!apiSsl?.['.id']) {
+			throw new Error(
+				'api-ssl service not found — set up the self-signed cert + api-ssl on the router first.'
+			);
+		}
+		await conn.write('/ip/service/set', [
+			`=.id=${apiSsl['.id']}`,
+			`=address=${cidr}`,
+			'=disabled=no'
+		]);
+
+		let plainApiDisabled = false;
+		if (input.disablePlainApi) {
+			const api = services.find((s) => s.name === 'api');
+			if (api?.['.id']) {
+				await conn.write('/ip/service/set', [`=.id=${api['.id']}`, '=disabled=yes']);
+				plainApiDisabled = true;
+			}
+		}
+
+		let leasePinned: boolean | 'no-lease' = false;
+		if (input.pinLease) {
+			const ip = cidr.split('/')[0];
+			const leases = await conn.write('/ip/dhcp-server/lease/print', [`?address=${ip}`]);
+			const lease = leases.find((l) => l['.id']);
+			if (!lease) {
+				leasePinned = 'no-lease';
+			} else if (lease.dynamic === 'true') {
+				await conn.write('/ip/dhcp-server/lease/make-static', [`=.id=${lease['.id']}`]);
+				leasePinned = true;
+			} else {
+				leasePinned = true; // already static
+			}
+		}
+
+		return { apiSslAddress: cidr, plainApiDisabled, leasePinned };
+	} finally {
+		conn.close();
+	}
+}
