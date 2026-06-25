@@ -178,17 +178,19 @@ export async function listActiveSessions(db: DB, now: Date = new Date()): Promis
 	});
 }
 
-/** The full dashboard in one frame: KPIs + revenue + active sessions + network
- * health. Pure composition of the four queries below — seeds SSR and is what the
- * live feed re-queries per DB notify. */
+/** The full admin live frame: KPIs + revenue + active sessions + network health +
+ * the user table. Pure composition of the queries below — seeds SSR and is what the
+ * live feed re-queries per DB notify, so the Dashboard, Networks, and Users pages all
+ * read one stream. */
 export async function dashboardSnapshot(db: DB): Promise<DashboardSnapshot> {
-	const [kpis, revenue, activeSessions, networks] = await Promise.all([
+	const [kpis, revenue, activeSessions, networks, users] = await Promise.all([
 		dashboardKpis(db),
 		revenueByDay(db),
 		listActiveSessions(db),
-		listNetworkHealth(db)
+		listNetworkHealth(db),
+		listUsers(db)
 	]);
-	return { kpis, revenue, activeSessions, networks };
+	return { kpis, revenue, activeSessions, networks, users };
 }
 
 /** Headline KPIs. Deltas are omitted (no period-over-period baseline yet).
