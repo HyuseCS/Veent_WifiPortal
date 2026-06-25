@@ -52,7 +52,12 @@ export const customerProfile = pgTable('customer_profile', {
 	// also clears it (adding time un-pauses). Paid windows only.
 	accessPausedAt: timestamp('access_paused_at'),
 	// Admin "block": when true, grant paths refuse to start sessions for this user.
-	blocked: boolean('blocked').notNull().default(false)
+	blocked: boolean('blocked').notNull().default(false),
+	// Last AP/network this account was granted on (network_health.id), stamped whenever a
+	// grant resolves an AP. A fallback for payment-location attribution: a returning buyer
+	// whose captive-portal context was lost and who has no live session still gets their
+	// last-known AP at checkout. Loose link (no FK), same rationale as network_sessions.
+	lastNetworkId: integer('last_network_id')
 });
 
 /** Purchasable credit bundles / access tiers, configured by admin (ERD "Packages"). */
@@ -116,6 +121,14 @@ export const paymentTransactions = pgTable(
 		// Nullable: a failed event may carry no referenceId, so we can't always map it.
 		userId: text('user_id').references(() => customerUser.id, { onDelete: 'set null' }),
 		packageId: integer('package_id').references(() => packages.id, { onDelete: 'set null' }),
+		// Which AP/network the payment originated from (network_health.id), copied from the
+		// matching payment_checkouts row at webhook time so EVERY event — success AND
+		// failed/expired — carries a location, not just credited ones. Loose link (no FK),
+		// same rationale as network_sessions.network_id: network_health rows are pruned/
+		// reseeded by the health sweep, and a hard reference would fight that (and could
+		// null/cascade settled payment history on prune). Null = location was unresolvable
+		// (foreign webhook with no checkout, wired/dev device); reported as "Unattributed".
+		networkId: integer('network_id'),
 		createdAt: timestamp('created_at').notNull().defaultNow()
 	},
 	(t) => [
@@ -152,6 +165,12 @@ export const paymentCheckouts = pgTable(
 		status: text('status').notNull().default('pending'),
 		// Gateway txn id once known (from reconcile/webhook), for tracing.
 		externalTransactionId: text('external_transaction_id'),
+		// AP/network the buyer was on when this checkout was created (network_health.id),
+		// resolved from the captive-portal context / active session at checkout. The webhook
+		// copies it onto payment_transactions for every resulting event, so even a failed
+		// payment is attributed to a location. Loose link (no FK) for the same reason as
+		// network_sessions.network_id. Null when no AP could be resolved at checkout.
+		networkId: integer('network_id'),
 		// Throttle for the on-return poll so a fast-refreshing page can't hammer the gateway.
 		lastPolledAt: timestamp('last_polled_at'),
 		createdAt: timestamp('created_at').notNull().defaultNow(),

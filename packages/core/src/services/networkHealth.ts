@@ -54,3 +54,45 @@ export async function refreshNetworkHealth(
 	}
 	return samples.length;
 }
+
+/**
+ * Resolve an AP name — a router interface name (what `resolveApForMac` returns) OR a display
+ * name — to its `network_health` id. Prefers the operator-set `interface_name` binding so a
+ * named map pin can track a specific interface, then falls back to the display `name`.
+ * Returns null when nothing matches; AP attribution is always best-effort.
+ */
+export async function resolveNetworkIdByApName(db: DB, apName: string): Promise<number | null> {
+	if (!apName) return null;
+	const [byIface] = await db
+		.select({ id: networkHealth.id })
+		.from(networkHealth)
+		.where(eq(networkHealth.interfaceName, apName))
+		.limit(1);
+	if (byIface) return byIface.id;
+	const [byName] = await db
+		.select({ id: networkHealth.id })
+		.from(networkHealth)
+		.where(eq(networkHealth.name, apName))
+		.limit(1);
+	return byName?.id ?? null;
+}
+
+/**
+ * Resolve the AP a device MAC is currently on to a `network_health` id, via the controller's
+ * MAC→AP lookup. Never throws — returns null when the controller can't map it (wired client,
+ * dev stub, no `resolveApForMac`) or no AP row matches.
+ */
+export async function resolveNetworkIdForMac(
+	db: DB,
+	network: NetworkController,
+	macAddress: string
+): Promise<number | null> {
+	if (!network.resolveApForMac) return null;
+	try {
+		const apName = await network.resolveApForMac(macAddress);
+		if (!apName) return null;
+		return await resolveNetworkIdByApName(db, apName);
+	} catch {
+		return null;
+	}
+}

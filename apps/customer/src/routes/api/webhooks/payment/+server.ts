@@ -1,19 +1,11 @@
 import { json, error } from '@sveltejs/kit';
 import { eq } from 'drizzle-orm';
-import { customerUser, packages, paymentCheckouts, paymentTransactions } from '@veent/db';
-import { creditCheckoutIfUnsettled } from '@veent/core';
+import { customerUser, packages, paymentCheckouts } from '@veent/db';
+import { creditCheckoutIfUnsettled, recordPaymentTransaction } from '@veent/core';
 import { db } from '$lib/server/db';
 import { payments } from '$lib/server/payments';
 import { rateLimit, clientIp } from '$lib/server/rateLimit';
 import type { RequestHandler } from './$types';
-
-const STATUS_DB: Record<string, string> = {
-	paid: 'PAYMENT_SUCCESS',
-	failed: 'PAYMENT_FAILED',
-	expired: 'PAYMENT_EXPIRED',
-	cancelled: 'PAYMENT_CANCELLED',
-	pending: 'PAYMENT_PENDING'
-};
 
 /**
  * POST /api/webhooks/payment — the source of truth for adding credits.
@@ -59,7 +51,11 @@ export const POST: RequestHandler = async (event) => {
 	const ref = evt.referenceId ?? '';
 	const [co] = ref
 		? await db
-				.select({ userId: paymentCheckouts.userId, packageId: paymentCheckouts.packageId })
+				.select({
+					userId: paymentCheckouts.userId,
+					packageId: paymentCheckouts.packageId,
+					networkId: paymentCheckouts.networkId
+				})
 				.from(paymentCheckouts)
 				.where(eq(paymentCheckouts.referenceId, ref))
 				.limit(1)
@@ -89,40 +85,16 @@ export const POST: RequestHandler = async (event) => {
 	const attributedUserId = userExists ? refUserId : null;
 	const attributedPackageId = pkgExists ? refPackageId : null;
 
-	// Record the event for Finance reporting. onConflictDoUpdate (NOT DoNothing): Maya
-	// can resend or send a later status transition for the same tx id, and we must keep
-	// the latest state, not freeze the first one seen.
-	const txRow = {
-		id: evt.externalTransactionId,
-		status: STATUS_DB[evt.status] ?? evt.status.toUpperCase(),
-		amount: String(evt.amountMinor / 100),
-		currency: evt.currency,
-		fundSourceType: evt.fundSourceType ?? null,
-		fundSourceMasked: evt.fundSourceMasked ?? null,
-		receiptNo: evt.receiptNo ?? null,
-		referenceNo: evt.referenceNo ?? null,
-		errorCode: evt.errorCode ?? null,
-		errorMessage: evt.errorMessage ?? null,
-		buyerName: evt.buyerName ?? null,
-		buyerEmail: evt.buyerEmail ?? null,
+	// Record the event for Finance reporting (the shared recorder upserts, so a Maya resend
+	// or a later status transition keeps the latest state). The reconcile safety nets call
+	// the SAME recorder, so a payment that settles without a webhook still lands here.
+	// networkId is the AP captured at checkout — carried onto every event (incl. failures)
+	// so Finance can report the full funnel by AP; null for a foreign webhook with no checkout.
+	await recordPaymentTransaction(db, evt, {
 		userId: attributedUserId,
-		packageId: attributedPackageId
-	};
-	await db
-		.insert(paymentTransactions)
-		.values(txRow)
-		.onConflictDoUpdate({
-			target: paymentTransactions.id,
-			set: {
-				status: txRow.status,
-				amount: txRow.amount,
-				fundSourceType: txRow.fundSourceType,
-				fundSourceMasked: txRow.fundSourceMasked,
-				receiptNo: txRow.receiptNo,
-				errorCode: txRow.errorCode,
-				errorMessage: txRow.errorMessage
-			}
-		});
+		packageId: attributedPackageId,
+		networkId: co?.networkId ?? null
+	});
 
 	// Only successful payments add credits; others are recorded above and acknowledged.
 	if (evt.status !== 'paid') return json({ ok: true, ignored: true, status: evt.status });

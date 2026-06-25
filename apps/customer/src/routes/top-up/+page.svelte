@@ -7,10 +7,14 @@
 
 	let { data, form }: { data: PageServerData; form: ActionData } = $props();
 
-	// The user's explicit choice; null until they tap one. The effective selection
-	// falls back to the best-value bundle so a one-tap path to payment always exists.
+	// The user's explicit choice; null until they tap one. The EFFECTIVE selection falls back to
+	// the entry (cheapest) bundle so there's always a one-tap path to payment AND the form is
+	// submittable on first paint — before client JS hydrates. That matters on slow mobile /
+	// captive-portal (CNA) browsers, where there's a window after the HTML loads but before
+	// hydration; with this default + the CSS-driven highlight below, picking and submitting work
+	// natively in that window.
 	let userPick = $state<number | null>(null);
-	const selectedId = $derived(userPick);
+	const selectedId = $derived(userPick ?? data.bundles[0]?.id ?? null);
 
 	let pending = $state(false);
 
@@ -74,32 +78,28 @@
 				<fieldset class="mb-6 flex flex-col gap-2.5" disabled={pending}>
 					<legend class="sr-only">Choose a credit bundle</legend>
 					{#each data.bundles as bundle (bundle.id)}
-						{@const selected = selectedId === bundle.id}
+						<!-- Selection highlight is driven by the radio's :checked state via `has-[:checked]`
+						(label border/fill) and `peer-checked` (the dot + credits color), NOT by the JS
+						`userPick` state — so the choice reflects visually even before hydration. -->
 						<label
-							class="flex min-h-[44px] cursor-pointer items-center gap-3.5 rounded-xl p-4 transition-colors {selected
-								? 'border-2 border-brand bg-brand-tint-2'
-								: 'border-[1.5px] border-border bg-bg hover:bg-surface'}"
+							class="flex min-h-[44px] cursor-pointer items-center gap-3.5 rounded-xl border-[1.5px] border-border bg-bg p-4 transition-colors hover:bg-surface has-[:checked]:border-2 has-[:checked]:border-brand has-[:checked]:bg-brand-tint-2"
 						>
 							<input
 								type="radio"
 								name="packageId"
 								value={bundle.id}
-								checked={selected}
+								checked={selectedId === bundle.id}
 								onchange={() => (userPick = bundle.id)}
-								class="sr-only"
+								class="peer sr-only"
 							/>
 							<span
-								class="h-5 w-5 shrink-0 rounded-full {selected
-									? 'border-[6px] border-brand'
-									: 'border-2 border-border'}"
+								class="h-5 w-5 shrink-0 rounded-full border-2 border-border peer-checked:border-[6px] peer-checked:border-brand"
 								aria-hidden="true"
 							></span>
 							<span class="flex flex-1 items-center gap-2">
 								<span class="font-mono text-lg font-bold text-ink">₱{bundle.fiatCost}</span>
 							</span>
-							<span
-								class="font-mono text-[13px] font-semibold {selected ? 'text-brand' : 'text-muted'}"
-							>
+							<span class="font-mono text-[13px] font-semibold text-muted peer-checked:text-brand">
 								{bundle.creditsProvided} credits
 							</span>
 						</label>

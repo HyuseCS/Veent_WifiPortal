@@ -1,9 +1,10 @@
 import { and, asc, desc, eq, isNotNull, isNull, lte } from 'drizzle-orm';
-import { type DB, customerProfile, networkHealth, networkSessions, packages } from '@veent/db';
+import { type DB, customerProfile, networkSessions, packages } from '@veent/db';
 import type { NetworkController } from '../integrations/network';
 import { MAX_DEVICES_PER_ACCOUNT, SESSION_STATUS } from '../config';
 import { getFreeTimeStatus } from './freeTime';
 import { spendCreditsTx, type Tx } from './credits';
+import { resolveNetworkIdForMac } from './networkHealth';
 
 function expiry(durationMinutes: number, now: Date) {
 	return new Date(now.getTime() + durationMinutes * 60 * 1000);
@@ -174,6 +175,7 @@ async function bindMacTx(
 async function afterBind(
 	db: DB,
 	network: NetworkController,
+	userId: string,
 	rowId: number,
 	macAddress: string,
 	evicted: string[]
@@ -185,7 +187,7 @@ async function afterBind(
 			// reconcileGuestBindings will drop an orphaned binding on the next cron.
 		}
 	}
-	await attributeAp(db, network, rowId, macAddress);
+	await attributeAp(db, network, userId, rowId, macAddress);
 }
 
 /**
@@ -221,45 +223,32 @@ async function bindMacToAccount(
 
 	if (plan.skip) return { ok: false, reason: 'no_access', accessExpiresAt: null, evicted: [] };
 
-	await afterBind(db, network, plan.rowId, opts.macAddress, plan.evicted);
+	await afterBind(db, network, opts.userId, plan.rowId, opts.macAddress, plan.evicted);
 	return { ok: true, accessExpiresAt: plan.newWindow, evicted: plan.evicted };
 }
 
 /**
  * Best-effort: tag the binding row with the AP the device is on, so the Networks view can
- * count active users per AP. Never throws — attribution is a reporting nicety and many setups
- * (wired clients, stub/dev) can't resolve it.
+ * count active users per AP, and remember it on the account as `last_network_id` so a later
+ * checkout can attribute a payment to a location even after the portal context is gone. Never
+ * throws — attribution is a reporting nicety and many setups (wired clients, stub/dev) can't
+ * resolve it.
  */
 async function attributeAp(
 	db: DB,
 	network: NetworkController,
+	userId: string,
 	rowId: number,
 	macAddress: string
 ): Promise<void> {
-	if (!network.resolveApForMac) return;
 	try {
-		const apName = await network.resolveApForMac(macAddress);
-		if (!apName) return;
-		const [bound] = await db
-			.select({ id: networkHealth.id })
-			.from(networkHealth)
-			.where(eq(networkHealth.interfaceName, apName))
-			.limit(1);
-		const ap =
-			bound ??
-			(
-				await db
-					.select({ id: networkHealth.id })
-					.from(networkHealth)
-					.where(eq(networkHealth.name, apName))
-					.limit(1)
-			)[0];
-		if (ap) {
-			await db
-				.update(networkSessions)
-				.set({ networkId: ap.id })
-				.where(eq(networkSessions.id, rowId));
-		}
+		const networkId = await resolveNetworkIdForMac(db, network, macAddress);
+		if (networkId === null) return;
+		await db.update(networkSessions).set({ networkId }).where(eq(networkSessions.id, rowId));
+		await db
+			.update(customerProfile)
+			.set({ lastNetworkId: networkId })
+			.where(eq(customerProfile.userId, userId));
 	} catch {
 		// Non-critical: leave networkId null.
 	}
@@ -358,7 +347,7 @@ export async function startPaidAccessAndBindDevice(
 
 	if (!outcome.ok) return { ok: false, reason: 'insufficient_balance', balance: outcome.balance };
 
-	await afterBind(db, network, outcome.rowId, input.macAddress, outcome.evicted);
+	await afterBind(db, network, input.userId, outcome.rowId, input.macAddress, outcome.evicted);
 	return {
 		ok: true,
 		balance: outcome.balance,

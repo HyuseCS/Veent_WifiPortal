@@ -178,6 +178,22 @@ export interface PaymentMethodSlice {
 	pct: number;
 }
 
+/**
+ * One slice of the Finance "revenue by access point" donut. Same shape as
+ * PaymentMethodSlice so it renders through the shared <DonutChart>.
+ */
+export interface ApRevenueSlice {
+	/** Stable key: the network_health id as a string, or 'unattributed'. */
+	type: string;
+	/** AP display name, "AP #<id>" for a pruned AP, or "Unattributed". */
+	label: string;
+	/** Settled peso amount attributed to this AP. */
+	amount: number;
+	count: number;
+	/** Share of total settled amount, 0–100. */
+	pct: number;
+}
+
 /** A row in the Finance transactions table. */
 export interface TransactionRow {
 	id: string;
@@ -193,6 +209,8 @@ export interface TransactionRow {
 	buyerName: string;
 	buyerEmail: string | null;
 	packageName: string | null;
+	/** AP the payment came from — name, "AP #<id>" if pruned, or null if unattributed. */
+	apName: string | null;
 	/** ISO timestamp. */
 	createdAt: string;
 }
@@ -219,6 +237,8 @@ export interface FinanceSnapshot {
 	kpis: Kpi[];
 	revenue: RevenuePoint[];
 	breakdown: PaymentMethodSlice[];
+	/** Settled revenue grouped by access point. */
+	apRevenue: ApRevenueSlice[];
 	transactions: TransactionRow[];
 	/** Total rows matching the filter, for pagination. */
 	total: number;
