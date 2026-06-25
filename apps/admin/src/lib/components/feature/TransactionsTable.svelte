@@ -43,7 +43,9 @@
 		let rows = transactions.filter((tx) => filter === 'all' || tx.status === filter);
 		if (q) {
 			rows = rows.filter((tx) =>
-				`${tx.buyerName} ${tx.buyerEmail ?? ''} ${tx.receiptNo ?? ''}`.toLowerCase().includes(q)
+				`${tx.buyerName} ${tx.buyerEmail ?? ''} ${tx.receiptNo ?? ''} ${tx.apName ?? ''}`
+					.toLowerCase()
+					.includes(q)
 			);
 		}
 		return rows;
@@ -55,6 +57,7 @@
 		{ label: 'Amount' },
 		{ label: 'Method' },
 		{ label: 'Buyer' },
+		{ label: 'Access point' },
 		{ label: 'Receipt' }
 	];
 
@@ -99,6 +102,7 @@
 				{#if tx.buyerEmail}<span class="block truncate text-xs text-muted">{tx.buyerEmail}</span
 					>{/if}
 			</td>
+			<td class="px-4 py-2.5 text-ink">{tx.apName ?? '—'}</td>
 			<td class="px-4 py-2.5 font-mono text-xs text-muted">{tx.receiptNo ?? '—'}</td>
 		</tr>
 	{/each}

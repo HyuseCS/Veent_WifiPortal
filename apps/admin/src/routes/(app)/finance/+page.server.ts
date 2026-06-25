@@ -3,6 +3,7 @@ import {
 	financeKpis,
 	revenueByPeriod,
 	paymentMethodBreakdown,
+	revenueByAp,
 	listTransactions
 } from '$lib/server/queries';
 import { parsePeriod, granularityFor } from '$lib/server/period';
@@ -17,12 +18,13 @@ import type { PageServerLoad } from './$types';
 export const load: PageServerLoad = async ({ url }) => {
 	const { period, from, to } = parsePeriod(url.searchParams.get('period'));
 
-	const [kpis, revenue, breakdown, { rows: transactions, total }] = await Promise.all([
+	const [kpis, revenue, breakdown, apRevenue, { rows: transactions, total }] = await Promise.all([
 		financeKpis(db, { from, to }),
 		revenueByPeriod(db, { from, to, granularity: granularityFor(period) }),
 		paymentMethodBreakdown(db, { from, to }),
+		revenueByAp(db, { from, to }),
 		listTransactions(db, { from, to, page: 1, pageSize: 50 })
 	]);
 
-	return { kpis, revenue, breakdown, transactions, total, period };
+	return { kpis, revenue, breakdown, apRevenue, transactions, total, period };
 };

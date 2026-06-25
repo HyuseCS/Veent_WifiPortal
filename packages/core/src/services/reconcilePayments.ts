@@ -1,8 +1,72 @@
 import { and, eq, gt, isNull, lte, or } from 'drizzle-orm';
-import { type DB, paymentCheckouts, packages } from '@veent/db';
+import { type DB, paymentCheckouts, paymentTransactions, packages } from '@veent/db';
 import { LEDGER_TYPE } from '../config';
-import type { PaymentProvider } from '../integrations/payments';
+import type { PaymentEvent, PaymentProvider } from '../integrations/payments';
 import { addCredits } from './credits';
+
+/** Normalized PaymentEvent.status → the raw gateway status we persist for Finance. */
+const STATUS_DB: Record<string, string> = {
+	paid: 'PAYMENT_SUCCESS',
+	failed: 'PAYMENT_FAILED',
+	expired: 'PAYMENT_EXPIRED',
+	cancelled: 'PAYMENT_CANCELLED',
+	pending: 'PAYMENT_PENDING'
+};
+
+/** Where a recorded payment is attributed (resolved from the matching checkout). */
+export interface PaymentAttribution {
+	userId: string | null;
+	packageId: number | null;
+	networkId: number | null;
+}
+
+/**
+ * Upsert a gateway event into payment_transactions (the Finance record). Shared by the
+ * webhook AND the reconcile safety nets, so a payment that settles WITHOUT a webhook — local
+ * dev (Maya can't POST to localhost), or a missed/late prod webhook caught by the on-return
+ * poll or cron — still appears in Finance, not just in credit_ledger. Idempotent:
+ * onConflictDoUpdate keeps the latest status/detail when a webhook later enriches a row a
+ * reconcile pass recorded first. network_id is INSERT-only (left out of the update set) — the
+ * location is fixed at checkout and must not be overwritten by a later event.
+ */
+export async function recordPaymentTransaction(
+	db: DB,
+	evt: PaymentEvent,
+	attribution: PaymentAttribution
+): Promise<void> {
+	const row = {
+		id: evt.externalTransactionId,
+		status: STATUS_DB[evt.status] ?? evt.status.toUpperCase(),
+		amount: String(evt.amountMinor / 100),
+		currency: evt.currency,
+		fundSourceType: evt.fundSourceType ?? null,
+		fundSourceMasked: evt.fundSourceMasked ?? null,
+		receiptNo: evt.receiptNo ?? null,
+		referenceNo: evt.referenceNo ?? null,
+		errorCode: evt.errorCode ?? null,
+		errorMessage: evt.errorMessage ?? null,
+		buyerName: evt.buyerName ?? null,
+		buyerEmail: evt.buyerEmail ?? null,
+		userId: attribution.userId,
+		packageId: attribution.packageId,
+		networkId: attribution.networkId
+	};
+	await db
+		.insert(paymentTransactions)
+		.values(row)
+		.onConflictDoUpdate({
+			target: paymentTransactions.id,
+			set: {
+				status: row.status,
+				amount: row.amount,
+				fundSourceType: row.fundSourceType,
+				fundSourceMasked: row.fundSourceMasked,
+				receiptNo: row.receiptNo,
+				errorCode: row.errorCode,
+				errorMessage: row.errorMessage
+			}
+		});
+}
 
 /**
  * Payment reconciliation — the SAFETY NET behind the webhook.
@@ -117,7 +181,12 @@ export async function reconcilePendingPayments(
 	const maxAge = new Date(now - (opts.maxAgeMs ?? 24 * 60 * 60 * 1000)); // stop after a day
 
 	const pending = await db
-		.select({ id: paymentCheckouts.id, userId: paymentCheckouts.userId, packageId: paymentCheckouts.packageId })
+		.select({
+			id: paymentCheckouts.id,
+			userId: paymentCheckouts.userId,
+			packageId: paymentCheckouts.packageId,
+			networkId: paymentCheckouts.networkId
+		})
 		.from(paymentCheckouts)
 		.where(
 			and(
@@ -131,7 +200,14 @@ export async function reconcilePendingPayments(
 	for (const c of pending) {
 		try {
 			const evt = await payments.getCheckoutStatus!(c.id);
-			if (!evt) continue;
+			if (!evt || evt.status === 'pending') continue;
+			// Record into payment_transactions like the webhook does, so a reconcile-settled
+			// payment still shows in Finance (with its checkout-time AP). Idempotent upsert.
+			await recordPaymentTransaction(db, evt, {
+				userId: c.userId,
+				packageId: c.packageId,
+				networkId: c.networkId
+			});
 			if (evt.status === 'paid') {
 				const r = await creditCheckoutIfUnsettled(db, {
 					checkoutId: c.id,
@@ -189,12 +265,23 @@ export async function reconcileCheckout(
 		.returning({
 			id: paymentCheckouts.id,
 			userId: paymentCheckouts.userId,
-			packageId: paymentCheckouts.packageId
+			packageId: paymentCheckouts.packageId,
+			networkId: paymentCheckouts.networkId
 		});
 	if (!claimed) return { credited: false }; // settled already, or polled too recently
 
 	try {
 		const evt = await payments.getCheckoutStatus(claimed.id);
+		// Record into payment_transactions like the webhook does, so a payment that settles
+		// via this poll (the usual path in local dev, where Maya can't reach localhost) still
+		// shows in Finance with its checkout-time AP. Idempotent upsert.
+		if (evt && evt.status !== 'pending') {
+			await recordPaymentTransaction(db, evt, {
+				userId: claimed.userId,
+				packageId: claimed.packageId,
+				networkId: claimed.networkId
+			});
+		}
 		if (evt?.status === 'paid') {
 			const r = await creditCheckoutIfUnsettled(db, {
 				checkoutId: claimed.id,

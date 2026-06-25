@@ -4,6 +4,7 @@ import { packages, paymentCheckouts } from '@veent/db';
 import { getAccount, getLatestLedgerId } from '@veent/core';
 import { db } from '$lib/server/db';
 import { payments } from '$lib/server/payments';
+import { resolveCheckoutNetworkId } from '$lib/server/network-location';
 import type { Actions, PageServerLoad } from './$types';
 
 /**
@@ -46,6 +47,10 @@ export const actions: Actions = {
 		// buyer is resolved from the payment_checkouts row we store below, not from the
 		// reference string. Unique per checkout → the claim maps to exactly one row.
 		const referenceId = crypto.randomUUID().replace(/-/g, ''); // 32 hex chars
+		// Attribute this payment to the AP the buyer is on now, while we still have the
+		// captive-portal context / live session — the webhook (server-to-server, no device)
+		// can't, and a failed payment never reaches a grant. Best-effort: null is fine.
+		const networkId = await resolveCheckoutNetworkId(event, user.id);
 		let redirectUrl: string;
 		try {
 			const checkout = await payments.createCheckout({
@@ -68,7 +73,8 @@ export const actions: Actions = {
 					userId: user.id,
 					packageId: pkg.id,
 					referenceId,
-					amount: String(pkg.fiatCost ?? 0)
+					amount: String(pkg.fiatCost ?? 0),
+					networkId
 				});
 			} catch (e) {
 				console.warn('[topup] failed to record pending checkout:', (e as Error).message);

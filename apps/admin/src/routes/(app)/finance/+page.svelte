@@ -78,32 +78,45 @@
 		{/each}
 	</section>
 
-	<!-- Revenue + method breakdown -->
-	<section class="grid grid-cols-1 items-stretch gap-4 lg:grid-cols-3">
-		<Card class="flex min-h-65 flex-col lg:col-span-2">
-			<SectionHeading title="Settled revenue over time" class="mb-4">
-				{#snippet aside()}
-					<span class="font-mono text-sm text-muted">₱{revenueTotal.toLocaleString('en-PH')}</span>
-				{/snippet}
-			</SectionHeading>
-			<div class="min-h-0 flex-1">
-				{#if data.revenue.length > 0}
-					<RevenueChart data={data.revenue} />
-				{:else}
-					<p class="grid h-full place-items-center text-sm text-muted">
-						No settled revenue in this period.
-					</p>
-				{/if}
+	<!-- Settled revenue over time -->
+	<Card class="flex min-h-65 flex-col">
+		<SectionHeading title="Settled revenue over time" class="mb-4">
+			{#snippet aside()}
+				<span class="font-mono text-sm text-muted">₱{revenueTotal.toLocaleString('en-PH')}</span>
+			{/snippet}
+		</SectionHeading>
+		<div class="min-h-0 flex-1">
+			{#if data.revenue.length > 0}
+				<RevenueChart data={data.revenue} />
+			{:else}
+				<p class="grid h-full place-items-center text-sm text-muted">
+					No settled revenue in this period.
+				</p>
+			{/if}
+		</div>
+	</Card>
+
+	<!-- Breakdowns: settled revenue split by payment method and by access point -->
+	<section class="grid grid-cols-1 items-stretch gap-4 lg:grid-cols-2">
+		<Card class="flex flex-col">
+			<SectionHeading title="By payment method" class="mb-4" />
+			<!-- Center the donut block in the leftover height so the card isn't top-heavy. -->
+			<div class="flex min-h-0 flex-1 items-center">
+				<DonutChart
+					data={data.breakdown}
+					label="Revenue by payment method"
+					centerValue="₱{settledTotal.toLocaleString('en-PH')}"
+					centerLabel="Settled"
+				/>
 			</div>
 		</Card>
 
 		<Card class="flex flex-col">
-			<SectionHeading title="By payment method" class="mb-4" />
-			<!-- Center the donut block in the leftover height so the card isn't top-heavy
-			     next to the taller chart panel. -->
+			<SectionHeading title="By access point" class="mb-4" />
 			<div class="flex min-h-0 flex-1 items-center">
 				<DonutChart
-					data={data.breakdown}
+					data={data.apRevenue}
+					label="Revenue by access point"
 					centerValue="₱{settledTotal.toLocaleString('en-PH')}"
 					centerLabel="Settled"
 				/>

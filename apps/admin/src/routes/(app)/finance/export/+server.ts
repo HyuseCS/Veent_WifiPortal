@@ -25,7 +25,7 @@ export const GET: RequestHandler = async (event) => {
 	const { rows } = await listTransactions(db, { from, to, page: 1, pageSize: 10_000 });
 
 	const csv = [
-		'Date,Status,Amount,Fund Source,Masked,Receipt No,Buyer,Email,Package',
+		'Date,Status,Amount,Fund Source,Masked,Receipt No,Buyer,Email,Package,Access Point',
 		...rows.map((r) =>
 			[
 				r.createdAt,
@@ -36,7 +36,8 @@ export const GET: RequestHandler = async (event) => {
 				r.receiptNo ?? '',
 				r.buyerName,
 				r.buyerEmail ?? '',
-				r.packageName ?? ''
+				r.packageName ?? '',
+				r.apName ?? ''
 			]
 				.map((v) => cell(String(v)))
 				.join(',')

@@ -74,12 +74,33 @@ const isIp = (h: string): boolean => /^[0-9.]+(\/\d{1,2})?$/.test(h) || h.includ
  * NOTE: card 3-D Secure step-up redirects to the issuing bank's ACS domain,
  * which can't be predicted here — e-wallet/Maya-wallet checkout is fully covered;
  * card payments may still need the bank's domain added per deployment.
+ *
+ * The Maya checkout page renders a Google reCAPTCHA, which loads from SEPARATE
+ * domains. Without them the captcha never appears on a device behind the portal,
+ * the page looks broken, and the phone may flip to cellular ("no internet"), which
+ * then breaks our IP→MAC device detection.
+ *
+ * Captcha hosts, by risk:
+ *   - `www.gstatic.com`  — static asset CDN (reCAPTCHA JS/images); serves no
+ *     browsable services, so opening it leaks no real internet.
+ *   - `www.recaptcha.net` — Google's dedicated reCAPTCHA host; serves nothing else.
+ *   - `www.google.com`   — REQUIRED: Maya's checkout embeds the google.com variant of
+ *     reCAPTCHA (confirmed from the router's DNS cache — the device resolves
+ *     www.google.com + gstatic, never recaptcha.net). The walled garden can only match
+ *     the TLS SNI (host), not the path, so this also exposes Google search to
+ *     UNAUTHENTICATED devices. That's an accepted, bounded trade-off: without it the
+ *     captcha can't render and mobile Maya payments dead-end. Pre-auth devices reach
+ *     google.com only — other domains stay blocked, so it isn't open internet.
  */
 const PAYMENT_HOSTS = [
 	'maya.ph',
 	'*.maya.ph',
 	'paymaya.com',
 	'*.paymaya.com',
+	// Google reCAPTCHA (Maya checkout). google.com is required + a deliberate leak — see note above.
+	'www.google.com',
+	'www.recaptcha.net',
+	'www.gstatic.com',
 	// Other gateways named in Rule #2; harmless if unused.
 	'*.paymongo.com',
 	'*.xendit.co'

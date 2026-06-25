@@ -23,6 +23,7 @@ import { SESSION_STATUS, LEDGER_TYPE } from '@veent/core';
 import type {
 	ActiveSession,
 	AdminUserRow,
+	ApRevenueSlice,
 	ConnectionLog,
 	DashboardSnapshot,
 	Kpi,
@@ -519,6 +520,42 @@ export async function paymentMethodBreakdown(
 	}));
 }
 
+/**
+ * Label an AP from its (loose) network_id + the joined name. The link is intentionally
+ * not an FK (network_health rows are pruned by the health sweep), so three cases:
+ * no id → "Unattributed"; id with a live row → its name; id whose row was pruned →
+ * "AP #<id>" (we know a location existed, just not its current name).
+ */
+function apLabel(networkId: number | null, name: string | null): string {
+	if (networkId == null) return 'Unattributed';
+	return name ?? `AP #${networkId}`;
+}
+
+/** Settled revenue split by access point, with each slice's share of the total. */
+export async function revenueByAp(db: DB, range: DateRange = {}): Promise<ApRevenueSlice[]> {
+	const rows = await db
+		.select({
+			networkId: paymentTransactions.networkId,
+			name: networkHealth.name,
+			amount: sql<number>`coalesce(sum(${paymentTransactions.amount}), 0)::float`,
+			count: sql<number>`count(*)::int`
+		})
+		.from(paymentTransactions)
+		.leftJoin(networkHealth, eq(networkHealth.id, paymentTransactions.networkId))
+		.where(and(eq(paymentTransactions.status, SUCCESS), ...rangeWhere(range)))
+		.groupBy(paymentTransactions.networkId, networkHealth.name)
+		.orderBy(desc(sql`sum(${paymentTransactions.amount})`));
+
+	const total = rows.reduce((sum, r) => sum + r.amount, 0);
+	return rows.map((r) => ({
+		type: r.networkId == null ? 'unattributed' : String(r.networkId),
+		label: apLabel(r.networkId, r.name),
+		amount: r.amount,
+		count: r.count,
+		pct: total > 0 ? Math.round((r.amount / total) * 100) : 0
+	}));
+}
+
 /** Paginated transaction list (newest first), with package name and buyer. */
 export async function listTransactions(
 	db: DB,
@@ -547,12 +584,15 @@ export async function listTransactions(
 				buyerName: paymentTransactions.buyerName,
 				buyerEmail: paymentTransactions.buyerEmail,
 				createdAt: paymentTransactions.createdAt,
+				networkId: paymentTransactions.networkId,
+				apNameRaw: networkHealth.name,
 				userName: customerUser.name,
 				packageName: packages.name
 			})
 			.from(paymentTransactions)
 			.leftJoin(customerUser, eq(customerUser.id, paymentTransactions.userId))
 			.leftJoin(packages, eq(packages.id, paymentTransactions.packageId))
+			.leftJoin(networkHealth, eq(networkHealth.id, paymentTransactions.networkId))
 			.where(where)
 			.orderBy(desc(paymentTransactions.createdAt))
 			.limit(pageSize)
@@ -573,6 +613,8 @@ export async function listTransactions(
 			buyerName: r.buyerName || r.userName || '—',
 			buyerEmail: r.buyerEmail,
 			packageName: r.packageName,
+			// null networkId → unattributed (render as —); pruned AP → "AP #<id>".
+			apName: r.networkId == null ? null : (r.apNameRaw ?? `AP #${r.networkId}`),
 			createdAt: r.createdAt.toISOString()
 		}))
 	};
