@@ -23,7 +23,12 @@ export const load: PageServerLoad = async (event) => {
 		.where(and(eq(packages.type, 'bundle'), eq(packages.isActive, true)))
 		.orderBy(asc(packages.fiatCost));
 
-	return { user, balance: account?.balance ?? 0, bundles };
+	// Keep the device MAC on the "Dashboard" link so it survives back into the dashboard
+	// even when the captive/system-browser cookie jar dropped it (same pattern as `/`).
+	const ctx = getPortalContext(event);
+	const portalQuery = ctx?.mac ? `?mac=${encodeURIComponent(ctx.mac)}` : '';
+
+	return { user, balance: account?.balance ?? 0, bundles, portalQuery };
 };
 
 export const actions: Actions = {

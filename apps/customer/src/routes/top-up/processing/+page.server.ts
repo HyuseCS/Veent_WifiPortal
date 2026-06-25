@@ -4,6 +4,7 @@ import { packages } from '@veent/db';
 import { getTopupSince, reconcileCheckout } from '@veent/core';
 import { db } from '$lib/server/db';
 import { payments } from '$lib/server/payments';
+import { getPortalContext } from '$lib/server/portal';
 import type { PageServerLoad } from './$types';
 
 /**
@@ -51,5 +52,10 @@ export const load: PageServerLoad = async (event) => {
 		expectedCredits = pkg?.creditsProvided ?? 0;
 	}
 
-	return { settled, balance, creditsAdded, expectedCredits, fiatCost };
+	// Keep the device MAC on the dashboard/try-again links so it survives back into the
+	// dashboard even when the system-browser cookie jar dropped it after the gateway hop.
+	const ctx = getPortalContext(event);
+	const portalQuery = ctx?.mac ? `?mac=${encodeURIComponent(ctx.mac)}` : '';
+
+	return { settled, balance, creditsAdded, expectedCredits, fiatCost, portalQuery };
 };
