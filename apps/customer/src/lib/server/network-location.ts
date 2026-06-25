@@ -28,11 +28,51 @@ export async function resolveMac(event: RequestEvent): Promise<string | null> {
 		const mac = await resolveDeviceMac(network, ip);
 		// Cache a fresh IP→MAC result in the portal cookie so the next load in this
 		// browser survives a transient IP change (cellular flip) without re-resolving.
-		if (mac) persistResolvedMac(event, mac);
+		if (mac) {
+			persistResolvedMac(event, mac);
+		} else {
+			// "Device not detected" lands here: no portal cookie (e.g. the system browser
+			// after the Maya hop) AND the router couldn't map this client IP → MAC. The IP it
+			// saw is the key clue — if it isn't the device's LAN IP (e.g. it's the router/NAT
+			// address, or the phone fell back to cellular so it's a WAN IP), the lookup can't win.
+			console.warn('[mac] unresolved — no portal cookie; router IP→MAC returned null', { ip });
+		}
 		return mac;
-	} catch {
+	} catch (e) {
+		console.warn('[mac] IP→MAC lookup threw', { msg: (e as Error).message });
 		return null;
 	}
+}
+
+/**
+ * The MAC this account most recently connected with — the last-resort device identity.
+ * The user authenticated through the captive portal ON this device (the OTP flow binds it),
+ * so a `network_sessions` row carries its MAC even after the access window lapsed. Most-recent
+ * row regardless of status: it's the same physical device on a reconnect in nearly all cases.
+ */
+export async function lastKnownMac(userId: string): Promise<string | null> {
+	const [row] = await db
+		.select({ mac: networkSessions.macAddress })
+		.from(networkSessions)
+		.where(and(eq(networkSessions.userId, userId), isNotNull(networkSessions.macAddress)))
+		.orderBy(desc(networkSessions.startedAt))
+		.limit(1);
+	return row?.mac ?? null;
+}
+
+/**
+ * MAC resolution with a per-user last resort. `resolveMac` (portal cookie → router IP→MAC) is
+ * the live detector; when BOTH miss it falls back to `lastKnownMac`. Both miss exactly in the
+ * cases that produce the "device not detected" warning: the portal cookie is gone (the CNA and
+ * the system browser have separate cookie jars — so it's absent after the Maya hop, or whenever
+ * the buyer isn't in the browser that hit the `?mac=` redirect), AND the IP→MAC lookup can't
+ * help because the hotspot NATs client traffic to its OWN address (we then see the router's IP,
+ * e.g. 10.0.0.1, not the device). A fresh portal entry (new `?mac=` cookie) always wins, so the
+ * fallback only fills the gap; a user who genuinely switched devices reconnects through the
+ * portal to refresh it.
+ */
+export async function resolveMacForUser(event: RequestEvent, userId: string): Promise<string | null> {
+	return (await resolveMac(event)) ?? (await lastKnownMac(userId));
 }
 
 /** One structured success line per resolution, tagged with the branch that won — feeds the
