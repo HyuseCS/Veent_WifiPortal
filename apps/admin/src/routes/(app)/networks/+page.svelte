@@ -50,9 +50,6 @@
 		latVals.length ? Math.round(latVals.reduce((s, v) => s + v, 0) / latVals.length) : null
 	);
 	const alerts = $derived(cntDegraded + cntOffline);
-	const placedCount = $derived(
-		networks.filter((n) => n.latitude != null && n.longitude != null).length
-	);
 
 	// Feeds the shared <KpiCard> (same component as Dashboard/Finance). `tone`/`captionTone`
 	// carry the status colour; `unit` is the muted value suffix.
@@ -146,125 +143,129 @@
 	}
 </script>
 
-<div class="space-y-5">
-	<!-- KPI STRIP -->
-	<section class="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-5">
-		{#each kpis as k (k.label)}
-			<KpiCard
-				kpi={{ label: k.label, value: k.value }}
-				icon={k.icon}
-				unit={k.unit}
-				helper={k.caption}
-				tone={k.tone}
-				captionTone={k.captionTone}
-			/>
-		{/each}
-	</section>
-
-	<!-- MAP + RIGHT PANELS -->
-	<div class="grid gap-5 xl:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)] xl:items-stretch">
-		<!-- Coverage map -->
-		<Card padding="p-0" class="flex flex-col overflow-hidden">
-			<div class="flex flex-wrap items-start justify-between gap-3 px-5 pt-4 pb-3">
-				<div>
-					<h2 class="text-base font-semibold text-ink">Coverage Map</h2>
-					<p class="mt-0.5 text-xs text-muted">
-						{placedCount} of {total} access points placed
-					</p>
-				</div>
-				<div class="flex flex-wrap gap-3.5">
-					{#each legend as leg (leg.label)}
-						<span class="flex items-center gap-1.5 text-xs font-medium text-muted">
-							<span class="h-2 w-2 rounded-full {leg.dot}"></span>{leg.label}
-						</span>
-					{/each}
-				</div>
-			</div>
-			<div
-				bind:this={mapEl}
-				class="relative mx-4 mb-4 min-h-107.5 flex-1 scroll-mt-4 overflow-hidden rounded-xl border border-border"
-			>
-				<div class="absolute inset-0">
-					<CoverageMap {networks} {selectedId} onselect={focusAp} />
-				</div>
-			</div>
-		</Card>
-
-		<!-- Right column: fleet status + router log -->
-		<div class="flex min-w-0 flex-col gap-5">
-			<Card class="flex flex-col gap-4">
-				<h2 class="text-base font-semibold text-ink">Fleet Status</h2>
-				<div class="flex items-center gap-5">
-					<div class="relative h-28 w-28 shrink-0 rounded-full" style="background: {donut}">
-						<div
-							class="absolute inset-3.5 flex flex-col items-center justify-center rounded-full bg-bg"
-						>
-							<span class="font-mono text-2xl font-extrabold text-ink">{total}</span>
-							<span class="text-[10px] font-bold tracking-wide text-muted uppercase">Total APs</span
-							>
-						</div>
-					</div>
-					<ul class="flex min-w-0 flex-1 flex-col gap-2.5">
-						{#each fleet as row (row.label)}
-							<li class="flex items-center gap-2.5">
-								<span class="h-2.5 w-2.5 rounded {row.dot}"></span>
-								<span class="text-sm font-medium text-muted">{row.label}</span>
-								<span class="ml-auto font-mono text-sm font-bold text-ink">{row.count}</span>
-							</li>
-						{/each}
-					</ul>
-				</div>
-			</Card>
-
-			<div class="min-h-80 flex-1">
-				<RouterLogPanel />
-			</div>
-		</div>
-	</div>
-
-	<!-- AP CARDS -->
-	<div class="flex flex-wrap items-center justify-between gap-3">
-		<div>
-			<h2 class="text-base font-semibold text-ink">Access Points</h2>
-			<p class="mt-0.5 text-xs text-muted">Health per access point across the venue</p>
-		</div>
-		<div class="flex flex-wrap items-center gap-3">
-			<FilterTabs tabs={filterDefs} active={filter} onselect={(key) => (filter = key)} />
-			{#if data.isOwner}
-				<Button variant="danger" onclick={() => (wipeOpen = true)}>
-					<Trash2 class="h-4 w-4" aria-hidden="true" />
-					Wipe database
-				</Button>
-			{/if}
-		</div>
-	</div>
-
-	{#if visible.length === 0}
-		<p
-			class="rounded-xl border border-dashed border-border px-4 py-8 text-center text-sm text-muted"
-		>
-			No access points match this filter.
-			<button onclick={() => (filter = 'all')} class="cursor-pointer text-brand underline">
-				Show all
-			</button>
-		</p>
-	{:else}
-		<!-- auto-fill (not auto-fit): keeps empty tracks so a lone card stays its natural
-		     width instead of stretching across the whole row. -->
-		<section
-			class="grid items-start gap-4"
-			style="grid-template-columns: repeat(auto-fill, minmax(330px, 1fr));"
-		>
-			{#each visible as ap (ap.id)}
-				<NetworkHealthCard
-					{ap}
-					selected={ap.id === selectedId}
-					canDelete={data.isOwner}
-					onfocus={focusAp}
+<div class="contents">
+	<!-- SCREEN 1: KPIs + coverage map + side panels -->
+	<div class="min-h-full snap-start space-y-5 pt-5 pb-5">
+		<!-- KPI STRIP -->
+		<section class="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-5">
+			{#each kpis as k (k.label)}
+				<KpiCard
+					kpi={{ label: k.label, value: k.value }}
+					icon={k.icon}
+					unit={k.unit}
+					helper={k.caption}
+					tone={k.tone}
+					captionTone={k.captionTone}
+					compact
 				/>
 			{/each}
 		</section>
-	{/if}
+
+		<!-- MAP + RIGHT PANELS -->
+		<div class="grid gap-5 xl:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)] xl:items-stretch">
+			<!-- Coverage map -->
+			<Card padding="p-0" class="flex h-[60vh] flex-col overflow-hidden xl:h-[65vh]">
+				<div class="flex flex-wrap items-start justify-between gap-3 px-5 pt-4 pb-3">
+					<div>
+						<h2 class="text-base font-semibold text-ink">Coverage Map</h2>
+					</div>
+					<div class="flex flex-wrap gap-3.5">
+						{#each legend as leg (leg.label)}
+							<span class="flex items-center gap-1.5 text-xs font-medium text-muted">
+								<span class="h-2 w-2 rounded-full {leg.dot}"></span>{leg.label}
+							</span>
+						{/each}
+					</div>
+				</div>
+				<div
+					bind:this={mapEl}
+					class="relative mx-4 mb-4 min-h-0 flex-1 scroll-mt-4 overflow-hidden rounded-xl border border-border"
+				>
+					<div class="absolute inset-0">
+						<CoverageMap {networks} {selectedId} onselect={focusAp} />
+					</div>
+				</div>
+			</Card>
+
+			<!-- Right column: fleet status + router log -->
+			<div class="flex min-w-0 flex-col gap-5">
+				<Card class="flex flex-col gap-4">
+					<h2 class="text-base font-semibold text-ink">Fleet Status</h2>
+					<div class="flex items-center gap-5">
+						<div class="relative h-25 w-25 shrink-0 rounded-full" style="background: {donut}">
+							<div
+								class="absolute inset-3.5 flex flex-col items-center justify-center rounded-full bg-bg"
+							>
+								<span class="font-mono text-2xl font-extrabold text-ink">{total}</span>
+								<span class="text-[10px] font-bold tracking-wide text-muted uppercase">Total APs</span
+								>
+							</div>
+						</div>
+						<ul class="flex min-w-0 flex-1 flex-col gap-2.5">
+							{#each fleet as row (row.label)}
+								<li class="flex items-center gap-2.5">
+									<span class="h-2.5 w-2.5 rounded {row.dot}"></span>
+									<span class="text-sm font-medium text-muted">{row.label}</span>
+									<span class="ml-auto font-mono text-sm font-bold text-ink">{row.count}</span>
+								</li>
+							{/each}
+						</ul>
+					</div>
+				</Card>
+
+				<div class="min-h-65 max-h-[65vh] flex-1">
+					<RouterLogPanel />
+				</div>
+			</div>
+		</div>
+	</div>
+
+	<!-- SCREEN 2: access point cards -->
+	<div class="min-h-full snap-start space-y-5 pt-1">
+		<!-- AP CARDS -->
+		<div class="flex flex-wrap items-center justify-between gap-3">
+			<div>
+				<h2 class="text-base font-semibold text-ink">Access Points</h2>
+				<p class="mt-0.5 text-xs text-muted">Health per access point across the venue</p>
+			</div>
+			<div class="flex flex-wrap items-center gap-3">
+				<FilterTabs tabs={filterDefs} active={filter} onselect={(key) => (filter = key)} />
+				{#if data.isOwner}
+					<Button variant="danger" onclick={() => (wipeOpen = true)}>
+						<Trash2 class="h-4 w-4" aria-hidden="true" />
+						Wipe database
+					</Button>
+				{/if}
+			</div>
+		</div>
+
+		{#if visible.length === 0}
+			<p
+				class="rounded-xl border border-dashed border-border px-4 py-8 text-center text-sm text-muted"
+			>
+				No access points match this filter.
+				<button onclick={() => (filter = 'all')} class="cursor-pointer text-brand underline">
+					Show all
+				</button>
+			</p>
+		{:else}
+			<!-- auto-fill (not auto-fit): keeps empty tracks so a lone card stays its natural
+			     width instead of stretching across the whole row. -->
+			<section
+				class="grid items-start gap-4"
+				style="grid-template-columns: repeat(auto-fill, minmax(330px, 1fr));"
+			>
+				{#each visible as ap (ap.id)}
+					<NetworkHealthCard
+						{ap}
+						selected={ap.id === selectedId}
+						canDelete={data.isOwner}
+						onfocus={focusAp}
+					/>
+				{/each}
+			</section>
+		{/if}
+	</div>
 </div>
 
 {#if data.isOwner}

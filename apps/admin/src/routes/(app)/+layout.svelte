@@ -30,6 +30,9 @@
 		]
 	);
 	const onFinance = $derived(page.url.pathname.startsWith('/finance'));
+	// Networks page opts into vertical scroll-snap (two full-screen sections). Scoped here
+	// so the snap + hidden scrollbar apply only on that route, not the whole admin.
+	const onNetworks = $derived(page.url.pathname.startsWith('/networks'));
 </script>
 
 <div class="flex h-screen overflow-hidden bg-bg">
@@ -40,7 +43,11 @@
 				{#if onFinance}<FinanceHeaderControls />{/if}
 			{/snippet}
 		</Topbar>
-		<main class="flex-1 overflow-y-auto bg-canvas p-4 sm:p-6">
+		<main
+			class="flex-1 overflow-y-auto bg-canvas p-4 sm:p-6 {onNetworks
+				? 'snap-y snap-proximity [scrollbar-width:none] [&::-webkit-scrollbar]:hidden'
+				: ''}"
+		>
 			{@render children()}
 		</main>
 	</div>
