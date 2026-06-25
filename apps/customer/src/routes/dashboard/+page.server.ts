@@ -25,35 +25,6 @@ import { auth } from '$lib/server/auth';
 const REBIND_REFRESH_MS = 60 * 1000;
 
 /**
- * Resolve the device MAC. The captive-portal redirect (`?mac=`) is preferred, but
- * the OS captive popup (CNA) is a separate browser with its own cookie jar — so the
- * stashed MAC often doesn't survive into the user's real browser. As a fallback we
- * ask the router to map the device's current LAN IP → MAC (resolveMacByIp). Returns
- * null only when neither path knows the device (e.g. dev stub, or off-LAN).
- */
-async function resolveMac(event: RequestEvent): Promise<string | null> {
-	const fromPortal = getPortalContext(event)?.mac;
-	if (fromPortal) return fromPortal;
-	// The dev placeholder is ONLY safe with the stub controller, whose grant() just
-	// logs. When a real router is configured (NETWORK_CONTROLLER=mikrotik) — e.g.
-	// dev-testing through an actual hotspot — fall through to the real IP→MAC lookup.
-	if (dev && env.NETWORK_CONTROLLER !== 'mikrotik') return '02:00:00:00:00:01';
-	try {
-		const ip = event.getClientAddress().replace(/^::ffff:/, '');
-		const mac = await resolveDeviceMac(network, ip);
-		// DIAGNOSTIC (Part 1): is getClientAddress() the device's real LAN IP, and does the
-		// router map it to a MAC? If `ip` is loopback/a proxy addr, or `mac` is null here,
-		// that's the root cause of "can't detect device". If behind a reverse proxy, set
-		// ADDRESS_HEADER=X-Forwarded-For. Remove this log once the IP path is confirmed good.
-		console.info(`[mac] clientAddress ip=${ip} -> ${mac ?? 'null'}`);
-		return mac;
-	} catch (e) {
-		console.warn('[mac] resolveDeviceMac failed:', (e as Error)?.message);
-		return null;
-	}
-}
-
-/**
  * The Hub. Renders the ACCOUNT's access window (one countdown shared across the
  * account's devices), the bound-device list, balance, Free Time eligibility, and
  * tiers. Auto-binds the current device transparently when the account has live time
