@@ -21,7 +21,7 @@
 	// On settlement, bounce to the dashboard after a beat.
 	$effect(() => {
 		if (!data.settled) return;
-		const t = setTimeout(() => goto(resolve('/dashboard')), 3000);
+		const t = setTimeout(() => goto(resolve('/dashboard') + data.portalQuery), 3000);
 		return () => clearTimeout(t);
 	});
 
@@ -102,7 +102,7 @@
 					</div>
 				</div>
 				<a
-					href={resolve('/dashboard')}
+					href="{resolve('/dashboard')}{data.portalQuery}"
 					class="flex h-[54px] w-full items-center justify-center gap-2 rounded-xl bg-cta text-base font-bold text-white transition-colors hover:bg-cta-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cta"
 				>
 					Back to dashboard
@@ -131,13 +131,13 @@
 					</span>
 				</div>
 				<a
-					href={resolve('/top-up')}
+					href="{resolve('/top-up')}{data.portalQuery}"
 					class="mb-2.5 flex h-[54px] w-full items-center justify-center rounded-xl bg-cta text-base font-bold text-white transition-colors hover:bg-cta-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cta"
 				>
 					Try again
 				</a>
 				<a
-					href={resolve('/dashboard')}
+					href="{resolve('/dashboard')}{data.portalQuery}"
 					class="flex h-12 w-full items-center justify-center rounded-xl border border-border bg-bg text-sm font-semibold text-muted transition-colors hover:text-ink"
 				>
 					Back to dashboard

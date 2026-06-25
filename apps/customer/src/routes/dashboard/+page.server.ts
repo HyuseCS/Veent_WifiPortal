@@ -36,7 +36,7 @@ export const load: PageServerLoad = async (event) => {
 
 	const account = await getAccount(db, user.id);
 	const blocked = account?.blocked ?? false;
-	const mac = await resolveMac(event);
+	let mac = await resolveMac(event);
 
 	const tiers = await db
 		.select()
@@ -44,6 +44,16 @@ export const load: PageServerLoad = async (event) => {
 		.where(and(eq(packages.type, 'tier'), eq(packages.isActive, true)));
 
 	let access = await getActiveAccess(db, user.id);
+
+	// Edge-case fallback for "can't detect device": after the gateway hop (Maya bounces to
+	// the system browser, dropping the portal cookie) AND when the router IP→MAC lookup is
+	// unavailable, neither path knows the device — yet it's plainly online. If the account
+	// has EXACTLY ONE bound device, that device IS this one, so adopt its MAC. Gated to a
+	// single device so we can never mis-label "this device" (or wire disconnect/buy to the
+	// wrong MAC) on a multi-device account — those still fall through to the honest warning.
+	if (!mac && access && !access.paused && access.devices.length === 1) {
+		mac = access.devices[0].macAddress ?? mac;
+	}
 
 	// Auto-bind: a returning device with live account time should get online with zero
 	// taps. Best-effort — a router hiccup must never break the dashboard render. Skipped while

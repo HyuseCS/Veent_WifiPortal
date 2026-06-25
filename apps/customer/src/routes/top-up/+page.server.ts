@@ -5,6 +5,7 @@ import { getAccount, getLatestLedgerId } from '@veent/core';
 import { db } from '$lib/server/db';
 import { payments } from '$lib/server/payments';
 import { resolveCheckoutNetworkId } from '$lib/server/network-location';
+import { getPortalContext } from '$lib/server/portal';
 import type { Actions, PageServerLoad } from './$types';
 
 /**
@@ -23,7 +24,12 @@ export const load: PageServerLoad = async (event) => {
 		.where(and(eq(packages.type, 'bundle'), eq(packages.isActive, true)))
 		.orderBy(asc(packages.fiatCost));
 
-	return { user, balance: account?.balance ?? 0, bundles };
+	// Keep the device MAC on the "Dashboard" link so it survives back into the dashboard
+	// even when the captive/system-browser cookie jar dropped it (same pattern as `/`).
+	const ctx = getPortalContext(event);
+	const portalQuery = ctx?.mac ? `?mac=${encodeURIComponent(ctx.mac)}` : '';
+
+	return { user, balance: account?.balance ?? 0, bundles, portalQuery };
 };
 
 export const actions: Actions = {
@@ -39,6 +45,15 @@ export const actions: Actions = {
 		if (!pkg || !pkg.isActive) return fail(404, { error: 'Bundle not found' });
 
 		const origin = event.url.origin;
+		// Thread the device MAC through the gateway round-trip. Maya bounces the buyer to
+		// the system browser (not the captive CNA popup), which has a DIFFERENT cookie jar —
+		// so the `veent_portal` cookie holding the MAC is GONE on return, and the dashboard
+		// can't detect the device ("can't detect device" warning) even on a cancel. Carrying
+		// the MAC in the return URLs lets `capturePortalContext` (hooks) re-stash it in
+		// whichever browser the buyer lands back in, success or cancel.
+		const mac = getPortalContext(event)?.mac;
+		const macQuery = mac ? `&mac=${encodeURIComponent(mac)}` : '';
+		const cancelMacQuery = mac ? `?mac=${encodeURIComponent(mac)}` : '';
 		// Watermark the ledger now; the processing page polls for a topup row above
 		// this id to know THIS payment's credit landed (gateway txn id is unknown here).
 		const since = await getLatestLedgerId(db, user.id);
@@ -58,8 +73,8 @@ export const actions: Actions = {
 				amountMinor: Math.round((pkg.fiatCost ?? 0) * 100),
 				currency: 'PHP',
 				description: pkg.name,
-				successUrl: `${origin}/top-up/processing?since=${since}&pkg=${pkg.id}&attempt=${referenceId}`,
-				cancelUrl: `${origin}/top-up`,
+				successUrl: `${origin}/top-up/processing?since=${since}&pkg=${pkg.id}&attempt=${referenceId}${macQuery}`,
+				cancelUrl: `${origin}/top-up${cancelMacQuery}`,
 				buyer: { name: user.name, email: user.email }
 			});
 			redirectUrl = checkout.redirectUrl;
