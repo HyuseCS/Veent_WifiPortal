@@ -55,7 +55,8 @@ describe('maya verifyWebhook', () => {
 			referenceId: 'ref_abc',
 			status: 'paid',
 			amountMinor: 12050,
-			currency: 'PHP'
+			currency: 'PHP',
+			referenceNo: 'ref_abc'
 		});
 	});
 
@@ -66,12 +67,39 @@ describe('maya verifyWebhook', () => {
 		expect(evt.amountMinor).toBe(1000);
 	});
 
-	it('maps failed/cancelled and expired statuses', async () => {
+	it('maps failed, cancelled and expired statuses distinctly', async () => {
 		mockFetchOnce({ id: 'p', paymentStatus: 'PAYMENT_FAILED', amount: 5, requestReferenceNumber: 'r' });
 		expect((await provider.verifyWebhook(JSON.stringify({ id: 'p' }), headers)).status).toBe('failed');
 
+		// PAYMENT_CANCELLED is its own status (not folded into failed) so Finance can separate
+		// user-cancelled from gateway-failed attempts.
+		mockFetchOnce({ id: 'p', paymentStatus: 'PAYMENT_CANCELLED', amount: 5, requestReferenceNumber: 'r' });
+		expect((await provider.verifyWebhook(JSON.stringify({ id: 'p' }), headers)).status).toBe('cancelled');
+
 		mockFetchOnce({ id: 'p', paymentStatus: 'PAYMENT_EXPIRED', amount: 5, requestReferenceNumber: 'r' });
 		expect((await provider.verifyWebhook(JSON.stringify({ id: 'p' }), headers)).status).toBe('expired');
+	});
+
+	it('extracts Finance detail (fund source, receipt, buyer, error) from the re-fetched payment', async () => {
+		mockFetchOnce({
+			id: 'pay_9',
+			paymentStatus: 'PAYMENT_SUCCESS',
+			amount: 100,
+			currency: 'PHP',
+			requestReferenceNumber: 'ref_9',
+			receiptNumber: 'R-001',
+			fundSource: { type: 'card', details: { last4: '4242' } },
+			buyer: { firstName: 'Ada', lastName: 'Lovelace', contact: { email: 'ada@example.com' } }
+		});
+		const evt = await provider.verifyWebhook(JSON.stringify({ id: 'pay_9' }), headers);
+		expect(evt).toMatchObject({
+			fundSourceType: 'card',
+			fundSourceMasked: '••••4242',
+			receiptNo: 'R-001',
+			buyerName: 'Ada Lovelace',
+			buyerEmail: 'ada@example.com',
+			referenceNo: 'ref_9'
+		});
 	});
 
 	it('rejects a body that is not valid JSON', async () => {

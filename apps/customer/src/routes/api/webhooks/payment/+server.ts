@@ -43,9 +43,10 @@ export const POST: RequestHandler = async (event) => {
 
 	// Resolve the buyer from the pending checkout we recorded at creation — referenceId is
 	// a short token (Maya caps it at 36 chars), so the buyer isn't encoded in the string.
-	// Fall back to the legacy `userId:packageId` format for any in-flight pre-token
-	// payments. A reference with no matching row (e.g. foreign webhooks on shared sandbox
-	// keys) stays UNATTRIBUTED — recorded for Finance, not credited — rather than 500ing.
+	// A reference with no matching checkout row (e.g. foreign webhooks on shared sandbox
+	// keys, or a forged reference) stays UNATTRIBUTED — recorded for Finance, not credited —
+	// rather than 500ing. Crediting itself additionally requires the checkout row (and a
+	// matching amount) inside creditCheckoutIfUnsettled, so attribution alone never credits.
 	let refUserId: string | null = null;
 	let refPackageId: number | null = null;
 	const ref = evt.referenceId ?? '';
@@ -63,10 +64,6 @@ export const POST: RequestHandler = async (event) => {
 	if (co) {
 		refUserId = co.userId;
 		refPackageId = co.packageId;
-	} else if (ref.includes(':')) {
-		const [u, p] = ref.split(':');
-		refUserId = u || null;
-		refPackageId = Number(p) || null;
 	}
 
 	const userExists =
@@ -113,7 +110,8 @@ export const POST: RequestHandler = async (event) => {
 		referenceId: evt.referenceId,
 		userId: attributedUserId,
 		packageId: attributedPackageId,
-		externalTransactionId: evt.externalTransactionId
+		externalTransactionId: evt.externalTransactionId,
+		amountMinor: evt.amountMinor
 	});
 
 	// Observability: one structured line per paid event — feeds webhook success-rate tracking.

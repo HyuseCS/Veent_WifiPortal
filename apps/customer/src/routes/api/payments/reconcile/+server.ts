@@ -1,9 +1,8 @@
-import { json, error } from '@sveltejs/kit';
-import { env } from '$env/dynamic/private';
+import { json } from '@sveltejs/kit';
 import { reconcilePendingPayments } from '@veent/core';
 import { db } from '$lib/server/db';
 import { payments } from '$lib/server/payments';
-import { cronIpAllowed } from '$lib/server/rateLimit';
+import { requireCron } from '$lib/server/cron';
 import type { RequestHandler } from './$types';
 
 /**
@@ -19,9 +18,7 @@ import type { RequestHandler } from './$types';
  *   * * * * * curl -fsS -X POST -H "x-cron-secret: $CRON_SECRET" http://127.0.0.1:5173/api/payments/reconcile
  */
 export const POST: RequestHandler = async (event) => {
-	if (!cronIpAllowed(event, env.CRON_IP_ALLOWLIST)) error(403, 'Forbidden');
-	const secret = event.request.headers.get('x-cron-secret');
-	if (!env.CRON_SECRET || secret !== env.CRON_SECRET) error(401, 'Unauthorized');
+	requireCron(event);
 
 	const result = await reconcilePendingPayments(db, payments);
 	return json({ ok: true, ...result });
