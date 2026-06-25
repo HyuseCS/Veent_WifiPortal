@@ -10,6 +10,11 @@ export const load: LayoutServerLoad = async (event) => {
 	if (!event.locals.user) {
 		return redirect(302, '/login');
 	}
+	// Mandatory TOTP: active staff who haven't enrolled yet can't reach any (app) page
+	// until they set up a second factor. (Checked before the role read to skip a query.)
+	if (!event.locals.user.twoFactorEnabled) {
+		return redirect(302, '/enroll-2fa');
+	}
 	const role = await getAdminRole(db, event.locals.user.id);
 	return {
 		user: { ...event.locals.user, role }

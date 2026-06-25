@@ -33,6 +33,25 @@ export interface MikrotikConfig {
  */
 /** Public host the router pings to gauge internet round-trip latency. */
 const LATENCY_PROBE_HOST = '1.1.1.1';
+/** Hard ceiling for the latency ping so a hung ping stream can't stall a health refresh. */
+const PING_TIMEOUT_MS = 5000;
+
+/** Reject if `p` doesn't settle within `ms` — bounds a single router call's wall time. */
+function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
+	return new Promise<T>((resolve, reject) => {
+		const t = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
+		p.then(
+			(v) => {
+				clearTimeout(t);
+				resolve(v);
+			},
+			(e) => {
+				clearTimeout(t);
+				reject(e);
+			}
+		);
+	});
+}
 
 /** Parse a RouterOS ping `time` value ("12ms", "834us", "1s200ms") into milliseconds. */
 function rttToMs(raw: unknown): number | null {
@@ -137,11 +156,17 @@ export function createMikrotikController(config: MikrotikConfig): NetworkControl
 			// time-based revoke cron, which only touches session MACs, leaves them be).
 			const comment = input.tag ?? tag;
 			await withConn(async (conn) => {
-				const ids = await findBindingIds(conn, mac);
-				if (ids.length > 0) {
-					// Idempotent: ensure the existing binding is a bypass.
+				const rows = await conn.write('/ip/hotspot/ip-binding/print', [`?mac-address=${mac}`]);
+				const existing = rows[0];
+				if (existing) {
+					// Already a bypass with our tag → nothing to do. Re-issuing /set here is
+					// what made the router log "ip binding rule changed" on every add-time,
+					// and the host-flush below would needlessly poke a live device. Access
+					// time lives in the DB window (customer_profile.access_expires_at), not in
+					// this binding, so a re-grant on an already-bypassed MAC is a true no-op.
+					if (existing.type === 'bypassed' && existing.comment === comment) return;
 					await conn.write('/ip/hotspot/ip-binding/set', [
-						`=.id=${ids[0]}`,
+						`=.id=${existing['.id']}`,
 						'=type=bypassed',
 						`=comment=${comment}`
 					]);
@@ -154,6 +179,7 @@ export function createMikrotikController(config: MikrotikConfig): NetworkControl
 				}
 				// Clear the stale captured host so the bypass applies right away, not after
 				// the device's old intercepted connections time out (the "slow for 5 min" bug).
+				// Only reached on a real add/change — an unchanged re-grant returned above.
 				await flushHotspotHost(conn, mac);
 			});
 		},
@@ -284,7 +310,11 @@ export function createMikrotikController(config: MikrotikConfig): NetworkControl
 				// Best-effort — a blocked/absent ping or no internet leaves latency null.
 				let latencyMs: number | null = null;
 				try {
-					const pings = await conn.write('/ping', [`=address=${LATENCY_PROBE_HOST}`, '=count=3']);
+					const pings = await withTimeout(
+						conn.write('/ping', [`=address=${LATENCY_PROBE_HOST}`, '=count=3']),
+						PING_TIMEOUT_MS,
+						'ping'
+					);
 					const times = pings
 						.map((p) => rttToMs(p.time))
 						.filter((n): n is number => n != null);

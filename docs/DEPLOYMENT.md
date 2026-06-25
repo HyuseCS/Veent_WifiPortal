@@ -253,7 +253,10 @@ header set to each app's `CRON_SECRET`:
 - [ ] TLS in front; `ORIGIN` matches the public URL.
 - [ ] Router API on **api-ssl (8729)** — both apps' `.env` set `MIKROTIK_TLS="true"` /
       `MIKROTIK_PORT="8729"`; router *Available From* = the app server's IP; cleartext `api`
-      disabled; server IP pinned (§7a). **On a server move, repoint the `Available From` IP.**
+      disabled (`/ip service set api disabled=yes`). **On a server move, repoint the `Available From` IP.**
+- [ ] **App server IP pinned to a static DHCP lease** on the router — the api-ssl *Available From*
+      restriction is by IP, so if the server's lease drifts, api-ssl silently drops the connection
+      (no health, latency `—`) while nothing logs an error. A static lease makes the restriction durable.
 - [ ] Router `login.html` points at prod; walled garden provisioned; crons scheduled.
 
 ## Updating a running deployment
@@ -302,6 +305,20 @@ Most setup failures are a **missing env var** or the **router IP restriction**. 
 **Router cert: `failure: CA not found` when signing the api-ssl cert**
 - A `tls-server`-only cert can't self-sign. Create it with `key-usage=tls-server,key-cert-sign`,
   then `sign` (see **§7a**).
+
+**Networks page suddenly shows no health / latency stuck at `—` (was working before)**
+- Almost always the app server's IP **drifted off** the IP pinned in the api-ssl *Available From*
+  restriction (a DHCP lease change). api-ssl then silently drops the SYN, so node-routeros hangs to
+  its timeout and the health sweep gets nothing — and **no error is logged**. Plain `api` (8728) may
+  still appear to work, masking it.
+- Confirm from the app server: `openssl s_client -connect <router>:8729 -brief </dev/null` should say
+  `CONNECTION ESTABLISHED` in ~100ms. If it hangs, the restriction is blocking this IP.
+- Fix: **pin the app server to a static DHCP lease** on the router (durable fix), then re-point the
+  restriction at the correct IP — `/ip service set api-ssl address=<this-server>/32` (or
+  `setup:router --restrict-api`, which detects this server's IP and pins the lease for you).
+- Separately, if `/ping`-based **latency** stays `—` but health is otherwise fine, the router API
+  user's group is missing the **`test`** policy (RouterOS gates `/ping` behind it):
+  `/user group set [find name=<group>] policy=...,test` (append `test`, don't drop the others).
 
 **Migrations say "applied successfully" but a column is missing**
 - A dev-only quirk: drizzle skips a migration whose timestamp predates a since-discarded one already

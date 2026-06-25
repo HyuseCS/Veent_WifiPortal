@@ -1,5 +1,5 @@
 {
-  "id": "4360ac24-812e-423e-b00c-0220a6d142ab",
+  "id": "0b47b6d4-2047-47f8-bd87-c35edf9aeede",
   "prevId": "676fe09b-5343-4ef5-809d-10cdd98c6198",
   "version": "7",
   "dialect": "postgresql",
@@ -573,6 +573,13 @@
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
+        },
+        "two_factor_enabled": {
+          "name": "two_factor_enabled",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "default": false
         }
       },
       "indexes": {},
@@ -636,6 +643,57 @@
       },
       "indexes": {},
       "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.admin_two_factor": {
+      "name": "admin_two_factor",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "secret": {
+          "name": "secret",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "backup_codes": {
+          "name": "backup_codes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "admin_two_factor_user_id_admin_user_id_fk": {
+          "name": "admin_two_factor_user_id_admin_user_id_fk",
+          "tableFrom": "admin_two_factor",
+          "tableTo": "admin_user",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
@@ -803,12 +861,6 @@
           "primaryKey": false,
           "notNull": true,
           "default": false
-        },
-        "last_network_id": {
-          "name": "last_network_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
         }
       },
       "indexes": {},
@@ -1152,12 +1204,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "network_id": {
-          "name": "network_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
         "last_polled_at": {
           "name": "last_polled_at",
           "type": "timestamp",
@@ -1337,12 +1383,6 @@
         },
         "package_id": {
           "name": "package_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "network_id": {
-          "name": "network_id",
           "type": "integer",
           "primaryKey": false,
           "notNull": false

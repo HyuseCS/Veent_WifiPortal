@@ -57,6 +57,9 @@ export interface DashboardSnapshot {
 	revenue: RevenuePoint[];
 	activeSessions: ActiveSession[];
 	networks: NetworkAp[];
+	/** Full user-management table, so the Users page can read the same live stream
+	 * (online status, balances, block state) instead of a reload. */
+	users: AdminUserRow[];
 }
 
 /** Health snapshot for one access point. */
@@ -210,6 +213,23 @@ export interface TransactionRow {
 	apName: string | null;
 	/** ISO timestamp. */
 	createdAt: string;
+}
+
+/** A pending owner demotion/removal request awaiting unanimous owner approval.
+ *  Mirrors the server's `OpenOwnerChange` ($lib/server/owner-change). */
+export interface OwnerChangeRequest {
+	id: string;
+	targetId: string;
+	targetName: string;
+	action: 'demote' | 'remove';
+	initiatedById: string;
+	initiatedByName: string;
+	/** Current owners whose approval is required (all owners except the target). */
+	requiredOwnerIds: string[];
+	/** Of the required owners, those who have approved. */
+	approvedOwnerIds: string[];
+	expiresAt: number;
+	expired: boolean;
 }
 
 /** The Finance page in one frame (KPIs + chart + breakdown + first page of rows). */
