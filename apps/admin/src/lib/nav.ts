@@ -6,7 +6,7 @@ import MapPin from 'lucide-svelte/icons/map-pin';
 import UserCog from 'lucide-svelte/icons/user-cog';
 import Users from 'lucide-svelte/icons/users';
 import TrendingUp from 'lucide-svelte/icons/trending-up';
-import Package from 'lucide-svelte/icons/package';
+import FileCog from 'lucide-svelte/icons/file-cog';
 
 /** A sidebar navigation entry. */
 export interface NavItem {
@@ -24,6 +24,11 @@ export const nav: NavItem[] = [
 	{ href: '/map', label: 'Map', icon: MapPin as unknown as Component },
 	{ href: '/users', label: 'Users', icon: Users as unknown as Component },
 	{ href: '/finance', label: 'Finance', icon: TrendingUp as unknown as Component },
-	{ href: '/packages', label: 'Packages', icon: Package as unknown as Component, ownerOnly: true },
+	{
+		href: '/content',
+		label: 'Content Management',
+		icon: FileCog as unknown as Component,
+		ownerOnly: true
+	},
 	{ href: '/staff', label: 'Staff', icon: UserCog as unknown as Component, ownerOnly: true }
 ];

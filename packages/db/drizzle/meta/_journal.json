@@ -162,6 +162,20 @@
       "when": 1782366169781,
       "tag": "0022_fine_blink",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1782376661270,
+      "tag": "0023_yummy_metal_master",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1782377475297,
+      "tag": "0024_heavy_forge",
+      "breakpoints": true
     }
   ]
 }
