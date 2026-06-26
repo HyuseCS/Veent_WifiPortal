@@ -48,6 +48,7 @@ packages/
 | `/users` | User list with credit balance, usage, block/kick actions |
 | `/finance` | Payment reporting — settled-revenue KPIs, revenue-over-time chart, payment-method donut, transactions table, CSV export (see **Finance & Payment Reporting** below) |
 | `/staff` | **Owner-only** staff management — invite / enable-disable / remove admins · promote admin→owner (step-up) · demote/remove an owner (unanimous owner approval). See **Staff governance** below |
+| `/content` | **Owner-only** Content Management — tabbed section over three operator-editable modules: **Packages** (credit bundles / access tiers / free time), **FAQ** (customer `/faq` content), **Session Limits** (device cap, free-time length & cooldown). See **Content Management (CMS)** below |
 
 ### Owner bootstrap (the `/register` hole was removed)
 
@@ -127,6 +128,35 @@ phase roadmap at the bottom of `apps/admin/To_Improve.md`. What changed (all add
   secret key (no HMAC); the unsigned body is never trusted.
 - **Pool bound** — `createDb` sets an explicit Drizzle pool `max` (10); the LISTEN client
   stays isolated at `max:1`.
+
+### Content Management (CMS)
+
+`/content` is an **owner-only** admin section (the gate lives in
+`(app)/content/+layout.server.ts` — 403s any non-owner; each write action re-asserts it via
+`requireOwner`, which re-reads the role from the DB). The shell (`+layout.svelte`) is a tab nav;
+`/content` itself redirects to `/content/packages`. Three operator-editable modules let staff
+change portal behaviour **without a deploy**:
+
+- **Packages** (`content/packages`) — CRUD over the existing `packages` table, grouped by type
+  (Credit Bundles / Access Tiers / Free Time) with activate/deactivate + delete. Data/CRUD layer:
+  `apps/admin/src/lib/server/packages.ts`. Per-type validation in the page `parsePackage`
+  (bundle needs fiatCost+creditsProvided; tier needs creditCost+durationMinutes; free needs
+  durationMinutes). Delete is safe — FK refs are `ON DELETE SET NULL`.
+- **FAQ** (`content/faq`) — CRUD over a new `faqs` table (question/answer/sort_order/is_published).
+  The customer `/faq` page now reads **published** rows ordered by `sort_order` from the DB
+  (`apps/customer/src/routes/faq/+page.server.ts`) instead of a hardcoded array; migration `0023`
+  creates the table **and idempotently seeds the original 5 hardcoded entries**. Admin layer:
+  `apps/admin/src/lib/server/faq.ts`.
+- **Session Limits** (`content/limits`) — tune `maxDevicesPerAccount`, `freeTimeMinutes`, and
+  `freeTimeCooldownHours` at runtime. Backed by a **singleton `app_settings` row (id=1)**
+  (migration `0024`, seeded `ON CONFLICT DO NOTHING`). The service
+  (`packages/core/src/services/settings.ts`) exposes `getSessionLimits(db)` (per-process cached,
+  **30s TTL**) and `updateSessionLimits(db, …)` (upsert + cache bust). Every consumer
+  (`freeTime.ts`, `sessions.ts` bind/cap paths, customer `account-view.ts`, dashboard auto-bind)
+  reads limits from here, with the old `config.ts` constants (`MAX_DEVICES_PER_ACCOUNT`,
+  `FREE_TIME_MINUTES`, `FREE_TIME_COOLDOWN_HOURS`) as the **fallback** when the row is missing or
+  a read fails — so a settings outage degrades to the shipped defaults, never to "no limit".
+  Changes propagate across the portal within ~30s (the cache TTL); no restart needed.
 
 ### Finance & Payment Reporting
 
