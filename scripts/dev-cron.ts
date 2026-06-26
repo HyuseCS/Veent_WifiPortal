@@ -40,7 +40,9 @@ function readEnvFile(path: string): Record<string, string> {
 const fileEnv = readEnvFile(join(root, 'apps/customer/.env'));
 
 const SECRET = process.env.CRON_SECRET ?? fileEnv.CRON_SECRET ?? '';
-const BASE_URL = (process.env.DEV_CRON_BASE_URL ?? 'http://127.0.0.1:5173').replace(/\/$/, '');
+// Use `localhost`, not `127.0.0.1`: Vite's dev server binds IPv6 loopback (`::1`) only, so an
+// IPv4 literal is refused ("unreachable"). `localhost` resolves to whichever family is listening.
+const BASE_URL = (process.env.DEV_CRON_BASE_URL ?? 'http://localhost:5173').replace(/\/$/, '');
 const INTERVAL_MS = Number(process.env.DEV_CRON_INTERVAL_MS ?? 60_000);
 
 if (!SECRET) {
