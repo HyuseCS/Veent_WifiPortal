@@ -11,7 +11,7 @@ import {
 	bindDevice,
 	unbindDevice,
 	unbindAllDevices,
-	MAX_DEVICES_PER_ACCOUNT
+	getSessionLimits
 } from '@veent/core';
 import { db } from '$lib/server/db';
 import { network } from '$lib/server/network';
@@ -23,35 +23,6 @@ import { auth } from '$lib/server/auth';
 
 /** Re-grant a known device on the router at most this often during dashboard loads. */
 const REBIND_REFRESH_MS = 60 * 1000;
-
-/**
- * Resolve the device MAC. The captive-portal redirect (`?mac=`) is preferred, but
- * the OS captive popup (CNA) is a separate browser with its own cookie jar — so the
- * stashed MAC often doesn't survive into the user's real browser. As a fallback we
- * ask the router to map the device's current LAN IP → MAC (resolveMacByIp). Returns
- * null only when neither path knows the device (e.g. dev stub, or off-LAN).
- */
-async function resolveMac(event: RequestEvent): Promise<string | null> {
-	const fromPortal = getPortalContext(event)?.mac;
-	if (fromPortal) return fromPortal;
-	// The dev placeholder is ONLY safe with the stub controller, whose grant() just
-	// logs. When a real router is configured (NETWORK_CONTROLLER=mikrotik) — e.g.
-	// dev-testing through an actual hotspot — fall through to the real IP→MAC lookup.
-	if (dev && env.NETWORK_CONTROLLER !== 'mikrotik') return '02:00:00:00:00:01';
-	try {
-		const ip = event.getClientAddress().replace(/^::ffff:/, '');
-		const mac = await resolveDeviceMac(network, ip);
-		// DIAGNOSTIC (Part 1): is getClientAddress() the device's real LAN IP, and does the
-		// router map it to a MAC? If `ip` is loopback/a proxy addr, or `mac` is null here,
-		// that's the root cause of "can't detect device". If behind a reverse proxy, set
-		// ADDRESS_HEADER=X-Forwarded-For. Remove this log once the IP path is confirmed good.
-		console.info(`[mac] clientAddress ip=${ip} -> ${mac ?? 'null'}`);
-		return mac;
-	} catch (e) {
-		console.warn('[mac] resolveDeviceMac failed:', (e as Error)?.message);
-		return null;
-	}
-}
 
 /**
  * The Hub. Renders the ACCOUNT's access window (one countdown shared across the
@@ -70,7 +41,8 @@ export const load: PageServerLoad = async (event) => {
 	// help — which it can't behind a hotspot that NATs client traffic to its own IP (we'd see
 	// the router's address, not the device). Without this fallback the dashboard shows the
 	// "device not detected" warning on every return-to-dashboard in those setups.
-	const mac = await resolveMacForUser(event, user.id);
+	// `let` because the single-device fallback below can still refine it.
+	let mac = await resolveMacForUser(event, user.id);
 
 	const tiers = await db
 		.select()
@@ -79,14 +51,25 @@ export const load: PageServerLoad = async (event) => {
 
 	let access = await getActiveAccess(db, user.id);
 
+	// Edge-case fallback for "can't detect device": after the gateway hop (Maya bounces to
+	// the system browser, dropping the portal cookie) AND when the router IP→MAC lookup is
+	// unavailable, neither path knows the device — yet it's plainly online. If the account
+	// has EXACTLY ONE bound device, that device IS this one, so adopt its MAC. Gated to a
+	// single device so we can never mis-label "this device" (or wire disconnect/buy to the
+	// wrong MAC) on a multi-device account — those still fall through to the honest warning.
+	if (!mac && access && !access.paused && access.devices.length === 1) {
+		mac = access.devices[0].macAddress ?? mac;
+	}
+
 	// Auto-bind: a returning device with live account time should get online with zero
 	// taps. Best-effort — a router hiccup must never break the dashboard render. Skipped while
 	// PAUSED: auto-binding would re-grant internet and defeat the pause (devices stay off until
 	// the user resumes).
 	if (access && !access.paused && mac && !blocked) {
+		const { maxDevicesPerAccount } = await getSessionLimits(db);
 		const macU = mac.toUpperCase();
 		const bound = access.devices.find((d) => d.macAddress?.toUpperCase() === macU);
-		const underCap = access.devices.length < MAX_DEVICES_PER_ACCOUNT;
+		const underCap = access.devices.length < maxDevicesPerAccount;
 		const stale = bound && Date.now() - bound.lastSeenAt.getTime() > REBIND_REFRESH_MS;
 		if ((!bound && underCap) || stale) {
 			try {

@@ -1,6 +1,6 @@
 {
-  "id": "69c0049d-fe29-450a-95ad-022422ac6569",
-  "prevId": "1145a3c8-615b-464c-9cc1-292cbea9acff",
+  "id": "dc2341b1-26fb-44c2-95c0-d94fb81b0df4",
+  "prevId": "9641b80c-8acb-4d2c-a9c5-1cb42df59c2a",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -875,6 +875,54 @@
           "onUpdate": "no action"
         }
       },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.app_settings": {
+      "name": "app_settings",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "default": 1
+        },
+        "max_devices_per_account": {
+          "name": "max_devices_per_account",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 2
+        },
+        "free_time_minutes": {
+          "name": "free_time_minutes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 15
+        },
+        "free_time_cooldown_hours": {
+          "name": "free_time_cooldown_hours",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 12
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
@@ -2077,7 +2125,23 @@
           "notNull": false
         }
       },
-      "indexes": {},
+      "indexes": {
+        "network_health_name_key": {
+          "name": "network_health_name_key",
+          "columns": [
+            {
+              "expression": "name",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
       "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},

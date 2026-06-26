@@ -1,8 +1,9 @@
 import { and, asc, desc, eq, inArray, isNotNull, isNull, lte } from 'drizzle-orm';
 import { type DB, customerProfile, networkSessions, packages } from '@veent/db';
 import type { NetworkController } from '../integrations/network';
-import { MAX_DEVICES_PER_ACCOUNT, SESSION_STATUS } from '../config';
+import { SESSION_STATUS } from '../config';
 import { getFreeTimeStatus } from './freeTime';
+import { getSessionLimits } from './settings';
 import { spendCreditsTx, type Tx } from './credits';
 import { resolveNetworkIdForMac } from './networkHealth';
 
@@ -59,6 +60,8 @@ async function bindMacTx(
 		addMinutes: number;
 		requireLiveWindow: boolean;
 		packageId?: number;
+		/** Per-account device cap (operator-tunable; fetched by the caller via getSessionLimits). */
+		maxDevices: number;
 	}
 ): Promise<BindPlan> {
 	const [profile] = await tx
@@ -128,7 +131,7 @@ async function bindMacTx(
 			)
 			.orderBy(asc(networkSessions.lastSeenAt));
 
-		const overBy = activeRows.length - (MAX_DEVICES_PER_ACCOUNT - 1);
+		const overBy = activeRows.length - (opts.maxDevices - 1);
 		for (let i = 0; i < overBy; i++) {
 			const e = activeRows[i];
 			await tx
@@ -208,9 +211,10 @@ async function bindMacToAccount(
 	}
 ): Promise<BindResult> {
 	const now = new Date();
+	const { maxDevicesPerAccount } = await getSessionLimits(db);
 
 	const plan = await db.transaction(async (tx) => {
-		const p = await bindMacTx(tx, now, opts);
+		const p = await bindMacTx(tx, now, { ...opts, maxDevices: maxDevicesPerAccount });
 		if (p.skip) return p;
 		// Grant INSIDE the tx: a failed grant rolls the window + binding back.
 		await network.grant({
@@ -310,6 +314,7 @@ export async function startPaidAccessAndBindDevice(
 	}
 ): Promise<StartPaidAccessResult> {
 	const now = new Date();
+	const { maxDevicesPerAccount } = await getSessionLimits(db);
 
 	const outcome = await db.transaction(async (tx) => {
 		const spend = await spendCreditsTx(tx, {
@@ -324,7 +329,8 @@ export async function startPaidAccessAndBindDevice(
 			macAddress: input.macAddress,
 			addMinutes: input.durationMinutes,
 			requireLiveWindow: false,
-			packageId: input.packageId
+			packageId: input.packageId,
+			maxDevices: maxDevicesPerAccount
 		});
 		// requireLiveWindow is false, so plan is never `skip`.
 		if (plan.skip) throw new Error('startPaidAccessAndBindDevice: unexpected skip');
@@ -595,6 +601,7 @@ export async function startFreeAccessAndBindDevice(
 ): Promise<StartFreeSessionResult> {
 	const now = new Date();
 
+	const limits = await getSessionLimits(db);
 	const claimed = await db.transaction(async (tx) => {
 		const [profile] = await tx
 			.select({ lastFreeSessionAt: customerProfile.lastFreeSessionAt })
@@ -602,7 +609,7 @@ export async function startFreeAccessAndBindDevice(
 			.where(eq(customerProfile.userId, input.userId))
 			.limit(1);
 
-		const status = getFreeTimeStatus(profile?.lastFreeSessionAt ?? null, now);
+		const status = getFreeTimeStatus(profile?.lastFreeSessionAt ?? null, now, limits);
 		if (!status.eligible) return { eligible: false as const, nextEligibleAt: status.nextEligibleAt };
 
 		await tx

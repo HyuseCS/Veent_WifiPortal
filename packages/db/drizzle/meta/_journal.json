@@ -166,8 +166,22 @@
     {
       "idx": 23,
       "version": "7",
-      "when": 1782370000629,
-      "tag": "0023_flawless_stellaris",
+      "when": 1782376661270,
+      "tag": "0023_yummy_metal_master",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1782377475297,
+      "tag": "0024_heavy_forge",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1782446184188,
+      "tag": "0025_tearful_rhino",
       "breakpoints": true
     }
   ]

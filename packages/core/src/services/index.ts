@@ -1,4 +1,5 @@
 export * from './freeTime';
+export * from './settings';
 export * from './credits';
 export * from './sessions';
 export * from './rateLimit';

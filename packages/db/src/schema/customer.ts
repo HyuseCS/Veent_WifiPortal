@@ -248,3 +248,39 @@ export const rateLimits = pgTable(
 		index('rate_limits_scope_identifier_idx').on(t.scope, t.identifier)
 	]
 );
+
+/**
+ * Customer-facing Help/FAQ entries, managed in the admin Content Management section.
+ * The customer Help page renders only PUBLISHED entries, ordered by `sortOrder` (then id).
+ * Moving this out of the hardcoded `faq/+page.svelte` array so operators can edit copy
+ * without a deploy.
+ */
+export const faqs = pgTable(
+	'faqs',
+	{
+		id: serial('id').primaryKey(),
+		question: text('question').notNull(),
+		answer: text('answer').notNull(),
+		// Display order on the customer Help page (ascending). Ties broken by id.
+		sortOrder: integer('sort_order').notNull().default(0),
+		// Only published entries show to guests; admin sees drafts + published.
+		isPublished: boolean('is_published').notNull().default(true),
+		createdAt: timestamp('created_at').notNull().defaultNow(),
+		updatedAt: timestamp('updated_at').notNull().defaultNow()
+	},
+	(t) => [index('faqs_sort_order_idx').on(t.sortOrder)]
+);
+
+/**
+ * Singleton app-wide configuration (exactly one row, id=1), editable in the admin Content
+ * Management → Session Limits. Column defaults mirror the @veent/core config constants;
+ * `getSessionLimits()` reads this row with those constants as the fallback, so the system
+ * works even before the row exists. Operators tune these without a deploy.
+ */
+export const appSettings = pgTable('app_settings', {
+	id: integer('id').primaryKey().default(1),
+	maxDevicesPerAccount: integer('max_devices_per_account').notNull().default(2),
+	freeTimeMinutes: integer('free_time_minutes').notNull().default(15),
+	freeTimeCooldownHours: integer('free_time_cooldown_hours').notNull().default(12),
+	updatedAt: timestamp('updated_at').notNull().defaultNow()
+});

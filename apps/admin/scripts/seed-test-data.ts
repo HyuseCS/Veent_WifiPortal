@@ -86,16 +86,6 @@ const minutesAhead = (m: number) => new Date(now.getTime() + m * 60_000);
 const daysAgoRandom = (maxDays: number) => minutesAgo(randInt(0, maxDays * 24 * 60));
 
 // ───────────────────────────── fixed source data ─────────────────────────────
-// Human names — NOT used as account identity (customers are phone-only); only as the
-// gateway-reported payer name on payment_transactions (buyerName/buyerEmail).
-const FIRST = [
-	'Ana', 'Ben', 'Carlos', 'Divya', 'Erin', 'Felix', 'Grace', 'Hugo', 'Ines', 'Jomar',
-	'Kira', 'Leo', 'Maya', 'Noel', 'Olive', 'Paolo', 'Quinn', 'Rina', 'Sami', 'Tonio'
-] as const;
-const LAST = [
-	'Reyes', 'Santos', 'Cruz', 'Lim', 'Garcia', 'Tan', 'Diaz', 'Flores', 'Mendoza', 'Castro',
-	'Aquino', 'Ramos', 'Torres', 'Gomez', 'Bautista', 'Navarro', 'Salazar', 'Villar', 'Ocampo', 'Yu'
-] as const;
 const FUND_SOURCES = ['card', 'gcash', 'maya-wallet', 'shopeepay', 'qrph'] as const;
 const PAYMENT_STATUS = {
 	success: 'PAYMENT_SUCCESS',
@@ -205,9 +195,6 @@ async function main() {
 	interface Cust {
 		id: string;
 		phone: string;
-		/** Gateway-reported payer name (card/e-wallet holder) — used only for the payment
-		 *  buyer fields, separate from the phone-only account identity. */
-		payerName: string;
 		cohort: Cohort;
 		online: boolean;
 		mac: string;
@@ -218,7 +205,6 @@ async function main() {
 		// Customers register by phone only (no name/email). Mirror the customer app's
 		// better-auth signUpOnVerification: name = phone, email = synthesized OTP alias.
 		const phone = `+6391${String(i).padStart(8, '0')}`;
-		const payerName = `${FIRST[i % FIRST.length]} ${LAST[i % LAST.length]}`;
 		// First 3 blocked, next 4 low-balance, rest normal. ~40% of non-blocked online.
 		const cohort: Cohort = i < 3 ? 'blocked' : i < 7 ? 'low' : 'normal';
 		const online = cohort !== 'blocked' && rand() < 0.45;
@@ -242,7 +228,7 @@ async function main() {
 			// Vary free-time cooldown: some recently used (in cooldown), some eligible.
 			lastFreeSessionAt: rand() < 0.5 ? minutesAgo(randInt(5, 60 * 24)) : null
 		});
-		customers.push({ id, phone, payerName, cohort, online, mac });
+		customers.push({ id, phone, cohort, online, mac });
 	}
 
 	// Phase 5a — payments + matching topup ledger. The ledger drives the Dashboard's
@@ -280,8 +266,10 @@ async function main() {
 			referenceNo: cust ? `ref_${cust.id.slice(0, 8)}` : null,
 			errorCode: success ? null : status === PAYMENT_STATUS.failed ? 'PAYMENT_DECLINED' : null,
 			errorMessage: status === PAYMENT_STATUS.failed ? 'Card was declined by issuer.' : null,
-			buyerName: cust?.payerName ?? 'Guest Checkout',
-			buyerEmail: cust ? `${cust.payerName.split(' ')[0].toLowerCase()}@example.com` : null,
+			// Buyer is the customer's phone — accounts are phone-only (matches the Users table's
+			// User column). Unattributed events (no referenceId) have no buyer.
+			buyerName: cust?.phone ?? 'Guest Checkout',
+			buyerEmail: null,
 			userId: cust?.id ?? null,
 			packageId: bundle.id,
 			createdAt

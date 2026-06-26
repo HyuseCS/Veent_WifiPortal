@@ -2,7 +2,7 @@ import {
 	getAccount,
 	getActiveAccess,
 	getFreeTimeStatus,
-	MAX_DEVICES_PER_ACCOUNT,
+	getSessionLimits,
 	type ActiveAccess
 } from '@veent/core';
 import type { DB } from '@veent/db';
@@ -21,8 +21,9 @@ export function macTail(mac: string | null): string | null {
 	return parts.length >= 3 ? parts.slice(-3).join(':') : mac;
 }
 
-/** Shape the account's device registry for the client, flagging the current device. */
-export function shapeDevices(access: ActiveAccess | null, thisMac: string | null) {
+/** Shape the account's device registry for the client, flagging the current device. `cap`
+ * is the operator-tunable per-account device limit (from getSessionLimits). */
+export function shapeDevices(access: ActiveAccess | null, thisMac: string | null, cap: number) {
 	const macU = thisMac?.toUpperCase() ?? null;
 	const list = (access?.devices ?? [])
 		.map((d) => ({
@@ -39,10 +40,10 @@ export function shapeDevices(access: ActiveAccess | null, thisMac: string | null
 	const oldest = [...list].sort((a, b) => a.lastSeenAt.localeCompare(b.lastSeenAt))[0] ?? null;
 
 	return {
-		cap: MAX_DEVICES_PER_ACCOUNT,
+		cap,
 		count: list.length,
 		thisDeviceBound,
-		atCap: list.length >= MAX_DEVICES_PER_ACCOUNT && !thisDeviceBound,
+		atCap: list.length >= cap && !thisDeviceBound,
 		oldest: oldest ? { id: oldest.id, macTail: oldest.macTail } : null,
 		list
 	};
@@ -54,11 +55,12 @@ export type AccountView = Awaited<ReturnType<typeof buildAccountView>>;
 export async function buildAccountView(db: DB, userId: string, thisMac: string | null) {
 	const account = await getAccount(db, userId);
 	const access = await getActiveAccess(db, userId);
+	const limits = await getSessionLimits(db);
 
 	return {
 		balance: account?.balance ?? 0,
 		blocked: account?.blocked ?? false,
-		freeTime: getFreeTimeStatus(account?.lastFreeSessionAt ?? null),
+		freeTime: getFreeTimeStatus(account?.lastFreeSessionAt ?? null, undefined, limits),
 		access: {
 			active: !!access,
 			isFree: access?.isFree ?? false,
@@ -70,6 +72,6 @@ export async function buildAccountView(db: DB, userId: string, thisMac: string |
 			startedAt: access?.startedAt.toISOString() ?? null,
 			expiresAt: access?.expiresAt.toISOString() ?? null
 		},
-		devices: shapeDevices(access, thisMac)
+		devices: shapeDevices(access, thisMac, limits.maxDevicesPerAccount)
 	};
 }
