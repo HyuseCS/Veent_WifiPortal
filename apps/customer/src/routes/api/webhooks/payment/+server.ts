@@ -102,6 +102,28 @@ export const POST: RequestHandler = async (event) => {
 	// ledger FKs would throw). It's already recorded above for Finance — acknowledge so
 	// Maya stops retrying, rather than 500ing on a payment that genuinely has no owner.
 	if (!attributedUserId || attributedPackageId === null) {
+		// Fraud-review signal: a *paid* event under our Maya account that maps to no live
+		// checkout/user/package is anomalous (forged reference, foreign webhook on shared
+		// sandbox keys, or a deleted user/package after the fact). Log full context — but
+		// NEVER credit. A spike here is worth alerting on. We log identifiers, not card data
+		// (only the gateway's masked fund source, which carries no full PAN).
+		console.warn('[webhook] UNATTRIBUTED paid event — recorded, not credited', {
+			txId: evt.externalTransactionId,
+			referenceId: evt.referenceId,
+			amountMinor: evt.amountMinor,
+			currency: evt.currency,
+			// Why each leg failed attribution, so the alert points at the cause.
+			hadCheckoutRow: !!co,
+			refUserId,
+			refPackageId,
+			userExists,
+			pkgExists,
+			fundSourceType: evt.fundSourceType ?? null,
+			fundSourceMasked: evt.fundSourceMasked ?? null,
+			buyerEmail: evt.buyerEmail ?? null,
+			receiptNo: evt.receiptNo ?? null,
+			ip: clientIp(event)
+		});
 		return json({ ok: true, recorded: true, credited: false, reason: 'unattributed' });
 	}
 

@@ -9,6 +9,17 @@
   Set PORTAL_BASE to the portal's LAN address. Update it if the IP changes.
   The portal host MUST be in the walled garden (IP → Hotspot → Walled Garden IP
   List) or trapped devices can't reach it.
+
+  *** PRODUCTION MUST USE HTTPS ***
+  The URLs below are http://<LAN-IP> for LOCAL DEV ONLY. In production the portal
+  mints session cookies over OPEN guest WiFi — on plain HTTP they are sniffable off
+  the air (sidejacking), and the cookie `Secure` flag keys off the ORIGIN protocol.
+  So in prod:
+    - serve the portal over https on a real domain (valid public cert),
+    - set ORIGIN=https://<portal-domain> (validateEnv hard-fails otherwise),
+    - point the redirect below at https://<portal-domain>,
+    - walled-garden the HTTPS portal origin (see docs/mikrotik/walled-garden.md).
+  Rationale + threat model: docs/SECURITY_2b_session-continuity.md (control C1).
 -->
 <html>
 <head>

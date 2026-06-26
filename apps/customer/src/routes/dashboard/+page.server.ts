@@ -106,11 +106,25 @@ export const load: PageServerLoad = async (event) => {
 	// the SSE feed pushes (`$lib/server/account-view`), so cross-device updates merge cleanly.
 	const view = await buildAccountView(db, user.id, mac);
 
+	// Issue 2b/B: mint a CNA→browser handoff token for THIS session so the page can offer an
+	// "Open in your browser to manage credits" link. The token is short-TTL + single-use
+	// (auth.ts oneTimeToken); opening the link in the system browser mints a session there
+	// (see /auth/handoff) so the guest skips a second OTP. Best-effort — a token hiccup must
+	// never break the dashboard render; the link is simply omitted then.
+	let handoffUrl: string | null = null;
+	try {
+		const r = await auth.api.generateOneTimeToken({ headers: event.request.headers });
+		if (r?.token) handoffUrl = `${event.url.origin}/auth/handoff?token=${encodeURIComponent(r.token)}`;
+	} catch (err) {
+		console.warn('[handoff] token generation failed:', (err as Error).message);
+	}
+
 	return {
 		maskedPhone: phone ? maskPhone(phone) : null,
 		mac,
 		hasMac: !!mac,
 		tiers,
+		handoffUrl,
 		...view
 	};
 };

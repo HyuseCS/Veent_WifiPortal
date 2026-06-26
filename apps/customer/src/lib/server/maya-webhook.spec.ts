@@ -129,3 +129,69 @@ describe('maya verifyWebhook', () => {
 		);
 	});
 });
+
+/**
+ * Resilience of the authoritative re-fetch: it's bounded by a timeout + small retry so a slow or
+ * flapping Maya API can't pin the webhook request (and a DB pool slot) open. Transient failures
+ * (timeout/abort, network error, 5xx/429) are retried; a deterministic 4xx is not; the retry
+ * count is bounded so a persistent outage fails fast instead of hammering forever.
+ */
+describe('maya verifyWebhook re-fetch resilience', () => {
+	const paidOk = {
+		ok: true,
+		status: 200,
+		json: async () => ({
+			id: 'p',
+			paymentStatus: 'PAYMENT_SUCCESS',
+			amount: 10,
+			currency: 'PHP',
+			requestReferenceNumber: 'r'
+		}),
+		text: async () => ''
+	};
+	const upstream500 = { ok: false, status: 500, json: async () => ({}), text: async () => '' };
+
+	it('retries a transient 5xx, then succeeds on a later attempt', async () => {
+		const fetchMock = vi.fn().mockResolvedValueOnce(upstream500).mockResolvedValueOnce(paidOk);
+		vi.stubGlobal('fetch', fetchMock);
+		const evt = await provider.verifyWebhook(JSON.stringify({ id: 'p' }), headers);
+		expect(fetchMock).toHaveBeenCalledTimes(2);
+		expect(evt.status).toBe('paid');
+	});
+
+	it('retries a network error, then succeeds on a later attempt', async () => {
+		const fetchMock = vi.fn().mockRejectedValueOnce(new TypeError('fetch failed')).mockResolvedValueOnce(paidOk);
+		vi.stubGlobal('fetch', fetchMock);
+		const evt = await provider.verifyWebhook(JSON.stringify({ id: 'p' }), headers);
+		expect(fetchMock).toHaveBeenCalledTimes(2);
+		expect(evt.status).toBe('paid');
+	});
+
+	it('normalizes a persistent abort/timeout into a clear "timed out" error', async () => {
+		const abort = Object.assign(new Error('aborted'), { name: 'AbortError' });
+		const fetchMock = vi.fn().mockRejectedValue(abort);
+		vi.stubGlobal('fetch', fetchMock);
+		await expect(provider.verifyWebhook(JSON.stringify({ id: 'p' }), headers)).rejects.toThrow(/timed out/);
+		// 1 initial attempt + 2 bounded retries.
+		expect(fetchMock).toHaveBeenCalledTimes(3);
+	});
+
+	it('stops retrying after the bounded number of attempts on a persistent 5xx', async () => {
+		const fetchMock = vi.fn().mockResolvedValue(upstream500);
+		vi.stubGlobal('fetch', fetchMock);
+		await expect(provider.verifyWebhook(JSON.stringify({ id: 'p' }), headers)).rejects.toThrow(
+			/payment lookup failed/
+		);
+		expect(fetchMock).toHaveBeenCalledTimes(3);
+	});
+
+	it('does NOT retry a deterministic 404 (no such payment) — fails on the first attempt', async () => {
+		const notFound = { ok: false, status: 404, json: async () => ({}), text: async () => '' };
+		const fetchMock = vi.fn().mockResolvedValue(notFound);
+		vi.stubGlobal('fetch', fetchMock);
+		await expect(provider.verifyWebhook(JSON.stringify({ id: 'p' }), headers)).rejects.toThrow(
+			/payment lookup failed/
+		);
+		expect(fetchMock).toHaveBeenCalledTimes(1);
+	});
+});

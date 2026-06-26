@@ -3,10 +3,10 @@
 	import { enhance } from '$app/forms';
 	import Icon from '$lib/Icon.svelte';
 	import { resolve } from '$app/paths';
-	import type { ActionData } from './$types';
+	import type { ActionData, PageServerData } from './$types';
 	import logo from '$lib/assets/parafiber-logo.webp';
 
-	let { form }: { form: ActionData } = $props();
+	let { form, data }: { form: ActionData; data: PageServerData } = $props();
 
 	// Seed from a failed submit (no-JS fallback) — initial value only; the bound
 	// input owns it thereafter, so reading `form` here is deliberately untracked.
@@ -39,8 +39,21 @@
 				We'll text you a 6-digit code to verify your number.
 			</p>
 
+			{#if data.handoffExpired}
+				<p class="mb-5 rounded-xl border border-warning/30 bg-warning/10 px-4 py-3 text-[13px] font-medium text-ink" role="status">
+					That "open in your browser" link expired. Just log in with your number below.
+				</p>
+			{/if}
+
+			<!-- `group` + data-pending drive the submit button's spinner via CSS so it shows the
+			instant the button is tapped — even before hydration. `data-pending` is set by the
+			pre-hydration inline script (app.html) on a native submit, and by Svelte's `submitting`
+			state once hydrated; both feed the same `group-data-[pending]` styles below. -->
 			<form
 				method="post"
+				class="group"
+				data-pending-form
+				data-pending={submitting ? '' : null}
 				use:enhance={() => {
 					submitting = true;
 					return async ({ update }) => {
@@ -76,20 +89,25 @@
 					<p class="mb-4 text-[13px] font-medium text-blocked" role="alert">{form.message}</p>
 				{/if}
 
+				<!-- Both labels are always rendered; the form's `group-data-[pending]` state shows
+				exactly one — so a native pre-hydration submit gets the spinner via the inline
+				script, and a hydrated submit gets it via `submitting`. The `pointer-events-none`
+				also blocks a double-tap before `disabled` (JS-only) can. -->
 				<button
 					type="submit"
 					disabled={submitting}
-					class="flex h-[54px] w-full items-center justify-center gap-2 rounded-xl bg-cta text-base font-bold text-white transition-colors hover:bg-cta-hover hover:cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cta disabled:cursor-wait disabled:opacity-80"
+					class="flex h-[54px] w-full items-center justify-center gap-2 rounded-xl bg-cta text-base font-bold text-white transition-colors hover:bg-cta-hover hover:cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cta disabled:cursor-wait disabled:opacity-80 group-data-[pending]:pointer-events-none group-data-[pending]:opacity-80"
 				>
-					{#if submitting}
+					<span class="hidden items-center gap-2 group-data-[pending]:inline-flex">
 						<span
 							class="inline-block h-[18px] w-[18px] animate-spin rounded-full border-[2.5px] border-white/40 border-t-white"
 							aria-hidden="true"
 						></span>
 						<span class="sr-only">Sending code…</span>
-					{:else}
+					</span>
+					<span class="inline-flex items-center gap-2 group-data-[pending]:hidden">
 						Send code
-					{/if}
+					</span>
 				</button>
 			</form>
 
