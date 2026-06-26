@@ -11,7 +11,9 @@ export const load: PageServerLoad = (event) => {
 	if (event.locals.user) {
 		return redirect(302, '/dashboard');
 	}
-	return {};
+	// An "Open in your browser" handoff link that was already used or has expired bounces here
+	// with ?handoff=expired (see /auth/handoff) — surface a gentle note so the guest just logs in.
+	return { handoffExpired: event.url.searchParams.get('handoff') === 'expired' };
 };
 
 export const actions: Actions = {
