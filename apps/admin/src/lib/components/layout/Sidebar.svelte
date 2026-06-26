@@ -35,7 +35,7 @@
 </script>
 
 <aside
-	class="flex shrink-0 flex-col bg-sidebar text-sidebar-text transition-[width] duration-200 {collapsed
+	class="hidden shrink-0 flex-col bg-sidebar text-sidebar-text transition-[width] duration-200 md:flex {collapsed
 		? 'w-16'
 		: 'w-60'}"
 >

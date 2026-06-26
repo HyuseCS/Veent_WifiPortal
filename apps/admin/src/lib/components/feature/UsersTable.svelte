@@ -111,7 +111,7 @@
 	];
 </script>
 
-<Table class="min-h-0 flex-1">
+<Table cards class="min-h-0 flex-1">
 	<!-- Toolbar: search + any owner action (Wipe) on the right. -->
 	{#snippet toolbar()}
 		<div class="flex flex-wrap items-center gap-3 px-4 py-3">
@@ -123,6 +123,36 @@
 			/>
 			<div class="ml-auto flex items-center gap-3">
 				{@render actions?.()}
+			</div>
+			<!-- Mobile sort: the sortable <thead> is hidden in card mode, so expose the same
+			     keys here. md:hidden — desktop keeps the clickable headers. -->
+			<div class="flex w-full items-center gap-2 md:hidden">
+				<label for="users-sort" class="sr-only">Sort users by</label>
+				<select
+					id="users-sort"
+					class="min-h-11 flex-1 rounded-lg border border-border bg-bg px-3 text-sm text-ink"
+					value={sort.key ?? ''}
+					onchange={(e) => sort.toggle(e.currentTarget.value as SortKey)}
+				>
+					<option value="" disabled>Sort by…</option>
+					{#each headers.filter((h) => h.key) as h (h.label)}
+						<option value={h.key}>{h.label}</option>
+					{/each}
+				</select>
+				{#if sort.key}
+					<button
+						type="button"
+						onclick={() => sort.toggle(sort.key!)}
+						aria-label="Toggle sort direction ({sort.dir === 'asc' ? 'ascending' : 'descending'})"
+						class="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-border bg-bg text-muted transition-colors hover:text-ink"
+					>
+						{#if sort.dir === 'asc'}
+							<ChevronUp class="h-4 w-4" aria-hidden="true" />
+						{:else}
+							<ChevronDown class="h-4 w-4" aria-hidden="true" />
+						{/if}
+					</button>
+				{/if}
 			</div>
 		</div>
 	{/snippet}
@@ -185,7 +215,7 @@
 
 	{#each sorted as user (user.id)}
 		<tr class="hover:bg-surface" class:bg-surface={selected.has(user.id)}>
-			<td class="px-4 py-3">
+			<td data-label="Select" class="px-4 py-3">
 				<input
 					type="checkbox"
 					class="h-4 w-4 accent-brand"
@@ -194,10 +224,10 @@
 					onchange={(e) => toggle(user.id, e.currentTarget.checked)}
 				/>
 			</td>
-			<td class="px-4 py-3">
+			<td data-label="User" class="px-4 py-3">
 				<span class="truncate font-mono font-medium text-ink">{fmtPhone(user.phone)}</span>
 			</td>
-			<td class="px-4 py-3">
+			<td data-label="Balance" class="px-4 py-3">
 				<span
 					class="inline-flex items-center gap-1.5 font-mono font-semibold {user.tone === 'warning'
 						? 'text-warning'
@@ -209,8 +239,8 @@
 					{/if}
 				</span>
 			</td>
-			<td class="px-4 py-3 font-mono text-ink">{user.timeLeft ?? '—'}</td>
-			<td class="px-4 py-3">
+			<td data-label="Time Left" class="px-4 py-3 font-mono text-ink">{user.timeLeft ?? '—'}</td>
+			<td data-label="Devices" class="px-4 py-3">
 				{#if user.deviceCount > 0}
 					<button
 						type="button"
@@ -234,7 +264,7 @@
 					<span class="font-mono text-xs text-muted">—</span>
 				{/if}
 			</td>
-			<td class="px-4 py-3">
+			<td data-label="Location" class="px-4 py-3">
 				{#if user.location}
 					<span class="inline-flex min-w-0 items-center gap-1.5 text-sm text-ink">
 						<MapPin class="h-3.5 w-3.5 shrink-0 text-muted" aria-hidden="true" />
@@ -244,10 +274,10 @@
 					<span class="text-xs text-muted">—</span>
 				{/if}
 			</td>
-			<td class="px-4 py-3">
+			<td data-label="Status" class="px-4 py-3">
 				<StatusBadge tone={user.tone} label={user.status} />
 			</td>
-			<td class="px-4 py-3">
+			<td class="tc-full px-4 py-3">
 				<div class="flex items-center justify-end gap-1">
 					{#if user.tone === 'blocked'}
 						<!-- Blocked users have no live session to kick; offer Unblock instead. -->
@@ -296,9 +326,9 @@
 			</td>
 		</tr>
 		{#if expanded.has(user.id) && user.deviceCount > 0}
-			<tr class="bg-surface">
+			<tr class="bg-surface tc-detail">
 				<td></td>
-				<td colspan={headers.length} class="px-4 pt-0 pb-3">
+				<td colspan={headers.length} class="tc-full px-4 pt-0 pb-3">
 					<ul class="flex flex-col gap-1.5 rounded-lg border border-border bg-bg p-3">
 						{#each user.devices as d, i (d.mac ?? i)}
 							<li class="flex items-center gap-2 text-xs">
@@ -315,7 +345,7 @@
 
 	{#if filtered.length === 0}
 		<tr>
-			<td colspan={headers.length + 1} class="p-0">
+			<td colspan={headers.length + 1} class="tc-full p-0">
 				<EmptyState
 					icon={Search as unknown as Component}
 					title="No users match your search"

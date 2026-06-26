@@ -78,7 +78,7 @@
 </script>
 
 <!-- Full-height flex column so the table body scrolls, not the page (see UsersTable's Table). -->
-<div class="flex h-full flex-col gap-5">
+<div class="flex flex-col gap-5 md:h-full">
 	<section class="grid shrink-0 grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-5">
 		{#each kpis as k (k.label)}
 			<KpiCard

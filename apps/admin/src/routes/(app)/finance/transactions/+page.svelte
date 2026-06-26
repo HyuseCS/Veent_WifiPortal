@@ -7,7 +7,7 @@
 
 <!-- Full-height column so the table fills the page and its rows scroll internally (sticky
      header). Period filter + Export + back-to-overview live in the Topbar (FinanceHeaderControls). -->
-<div class="flex h-full flex-col gap-2">
+<div class="flex flex-col gap-2 md:h-full">
 	<TransactionsTable transactions={data.transactions} total={data.total} />
 	{#if data.total > data.transactions.length}
 		<p class="shrink-0 text-xs text-muted">

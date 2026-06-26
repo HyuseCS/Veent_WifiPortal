@@ -139,7 +139,7 @@
 
 <!-- min-h-0 flex-1: the Staff page gives this a full-height flex column, so the table body
      scrolls internally (sticky header) instead of growing the page. -->
-<Table class="min-h-0 flex-1">
+<Table cards class="min-h-0 flex-1">
 	<!-- Toolbar: title + status filter + search, matching the Users/Transactions chrome. -->
 	{#snippet toolbar()}
 		<div class="flex flex-wrap items-center gap-3 px-4 py-3">
@@ -156,6 +156,36 @@
 					<UserPlus class="h-4 w-4" aria-hidden="true" />
 				</Button>
 			{/if}
+			<!-- Mobile sort: the sortable <thead> is hidden in card mode, so expose the same
+			     keys here. md:hidden — desktop keeps the clickable headers. -->
+			<div class="flex w-full items-center gap-2 md:hidden">
+				<label for="staff-sort" class="sr-only">Sort staff by</label>
+				<select
+					id="staff-sort"
+					class="min-h-11 flex-1 rounded-lg border border-border bg-bg px-3 text-sm text-ink"
+					value={sortKey ?? ''}
+					onchange={(e) => toggleSort(e.currentTarget.value as SortKey)}
+				>
+					<option value="" disabled>Sort by…</option>
+					{#each headers.filter((h) => h.key) as h (h.label)}
+						<option value={h.key}>{h.label}</option>
+					{/each}
+				</select>
+				{#if sortKey}
+					<button
+						type="button"
+						onclick={() => sortKey && toggleSort(sortKey)}
+						aria-label="Toggle sort direction ({sortDir === 'asc' ? 'ascending' : 'descending'})"
+						class="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-border bg-bg text-muted transition-colors hover:text-ink"
+					>
+						{#if sortDir === 'asc'}
+							<ChevronUp class="h-4 w-4" aria-hidden="true" />
+						{:else}
+							<ChevronDown class="h-4 w-4" aria-hidden="true" />
+						{/if}
+					</button>
+				{/if}
+			</div>
 		</div>
 	{/snippet}
 
@@ -206,7 +236,7 @@
 
 	{#each sorted as member (member.id)}
 		<tr class="hover:bg-surface" class:opacity-60={member.status === 'disabled'}>
-			<td class="px-4 py-3">
+			<td class="tc-full px-4 py-3">
 				<div class="flex items-center gap-3">
 					<span
 						class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand/10 text-xs font-bold text-brand"
@@ -218,7 +248,7 @@
 					</div>
 				</div>
 			</td>
-			<td class="px-4 py-3">
+			<td data-label="Role" class="px-4 py-3">
 				{#if member.role === 'owner'}
 					<span
 						class="inline-flex items-center gap-1.5 rounded-full bg-brand/10 px-2.5 py-1 text-xs font-medium text-brand"
@@ -234,14 +264,14 @@
 					</span>
 				{/if}
 			</td>
-			<td class="px-4 py-3">
+			<td data-label="Status" class="px-4 py-3">
 				<StatusBadge
 					tone={statusMeta[member.status].tone}
 					label={statusMeta[member.status].label}
 				/>
 			</td>
-			<td class="px-4 py-3 font-mono text-muted">{member.lastActive}</td>
-			<td class="px-4 py-3">
+			<td data-label="Last active" class="px-4 py-3 font-mono text-muted">{member.lastActive}</td>
+			<td class="tc-full px-4 py-3">
 				{#if member.role !== 'owner'}
 					{#if confirmingId === member.id}
 						<div class="flex items-center justify-end gap-1">
@@ -330,7 +360,7 @@
 
 	{#if filtered.length === 0}
 		<tr>
-			<td colspan={headers.length} class="p-0">
+			<td colspan={headers.length} class="tc-full p-0">
 				<EmptyState
 					icon={Search as unknown as Component}
 					title="No staff members match"

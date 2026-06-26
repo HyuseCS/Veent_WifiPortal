@@ -524,8 +524,13 @@
 <div class="relative h-full w-full overflow-hidden">
 	{#if sidebarOpen}
 		<aside
-			class="absolute top-0 bottom-0 left-0 z-[1000] flex w-85 flex-col border-r border-border bg-bg"
+			class="absolute z-[1000] flex flex-col bg-bg shadow-2xl max-md:inset-x-0 max-md:bottom-0 max-md:max-h-[70dvh] max-md:rounded-t-2xl max-md:border-t max-md:border-border md:top-0 md:bottom-0 md:left-0 md:w-85 md:border-r md:border-border md:shadow-none"
 		>
+			<!-- Drag-handle affordance — mobile bottom-sheet only. -->
+			<div
+				class="mx-auto mt-2 mb-1 h-1.5 w-10 shrink-0 rounded-full bg-border md:hidden"
+				aria-hidden="true"
+			></div>
 			<header class="flex h-14 items-center justify-between gap-2 border-b border-border px-4">
 				<div class="flex items-center gap-2.5">
 					<span class="text-sm font-semibold text-ink">Access Points</span>

@@ -42,7 +42,7 @@
 
 <!-- Period selector + Export CSV now live in the Topbar header (FinanceHeaderControls).
      Full-height column so the charts stretch to the bottom of the page. -->
-<div class="flex h-full flex-col gap-6">
+<div class="flex flex-col gap-6 md:h-full">
 	<!-- KPIs -->
 	<section class="grid shrink-0 grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
 		{#each data.kpis as kpi (kpi.label)}
