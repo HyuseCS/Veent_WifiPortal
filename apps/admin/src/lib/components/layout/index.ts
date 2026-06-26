@@ -3,5 +3,6 @@
  * Import as: `import { Sidebar, Topbar } from '$lib/components/layout';`
  */
 export { default as Sidebar } from './Sidebar.svelte';
+export { default as MobileDrawer } from './MobileDrawer.svelte';
 export { default as Topbar } from './Topbar.svelte';
 export { default as ModeToggle } from './ModeToggle.svelte';

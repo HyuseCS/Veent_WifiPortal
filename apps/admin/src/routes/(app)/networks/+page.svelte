@@ -248,7 +248,7 @@
 		<!-- MAP + RIGHT PANELS -->
 		<div class="grid gap-5 xl:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)] xl:items-stretch">
 			<!-- Coverage map -->
-			<Card padding="p-0" class="flex h-[60vh] flex-col overflow-hidden xl:h-[65vh]">
+			<Card padding="p-0" class="flex h-[60dvh] flex-col overflow-hidden xl:h-[65vh]">
 				<div class="flex flex-wrap items-start justify-between gap-3 px-5 pt-4 pb-3">
 					<div>
 						<h2 class="text-base font-semibold text-ink">Coverage Map</h2>

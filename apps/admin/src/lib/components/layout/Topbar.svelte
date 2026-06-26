@@ -2,8 +2,10 @@
 	import type { Snippet } from 'svelte';
 	import { invalidateAll } from '$app/navigation';
 	import RefreshCw from 'lucide-svelte/icons/refresh-cw';
+	import Menu from 'lucide-svelte/icons/menu';
 	import { LiveStatusPill } from '$lib/components/ui';
 	import { live, connectLive } from '$lib/live.svelte';
+	import { mobileNav } from '$lib/uiState.svelte';
 
 	// `actions` renders page-specific controls on the right (e.g. the dashboard layout switcher).
 	let { title, subtitle, actions }: { title: string; subtitle?: string; actions?: Snippet } =
@@ -50,14 +52,27 @@
 <header
 	class="flex h-16 shrink-0 items-center justify-between gap-4 border-b border-border bg-bg px-4 sm:px-6"
 >
-	<div class="min-w-0">
-		<div class="flex min-w-0 items-center gap-3">
-			<h1 class="truncate text-lg font-semibold tracking-tight text-ink sm:text-xl">{title}</h1>
-			<LiveStatusPill status={live.status} />
+	<div class="flex min-w-0 items-center gap-2 sm:gap-3">
+		<!-- Hamburger — mobile only (display:none at md+, so the desktop header is unchanged). -->
+		<button
+			type="button"
+			onclick={() => (mobileNav.open = true)}
+			aria-label="Open navigation menu"
+			aria-controls="mobile-nav-drawer"
+			aria-expanded={mobileNav.open}
+			class="flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted outline-none transition-colors duration-150 hover:bg-surface hover:text-ink focus-visible:ring-2 focus-visible:ring-brand/40 md:hidden"
+		>
+			<Menu class="h-5 w-5" aria-hidden="true" />
+		</button>
+		<div class="min-w-0">
+			<div class="flex min-w-0 items-center gap-3">
+				<h1 class="truncate text-lg font-semibold tracking-tight text-ink sm:text-xl">{title}</h1>
+				<LiveStatusPill status={live.status} />
+			</div>
+			{#if subtitle}
+				<p class="truncate text-xs text-muted">{subtitle}</p>
+			{/if}
 		</div>
-		{#if subtitle}
-			<p class="truncate text-xs text-muted">{subtitle}</p>
-		{/if}
 	</div>
 
 	<div class="flex shrink-0 items-center gap-2 sm:gap-3">

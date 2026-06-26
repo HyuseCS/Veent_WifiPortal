@@ -105,7 +105,7 @@
 		<StatusBadge tone={ap.tone} label={ap.status} pulse={ap.tone !== 'online'} />
 	</div>
 
-	<dl class="grid grid-cols-4 gap-2 border-y border-border py-3 text-center">
+	<dl class="grid grid-cols-2 gap-2 border-y border-border py-3 text-center sm:grid-cols-4">
 		{#each metrics as metric (metric.label)}
 			<div class="flex flex-col gap-1">
 				<dt class="text-[10px] font-bold tracking-wide text-muted uppercase">{metric.label}</dt>

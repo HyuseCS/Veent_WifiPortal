@@ -27,6 +27,7 @@ vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 # Playwright
 test-results
+.playwright-mcp/
 
 # graphify (knowledge-graph build output)
 graphify-out/

@@ -24,6 +24,10 @@
 	// header and footer bars). Optional and bindable — consumers that need to fit a fixed
 	// number of rows to the available space (e.g. the dashboard's "+N more" tables) bind it
 	// and derive a row cap from it; everyone else ignores it at zero cost.
+	// `cards` opts a table into the responsive card-flip: below md the rows render as stacked
+	// cards (see `.table-cards` in layout.css). Default off — desktop and non-opted tables
+	// (e.g. the dashboard's) are byte-identical. Opted-in tables must give each <td> a
+	// `data-label` (or `.tc-full`) for the mobile label/value rows.
 	let {
 		columns = [],
 		children,
@@ -33,6 +37,7 @@
 		headRow,
 		footer,
 		class: klass = '',
+		cards = false,
 		bodyHeight = $bindable(0)
 	}: {
 		columns?: Column[];
@@ -43,6 +48,7 @@
 		headRow?: Snippet;
 		footer?: Snippet;
 		class?: string;
+		cards?: boolean;
 		bodyHeight?: number;
 	} = $props();
 </script>
@@ -58,7 +64,10 @@
 			<SectionHeading {title} {aside} />
 		</div>
 	{/if}
-	<div class="min-h-0 flex-1 overflow-auto" bind:clientHeight={bodyHeight}>
+	<div
+		class="min-h-0 flex-1 overflow-auto {cards ? 'table-cards' : ''}"
+		bind:clientHeight={bodyHeight}
+	>
 		<table class="w-full text-sm">
 			<thead class="sticky top-0 z-10">
 				{#if headRow}

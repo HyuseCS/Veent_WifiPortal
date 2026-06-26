@@ -15,12 +15,16 @@
 </script>
 
 <div class="space-y-5">
-	<nav class="flex w-fit gap-1 rounded-xl border border-border bg-bg p-1 shadow-sm">
+	<!-- Mobile: horizontal-scroll strip so all tabs stay reachable < sm; desktop is unchanged
+	     (w-fit content-width pill, overflow visible from sm up). -->
+	<nav
+		class="flex w-fit max-w-full gap-1 overflow-x-auto rounded-xl border border-border bg-bg p-1 shadow-sm [scrollbar-width:none] sm:overflow-visible [&::-webkit-scrollbar]:hidden"
+	>
 		{#each tabs as t (t.href)}
 			<a
 				href={t.href}
 				aria-current={isActive(t.href) ? 'page' : undefined}
-				class="flex min-h-[44px] items-center rounded-lg px-3.5 text-xs font-bold transition-colors duration-150 {isActive(
+				class="flex min-h-[44px] shrink-0 items-center rounded-lg px-3.5 text-xs font-bold transition-colors duration-150 {isActive(
 					t.href
 				)
 					? 'bg-brand text-white'
