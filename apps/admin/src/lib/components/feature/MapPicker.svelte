@@ -48,7 +48,7 @@
 			const obs = new MutationObserver(() => tileLayer.setUrl(tileUrl()));
 			obs.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
 
-			const pinIcon = (L: typeof import('leaflet').default) =>
+			const pinIcon = (L: typeof import('leaflet')) =>
 				L.divIcon({
 					className: '',
 					html: '<div class="vpick"><span></span></div>',
