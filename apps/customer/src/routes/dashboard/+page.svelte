@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
-	import { fade, fly } from 'svelte/transition';
 	import type { SubmitFunction } from '@sveltejs/kit';
 	import { toasts } from '$lib/toasts.svelte';
 	import Icon from '$lib/Icon.svelte';
@@ -31,11 +30,10 @@
 	const freeTime = $derived(live?.freeTime ?? data.freeTime);
 	const affordable = (t: Tier) => balance >= (t.creditCost ?? 0);
 
-	// Confirm-before-spend (and a soft wall for tiers the guest can't afford yet).
-	let sheet = $state<{ kind: 'confirm' | 'insufficient'; tier: Tier } | null>(null);
-	const openBuy = (t: Tier) =>
-		(sheet = { kind: affordable(t) ? 'confirm' : 'insufficient', tier: t });
-	const closeSheet = () => (sheet = null);
+	// Confirm-before-spend is a CSS-only disclosure (a hidden radio per tier + `peer-checked`,
+	// see the buy rail below), so the confirm sheet opens the instant "Buy" is tapped — even
+	// before hydration. That matters in the captive-portal browser, where a JS-only onclick is
+	// dead until the bundle loads. `buysheet-none` is the default-checked off-state.
 
 	// Live countdown to the next free session.
 	let now = $state(Date.now());
@@ -581,32 +579,164 @@
 							spend credits{:else}Buy access — spend credits{/if}
 					</div>
 					<section class="mb-6 flex flex-col gap-2.5">
+						<!-- Off-state for the buy-sheet radio group: checked = no sheet open. -->
+						<input
+							type="radio"
+							name="buy-sheet"
+							id="buysheet-none"
+							checked
+							class="sr-only"
+							aria-hidden="true"
+							tabindex="-1"
+						/>
 						{#each data.tiers as tier (tier.id)}
 							{@const ok = affordable(tier)}
-							<div
-								class="flex items-center justify-between rounded-2xl border border-border py-3 pr-3 pl-4"
-							>
-								<div>
-									<div class="text-[15px] font-semibold text-ink">{tier.name}</div>
-									<div class="text-[11.5px] font-medium text-muted">
-										{tier.durationMinutes} min · {tier.creditCost} cr
+							<div>
+								<!-- Hidden radio + `peer-checked` reveal this tier's sheet the instant "Buy" is
+								tapped — CSS only, so it works before hydration (dead JS onclick in the CNA). -->
+								<input type="radio" name="buy-sheet" id="buysheet-{tier.id}" class="peer sr-only" />
+								<div
+									class="flex items-center justify-between rounded-2xl border border-border py-3 pr-3 pl-4 peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-brand"
+								>
+									<div>
+										<div class="text-[15px] font-semibold text-ink">{tier.name}</div>
+										<div class="text-[11.5px] font-medium text-muted">
+											{tier.durationMinutes} min · {tier.creditCost} cr
+										</div>
+									</div>
+									{#if ok}
+										<label
+											for="buysheet-{tier.id}"
+											class="flex h-[42px] min-w-[44px] cursor-pointer items-center justify-center rounded-xl bg-brand px-5 text-sm font-semibold text-white transition-colors hover:bg-brand-hover"
+										>
+											Buy
+										</label>
+									{:else}
+										<label
+											for="buysheet-{tier.id}"
+											class="flex h-[42px] min-w-[44px] cursor-pointer items-center justify-center rounded-xl border border-border bg-surface px-3.5 text-[13px] font-semibold text-muted"
+										>
+											Need {tier.creditCost}
+										</label>
+									{/if}
+								</div>
+
+								<!-- Confirm / insufficient sheet for THIS tier. Always in the DOM; shown via the
+								tier's `peer-checked`. Bottom sheet on mobile, centered modal on lg. -->
+								<div
+									role="dialog"
+									aria-modal="true"
+									aria-label={ok ? `Start ${tier.name}` : 'Not enough credits'}
+									class="pointer-events-none invisible fixed inset-0 z-50 flex items-end justify-center opacity-0 transition-[opacity,visibility] duration-200 peer-checked:pointer-events-auto peer-checked:visible peer-checked:opacity-100 lg:items-center"
+								>
+									<label
+										for="buysheet-none"
+										aria-label="Dismiss"
+										class="absolute inset-0 cursor-default bg-ink/40"
+									></label>
+									<div
+										class="relative z-10 w-full max-w-sm rounded-t-3xl bg-bg px-5 pt-5 pb-6 shadow-[0_-8px_30px_rgba(0,0,0,0.16)] lg:rounded-3xl lg:p-7"
+									>
+										<div class="mx-auto mb-[18px] h-1 w-9 rounded bg-border lg:hidden"></div>
+
+										{#if ok}
+											<div class="mb-4 flex items-center gap-3">
+												<div
+													class="flex h-[42px] w-[42px] items-center justify-center rounded-xl bg-brand-tint"
+												>
+													<Icon name="clock" size={22} class="text-brand" />
+												</div>
+												<div>
+													<div class="text-[17px] font-bold text-ink">
+														Start {tier.name} of access?
+													</div>
+													<div class="text-[12.5px] font-medium text-muted">
+														{tier.durationMinutes} minutes, starting now.
+													</div>
+												</div>
+											</div>
+											<div class="mb-[18px] overflow-hidden rounded-xl border border-border">
+												<div
+													class="flex items-center justify-between border-b border-border px-4 py-3"
+												>
+													<span class="text-[13px] font-medium text-muted">Cost</span>
+													<span class="font-mono text-sm font-semibold text-ink"
+														>−{tier.creditCost} cr</span
+													>
+												</div>
+												<div class="flex items-center justify-between px-4 py-3">
+													<span class="text-[13px] font-medium text-muted">Balance after</span>
+													<span class="font-mono text-sm font-semibold text-brand">
+														{balance - (tier.creditCost ?? 0)} cr
+													</span>
+												</div>
+											</div>
+											<form
+												method="post"
+												action="?/buyTier"
+												use:enhance={confirmBuy(tier)}
+												class="group"
+												data-pending={buying ? '' : null}
+												data-pending-form
+											>
+												<input type="hidden" name="mac" value={mac} />
+												<input type="hidden" name="packageId" value={tier.id} />
+												<button
+													disabled={!hasMac || buying}
+													class="mb-2.5 flex h-[52px] w-full items-center justify-center gap-2 rounded-xl bg-cta text-base font-bold text-white transition-colors hover:bg-cta-hover hover:cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 group-data-[pending]:pointer-events-none group-data-[pending]:opacity-70"
+												>
+													<span
+														class="hidden h-[18px] w-[18px] animate-spin rounded-full border-[2.5px] border-white/40 border-t-white group-data-[pending]:inline-block"
+														aria-hidden="true"
+													></span>
+													Confirm — spend {tier.creditCost} cr
+												</button>
+											</form>
+											<label
+												for="buysheet-none"
+												class="flex h-11 w-full cursor-pointer items-center justify-center text-[13px] font-semibold text-muted hover:text-ink"
+											>
+												Cancel
+											</label>
+										{:else}
+											<div class="mb-3 flex items-center gap-3">
+												<div
+													class="flex h-[42px] w-[42px] items-center justify-center rounded-xl bg-blocked/10"
+												>
+													<Icon name="alert-circle" size={22} class="text-blocked" />
+												</div>
+												<div>
+													<div class="text-[17px] font-bold text-ink">Not enough credits</div>
+													<div class="text-[12.5px] font-medium text-muted">
+														{tier.name} needs {tier.creditCost} credits.
+													</div>
+												</div>
+											</div>
+											<div
+												class="mb-[18px] flex items-center justify-between gap-2 rounded-xl border border-border bg-surface px-4 py-3"
+											>
+												<span class="text-[13px] font-medium text-muted">You have</span>
+												<span class="font-mono text-[15px] font-semibold text-ink">{balance} cr</span>
+												<span class="text-[13px] font-medium text-muted">short by</span>
+												<span class="font-mono text-[15px] font-semibold text-blocked">
+													{(tier.creditCost ?? 0) - balance} cr
+												</span>
+											</div>
+											<a
+												href={resolve('/top-up')}
+												class="mb-2.5 flex h-[52px] w-full items-center justify-center rounded-xl bg-cta text-base font-bold text-white transition-colors hover:bg-cta-hover"
+											>
+												Top up credits
+											</a>
+											<label
+												for="buysheet-none"
+												class="flex h-11 w-full cursor-pointer items-center justify-center text-[13px] font-semibold text-muted hover:text-ink"
+											>
+												Not now
+											</label>
+										{/if}
 									</div>
 								</div>
-								{#if ok}
-									<button
-										onclick={() => openBuy(tier)}
-										class="h-[42px] rounded-xl bg-brand px-5 text-sm font-semibold text-white transition-colors hover:bg-brand-hover hover:cursor-pointer"
-									>
-										Buy
-									</button>
-								{:else}
-									<button
-										onclick={() => openBuy(tier)}
-										class="h-[42px] rounded-xl border border-border bg-surface px-3.5 text-[13px] font-semibold text-muted hover:cursor-pointer"
-									>
-										Need {tier.creditCost}
-									</button>
-								{/if}
 							</div>
 						{:else}
 							<p class="text-sm text-muted">No access tiers available.</p>
@@ -661,110 +791,4 @@
 		{/if}
 	</div>
 
-	<!-- Bottom sheet: confirm spend / insufficient credits -->
-	{#if sheet}
-		<button
-			type="button"
-			aria-label="Dismiss"
-			onclick={closeSheet}
-			transition:fade={{ duration: 150 }}
-			class="fixed inset-0 z-40 bg-ink/40"
-		></button>
-		<div
-			transition:fly={{ y: 240, duration: 220 }}
-			class="fixed inset-x-0 bottom-0 z-50 mx-auto max-w-sm rounded-t-3xl bg-bg px-5 pt-5 pb-6 shadow-[0_-8px_30px_rgba(0,0,0,0.16)] lg:inset-x-auto lg:top-1/2 lg:right-auto lg:bottom-auto lg:left-1/2 lg:-translate-x-1/2 lg:-translate-y-1/2 lg:rounded-3xl lg:p-7"
-		>
-			<div class="mx-auto mb-[18px] h-1 w-9 rounded bg-border lg:hidden"></div>
-
-			{#if sheet.kind === 'confirm'}
-				<div class="mb-4 flex items-center gap-3">
-					<div class="flex h-[42px] w-[42px] items-center justify-center rounded-xl bg-brand-tint">
-						<Icon name="clock" size={22} class="text-brand" />
-					</div>
-					<div>
-						<div class="text-[17px] font-bold text-ink">Start {sheet.tier.name} of access?</div>
-						<div class="text-[12.5px] font-medium text-muted">
-							{sheet.tier.durationMinutes} minutes, starting now.
-						</div>
-					</div>
-				</div>
-				<div class="mb-[18px] overflow-hidden rounded-xl border border-border">
-					<div class="flex items-center justify-between border-b border-border px-4 py-3">
-						<span class="text-[13px] font-medium text-muted">Cost</span>
-						<span class="font-mono text-sm font-semibold text-ink">−{sheet.tier.creditCost} cr</span
-						>
-					</div>
-					<div class="flex items-center justify-between px-4 py-3">
-						<span class="text-[13px] font-medium text-muted">Balance after</span>
-						<span class="font-mono text-sm font-semibold text-brand">
-							{balance - (sheet.tier.creditCost ?? 0)} cr
-						</span>
-					</div>
-				</div>
-				<form
-					method="post"
-					action="?/buyTier"
-					use:enhance={confirmBuy(sheet.tier)}
-					class="group"
-					data-pending={buying ? '' : null}
-					data-pending-form
-				>
-					<input type="hidden" name="mac" value={mac} />
-					<input type="hidden" name="packageId" value={sheet.tier.id} />
-					<button
-						disabled={!hasMac || buying}
-						class="mb-2.5 flex h-[52px] w-full items-center justify-center gap-2 rounded-xl bg-cta text-base font-bold text-white transition-colors hover:bg-cta-hover hover:cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 group-data-[pending]:pointer-events-none group-data-[pending]:opacity-70"
-					>
-						<span
-							class="hidden h-[18px] w-[18px] animate-spin rounded-full border-[2.5px] border-white/40 border-t-white group-data-[pending]:inline-block"
-							aria-hidden="true"
-						></span>
-						Confirm — spend {sheet.tier.creditCost} cr
-					</button>
-				</form>
-				<button
-					type="button"
-					onclick={closeSheet}
-					class="h-11 w-full text-[13px] font-semibold text-muted hover:text-ink hover:cursor-pointer"
-				>
-					Cancel
-				</button>
-			{:else}
-				<div class="mb-3 flex items-center gap-3">
-					<div class="flex h-[42px] w-[42px] items-center justify-center rounded-xl bg-blocked/10">
-						<Icon name="alert-circle" size={22} class="text-blocked" />
-					</div>
-					<div>
-						<div class="text-[17px] font-bold text-ink">Not enough credits</div>
-						<div class="text-[12.5px] font-medium text-muted">
-							{sheet.tier.name} needs {sheet.tier.creditCost} credits.
-						</div>
-					</div>
-				</div>
-				<div
-					class="mb-[18px] flex items-center justify-between gap-2 rounded-xl border border-border bg-surface px-4 py-3"
-				>
-					<span class="text-[13px] font-medium text-muted">You have</span>
-					<span class="font-mono text-[15px] font-semibold text-ink">{balance} cr</span>
-					<span class="text-[13px] font-medium text-muted">short by</span>
-					<span class="font-mono text-[15px] font-semibold text-blocked">
-						{(sheet.tier.creditCost ?? 0) - balance} cr
-					</span>
-				</div>
-				<a
-					href={resolve('/top-up')}
-					class="mb-2.5 flex h-[52px] w-full items-center justify-center rounded-xl bg-cta text-base font-bold text-white transition-colors hover:bg-cta-hover"
-				>
-					Top up credits
-				</a>
-				<button
-					type="button"
-					onclick={closeSheet}
-					class="h-11 w-full text-[13px] font-semibold text-muted hover:text-ink hover:cursor-pointer"
-				>
-					Not now
-				</button>
-			{/if}
-		</div>
-	{/if}
 </main>
