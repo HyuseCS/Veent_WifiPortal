@@ -2,7 +2,7 @@
 	import { type Snippet } from 'svelte';
 	import { page } from '$app/state';
 	import { Sidebar, MobileDrawer, Topbar } from '$lib/components/layout';
-	import { FinanceHeaderControls } from '$lib/components/feature';
+	import { FinanceHeaderControls, NetworkHeaderControls } from '$lib/components/feature';
 	import { nav } from '$lib/nav';
 	import { mobileNav } from '$lib/uiState.svelte';
 	import type { LayoutData } from './$types';
@@ -46,11 +46,12 @@
 		<Topbar {title} {subtitle}>
 			{#snippet actions()}
 				{#if onFinance}<FinanceHeaderControls />{/if}
+			{#if onNetworks}<NetworkHeaderControls />{/if}
 			{/snippet}
 		</Topbar>
 		<main
 			class="flex-1 overflow-y-auto bg-canvas p-4 sm:p-6 {onNetworks
-				? 'snap-y snap-proximity [scrollbar-width:none] [&::-webkit-scrollbar]:hidden'
+				? 'md:snap-y md:snap-proximity [scrollbar-width:none] [&::-webkit-scrollbar]:hidden'
 				: ''}"
 		>
 			{@render children()}

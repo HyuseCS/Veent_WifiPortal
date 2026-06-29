@@ -228,8 +228,10 @@
 	</div>
 {:else}
 <div class="contents">
-	<!-- SCREEN 1: KPIs + coverage map + side panels -->
-	<div class="min-h-full snap-start space-y-5 pt-5 pb-5">
+	<!-- SCREEN 1: KPIs + coverage map + side panels. min-h-full (the full-screen snap section)
+	     is desktop-only — on mobile the map/log are gone, so let this shrink to content and the
+	     access points pull up right under it instead of sitting a screen-height below. -->
+	<div class="snap-start space-y-5 pt-5 pb-5 md:min-h-full">
 		<!-- KPI STRIP -->
 		<KpiCarousel items={kpis}>
 			{#snippet card(k)}
@@ -248,8 +250,9 @@
 
 		<!-- MAP + RIGHT PANELS -->
 		<div class="grid gap-5 xl:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)] xl:items-stretch">
-			<!-- Coverage map -->
-			<Card padding="p-0" class="flex h-[60dvh] flex-col overflow-hidden xl:h-[65vh]">
+			<!-- Coverage map — hidden on mobile (display:none also skips Leaflet tile loads); the
+			     interactive map is desktop-only, AP health is still covered by the cards below. -->
+			<Card padding="p-0" class="hidden h-[60dvh] flex-col overflow-hidden md:flex xl:h-[65vh]">
 				<div class="flex flex-wrap items-start justify-between gap-3 px-5 pt-4 pb-3">
 					<div>
 						<h2 class="text-base font-semibold text-ink">Coverage Map</h2>
@@ -298,7 +301,8 @@
 					</div>
 				</Card>
 
-				<div class="h-[37vh] xl:h-auto xl:min-h-0 xl:flex-1">
+				<!-- Inline log — desktop/tablet only; mobile opens /networks/logs from the header. -->
+				<div class="hidden h-[37vh] md:block xl:h-auto xl:min-h-0 xl:flex-1">
 					<RouterLogPanel />
 				</div>
 			</div>
