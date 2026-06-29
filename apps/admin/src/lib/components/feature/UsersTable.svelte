@@ -12,6 +12,7 @@
 	import ChevronDown from 'lucide-svelte/icons/chevron-down';
 	import ChevronUp from 'lucide-svelte/icons/chevron-up';
 	import ChevronsUpDown from 'lucide-svelte/icons/chevrons-up-down';
+	import ListFilter from 'lucide-svelte/icons/list-filter';
 	import type { Component, Snippet } from 'svelte';
 	import { fade } from 'svelte/transition';
 	import { SvelteSet } from 'svelte/reactivity';
@@ -125,26 +126,35 @@
 				bind:value={query}
 				placeholder="Search phone or MAC…"
 				label="Search users"
-				class="min-w-60 flex-1"
+				class="min-w-0 flex-1"
 			/>
 			<div class="ml-auto flex items-center gap-3">
 				{@render actions?.()}
 			</div>
 			<!-- Mobile sort: the sortable <thead> is hidden in card mode, so expose the same
-			     keys here. md:hidden — desktop keeps the clickable headers. -->
-			<div class="flex w-full items-center gap-2 md:hidden">
+			     keys here. md:hidden — desktop keeps the clickable headers. Sits inline with the
+			     search (icon-only), no w-full. -->
+			<div class="flex items-center gap-2 md:hidden">
 				<label for="users-sort" class="sr-only">Sort users by</label>
-				<select
-					id="users-sort"
-					class="min-h-11 flex-1 rounded-lg border border-border bg-bg px-3 text-sm text-ink"
-					value={sort.key ?? ''}
-					onchange={(e) => sort.toggle(e.currentTarget.value as SortKey)}
-				>
-					<option value="" disabled>Sort by…</option>
-					{#each headers.filter((h) => h.key) as h (h.label)}
-						<option value={h.key}>{h.label}</option>
-					{/each}
-				</select>
+				<!-- Icon-only: a square select with a centred sort glyph; the chosen value is hidden
+				     (text-transparent) — the native picker still lists the columns. -->
+				<div class="relative shrink-0">
+					<ListFilter
+						class="pointer-events-none absolute top-1/2 left-1/2 h-4 w-4 -translate-x-1/2 -translate-y-1/2 text-muted"
+						aria-hidden="true"
+					/>
+					<select
+						id="users-sort"
+						class="h-11 w-11 cursor-pointer appearance-none rounded-lg border border-border bg-bg text-transparent"
+						value={sort.key ?? ''}
+						onchange={(e) => sort.toggle(e.currentTarget.value as SortKey)}
+					>
+						<option value="" disabled>Sort by…</option>
+						{#each headers.filter((h) => h.key) as h (h.label)}
+							<option value={h.key} class="text-ink">{h.label}</option>
+						{/each}
+					</select>
+				</div>
 				{#if sort.key}
 					<button
 						type="button"

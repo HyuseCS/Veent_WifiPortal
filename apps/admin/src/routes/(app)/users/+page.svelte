@@ -96,9 +96,16 @@
 	<UsersTable {users} isOwner={data.isOwner}>
 		{#snippet actions()}
 			{#if data.isOwner}
-				<Button variant="danger" onclick={() => (wipeOpen = true)}>
+				<!-- Icon-only below sm so the toolbar stays one line on mobile; full label at sm+. -->
+				<Button
+					variant="danger"
+					onclick={() => (wipeOpen = true)}
+					title="Wipe database"
+					aria-label="Wipe database"
+					class="shrink-0 max-sm:w-11 max-sm:px-0"
+				>
 					<Trash2 class="h-4 w-4" aria-hidden="true" />
-					Wipe database
+					<span class="hidden sm:inline">Wipe database</span>
 				</Button>
 			{/if}
 		{/snippet}
