@@ -1,9 +1,10 @@
 <script lang="ts">
 	import { type Snippet } from 'svelte';
 	import { page } from '$app/state';
-	import { Sidebar, Topbar } from '$lib/components/layout';
+	import { Sidebar, MobileDrawer, Topbar } from '$lib/components/layout';
 	import { FinanceHeaderControls } from '$lib/components/feature';
 	import { nav } from '$lib/nav';
+	import { mobileNav } from '$lib/uiState.svelte';
 	import type { LayoutData } from './$types';
 
 	let { children, data }: { children: Snippet; data: LayoutData } = $props();
@@ -20,6 +21,7 @@
 		'/map': 'Access point locations',
 		'/users': 'Guests, credits & sessions',
 		'/finance': 'Settled revenue & payments',
+		'/content': 'Packages, FAQ & session limits',
 		'/staff': 'Admin access management'
 	};
 	const subtitle = $derived(
@@ -35,9 +37,12 @@
 	const onNetworks = $derived(page.url.pathname.startsWith('/networks'));
 </script>
 
-<div class="flex h-screen overflow-hidden bg-bg">
+<div class="flex h-dvh overflow-hidden bg-bg">
 	<Sidebar user={data.user} />
-	<div class="flex flex-1 flex-col overflow-hidden">
+	<MobileDrawer user={data.user} />
+	<!-- Background goes inert while the mobile drawer is open → focus can't leave the drawer.
+	     On desktop the drawer never opens, so this is never inert. -->
+	<div class="flex flex-1 flex-col overflow-hidden" inert={mobileNav.open ? true : undefined}>
 		<Topbar {title} {subtitle}>
 			{#snippet actions()}
 				{#if onFinance}<FinanceHeaderControls />{/if}

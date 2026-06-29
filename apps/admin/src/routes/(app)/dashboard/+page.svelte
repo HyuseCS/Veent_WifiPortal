@@ -8,7 +8,11 @@
 	import Wifi from 'lucide-svelte/icons/wifi';
 	import Router from 'lucide-svelte/icons/router';
 	import ReceiptText from 'lucide-svelte/icons/receipt-text';
+	import ChevronDown from 'lucide-svelte/icons/chevron-down';
+	import ChevronUp from 'lucide-svelte/icons/chevron-up';
+	import ChevronsUpDown from 'lucide-svelte/icons/chevrons-up-down';
 	import { live, connectLive } from '$lib/live.svelte';
+	import { createSort } from '$lib/sortable.svelte';
 	import type { ActiveSession, StatusTone } from '$lib/types';
 	import type { PageData } from './$types';
 
@@ -69,20 +73,85 @@
 	const onlineCount = $derived(networks.filter((ap) => ap.tone === 'online').length);
 	const apTotal = $derived(networks.length);
 
-	const sessionCols = [
-		{ label: 'MAC Address' },
-		{ label: 'Network' },
-		{ label: 'Package' },
-		{ label: 'Time Left' }
+	// Clickable-header sorting over the live rows (mirrors <UsersTable>/<TransactionsTable>).
+	// `null` key keeps the snapshot order; clicking a header sorts, clicking it again flips.
+	const toneRank: Record<StatusTone, number> = { online: 0, warning: 1, blocked: 2 };
+	const num = (s: string) => Number(s.replace(/[^\d.]/g, '')) || 0; // "45 Mbps" → 45
+
+	type SessSort = 'mac' | 'network' | 'package' | 'timeLeft';
+	const sessionCols: { label: string; key: SessSort }[] = [
+		{ label: 'MAC Address', key: 'mac' },
+		{ label: 'Network', key: 'network' },
+		{ label: 'Package', key: 'package' },
+		{ label: 'Time Left', key: 'timeLeft' }
 	];
-	const netCols = [
-		{ label: 'Access Point' },
-		{ label: 'Status' },
-		{ label: 'Uptime' },
-		{ label: 'Latency' },
-		{ label: 'Speed' }
+	const sessSort = createSort<SessSort>({ mac: 'asc', network: 'asc', package: 'asc', timeLeft: 'asc' });
+	// Remaining ms from expiresAt (live-sorts by soonest expiry); no expiry sinks to the bottom.
+	const sessExpiry = (s: ActiveSession) => (s.expiresAt ? new Date(s.expiresAt).getTime() : Infinity);
+	const sortedSessions = $derived(
+		sessSort.apply(activeSessions, (a, b, key) => {
+			if (key === 'mac') return a.mac.localeCompare(b.mac);
+			if (key === 'network') return (a.network ?? '').localeCompare(b.network ?? '');
+			if (key === 'package') return a.package.localeCompare(b.package);
+			return sessExpiry(a) - sessExpiry(b); // timeLeft
+		})
+	);
+
+	type NetSort = 'name' | 'status' | 'uptime' | 'latency' | 'speed';
+	const netCols: { label: string; key: NetSort }[] = [
+		{ label: 'Access Point', key: 'name' },
+		{ label: 'Status', key: 'status' },
+		{ label: 'Uptime', key: 'uptime' },
+		{ label: 'Latency', key: 'latency' },
+		{ label: 'Speed', key: 'speed' }
 	];
+	const netSort = createSort<NetSort>({
+		name: 'asc',
+		status: 'asc',
+		uptime: 'desc',
+		latency: 'asc',
+		speed: 'desc'
+	});
+	const sortedNetworks = $derived(
+		netSort.apply(networks, (a, b, key) => {
+			if (key === 'name') return a.name.localeCompare(b.name);
+			if (key === 'status') return toneRank[a.tone] - toneRank[b.tone];
+			if (key === 'uptime') return num(a.uptime) - num(b.uptime);
+			if (key === 'latency') return num(a.latency) - num(b.latency);
+			return num(a.throughput) - num(b.throughput); // speed
+		})
+	);
 </script>
+
+<!-- Shared sortable header cell, reused by both dashboard tables (mirrors <UsersTable>). -->
+{#snippet sortTh(label: string, active: boolean, dir: 'asc' | 'desc', onclick: () => void)}
+	<th
+		class="px-4 py-2.5 text-left text-[11px] font-semibold tracking-wider text-muted uppercase"
+		aria-sort={active ? (dir === 'asc' ? 'ascending' : 'descending') : undefined}
+	>
+		<button
+			type="button"
+			{onclick}
+			class="group inline-flex items-center gap-1 tracking-wider uppercase transition-colors hover:text-ink {active
+				? 'text-ink'
+				: ''}"
+		>
+			{label}
+			{#if active}
+				{#if dir === 'asc'}
+					<ChevronUp class="h-3.5 w-3.5" aria-hidden="true" />
+				{:else}
+					<ChevronDown class="h-3.5 w-3.5" aria-hidden="true" />
+				{/if}
+			{:else}
+				<ChevronsUpDown
+					class="h-3.5 w-3.5 opacity-0 transition-opacity group-hover:opacity-50"
+					aria-hidden="true"
+				/>
+			{/if}
+		</button>
+	</th>
+{/snippet}
 
 <div class="dash">
 	<!-- KPIs + Revenue share the left column: KPIs keep their natural height, revenue fills
@@ -105,7 +174,7 @@
 					<span class="font-mono text-sm text-muted">₱{total.toLocaleString('en-PH')}</span>
 				{/snippet}
 			</SectionHeading>
-			<div class="min-h-0 flex-1">
+			<div class="min-h-[220px] flex-1 lg:min-h-0">
 				{#if total > 0}
 					<RevenueChart data={revenue} />
 				{:else}
@@ -124,7 +193,7 @@
 
 	<!-- Active Sessions -->
 	<section class="sessions flex min-h-0 flex-col">
-		<Table title="Active Sessions" columns={sessionCols} class="min-h-0 flex-1">
+		<Table title="Active Sessions" cards class="min-h-0 flex-1">
 			{#snippet aside()}
 				{#if activeSessions.length > 0}
 					<span
@@ -135,22 +204,29 @@
 					</span>
 				{/if}
 			{/snippet}
-			{#each activeSessions as session (session.id)}
+			{#snippet headRow()}
+				<tr class="border-b border-border bg-surface">
+					{#each sessionCols as c (c.key)}
+						{@render sortTh(c.label, sessSort.key === c.key, sessSort.dir, () => sessSort.toggle(c.key))}
+					{/each}
+				</tr>
+			{/snippet}
+			{#each sortedSessions as session (session.id)}
 				{@const t = liveTimer(session, now)}
 				<tr class="transition-colors hover:bg-surface">
-					<td class="px-4 py-3 font-mono text-xs text-ink">{session.mac}</td>
-					<td class="px-4 py-3 text-ink">{session.network ?? '—'}</td>
-					<td class="px-4 py-3">
+					<td data-label="MAC Address" class="px-4 py-3 font-mono text-xs text-ink">{session.mac}</td>
+					<td data-label="Network" class="px-4 py-3 text-ink">{session.network ?? '—'}</td>
+					<td data-label="Package" class="px-4 py-3">
 						<span class="inline-flex rounded-md bg-surface px-2 py-0.5 text-xs font-medium text-ink">
 							{session.package}
 						</span>
 					</td>
-					<td class="px-4 py-3 font-mono {timeClass(t.tone)}">{t.left}</td>
+					<td data-label="Time Left" class="px-4 py-3 font-mono {timeClass(t.tone)}">{t.left}</td>
 				</tr>
 			{/each}
 			{#if activeSessions.length === 0}
 				<tr>
-					<td colspan={sessionCols.length} class="p-0">
+					<td colspan={sessionCols.length} class="tc-full p-0">
 						<EmptyState
 							icon={icon(Wifi)}
 							title="No active sessions"
@@ -170,7 +246,7 @@
 
 	<!-- Network Health -->
 	<section class="network flex min-h-0 flex-col">
-		<Table title="Network Health" columns={netCols} class="min-h-0 flex-1">
+		<Table title="Network Health" cards class="min-h-0 flex-1">
 			{#snippet aside()}
 				<div class="flex items-center gap-2">
 					{#if apTotal > 0}
@@ -179,20 +255,27 @@
 					<a href="/networks" class="text-xs font-medium text-brand hover:underline">View all</a>
 				</div>
 			{/snippet}
-			{#each networks as ap (ap.id)}
+			{#snippet headRow()}
+				<tr class="border-b border-border bg-surface">
+					{#each netCols as c (c.key)}
+						{@render sortTh(c.label, netSort.key === c.key, netSort.dir, () => netSort.toggle(c.key))}
+					{/each}
+				</tr>
+			{/snippet}
+			{#each sortedNetworks as ap (ap.id)}
 				<tr class="transition-colors hover:bg-surface">
-					<td class="px-4 py-3 font-medium text-ink">{ap.name}</td>
-					<td class="px-4 py-3">
+					<td data-label="Access Point" class="px-4 py-3 font-medium text-ink">{ap.name}</td>
+					<td data-label="Status" class="px-4 py-3">
 						<StatusBadge tone={ap.tone} label={ap.status} pulse={ap.tone !== 'online'} />
 					</td>
-					<td class="px-4 py-3 font-mono text-ink">{ap.uptime}</td>
-					<td class="px-4 py-3 font-mono text-ink">{ap.latency}</td>
-					<td class="px-4 py-3 font-mono text-ink">{ap.throughput}</td>
+					<td data-label="Uptime" class="px-4 py-3 font-mono text-ink">{ap.uptime}</td>
+					<td data-label="Latency" class="px-4 py-3 font-mono text-ink">{ap.latency}</td>
+					<td data-label="Speed" class="px-4 py-3 font-mono text-ink">{ap.throughput}</td>
 				</tr>
 			{/each}
 			{#if networks.length === 0}
 				<tr>
-					<td colspan={netCols.length} class="p-0">
+					<td colspan={netCols.length} class="tc-full p-0">
 						<EmptyState
 							icon={icon(Router)}
 							title="No access points reporting"
@@ -216,12 +299,16 @@
 	   is a single stacked column; the chosen arrangement only diverges at lg+. */
 	.dash {
 		display: grid;
-		height: 100%;
-		min-height: 0;
 		gap: 1rem;
 		grid-template-columns: 1fr;
-		grid-template-rows: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr);
 		grid-template-areas: 'leftcol' 'sessions' 'network';
+	}
+	/* Mobile/tablet: natural-height stack so the page scrolls; each live table is a bounded
+	   scroll region so a long session list doesn't run the page off. The fixed full-height
+	   bento (height:100%, equal rows) only applies at lg+ below. */
+	.dash > .sessions,
+	.dash > .network {
+		max-height: 75vh;
 	}
 
 	.leftcol {
@@ -238,11 +325,17 @@
 		/* Bento: KPIs+revenue fill the left column; sessions over network on the right, with
 		   two equal rows so the two tables split the right column's height 50/50. */
 		.dash {
+			height: 100%;
+			min-height: 0;
 			grid-template-columns: 1fr 1fr;
 			grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
 			grid-template-areas:
 				'leftcol sessions'
 				'leftcol network';
+		}
+		.dash > .sessions,
+		.dash > .network {
+			max-height: none;
 		}
 	}
 </style>

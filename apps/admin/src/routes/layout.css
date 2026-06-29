@@ -179,6 +179,73 @@
 	}
 }
 
+/* ── Responsive table → cards (opt-in via <Table cards />) ───────────────────
+ * Below md only, a real <table> carrying `.table-cards` flips to a stack of
+ * cards: each <tr> is a card, each <td> a label/value row (label pulled from the
+ * cell's `data-label`). Desktop is untouched — every rule lives inside this
+ * mobile media query, and the class is only added when the `cards` prop is set.
+ * Per-cell opt-outs: `.tc-full` drops the label and spans the card (actions,
+ * identity); an empty spacer cell (`<td></td>`) is hidden; `.tc-detail` rows
+ * tuck under the card above (the Users device-expand sub-row).
+ * -------------------------------------------------------------------------- */
+@media (width < 48rem) {
+	.table-cards {
+		padding: 0.75rem;
+	}
+	.table-cards table,
+	.table-cards tbody,
+	.table-cards tr,
+	.table-cards td {
+		display: block;
+		width: auto;
+	}
+	.table-cards thead {
+		display: none;
+	}
+	.table-cards tbody tr {
+		border: 1px solid var(--color-border);
+		border-radius: 0.5rem;
+		background: var(--color-bg);
+		margin-bottom: 0.75rem;
+		padding: 0.25rem 0.25rem 0.5rem;
+	}
+	.table-cards td {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 1rem;
+		padding: 0.5rem 0.75rem;
+		text-align: right;
+	}
+	.table-cards td::before {
+		content: attr(data-label);
+		text-align: left;
+		font-size: 0.6875rem;
+		font-weight: 600;
+		letter-spacing: 0.05em;
+		text-transform: uppercase;
+		color: var(--color-muted);
+		white-space: nowrap;
+	}
+	.table-cards td.tc-full {
+		display: block;
+		text-align: left;
+		padding: 0.5rem 0.75rem;
+	}
+	.table-cards td.tc-full::before {
+		content: none;
+	}
+	.table-cards td:empty {
+		display: none;
+	}
+	.table-cards tbody tr.tc-detail {
+		border: 0;
+		background: transparent;
+		margin-top: -0.75rem;
+		padding: 0 0.25rem;
+	}
+}
+
 /* ── Leaflet shared styles ──────────────────────────────────────────────────
  * Placed here so they're available on every page that mounts a map, regardless
  * of which map component (CoverageMap / NetworkMap / MapPicker) is rendered.

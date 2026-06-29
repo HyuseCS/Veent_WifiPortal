@@ -50,7 +50,8 @@
 	});
 </script>
 
-<div class="flex items-center gap-6">
+<!-- Row on sm+; stacks (donut over legend) on phones so the legend gets full width. -->
+<div class="flex items-center gap-6 max-sm:flex-col">
 	<div class="relative h-36 w-36 shrink-0">
 		<svg viewBox="0 0 42 42" class="h-full w-full" role="img" aria-label={label}>
 			<circle
@@ -88,7 +89,7 @@
 		{/if}
 	</div>
 
-	<ul class="flex min-w-0 flex-1 flex-col gap-2 text-sm">
+	<ul class="flex min-w-0 flex-1 flex-col gap-2 text-sm max-sm:w-full">
 		{#each segments as seg (seg.key)}
 			<li class="flex items-center gap-2">
 				<span class="h-2.5 w-2.5 shrink-0 rounded-full" style="background: {seg.color}"></span>

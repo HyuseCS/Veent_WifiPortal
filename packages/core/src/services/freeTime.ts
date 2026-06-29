@@ -14,18 +14,24 @@ export interface FreeTimeStatus {
  */
 export function getFreeTimeStatus(
 	lastFreeSessionAt: Date | null | undefined,
-	now: Date = new Date()
+	now: Date = new Date(),
+	// Operator-tunable (admin Session Limits); defaults to the config constants so existing
+	// callers and tests keep working without passing limits.
+	limits: { freeTimeMinutes: number; freeTimeCooldownHours: number } = {
+		freeTimeMinutes: FREE_TIME_MINUTES,
+		freeTimeCooldownHours: FREE_TIME_COOLDOWN_HOURS
+	}
 ): FreeTimeStatus {
 	if (!lastFreeSessionAt) {
-		return { eligible: true, durationMinutes: FREE_TIME_MINUTES, nextEligibleAt: null };
+		return { eligible: true, durationMinutes: limits.freeTimeMinutes, nextEligibleAt: null };
 	}
 	const nextEligibleAt = new Date(
-		lastFreeSessionAt.getTime() + FREE_TIME_COOLDOWN_HOURS * 60 * 60 * 1000
+		lastFreeSessionAt.getTime() + limits.freeTimeCooldownHours * 60 * 60 * 1000
 	);
 	const eligible = now >= nextEligibleAt;
 	return {
 		eligible,
-		durationMinutes: FREE_TIME_MINUTES,
+		durationMinutes: limits.freeTimeMinutes,
 		nextEligibleAt: eligible ? null : nextEligibleAt
 	};
 }

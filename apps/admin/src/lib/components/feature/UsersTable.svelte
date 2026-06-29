@@ -18,6 +18,7 @@
 	import { dev } from '$app/environment';
 	import { enhance } from '$app/forms';
 	import type { AdminUserRow, StatusTone } from '$lib/types';
+	import { createSort } from '$lib/sortable.svelte';
 	import { EmptyState, IconButton, SearchInput, StatusBadge, Table } from '$lib/components/ui';
 
 	// `actions` lets the page slot owner-only controls (the Wipe button) into the toolbar
@@ -39,46 +40,30 @@
 		);
 	});
 
-	// Clickable-header sorting. `null` key keeps the server order (by phone). Clicking a
-	// header sorts by it; clicking the active header flips direction.
+	// Clickable-header sorting (shared $lib/sortable). `null` key keeps the server order (by
+	// phone); first-click direction per column is set below (e.g. biggest balance first).
 	type SortKey = 'phone' | 'balance' | 'timeLeft' | 'devices' | 'location' | 'status';
-	let sortKey = $state<SortKey | null>(null);
-	let sortDir = $state<'asc' | 'desc'>('asc');
-	// Sensible first-click direction per column (e.g. soonest-to-expire / biggest balance first).
-	const defaultDir: Record<SortKey, 'asc' | 'desc'> = {
+	// Logical status order via tone (online → warning → blocked), not alphabetical.
+	const toneRank: Record<StatusTone, number> = { online: 0, warning: 1, blocked: 2 };
+	const sort = createSort<SortKey>({
 		phone: 'asc',
 		balance: 'desc',
 		timeLeft: 'asc',
 		devices: 'desc',
 		location: 'asc',
 		status: 'asc'
-	};
-	// Logical status order via tone (online → warning → blocked), not alphabetical.
-	const toneRank: Record<StatusTone, number> = { online: 0, warning: 1, blocked: 2 };
-
-	function toggleSort(key: SortKey) {
-		if (sortKey === key) sortDir = sortDir === 'asc' ? 'desc' : 'asc';
-		else {
-			sortKey = key;
-			sortDir = defaultDir[key];
-		}
-	}
-
-	const sorted = $derived.by(() => {
-		if (!sortKey) return filtered;
-		const key = sortKey;
-		const dir = sortDir === 'asc' ? 1 : -1;
-		return [...filtered].sort((a, b) => {
-			let cmp: number;
-			if (key === 'phone') cmp = a.phone.localeCompare(b.phone);
-			else if (key === 'balance') cmp = a.balance - b.balance;
-			else if (key === 'timeLeft') cmp = (a.timeLeftMs ?? -Infinity) - (b.timeLeftMs ?? -Infinity);
-			else if (key === 'devices') cmp = a.deviceCount - b.deviceCount;
-			else if (key === 'location') cmp = (a.location ?? '').localeCompare(b.location ?? '');
-			else cmp = toneRank[a.tone] - toneRank[b.tone]; // status
-			return cmp * dir;
-		});
 	});
+
+	const sorted = $derived(
+		sort.apply(filtered, (a, b, key) => {
+			if (key === 'phone') return a.phone.localeCompare(b.phone);
+			if (key === 'balance') return a.balance - b.balance;
+			if (key === 'timeLeft') return (a.timeLeftMs ?? -Infinity) - (b.timeLeftMs ?? -Infinity);
+			if (key === 'devices') return a.deviceCount - b.deviceCount;
+			if (key === 'location') return (a.location ?? '').localeCompare(b.location ?? '');
+			return toneRank[a.tone] - toneRank[b.tone]; // status
+		})
+	);
 
 	// Pretty-print an E.164 PH mobile (+63 then 10 digits) as "+63 917 654 4521"; raw otherwise.
 	function fmtPhone(p: string): string {
@@ -126,7 +111,7 @@
 	];
 </script>
 
-<Table class="min-h-0 flex-1">
+<Table cards class="min-h-0 flex-1">
 	<!-- Toolbar: search + any owner action (Wipe) on the right. -->
 	{#snippet toolbar()}
 		<div class="flex flex-wrap items-center gap-3 px-4 py-3">
@@ -138,6 +123,36 @@
 			/>
 			<div class="ml-auto flex items-center gap-3">
 				{@render actions?.()}
+			</div>
+			<!-- Mobile sort: the sortable <thead> is hidden in card mode, so expose the same
+			     keys here. md:hidden — desktop keeps the clickable headers. -->
+			<div class="flex w-full items-center gap-2 md:hidden">
+				<label for="users-sort" class="sr-only">Sort users by</label>
+				<select
+					id="users-sort"
+					class="min-h-11 flex-1 rounded-lg border border-border bg-bg px-3 text-sm text-ink"
+					value={sort.key ?? ''}
+					onchange={(e) => sort.toggle(e.currentTarget.value as SortKey)}
+				>
+					<option value="" disabled>Sort by…</option>
+					{#each headers.filter((h) => h.key) as h (h.label)}
+						<option value={h.key}>{h.label}</option>
+					{/each}
+				</select>
+				{#if sort.key}
+					<button
+						type="button"
+						onclick={() => sort.toggle(sort.key!)}
+						aria-label="Toggle sort direction ({sort.dir === 'asc' ? 'ascending' : 'descending'})"
+						class="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-border bg-bg text-muted transition-colors hover:text-ink"
+					>
+						{#if sort.dir === 'asc'}
+							<ChevronUp class="h-4 w-4" aria-hidden="true" />
+						{:else}
+							<ChevronDown class="h-4 w-4" aria-hidden="true" />
+						{/if}
+					</button>
+				{/if}
 			</div>
 		</div>
 	{/snippet}
@@ -159,8 +174,8 @@
 					class="px-4 py-2.5 text-left text-[11px] font-semibold tracking-wider text-muted uppercase {h.srOnly
 						? 'text-right'
 						: ''}"
-					aria-sort={sortKey === h.key
-						? sortDir === 'asc'
+					aria-sort={sort.key === h.key
+						? sort.dir === 'asc'
 							? 'ascending'
 							: 'descending'
 						: undefined}
@@ -170,15 +185,15 @@
 					{:else if h.key}
 						<button
 							type="button"
-							onclick={() => toggleSort(h.key!)}
-							class="group inline-flex items-center gap-1 tracking-wider uppercase transition-colors hover:text-ink {sortKey ===
+							onclick={() => sort.toggle(h.key!)}
+							class="group inline-flex items-center gap-1 tracking-wider uppercase transition-colors hover:text-ink {sort.key ===
 							h.key
 								? 'text-ink'
 								: ''}"
 						>
 							{h.label}
-							{#if sortKey === h.key}
-								{#if sortDir === 'asc'}
+							{#if sort.key === h.key}
+								{#if sort.dir === 'asc'}
 									<ChevronUp class="h-3.5 w-3.5" aria-hidden="true" />
 								{:else}
 									<ChevronDown class="h-3.5 w-3.5" aria-hidden="true" />
@@ -200,7 +215,7 @@
 
 	{#each sorted as user (user.id)}
 		<tr class="hover:bg-surface" class:bg-surface={selected.has(user.id)}>
-			<td class="px-4 py-3">
+			<td data-label="Select" class="px-4 py-3">
 				<input
 					type="checkbox"
 					class="h-4 w-4 accent-brand"
@@ -209,10 +224,10 @@
 					onchange={(e) => toggle(user.id, e.currentTarget.checked)}
 				/>
 			</td>
-			<td class="px-4 py-3">
+			<td data-label="User" class="px-4 py-3">
 				<span class="truncate font-mono font-medium text-ink">{fmtPhone(user.phone)}</span>
 			</td>
-			<td class="px-4 py-3">
+			<td data-label="Balance" class="px-4 py-3">
 				<span
 					class="inline-flex items-center gap-1.5 font-mono font-semibold {user.tone === 'warning'
 						? 'text-warning'
@@ -224,8 +239,8 @@
 					{/if}
 				</span>
 			</td>
-			<td class="px-4 py-3 font-mono text-ink">{user.timeLeft ?? '—'}</td>
-			<td class="px-4 py-3">
+			<td data-label="Time Left" class="px-4 py-3 font-mono text-ink">{user.timeLeft ?? '—'}</td>
+			<td data-label="Devices" class="px-4 py-3">
 				{#if user.deviceCount > 0}
 					<button
 						type="button"
@@ -249,7 +264,7 @@
 					<span class="font-mono text-xs text-muted">—</span>
 				{/if}
 			</td>
-			<td class="px-4 py-3">
+			<td data-label="Location" class="px-4 py-3">
 				{#if user.location}
 					<span class="inline-flex min-w-0 items-center gap-1.5 text-sm text-ink">
 						<MapPin class="h-3.5 w-3.5 shrink-0 text-muted" aria-hidden="true" />
@@ -259,10 +274,10 @@
 					<span class="text-xs text-muted">—</span>
 				{/if}
 			</td>
-			<td class="px-4 py-3">
+			<td data-label="Status" class="px-4 py-3">
 				<StatusBadge tone={user.tone} label={user.status} />
 			</td>
-			<td class="px-4 py-3">
+			<td class="tc-full px-4 py-3">
 				<div class="flex items-center justify-end gap-1">
 					{#if user.tone === 'blocked'}
 						<!-- Blocked users have no live session to kick; offer Unblock instead. -->
@@ -311,9 +326,9 @@
 			</td>
 		</tr>
 		{#if expanded.has(user.id) && user.deviceCount > 0}
-			<tr class="bg-surface">
+			<tr class="bg-surface tc-detail">
 				<td></td>
-				<td colspan={headers.length} class="px-4 pt-0 pb-3">
+				<td colspan={headers.length} class="tc-full px-4 pt-0 pb-3">
 					<ul class="flex flex-col gap-1.5 rounded-lg border border-border bg-bg p-3">
 						{#each user.devices as d, i (d.mac ?? i)}
 							<li class="flex items-center gap-2 text-xs">
@@ -330,7 +345,7 @@
 
 	{#if filtered.length === 0}
 		<tr>
-			<td colspan={headers.length + 1} class="p-0">
+			<td colspan={headers.length + 1} class="tc-full p-0">
 				<EmptyState
 					icon={Search as unknown as Component}
 					title="No users match your search"

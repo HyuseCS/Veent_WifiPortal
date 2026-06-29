@@ -11,7 +11,7 @@ import {
 	bindDevice,
 	unbindDevice,
 	unbindAllDevices,
-	MAX_DEVICES_PER_ACCOUNT
+	getSessionLimits
 } from '@veent/core';
 import { db } from '$lib/server/db';
 import { network } from '$lib/server/network';
@@ -60,9 +60,10 @@ export const load: PageServerLoad = async (event) => {
 	// PAUSED: auto-binding would re-grant internet and defeat the pause (devices stay off until
 	// the user resumes).
 	if (access && !access.paused && mac && !blocked) {
+		const { maxDevicesPerAccount } = await getSessionLimits(db);
 		const macU = mac.toUpperCase();
 		const bound = access.devices.find((d) => d.macAddress?.toUpperCase() === macU);
-		const underCap = access.devices.length < MAX_DEVICES_PER_ACCOUNT;
+		const underCap = access.devices.length < maxDevicesPerAccount;
 		const stale = bound && Date.now() - bound.lastSeenAt.getTime() > REBIND_REFRESH_MS;
 		if ((!bound && underCap) || stale) {
 			try {

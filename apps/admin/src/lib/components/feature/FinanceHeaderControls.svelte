@@ -55,27 +55,36 @@
 
 <div class="flex items-center gap-3">
 	{#if onList}
-		<a href="/finance?period={period}" class={btn}>
+		<a
+			href="/finance?period={period}"
+			class="{btn} max-sm:w-11 max-sm:justify-center max-sm:px-0"
+			aria-label="Overview"
+		>
 			<ChartColumn class="h-4 w-4" aria-hidden="true" />
-			Overview
+			<span class="hidden sm:inline">Overview</span>
 		</a>
 	{:else}
-		<a href="/finance/transactions?period={period}" class={btn}>
+		<a
+			href="/finance/transactions?period={period}"
+			class="{btn} max-sm:w-11 max-sm:justify-center max-sm:px-0"
+			aria-label="Transactions"
+		>
 			<Receipt class="h-4 w-4" aria-hidden="true" />
-			Transactions
+			<span class="hidden sm:inline">Transactions</span>
 		</a>
 	{/if}
 
 	<div class="relative" bind:this={menuEl}>
 		<button
 			type="button"
-			class={btn}
+			class="{btn} max-sm:px-2.5"
 			aria-haspopup="menu"
 			aria-expanded={open}
+			aria-label="Time range: {periodLabel[period]}"
 			onclick={() => (open = !open)}
 		>
 			<SlidersHorizontal class="h-4 w-4" aria-hidden="true" />
-			{periodLabel[period]}
+			<span class="hidden sm:inline">{periodLabel[period]}</span>
 			<ChevronDown
 				class="h-4 w-4 transition-transform duration-150 {open ? 'rotate-180' : ''}"
 				aria-hidden="true"

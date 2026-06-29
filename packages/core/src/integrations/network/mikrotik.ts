@@ -147,6 +147,61 @@ export function createMikrotikController(config: MikrotikConfig): NetworkControl
 		}
 	}
 
+	/** Every current IP the router associates with `mac` — hotspot host table, DHCP lease,
+	 * then ARP (each may be absent / stale; we union whatever's there). Used to find the
+	 * conntrack rows to cut on revoke. */
+	async function ipsForMac(conn: RosConn, mac: string): Promise<string[]> {
+		const out = new Set<string>();
+		const sources: [string, string][] = [
+			['/ip/hotspot/host/print', `?mac-address=${mac}`],
+			['/ip/dhcp-server/lease/print', `?mac-address=${mac}`],
+			['/ip/arp/print', `?mac-address=${mac}`]
+		];
+		for (const [path, query] of sources) {
+			try {
+				const rows = await conn.write(path, [query]);
+				for (const r of rows) if (r.address) out.add(r.address);
+			} catch {
+				// This table is unavailable / not installed — skip it, try the next source.
+			}
+		}
+		return [...out];
+	}
+
+	/**
+	 * Drop the device's live connection-tracking entries so a revoke takes effect
+	 * IMMEDIATELY. Removing the ip-binding only stops NEW flows from being bypassed — the
+	 * firewall's established/related accept rule keeps forwarding the device's ALREADY-OPEN
+	 * connections until they age out of conntrack, so a revoked / blocked / kicked / evicted
+	 * device can keep browsing on existing sockets for minutes. Flushing the device's
+	 * conntrack rows forces every flow to be re-evaluated; with the bypass now gone they hit
+	 * the hotspot intercept and are cut. Best-effort: a revoke must still succeed (binding
+	 * already removed) even if this cleanup can't run.
+	 */
+	async function cutConnectionsForMac(conn: RosConn, mac: string): Promise<void> {
+		try {
+			const ips = await ipsForMac(conn, mac);
+			if (ips.length === 0) return;
+			const rows = await conn.write('/ip/firewall/connection/print', []);
+			for (const r of rows) {
+				const id = r['.id'];
+				if (!id) continue;
+				// conntrack addresses carry a `:port` suffix — compare on the IP only, and on
+				// either end so we catch the flow whichever side the device sits on.
+				const src = (r['src-address'] ?? '').split(':')[0];
+				const dst = (r['dst-address'] ?? '').split(':')[0];
+				if (!ips.includes(src) && !ips.includes(dst)) continue;
+				try {
+					await conn.write('/ip/firewall/connection/remove', [`=.id=${id}`]);
+				} catch {
+					// Entry already closed / aged out between print and remove — ignore.
+				}
+			}
+		} catch {
+			// Connection table unavailable — binding removal alone still cuts new flows.
+		}
+	}
+
 	return {
 		name: 'mikrotik',
 
@@ -190,6 +245,11 @@ export function createMikrotikController(config: MikrotikConfig): NetworkControl
 				for (const id of await findBindingIds(conn, m)) {
 					await conn.write('/ip/hotspot/ip-binding/remove', [`=.id=${id}`]);
 				}
+				// Removing the binding stops NEW bypassed flows; cut live conntrack + the stale
+				// hotspot host entry so EXISTING connections drop immediately instead of riding
+				// until they age out (a revoked device must lose internet now, not in minutes).
+				await cutConnectionsForMac(conn, m);
+				await flushHotspotHost(conn, m);
 			});
 		},
 
