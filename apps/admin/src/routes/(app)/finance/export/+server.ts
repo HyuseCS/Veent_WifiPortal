@@ -3,21 +3,8 @@ import { db } from '$lib/server/db';
 import { listTransactions } from '$lib/server/queries';
 import { parsePeriod } from '$lib/server/period';
 import { rateLimit } from '$lib/server/rateLimit';
+import { cell } from '$lib/server/csv';
 import type { RequestHandler } from './$types';
-
-/**
- * CSV cell with two layers of protection:
- *  1. Formula-injection guard — a leading =, +, -, @, tab or CR makes Excel/Sheets/LibreOffice
- *     evaluate the cell as a formula on open. buyerName/buyerEmail come from the (semi-untrusted)
- *     payment gateway, so a value like `=HYPERLINK(...)` or a DDE payload would run in the
- *     operator's spreadsheet. Prefix any such value with a single quote to force it to plain text.
- *     (RFC-4180 quoting alone does NOT prevent this — the quotes are stripped as CSV delimiters.)
- *  2. RFC-4180 quoting — wrap in quotes and double inner quotes when it contains , " or newline.
- */
-function cell(v: string): string {
-	const guarded = /^[=+\-@\t\r]/.test(v) ? `'${v}` : v;
-	return /[",\n]/.test(guarded) ? `"${guarded.replace(/"/g, '""')}"` : guarded;
-}
 
 /**
  * GET /finance/export?period= — streams the filtered transactions as a CSV download.
