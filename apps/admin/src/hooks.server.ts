@@ -9,6 +9,25 @@ import { validateEnv } from '$lib/server/validateEnv';
 // Fail fast at boot on a misconfigured production deploy (no-op during build; warns in dev).
 validateEnv();
 
+/**
+ * Baseline security headers for the admin dashboard. It holds owner-privileged, session-cookie'd
+ * actions, so it must NEVER be framed (clickjacking on promote/demote/wipe) — hence DENY +
+ * `frame-ancestors 'none'`. `nosniff` blocks MIME-confusion; HSTS is set only over HTTPS (the
+ * admin VIP may run plain HTTP on the LAN — see SECURITY_RISKS R-cookie note). A full script/style
+ * CSP is intentionally out of scope here (would need per-app nonce wiring); this is the framing +
+ * sniff baseline the audit flagged as missing.
+ */
+function setSecurityHeaders(event: Parameters<Handle>[0]['event'], response: Response) {
+	const h = response.headers;
+	h.set('X-Frame-Options', 'DENY');
+	h.set('Content-Security-Policy', "frame-ancestors 'none'");
+	h.set('X-Content-Type-Options', 'nosniff');
+	h.set('Referrer-Policy', 'same-origin');
+	if (event.url.protocol === 'https:') {
+		h.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+	}
+}
+
 const handleBetterAuth: Handle = async ({ event, resolve }) => {
 	const session = await auth.api.getSession({ headers: event.request.headers });
 
@@ -26,7 +45,9 @@ const handleBetterAuth: Handle = async ({ event, resolve }) => {
 		}
 	}
 
-	return svelteKitHandler({ event, resolve, auth, building });
+	const response = await svelteKitHandler({ event, resolve, auth, building });
+	setSecurityHeaders(event, response);
+	return response;
 };
 
 export const handle: Handle = handleBetterAuth;

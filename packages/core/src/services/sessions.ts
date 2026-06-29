@@ -64,6 +64,12 @@ async function bindMacTx(
 		maxDevices: number;
 	}
 ): Promise<BindPlan> {
+	// Canonicalize the MAC to uppercase at the DB-binding boundary so the same physical device
+	// presenting `aa:bb:…` then `AA:BB:…` reuses ONE network_sessions row instead of spawning a
+	// duplicate (which would burn a device-cap slot via spurious LRU eviction). The router layer
+	// already uppercases everywhere; this keeps the stored binding consistent with it.
+	const macAddress = opts.macAddress.toUpperCase();
+
 	const [profile] = await tx
 		.select({ accessExpiresAt: customerProfile.accessExpiresAt })
 		.from(customerProfile)
@@ -99,7 +105,7 @@ async function bindMacTx(
 		.where(
 			and(
 				eq(networkSessions.userId, opts.userId),
-				eq(networkSessions.macAddress, opts.macAddress),
+				eq(networkSessions.macAddress, macAddress),
 				eq(networkSessions.status, SESSION_STATUS.active)
 			)
 		)
@@ -145,7 +151,7 @@ async function bindMacTx(
 			.insert(networkSessions)
 			.values({
 				userId: opts.userId,
-				macAddress: opts.macAddress,
+				macAddress,
 				packageId: opts.packageId,
 				status: SESSION_STATUS.active,
 				startedAt: now,

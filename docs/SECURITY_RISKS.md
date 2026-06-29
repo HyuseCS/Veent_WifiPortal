@@ -29,6 +29,7 @@
 | R17 | CSV formula injection in Finance export | Medium | ✅ Resolved | — |
 | R18 | `payment_transactions` double-count (webhook vs poll record under divergent ids) | Medium | ✅ Resolved | — |
 | R19 | OTP-send throttle bypassable via direct `/api/auth/phone-number/send-otp` | High | ✅ Resolved | — |
+| R20 | Low-severity hardening: no security headers, webhook error reflection, MAC case-drift, proxy-IP trust undocumented | Low | ✅ Resolved | — |
 
 Severity = impact × likelihood for *this* app at its current scale, not generic CVSS.
 
@@ -419,6 +420,29 @@ the one seam every send (form *and* direct endpoint) passes through. The form ac
 pre-check (for the friendly retry message + MAC dimension) and set `locals.otpLimitEnforced` so
 the callback doesn't double-count a legitimate send; a direct call (no portal context) falls back
 to a phone-only cap. `otpRateLimit.ts` itself (teammate-owned) was not modified — only called.
+
+## R20 — Low-severity hardening batch ✅ Resolved (2026-06-29)
+
+- **Security headers** on both apps' `hooks.server.ts` (set on the resolved response):
+  `X-Content-Type-Options: nosniff`, `Referrer-Policy: same-origin`, anti-framing, and HSTS
+  **only over HTTPS** (the LAN deploys run plain HTTP). Admin uses `X-Frame-Options: DENY` /
+  CSP `frame-ancestors 'none'` (owner actions must never be framed); the customer portal uses
+  `SAMEORIGIN` / `'self'` so the OS captive popup (top-level, not framed) isn't broken. A full
+  script/style CSP is intentionally out of scope (needs per-app nonce wiring).
+- **Webhook error no longer reflected** — `webhooks/payment/+server.ts` returns a generic
+  `Webhook verification failed`; the gateway/internal detail stays in the server log only (no
+  info-disclosure / payment-id probing to an unauthenticated caller).
+- **MAC case-normalization** — `bindMacTx` (`sessions.ts`) canonicalizes the MAC to uppercase at
+  the DB-binding boundary, so `aa:bb…` vs `AA:BB…` for one device reuses a single
+  `network_sessions` row instead of spawning a duplicate (spurious device-cap eviction).
+- **Proxy-IP trust documented** — both `.env.example` files now explain `ADDRESS_HEADER` /
+  `XFF_DEPTH`: leave unset when the app terminates connections (un-spoofable TCP peer); set them
+  only behind a trusted proxy, with the right hop count, or per-IP throttles become spoofable
+  (wrong depth) or collapse to one bucket (unset behind a proxy → lockout DoS).
+
+**Regression tests added** to lock in earlier fixes: CSV `cell()` formula-escaping
+(`apps/admin/src/lib/server/csv.test.ts`, R17) and `recordPaymentTransaction` referenceNo dedupe
+(`apps/customer/src/lib/server/record-payment.spec.ts`, R18).
 
 ---
 
