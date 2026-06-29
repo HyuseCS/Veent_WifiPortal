@@ -188,19 +188,30 @@
 			<td data-label="Status" class="px-4 py-2.5">
 				<StatusBadge tone={tx.statusTone} label={cleanStatus(tx.status)} />
 			</td>
-			<td data-label="Amount" class="px-4 py-2.5 font-mono font-semibold text-ink">{tx.amount}</td>
+			<td data-label="Amount" class="px-4 py-2.5 font-mono font-semibold text-ink max-sm:text-base"
+				>{tx.amount}</td
+			>
 			<td data-label="Method" class="px-4 py-2.5 text-ink">
 				{tx.fundSourceType}{#if tx.fundSourceMasked}<span class="ml-1 font-mono text-xs text-muted"
 						>•{tx.fundSourceMasked}</span
 					>{/if}
 			</td>
-			<td data-label="Buyer" class="px-4 py-2.5 text-ink">
-				<span class="block truncate">{tx.buyerName}</span>
-				{#if tx.buyerEmail}<span class="block truncate text-xs text-muted">{tx.buyerEmail}</span
+			<td data-label="Buyer" class="px-4 py-2.5 text-ink tc-full">
+				<span class="block min-w-0 truncate max-sm:text-base">{tx.buyerName}</span>
+				{#if tx.buyerEmail}<span class="block min-w-0 truncate text-xs text-muted"
+						>{tx.buyerEmail}</span
 					>{/if}
 			</td>
-			<td data-label="Access point" class="px-4 py-2.5 text-ink">{tx.apName ?? '—'}</td>
-			<td data-label="Receipt" class="px-4 py-2.5 font-mono text-xs text-muted">{tx.receiptNo ?? '—'}</td>
+			<td
+				data-label="Access point"
+				class="px-4 py-2.5 text-ink"
+				class:tc-skip={!tx.apName}>{tx.apName ?? '—'}</td
+			>
+			<td
+				data-label="Receipt"
+				class="px-4 py-2.5 font-mono text-xs text-muted"
+				class:tc-skip={!tx.receiptNo}>{tx.receiptNo ?? '—'}</td
+			>
 		</tr>
 	{/each}
 

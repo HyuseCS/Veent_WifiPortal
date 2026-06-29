@@ -231,21 +231,24 @@
 
 	{#each sorted as user (user.id)}
 		<tr class="hover:bg-surface" class:bg-surface={selected.has(user.id)}>
-			<td data-label="Select" class="px-4 py-3">
+			<td data-label="Select" class="tc-corner px-4 py-3">
 				<input
 					type="checkbox"
-					class="h-4 w-4 accent-brand"
+					class="h-4 w-4 accent-brand max-sm:h-5 max-sm:w-5"
 					aria-label="Select {user.phone}"
 					checked={selected.has(user.id)}
 					onchange={(e) => toggle(user.id, e.currentTarget.checked)}
 				/>
 			</td>
-			<td data-label="User" class="px-4 py-3">
-				<span class="truncate font-mono font-medium text-ink">{fmtPhone(user.phone)}</span>
+			<td data-label="User" class="tc-full px-4 py-3 max-sm:pr-9">
+				<span class="truncate font-mono font-medium text-ink max-sm:text-base">
+					{fmtPhone(user.phone)}
+				</span>
 			</td>
 			<td data-label="Balance" class="px-4 py-3">
 				<span
-					class="inline-flex items-center gap-1.5 font-mono font-semibold {user.tone === 'warning'
+					class="inline-flex items-center gap-1.5 font-mono font-semibold max-sm:text-base {user.tone ===
+					'warning'
 						? 'text-warning'
 						: 'text-ink'}"
 				>
@@ -255,7 +258,11 @@
 					{/if}
 				</span>
 			</td>
-			<td data-label="Time Left" class="px-4 py-3 font-mono text-ink">{user.timeLeft ?? '—'}</td>
+			<td
+				data-label="Time Left"
+				class="px-4 py-3 font-mono text-ink"
+				class:tc-skip={!user.timeLeft}>{user.timeLeft ?? '—'}</td
+			>
 			<td data-label="Devices" class="px-4 py-3">
 				{#if user.deviceCount > 0}
 					<button
@@ -280,7 +287,7 @@
 					<span class="font-mono text-xs text-muted">—</span>
 				{/if}
 			</td>
-			<td data-label="Location" class="px-4 py-3">
+			<td data-label="Location" class="px-4 py-3" class:tc-skip={!user.location}>
 				{#if user.location}
 					<span class="inline-flex min-w-0 items-center gap-1.5 text-sm text-ink">
 						<MapPin class="h-3.5 w-3.5 shrink-0 text-muted" aria-hidden="true" />
