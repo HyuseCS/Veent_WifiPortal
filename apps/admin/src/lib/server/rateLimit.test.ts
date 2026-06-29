@@ -9,7 +9,10 @@ import { consumeRateLimit } from '@veent/core';
  */
 
 // Chainable Drizzle stand-in: every builder method returns the proxy; awaiting it yields
-// the next queued result, one per awaited statement in call order.
+// the next queued result, one per awaited statement in call order. The consume path awaits, in
+// order: (1) insert-if-absent (onConflictDoNothing), (2) select … for('update'), then (3) an
+// optional update. After the insert-if-absent the row always exists, so the select result is the
+// (possibly placeholder) counter row.
 function fakeTx(results: unknown[]) {
 	const queue = [...results];
 	const proxy: unknown = new Proxy(function () {}, {
@@ -28,9 +31,10 @@ const key = { scope: 'admin_email', identifier: 'a@b.com' };
 const now = new Date('2026-06-24T00:00:00Z');
 
 describe('consumeRateLimit (scoped key)', () => {
-	it('allows + seeds the counter on a first attempt (no existing row)', async () => {
-		// select → no row; insert seeds the row.
-		const db = fakeDb([[], []]);
+	it('allows + opens the window on a first attempt (placeholder row)', async () => {
+		// insert-if-absent seeds a placeholder; select → placeholder (epoch ts) reads as an
+		// expired window; update opens it at attempt 1.
+		const db = fakeDb([[], [{ id: 1, attempts: 0, lastAttemptAt: new Date(0) }], []]);
 		const res = await consumeRateLimit(db, { key, max: 5, now });
 		expect(res.allowed).toBe(true);
 		expect(res.remaining).toBe(4);
@@ -38,8 +42,8 @@ describe('consumeRateLimit (scoped key)', () => {
 	});
 
 	it('blocks once attempts reach the cap within the window', async () => {
-		// select → existing row already at the cap, last attempt just now (window not lapsed).
-		const db = fakeDb([[{ id: 1, attempts: 5, lastAttemptAt: now }]]);
+		// insert no-ops; select (for update) → row already at the cap, last attempt just now.
+		const db = fakeDb([[], [{ id: 1, attempts: 5, lastAttemptAt: now }]]);
 		const res = await consumeRateLimit(db, { key, max: 5, windowMs: 60_000, now });
 		expect(res.allowed).toBe(false);
 		expect(res.remaining).toBe(0);
@@ -47,8 +51,8 @@ describe('consumeRateLimit (scoped key)', () => {
 	});
 
 	it('consumes one when under the cap within the window', async () => {
-		// select → existing row under cap; update bumps the count.
-		const db = fakeDb([[{ id: 1, attempts: 2, lastAttemptAt: now }], []]);
+		// insert no-ops; select (for update) → row under cap; update bumps the count.
+		const db = fakeDb([[], [{ id: 1, attempts: 2, lastAttemptAt: now }], []]);
 		const res = await consumeRateLimit(db, { key, max: 5, windowMs: 60_000, now });
 		expect(res.allowed).toBe(true);
 		expect(res.remaining).toBe(2); // max - 1 - attempts = 5 - 1 - 2

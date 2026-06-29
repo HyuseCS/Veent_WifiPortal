@@ -93,7 +93,7 @@
 		{/snippet}
 	</KpiCarousel>
 
-	<UsersTable {users}>
+	<UsersTable {users} isOwner={data.isOwner}>
 		{#snippet actions()}
 			{#if data.isOwner}
 				<Button variant="danger" onclick={() => (wipeOpen = true)}>
