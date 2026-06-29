@@ -4,7 +4,7 @@
 > current: when you fix one, flip its status and note the commit/PR. Deep
 > rationale for the architectural items lives in [`ARCHITECTURE_REVIEW.md`](./ARCHITECTURE_REVIEW.md).
 >
-> Last updated: 2026-06-24
+> Last updated: 2026-06-29
 
 ## Status at a glance
 
@@ -21,6 +21,14 @@
 | R9 | Router management plane (Winbox/Dude/API) reachable from the internet | High | 🟡 Mitigated | — |
 | R10 | Portal↔router API runs in cleartext (port 8728, no TLS) | Medium | ✅ Resolved | — |
 | R11 | node-routeros connection timeout crashes the whole app server | Medium | ✅ Resolved | — |
+| R12 | Client-supplied device MAC trusted on grant paths (free internet for arbitrary devices / cross-user revoke DoS) | High | 🔴 Accepted (deferred) | — |
+| R13 | Admin bulk customer-delete not owner-gated (bypasses the owner-only verified wipe) | High | ✅ Resolved | — |
+| R14 | `consumeRateLimit` TOCTOU race + no unique constraint (burst-bypassable throttles) | High | ✅ Resolved | — |
+| R15 | Admin `/api/auth/sign-up/email` open (no `disableSignUp`) | Medium | ✅ Resolved | — |
+| R16 | Mandatory admin 2FA gate missing on `/api/connected` + `/api/router-log` | Medium | ✅ Resolved | — |
+| R17 | CSV formula injection in Finance export | Medium | ✅ Resolved | — |
+| R18 | `payment_transactions` double-count (webhook vs poll record under divergent ids) | Medium | ✅ Resolved | — |
+| R19 | OTP-send throttle bypassable via direct `/api/auth/phone-number/send-otp` | High | ✅ Resolved | — |
 
 Severity = impact × likelihood for *this* app at its current scale, not generic CVSS.
 
@@ -295,6 +303,122 @@ production / before guests and management share a segment long-term.
 
 **Stronger structural option:** move guests to their own VLAN/subnet with hotspot
 client isolation, so they can't reach or sniff the management segment at all.
+
+---
+
+# Security audit 2026-06-29 (R12–R19)
+
+A whole-app, security-critical-paths audit (auth/TOTP, payments, network grant, admin
+authz, injection, secrets/rate-limiting). R13–R19 are fixed; **R12 is a knowingly-accepted
+risk** — recorded here rather than silently dropped.
+
+## R12 — Client-supplied device MAC trusted on grant paths 🔴 Accepted (deferred)
+
+**Risk (High):** the grant paths take the device MAC from the request and only validate its
+*shape*, never that it belongs to the caller's device:
+- `apps/customer/src/routes/api/network/grant/+server.ts:39` — `isValidMac(body.macAddress)`
+  is a format check only; the value flows straight into bind+grant.
+- `apps/customer/src/routes/dashboard/+page.server.ts:107,131,172` — the actions **prefer the
+  client form `mac`** over the server-resolved one (`resolveMac`).
+
+Two attacks: **(1) free internet for arbitrary devices** — an authenticated user binds any MAC
+they choose (e.g. a sniffed nearby device) under their own free-time/paid window; **(2)
+cross-user DoS** — bind a paying victim's MAC under the attacker's account, then `unbindDevice`
+revokes the *shared* router bypass and flaps the victim offline. Bounded: attack 1 spends the
+attacker's own credits/free-time and is capped by the device limit + phone-OTP-gated signup;
+attack 2 self-heals on the ~60s dashboard auto-rebind.
+
+**Why accepted (2026-06-29):** the MAC-from-client is partly inherent to captive portals — the
+redirect carries `?mac=` precisely because server-side IP→MAC resolution (`resolveMac`,
+`network-location.ts`) is documented-unreliable (CNA cookie-jar, IP→MAC gaps, returns null on
+stub/dev). A correct fix must enforce a match **only** when the router IP→MAC lookup gives a
+high-confidence result and fall back to the client value otherwise, applied consistently across
+the grant endpoint + 3 dashboard actions — so it's its own careful pass, and its strength is
+bounded by detection reliability anyway. The **remove-device** control does *not* mitigate this
+(the rogue binding lives under the *attacker's* account, invisible to the victim).
+
+**Deferred fix:** shared resolve-and-compare helper, gated strictly on `resolveDeviceMac`
+(router IP→MAC), `403` on mismatch, null/dev paths unchanged. See the audit discussion.
+
+## R13 — Admin bulk customer-delete not owner-gated ✅ Resolved
+
+**Was:** the `delete` action (`apps/admin/src/routes/(app)/users/+page.server.ts`) hard-deleted
+selected customers (cascading all domain + auth rows) with **no `requireOwner`, no confirmation,
+no step-up** — while the sibling `wipe` was owner-gated + email-code. Any non-owner admin could
+select every row and POST `?/delete`, achieving the same irreversible destruction the owner-only
+wipe was built to control; the bulk UI bar wasn't even hidden from non-owners.
+
+**Fix:** `delete` now calls `requireOwner` (re-reads role from the DB); the bulk-delete bar in
+`UsersTable.svelte` is gated behind `isOwner` (defense-in-depth). Commit `cc420c2`.
+
+## R14 — Rate-limit TOCTOU race + no unique constraint ✅ Resolved
+
+**Was:** `consumeRateLimit` (`packages/core/src/services/rateLimit.ts`) did `SELECT` then a
+separate `INSERT`/`UPDATE` with no row lock, and `rate_limits` had no unique constraint per key.
+Concurrent first-attempts inserted duplicate counter rows; concurrent increments all read the
+same count, all passed the cap check, all wrote back (lost update). A burst multiplied every cap
+— admin login, 2FA/OTP brute-force, webhook flood, grant.
+
+**Fix:** insert-if-absent (`onConflictDoNothing` on a new per-key **unique** index) → `SELECT …
+FOR UPDATE` → conditional update, so the check-then-increment is atomic. Migration `0026` adds
+the unique indexes (dedups any pre-existing duplicate counter rows first, idempotent). Proven
+with a 50-way concurrent probe (exactly `max` allowed, single counter row). Commit `cc420c2`.
+
+## R15 — Admin self-signup endpoint open ✅ Resolved
+
+**Was:** `apps/admin/src/lib/server/auth.ts` had `emailAndPassword: { enabled: true }` with no
+`disableSignUp`, so `POST /api/auth/sign-up/email` accepted anonymous `admin_user` creation
+(email-squatting an invitee's address / DB pollution).
+
+**Fix:** `disableSignUp: true`. Staff are created only via the owner-only `/staff` invite flow
+(`internalAdapter.createUser`), never the auth-API signup route.
+
+## R16 — Mandatory admin 2FA gate missing on API endpoints ✅ Resolved
+
+**Was:** the 2FA-enrollment gate lived only in `(app)/+layout.server.ts`; `hooks.server.ts`
+exposes `locals.user` to any *active* staff regardless of `twoFactorEnabled` (so `/enroll-2fa`
+can run). The non-`(app)` API routes `/api/connected` (live dashboard SSE) and `/api/router-log`
+checked only `locals.user`, so an un-enrolled session (or an attacker with just the password of
+a not-yet-enrolled invitee) could `curl` them.
+
+**Fix:** both endpoints now also require `event.locals.user.twoFactorEnabled` (`403` otherwise).
+Kept per-endpoint rather than central, because `/enroll-2fa` itself needs `locals.user` while
+`twoFactorEnabled` is still false.
+
+## R17 — CSV formula injection in Finance export ✅ Resolved
+
+**Was:** `finance/export/+server.ts` `cell()` did RFC-4180 quoting but didn't neutralize
+spreadsheet formulas. `buyerName`/`buyerEmail` come from the Maya checkout (buyer-controlled), so
+a value like `=HYPERLINK(…)` or a DDE payload executed when an operator opened the export.
+
+**Fix:** `cell()` prefixes any value starting with `= + - @ \t \r` with a single quote before
+quoting, forcing it to plain text.
+
+## R18 — Finance settled-revenue double-count ✅ Resolved
+
+**Was:** `payment_transactions` is keyed by the gateway tx id, derived **differently** by the two
+recording paths — the webhook uses the Maya payment id, the on-return poll / reconcile fall back
+to the checkout id (`maya.ts` `getCheckoutStatus`). When they diverge, one payment writes two
+`PAYMENT_SUCCESS` rows and "Gross Revenue (settled)" inflates (crediting stays correct — the
+checkout claim guards that). Hinges on the unconfirmed Maya `getCheckoutStatus` payment-id field.
+
+**Fix:** `recordPaymentTransaction` (`reconcilePayments.ts`) dedupes on `referenceNo`
+(requestReferenceNumber, identical across both paths) — if a row already exists for this
+referenceNo under a different id, it updates that row instead of inserting a divergent duplicate.
+Reporting-only, no schema change; an airtight version (partial unique index on `reference_no`)
+plus confirming the Maya field stays a follow-up.
+
+## R19 — OTP-send throttle bypassable via the direct endpoint ✅ Resolved
+
+**Was:** the per-phone/MAC OTP cap (R1, `enforceOtpSendLimit`) was wired only into the `login` /
+`auth/verify` form actions, so a direct `POST /api/auth/phone-number/send-otp` (mounted by the
+better-auth handler) skipped it — re-opening the SMS-bomb / credit-drain R1 was meant to close.
+
+**Fix:** enforcement moved to the `sendOTP` callback in `apps/customer/src/lib/server/auth.ts` —
+the one seam every send (form *and* direct endpoint) passes through. The form actions keep their
+pre-check (for the friendly retry message + MAC dimension) and set `locals.otpLimitEnforced` so
+the callback doesn't double-count a legitimate send; a direct call (no portal context) falls back
+to a phone-only cap. `otpRateLimit.ts` itself (teammate-owned) was not modified — only called.
 
 ---
 

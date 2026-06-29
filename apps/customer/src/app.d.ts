@@ -7,6 +7,11 @@ declare global {
 		interface Locals {
 			user?: User;
 			session?: Session;
+			// Set by the OTP-send form actions after they've already charged the per-phone/MAC
+			// send limit, so the auth `sendOTP` callback (which enforces the same limit at the
+			// universal seam, to also cover the direct /api/auth/phone-number/send-otp route)
+			// doesn't double-count a legitimate form send.
+			otpLimitEnforced?: boolean;
 		}
 
 		// interface Error {}

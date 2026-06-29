@@ -22,6 +22,12 @@ const openStreams = new Map<string, number>();
 
 export const GET: RequestHandler = async (event) => {
 	if (!event.locals.user) error(401, 'Not authenticated');
+	// Mandatory 2FA applies here too. `hooks.server.ts` exposes locals.user to any ACTIVE staff
+	// regardless of enrollment (so the /enroll-2fa flow can run), and the (app) layout only
+	// guards page loads — not this API route. Without this check, a staff member who is signed
+	// in but hasn't enrolled (or an attacker with only their password) could stream the whole
+	// live dashboard via curl, bypassing the enrollment gate.
+	if (!event.locals.user.twoFactorEnabled) error(403, 'Two-factor enrollment required');
 	const userId = event.locals.user.id;
 
 	if ((openStreams.get(userId) ?? 0) >= MAX_STREAMS_PER_USER) {

@@ -53,6 +53,47 @@ export async function recordPaymentTransaction(
 		packageId: attribution.packageId,
 		networkId: attribution.networkId
 	};
+	// Gateway-supplied detail a later event (Maya resend or a PENDING→SUCCESS transition) may
+	// legitimately backfill. Shared by the id-conflict upsert and the referenceNo dedupe below.
+	const detail = {
+		status: row.status,
+		amount: row.amount,
+		currency: row.currency,
+		fundSourceType: row.fundSourceType,
+		fundSourceMasked: row.fundSourceMasked,
+		receiptNo: row.receiptNo,
+		referenceNo: row.referenceNo,
+		errorCode: row.errorCode,
+		errorMessage: row.errorMessage,
+		buyerName: row.buyerName,
+		buyerEmail: row.buyerEmail
+	};
+
+	// Finance reporting integrity: ONE Maya payment can reach here via two paths under DIFFERENT
+	// gateway ids — the webhook keys on the payment id, while the on-return poll / reconcile cron
+	// may fall back to the checkout id when Maya doesn't surface the payment id. Left unchecked
+	// that writes two PAYMENT_SUCCESS rows for one payment and double-counts "settled revenue".
+	// Both paths carry the SAME referenceNo (requestReferenceNumber / our referenceId echo), so
+	// if a row already exists for this referenceNo under a different id, update THAT row instead
+	// of inserting a divergent duplicate. (One Maya checkout = one referenceNo = one terminal
+	// payment, so collapsing is correct.) Best-effort: a partial unique index on reference_no
+	// would also close the rare simultaneous-insert race; deferred — this is reporting-only and
+	// the two paths normally fire seconds apart, not concurrently.
+	if (row.referenceNo) {
+		const [existing] = await db
+			.select({ id: paymentTransactions.id })
+			.from(paymentTransactions)
+			.where(eq(paymentTransactions.referenceNo, row.referenceNo))
+			.limit(1);
+		if (existing && existing.id !== row.id) {
+			await db
+				.update(paymentTransactions)
+				.set(detail)
+				.where(eq(paymentTransactions.id, existing.id));
+			return;
+		}
+	}
+
 	await db
 		.insert(paymentTransactions)
 		.values(row)
@@ -61,20 +102,8 @@ export async function recordPaymentTransaction(
 			// Keep the latest detail when Maya resends or a later status transition (e.g.
 			// PENDING→SUCCESS) enriches a row a reconcile pass recorded first. networkId and
 			// the userId/packageId attribution stay INSERT-only (fixed at first record); the
-			// gateway-supplied detail below is what a transition can legitimately backfill.
-			set: {
-				status: row.status,
-				amount: row.amount,
-				currency: row.currency,
-				fundSourceType: row.fundSourceType,
-				fundSourceMasked: row.fundSourceMasked,
-				receiptNo: row.receiptNo,
-				referenceNo: row.referenceNo,
-				errorCode: row.errorCode,
-				errorMessage: row.errorMessage,
-				buyerName: row.buyerName,
-				buyerEmail: row.buyerEmail
-			}
+			// gateway-supplied detail is what a transition can legitimately backfill.
+			set: detail
 		});
 }
 
