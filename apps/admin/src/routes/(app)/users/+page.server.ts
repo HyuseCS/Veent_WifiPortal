@@ -18,10 +18,10 @@ import { issueWipeCode, consumeWipeCode } from '$lib/server/wipe-verification';
 import { listUsers } from '$lib/server/queries';
 import type { Actions, PageServerLoad } from './$types';
 
-/** Re-asserts owner from the DB (never trust client state) for wipe actions. */
+/** Re-asserts owner from the DB (never trust client state) for destructive actions. */
 async function requireOwner(userId: string | undefined) {
 	if (!userId || (await getAdminRole(db, userId)) !== STAFF_ROLE.owner) {
-		return fail(403, { error: 'Only the owner can wipe the customer database.' });
+		return fail(403, { error: 'Only the owner can perform this action.' });
 	}
 	return null;
 }
@@ -96,8 +96,12 @@ export const actions: Actions = {
 	},
 
 	/** Bulk hard-delete: removes the selected customers (cascades to all their
-	 *  domain + auth rows) after dropping any live router grants. */
+	 *  domain + auth rows) after dropping any live router grants. Owner-only — this is
+	 *  irreversible mass destruction, the same class of action as `wipe`, so it must not
+	 *  be reachable by a non-owner admin (the `requireOwner` re-reads the role from the DB). */
 	delete: async (event) => {
+		const denied = await requireOwner(event.locals.user?.id);
+		if (denied) return denied;
 		const ids = String((await event.request.formData()).get('userIds') ?? '')
 			.split(',')
 			.map((s) => s.trim())

@@ -23,7 +23,13 @@
 
 	// `actions` lets the page slot owner-only controls (the Wipe button) into the toolbar
 	// without this component owning the gated dialog/flow — data flow stays on the page.
-	let { users, actions }: { users: AdminUserRow[]; actions?: Snippet } = $props();
+	// `isOwner` gates the destructive bulk-delete bar; the server action enforces owner-only
+	// regardless, this just keeps the control from being shown to admins who can't use it.
+	let {
+		users,
+		actions,
+		isOwner = false
+	}: { users: AdminUserRow[]; actions?: Snippet; isOwner?: boolean } = $props();
 
 	// Client-side view state over the already-loaded rows (no extra loads / no DB hits):
 	// a text search + clickable-header sort. Status is reachable via the Status column
@@ -364,9 +370,10 @@
 	{/snippet}
 </Table>
 
-<!-- Floating bulk bar: appears only with a selection. Delete is the one bulk action with a
-     backing form action; select/clear are local UI state. -->
-{#if selected.size > 0}
+<!-- Floating bulk bar: appears only with a selection, and only for an owner (the `?/delete`
+     action is owner-only server-side; non-owners never see the control). Delete is the one
+     bulk action with a backing form action; select/clear are local UI state. -->
+{#if selected.size > 0 && isOwner}
 	<div
 		transition:fade={{ duration: 150 }}
 		class="fixed bottom-6 left-1/2 z-30 flex -translate-x-1/2 items-center gap-2 rounded-2xl bg-sidebar py-2 pr-2 pl-4 shadow-lg"
