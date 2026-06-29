@@ -97,37 +97,45 @@ export interface AddCreditsResult {
  * business rule #3 (credits added only once, on verified payment).
  */
 export async function addCredits(db: DB, input: AddCreditsInput): Promise<AddCreditsResult> {
+	return db.transaction((tx) => addCreditsTx(tx, input));
+}
+
+/**
+ * `addCredits` inside a caller-owned transaction. Use this when the credit must commit
+ * atomically with another effect — e.g. claiming a payment_checkouts row and crediting in
+ * one transaction, so a crash between them can't leave a checkout settled-but-uncredited.
+ * Same idempotency guarantee as `addCredits` (unique `externalTransactionId`).
+ */
+export async function addCreditsTx(tx: Tx, input: AddCreditsInput): Promise<AddCreditsResult> {
 	if (input.amount <= 0) throw new Error('addCredits: amount must be positive');
 	if (input.type === LEDGER_TYPE.topup && !input.externalTransactionId) {
 		throw new Error('addCredits: topup requires externalTransactionId (idempotency key)');
 	}
 
-	return db.transaction(async (tx) => {
-		const inserted = await tx
-			.insert(creditLedger)
-			.values({
-				userId: input.userId,
-				packageId: input.packageId,
-				amount: input.amount,
-				type: input.type,
-				externalTransactionId: input.externalTransactionId
-			})
-			.onConflictDoNothing({ target: creditLedger.externalTransactionId })
-			.returning({ id: creditLedger.id });
+	const inserted = await tx
+		.insert(creditLedger)
+		.values({
+			userId: input.userId,
+			packageId: input.packageId,
+			amount: input.amount,
+			type: input.type,
+			externalTransactionId: input.externalTransactionId
+		})
+		.onConflictDoNothing({ target: creditLedger.externalTransactionId })
+		.returning({ id: creditLedger.id });
 
-		// Conflict → this external transaction was already processed.
-		if (input.externalTransactionId && inserted.length === 0) {
-			return { credited: false, balance: await balanceInTx(tx, input.userId) };
-		}
+	// Conflict → this external transaction was already processed.
+	if (input.externalTransactionId && inserted.length === 0) {
+		return { credited: false, balance: await balanceInTx(tx, input.userId) };
+	}
 
-		const [updated] = await tx
-			.update(customerProfile)
-			.set({ creditBalance: sql`${customerProfile.creditBalance} + ${input.amount}` })
-			.where(eq(customerProfile.userId, input.userId))
-			.returning({ balance: customerProfile.creditBalance });
+	const [updated] = await tx
+		.update(customerProfile)
+		.set({ creditBalance: sql`${customerProfile.creditBalance} + ${input.amount}` })
+		.where(eq(customerProfile.userId, input.userId))
+		.returning({ balance: customerProfile.creditBalance });
 
-		return { credited: true, balance: updated ? Number(updated.balance) : 0 };
-	});
+	return { credited: true, balance: updated ? Number(updated.balance) : 0 };
 }
 
 export interface SpendCreditsResult {

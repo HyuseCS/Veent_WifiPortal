@@ -1,6 +1,6 @@
 {
-  "id": "69c0049d-fe29-450a-95ad-022422ac6569",
-  "prevId": "0c8c015c-2848-44fa-b109-b6e64bdde39c",
+  "id": "9641b80c-8acb-4d2c-a9c5-1cb42df59c2a",
+  "prevId": "69c0049d-fe29-450a-95ad-022422ac6569",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -875,6 +875,54 @@
           "onUpdate": "no action"
         }
       },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.app_settings": {
+      "name": "app_settings",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "default": 1
+        },
+        "max_devices_per_account": {
+          "name": "max_devices_per_account",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 2
+        },
+        "free_time_minutes": {
+          "name": "free_time_minutes",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 15
+        },
+        "free_time_cooldown_hours": {
+          "name": "free_time_cooldown_hours",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 12
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},

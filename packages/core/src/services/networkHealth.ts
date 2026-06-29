@@ -30,16 +30,12 @@ export async function refreshNetworkHealth(
 			latencyMs: s.latencyMs ?? null,
 			lastSampleAt: now
 		};
-		const [existing] = await db
-			.select({ id: networkHealth.id })
-			.from(networkHealth)
-			.where(eq(networkHealth.name, s.name))
-			.limit(1);
-		if (existing) {
-			await db.update(networkHealth).set(vals).where(eq(networkHealth.id, existing.id));
-		} else {
-			await db.insert(networkHealth).values({ name: s.name, ...vals });
-		}
+		// Upsert on the unique `name`: one round-trip, and two concurrent sweeps can't create
+		// duplicate rows for the same AP (the select-then-insert this replaced could).
+		await db
+			.insert(networkHealth)
+			.values({ name: s.name, ...vals })
+			.onConflictDoUpdate({ target: networkHealth.name, set: vals });
 	}
 
 	// Drop auto-discovered rows the router didn't report this round (e.g. the seeded
