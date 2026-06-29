@@ -361,9 +361,10 @@ same count, all passed the cap check, all wrote back (lost update). A burst mult
 — admin login, 2FA/OTP brute-force, webhook flood, grant.
 
 **Fix:** insert-if-absent (`onConflictDoNothing` on a new per-key **unique** index) → `SELECT …
-FOR UPDATE` → conditional update, so the check-then-increment is atomic. Migration `0026` adds
-the unique indexes (dedups any pre-existing duplicate counter rows first, idempotent). Proven
-with a 50-way concurrent probe (exactly `max` allowed, single counter row). Commit `cc420c2`.
+FOR UPDATE` → conditional update, so the check-then-increment is atomic. Migration
+`0027_orange_layla_miller` adds the unique indexes (dedups any pre-existing duplicate counter
+rows first, idempotent). Proven with a 50-way concurrent probe (exactly `max` allowed, single
+counter row).
 
 ## R15 — Admin self-signup endpoint open ✅ Resolved
 
