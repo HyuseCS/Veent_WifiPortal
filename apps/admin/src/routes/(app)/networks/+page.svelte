@@ -95,6 +95,17 @@
 	};
 	const kpis = $derived<NetKpi[]>([
 		{
+			label: 'Alerts',
+			value: String(alerts),
+			icon: icon(TriangleAlert),
+			// Honest at zero: green "all clear" instead of a red "needs attention" on 0.
+			caption: alerts > 0 ? 'view affected APs' : 'all clear',
+			tone: alerts > 0 ? 'blocked' : 'online',
+			captionTone: alerts > 0 ? 'blocked' : 'online',
+			// Clicking drills into the offending APs (degraded + offline). No-op at zero.
+			onclick: alerts > 0 ? showAlerts : undefined
+		},
+		{
 			label: 'Access Points',
 			value: String(total),
 			icon: icon(Router),
@@ -120,17 +131,6 @@
 			unit: avgLat == null ? undefined : 'ms',
 			icon: icon(Timer),
 			caption: 'across active APs'
-		},
-		{
-			label: 'Alerts',
-			value: String(alerts),
-			icon: icon(TriangleAlert),
-			// Honest at zero: green "all clear" instead of a red "needs attention" on 0.
-			caption: alerts > 0 ? 'view affected APs' : 'all clear',
-			tone: alerts > 0 ? 'blocked' : 'online',
-			captionTone: alerts > 0 ? 'blocked' : 'online',
-			// Clicking drills into the offending APs (degraded + offline). No-op at zero.
-			onclick: alerts > 0 ? showAlerts : undefined
 		}
 	]);
 
