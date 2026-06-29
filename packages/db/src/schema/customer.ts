@@ -58,7 +58,14 @@ export const customerProfile = pgTable('customer_profile', {
 	// grant resolves an AP. A fallback for payment-location attribution: a returning buyer
 	// whose captive-portal context was lost and who has no live session still gets their
 	// last-known AP at checkout. Loose link (no FK), same rationale as network_sessions.
-	lastNetworkId: integer('last_network_id')
+	lastNetworkId: integer('last_network_id'),
+	// The device MAC this account most recently presented to the portal (from the captive
+	// `?mac=` redirect or a router IP→MAC lookup). Durably stored here — keyed by user, NOT a
+	// cookie — so a returning buyer whose portal cookie was lost can still be matched to their
+	// device WITHOUT a fresh portal reconnect. The CNA and the system browser have separate
+	// cookie jars, so the `?mac=` cookie is gone after a Maya payment hop; this column bridges
+	// that. Same loose-fallback rationale as `lastNetworkId`; a fresh `?mac=` always supersedes it.
+	lastKnownMac: text('last_known_mac')
 });
 
 /** Purchasable credit bundles / access tiers, configured by admin (ERD "Packages"). */

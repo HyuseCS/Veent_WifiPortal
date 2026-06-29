@@ -1,6 +1,6 @@
 {
-  "id": "9442c069-4422-4296-a2f1-118e987de2c2",
-  "prevId": "44db2711-b63d-4e30-92e3-3e210e80539d",
+  "id": "04e24efb-d967-4bc0-872e-2daffc723507",
+  "prevId": "9442c069-4422-4296-a2f1-118e987de2c2",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -1109,6 +1109,12 @@
         "last_network_id": {
           "name": "last_network_id",
           "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_known_mac": {
+          "name": "last_known_mac",
+          "type": "text",
           "primaryKey": false,
           "notNull": false
         }
