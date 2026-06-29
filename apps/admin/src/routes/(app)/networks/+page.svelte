@@ -6,6 +6,7 @@
 		RouterLogPanel,
 		CoverageMap,
 		KpiCard,
+		KpiCarousel,
 		WipeDialog
 	} from '$lib/components/feature';
 	import Router from 'lucide-svelte/icons/router';
@@ -230,8 +231,8 @@
 	<!-- SCREEN 1: KPIs + coverage map + side panels -->
 	<div class="min-h-full snap-start space-y-5 pt-5 pb-5">
 		<!-- KPI STRIP -->
-		<section class="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-5">
-			{#each kpis as k (k.label)}
+		<KpiCarousel items={kpis}>
+			{#snippet card(k)}
 				<KpiCard
 					kpi={{ label: k.label, value: k.value }}
 					icon={k.icon}
@@ -242,8 +243,8 @@
 					onclick={k.onclick}
 					compact
 				/>
-			{/each}
-		</section>
+			{/snippet}
+		</KpiCarousel>
 
 		<!-- MAP + RIGHT PANELS -->
 		<div class="grid gap-5 xl:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)] xl:items-stretch">

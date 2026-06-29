@@ -69,8 +69,8 @@
 
 <!-- Full-height flex column so the members table scrolls internally, not the page (see
      StaffTable's Table). KPIs + invite form stay fixed; the table takes the rest. -->
-<div class="flex flex-col gap-5 md:h-full">
-	<section class="grid shrink-0 grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+<div class="flex flex-col gap-5 h-full">
+	<section class="grid shrink-0 grid-cols-2 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-4">
 		{#each kpis as k (k.label)}
 			<KpiCard
 				kpi={{ label: k.label, value: k.value }}
@@ -78,6 +78,7 @@
 				helper={k.helper}
 				tone={k.tone}
 				captionTone={k.captionTone}
+				compact
 			/>
 		{/each}
 	</section>

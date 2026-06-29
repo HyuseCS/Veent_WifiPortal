@@ -3,6 +3,7 @@
  * Import as: `import { KpiCard, RevenueChart } from '$lib/components/feature';`
  */
 export { default as KpiCard } from './KpiCard.svelte';
+export { default as KpiCarousel } from './KpiCarousel.svelte';
 export { default as RevenueChart } from './RevenueChart.svelte';
 export { default as DonutChart } from './DonutChart.svelte';
 export { default as NetworkHealthCard } from './NetworkHealthCard.svelte';
