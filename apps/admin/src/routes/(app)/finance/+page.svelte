@@ -79,31 +79,53 @@
 			</div>
 		</Card>
 
-		<!-- Two donuts stacked in the 3rd column. On md+ they shrink to share the column height
-		     (one screen, no overflow); on mobile they keep natural height and stack/scroll. -->
-		<div class="flex flex-col gap-4 md:min-h-0">
-			<Card class="flex flex-col md:min-h-0 md:flex-1">
-				<SectionHeading title="By payment method" class="mb-4" />
-				<!-- Center the donut block in the leftover height so the card isn't top-heavy
-				     next to the taller chart panel. -->
-				<div class="flex items-center md:min-h-0 md:flex-1">
-					<DonutChart
-						data={data.breakdown}
-						centerValue="₱{settledTotal.toLocaleString('en-PH')}"
-						centerLabel="Settled"
-					/>
+		<!-- Two donuts. Below lg: a 2-up grid (compact cards) so they sit side-by-side instead of
+		     two tall stacked blocks. At lg they return to the stacked 3rd column, sharing its height
+		     (one screen, no overflow) — desktop is byte-identical (compact hidden, original shown). -->
+		<div class="grid grid-cols-2 gap-4 md:min-h-0 lg:flex lg:flex-col">
+			<Card padding="p-3 lg:p-5" class="flex flex-col md:min-h-0 md:flex-1">
+				<SectionHeading title="By payment method" class="mb-3 lg:mb-4" />
+				<!-- lg: center the donut in the leftover column height (avoids a top-heavy card next to
+				     the taller chart). Below lg: plain flow so the donut sits right under the title. -->
+				<div class="md:min-h-0 lg:flex lg:flex-1 lg:items-center">
+					<div class="w-full lg:hidden">
+						<DonutChart
+							data={data.breakdown}
+							compact
+							centerValue="₱{settledTotal.toLocaleString('en-PH')}"
+							centerLabel="Settled"
+						/>
+					</div>
+					<div class="hidden w-full lg:block">
+						<DonutChart
+							data={data.breakdown}
+							centerValue="₱{settledTotal.toLocaleString('en-PH')}"
+							centerLabel="Settled"
+						/>
+					</div>
 				</div>
 			</Card>
 
-			<Card class="flex flex-col md:min-h-0 md:flex-1">
-				<SectionHeading title="By access point" class="mb-4" />
-				<div class="flex items-center md:min-h-0 md:flex-1">
-					<DonutChart
-						data={data.apRevenue}
-						label="Revenue by access point"
-						centerValue="₱{settledTotal.toLocaleString('en-PH')}"
-						centerLabel="Settled"
-					/>
+			<Card padding="p-3 lg:p-5" class="flex flex-col md:min-h-0 md:flex-1">
+				<SectionHeading title="By access point" class="mb-3 lg:mb-4" />
+				<div class="md:min-h-0 lg:flex lg:flex-1 lg:items-center">
+					<div class="w-full lg:hidden">
+						<DonutChart
+							data={data.apRevenue}
+							label="Revenue by access point"
+							compact
+							centerValue="₱{settledTotal.toLocaleString('en-PH')}"
+							centerLabel="Settled"
+						/>
+					</div>
+					<div class="hidden w-full lg:block">
+						<DonutChart
+							data={data.apRevenue}
+							label="Revenue by access point"
+							centerValue="₱{settledTotal.toLocaleString('en-PH')}"
+							centerLabel="Settled"
+						/>
+					</div>
 				</div>
 			</Card>
 		</div>
