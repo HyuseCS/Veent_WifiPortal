@@ -2,6 +2,7 @@ import { fail } from '@sveltejs/kit';
 import { getSessionLimits, updateSessionLimits } from '@veent/core';
 import { db } from '$lib/server/db';
 import { requireOwner as ownerGate } from '$lib/server/auth-guard';
+import { verifyStepUp } from '$lib/server/step-up';
 import { parseIntField } from '$lib/server/formValidation';
 import type { Actions, PageServerLoad } from './$types';
 
@@ -30,6 +31,13 @@ export const actions: Actions = {
 		if (freeTimeCooldownHours === null) {
 			return fail(400, { error: 'Cooldown hours must be a whole number from 0 to 168.' });
 		}
+
+		// Step-up last: a valid TOTP code confirms the save (after the values validate).
+		const stepUp = await verifyStepUp(event, String(form.get('code') ?? ''), {
+			scope: 'admin_content_step_up',
+			action: 'save'
+		});
+		if (stepUp) return stepUp;
 
 		await updateSessionLimits(db, {
 			maxDevicesPerAccount,

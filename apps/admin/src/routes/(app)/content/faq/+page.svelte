@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
-	import { Card, Button } from '$lib/components/ui';
+	import { Card, Button, Field } from '$lib/components/ui';
+	import StepUpDialog from '$lib/components/feature/StepUpDialog.svelte';
 	import Plus from 'lucide-svelte/icons/plus';
 	import Pencil from 'lucide-svelte/icons/pencil';
 	import Trash2 from 'lucide-svelte/icons/trash-2';
@@ -8,6 +9,52 @@
 	import type { PageData, ActionData } from './$types';
 
 	let { data, form }: { data: PageData; form: ActionData } = $props();
+
+	// Per-save MFA: edit form collects the code inline; publish-toggle/delete use a step-up
+	// confirm dialog. The server re-verifies the code on every write.
+	let code = $state('');
+	const codeValid = $derived(/^\d{6}$/.test(code));
+
+	let dialogOpen = $state(false);
+	let dialogProps = $state<{
+		title: string;
+		message: string;
+		action: string;
+		fields: Record<string, string | number | boolean>;
+		submitLabel: string;
+		danger: boolean;
+	}>({ title: '', message: '', action: '', fields: {}, submitLabel: 'Confirm', danger: false });
+
+	function confirmToggle(f: Faq) {
+		dialogProps = {
+			title: f.isPublished ? 'Unpublish entry' : 'Publish entry',
+			message: f.isPublished
+				? 'This hides it from the customer Help page. Enter your authenticator code to confirm.'
+				: 'This shows it on the customer Help page. Enter your authenticator code to confirm.',
+			action: '?/togglePublished',
+			fields: { id: f.id, isPublished: (!f.isPublished).toString() },
+			submitLabel: f.isPublished ? 'Unpublish' : 'Publish',
+			danger: false
+		};
+		dialogOpen = true;
+	}
+	function confirmRemove(f: Faq) {
+		dialogProps = {
+			title: 'Delete FAQ entry',
+			message: "This permanently deletes the entry and can't be undone. Enter your authenticator code to confirm.",
+			action: '?/remove',
+			fields: { id: f.id },
+			submitLabel: 'Delete',
+			danger: true
+		};
+		dialogOpen = true;
+	}
+	// `form` is a union of per-action success/failure shapes; for these presentation-only
+	// checks we just need an optional error + action, so read it through a loose view.
+	const fv = $derived(form as { ok?: boolean; action?: string; error?: string } | null);
+	const dialogError = $derived(
+		fv?.error && (fv.action === 'togglePublished' || fv.action === 'remove') ? fv.error : null
+	);
 
 	type Faq = PageData['faqs'][number];
 	type EditState = {
@@ -30,9 +77,11 @@
 	let editing = $state<EditState | null>(null);
 
 	function startNew() {
+		code = '';
 		editing = blank();
 	}
 	function startEdit(f: Faq) {
+		code = '';
 		editing = {
 			id: f.id,
 			question: f.question,
@@ -64,8 +113,8 @@
 		{/if}
 	</div>
 
-	{#if form?.error}
-		<p class="rounded-lg bg-blocked/10 px-4 py-3 text-sm text-blocked" role="alert">{form.error}</p>
+	{#if fv?.error && (fv.action === 'create' || fv.action === 'update')}
+		<p class="rounded-lg bg-blocked/10 px-4 py-3 text-sm text-blocked" role="alert">{fv.error}</p>
 	{/if}
 
 	{#if editing}
@@ -135,8 +184,22 @@
 					</label>
 				</div>
 
+				<Field
+					id="faq-code"
+					name="code"
+					label="Authenticator code"
+					inputmode="numeric"
+					autocomplete="one-time-code"
+					placeholder="6-digit code"
+					value={code}
+					oninput={(e) => (code = e.currentTarget.value)}
+					class="max-w-40 font-mono tracking-widest"
+				/>
+
 				<div class="flex gap-2.5">
-					<Button type="submit">{editing.id ? 'Save changes' : 'Create entry'}</Button>
+					<Button type="submit" disabled={!codeValid}>
+						{editing.id ? 'Save changes' : 'Create entry'}
+					</Button>
 					<Button variant="secondary" onclick={() => (editing = null)}>Cancel</Button>
 				</div>
 			</form>
@@ -171,45 +234,45 @@
 					</div>
 
 					<div class="flex items-center gap-2">
-						<form method="post" action="?/togglePublished" use:enhance>
-							<input type="hidden" name="id" value={f.id} />
-							<input type="hidden" name="isPublished" value={(!f.isPublished).toString()} />
-							<button
-								type="submit"
-								class="flex min-h-[36px] items-center rounded-lg border border-border px-3 text-xs font-semibold text-muted hover:text-ink"
-							>
-								{f.isPublished ? 'Unpublish' : 'Publish'}
-							</button>
-						</form>
+						<button
+							type="button"
+							onclick={() => confirmToggle(f)}
+							class="flex min-h-[44px] items-center rounded-lg border border-border px-3 text-xs font-semibold text-muted hover:text-ink"
+						>
+							{f.isPublished ? 'Unpublish' : 'Publish'}
+						</button>
 
 						<button
 							type="button"
 							onclick={() => startEdit(f)}
-							class="flex h-9 w-9 items-center justify-center rounded-lg border border-border text-muted hover:text-ink"
+							class="flex h-11 w-11 items-center justify-center rounded-lg border border-border text-muted hover:text-ink"
 							aria-label="Edit"
 						>
 							<Pencil class="h-4 w-4" />
 						</button>
 
-						<form
-							method="post"
-							action="?/remove"
-							use:enhance={({ cancel }) => {
-								if (!confirm(`Delete this FAQ entry? This can't be undone.`)) cancel();
-							}}
+						<button
+							type="button"
+							onclick={() => confirmRemove(f)}
+							class="flex h-11 w-11 items-center justify-center rounded-lg border border-border text-blocked hover:bg-blocked/10"
+							aria-label="Delete"
 						>
-							<input type="hidden" name="id" value={f.id} />
-							<button
-								type="submit"
-								class="flex h-9 w-9 items-center justify-center rounded-lg border border-border text-blocked hover:bg-blocked/10"
-								aria-label="Delete"
-							>
-								<Trash2 class="h-4 w-4" />
-							</button>
-						</form>
+							<Trash2 class="h-4 w-4" />
+						</button>
 					</div>
 				</div>
 			{/each}
 		</Card>
 	{/if}
+
+	<StepUpDialog
+		bind:open={dialogOpen}
+		title={dialogProps.title}
+		message={dialogProps.message}
+		action={dialogProps.action}
+		fields={dialogProps.fields}
+		submitLabel={dialogProps.submitLabel}
+		danger={dialogProps.danger}
+		error={dialogError}
+	/>
 </div>

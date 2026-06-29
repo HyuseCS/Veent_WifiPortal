@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
-	import { Card, Button } from '$lib/components/ui';
+	import { Card, Button, Field } from '$lib/components/ui';
+	import StepUpDialog from '$lib/components/feature/StepUpDialog.svelte';
 	import Plus from 'lucide-svelte/icons/plus';
 	import Pencil from 'lucide-svelte/icons/pencil';
 	import Trash2 from 'lucide-svelte/icons/trash-2';
@@ -8,6 +9,53 @@
 	import type { PageData, ActionData } from './$types';
 
 	let { data, form }: { data: PageData; form: ActionData } = $props();
+
+	// Per-save MFA: the edit form collects the code inline; one-click toggle/delete route
+	// through a step-up confirm dialog. The server re-verifies the code on every write.
+	let code = $state('');
+	const codeValid = $derived(/^\d{6}$/.test(code));
+
+	let dialogOpen = $state(false);
+	let dialogProps = $state<{
+		title: string;
+		message: string;
+		action: string;
+		fields: Record<string, string | number | boolean>;
+		submitLabel: string;
+		danger: boolean;
+	}>({ title: '', message: '', action: '', fields: {}, submitLabel: 'Confirm', danger: false });
+
+	function confirmToggle(p: Pkg) {
+		dialogProps = {
+			title: p.isActive ? `Deactivate ${p.name}` : `Activate ${p.name}`,
+			message: p.isActive
+				? 'This removes it from the customer apps. Enter your authenticator code to confirm.'
+				: 'This makes it purchasable in the customer apps. Enter your authenticator code to confirm.',
+			action: '?/toggleActive',
+			fields: { id: p.id, isActive: (!p.isActive).toString() },
+			submitLabel: p.isActive ? 'Deactivate' : 'Activate',
+			danger: false
+		};
+		dialogOpen = true;
+	}
+	function confirmRemove(p: Pkg) {
+		dialogProps = {
+			title: `Delete ${p.name}`,
+			message: "This permanently deletes the package and can't be undone. Enter your authenticator code to confirm.",
+			action: '?/remove',
+			fields: { id: p.id },
+			submitLabel: 'Delete',
+			danger: true
+		};
+		dialogOpen = true;
+	}
+	// Surface a step-up/validation error inside the dialog only for the dialog's own actions.
+	// `form` is a union of per-action success/failure shapes; for these presentation-only
+	// checks we just need an optional error + action, so read it through a loose view.
+	const fv = $derived(form as { ok?: boolean; action?: string; error?: string } | null);
+	const dialogError = $derived(
+		fv?.error && (fv.action === 'toggleActive' || fv.action === 'remove') ? fv.error : null
+	);
 
 	type Pkg = PageData['packages'][number];
 	type EditState = {
@@ -36,9 +84,11 @@
 	let editing = $state<EditState | null>(null);
 
 	function startNew() {
+		code = '';
 		editing = blank();
 	}
 	function startEdit(p: Pkg) {
+		code = '';
 		editing = {
 			id: p.id,
 			name: p.name,
@@ -90,8 +140,8 @@
 		{/if}
 	</div>
 
-	{#if form?.error}
-		<p class="rounded-lg bg-blocked/10 px-4 py-3 text-sm text-blocked" role="alert">{form.error}</p>
+	{#if fv?.error && (fv.action === 'create' || fv.action === 'update')}
+		<p class="rounded-lg bg-blocked/10 px-4 py-3 text-sm text-blocked" role="alert">{fv.error}</p>
 	{/if}
 
 	{#if editing}
@@ -210,8 +260,22 @@
 					Active — visible to guests
 				</label>
 
+				<Field
+					id="package-code"
+					name="code"
+					label="Authenticator code"
+					inputmode="numeric"
+					autocomplete="one-time-code"
+					placeholder="6-digit code"
+					value={code}
+					oninput={(e) => (code = e.currentTarget.value)}
+					class="max-w-40 font-mono tracking-widest"
+				/>
+
 				<div class="flex gap-2.5">
-					<Button type="submit">{editing.id ? 'Save changes' : 'Create package'}</Button>
+					<Button type="submit" disabled={!codeValid}>
+						{editing.id ? 'Save changes' : 'Create package'}
+					</Button>
 					<Button variant="secondary" onclick={() => (editing = null)}>Cancel</Button>
 				</div>
 			</form>
@@ -246,46 +310,46 @@
 								<span class="font-mono text-xs text-muted">{summary(p)}</span>
 							</div>
 
-							<form method="post" action="?/toggleActive" use:enhance>
-								<input type="hidden" name="id" value={p.id} />
-								<input type="hidden" name="isActive" value={(!p.isActive).toString()} />
-								<button
-									type="submit"
-									class="flex min-h-[36px] items-center rounded-lg border border-border px-3 text-xs font-semibold text-muted hover:text-ink"
-								>
-									{p.isActive ? 'Deactivate' : 'Activate'}
-								</button>
-							</form>
+							<button
+								type="button"
+								onclick={() => confirmToggle(p)}
+								class="flex min-h-[44px] items-center rounded-lg border border-border px-3 text-xs font-semibold text-muted hover:text-ink"
+							>
+								{p.isActive ? 'Deactivate' : 'Activate'}
+							</button>
 
 							<button
 								type="button"
 								onclick={() => startEdit(p)}
-								class="flex h-9 w-9 items-center justify-center rounded-lg border border-border text-muted hover:text-ink"
+								class="flex h-11 w-11 items-center justify-center rounded-lg border border-border text-muted hover:text-ink"
 								aria-label="Edit {p.name}"
 							>
 								<Pencil class="h-4 w-4" />
 							</button>
 
-							<form
-								method="post"
-								action="?/remove"
-								use:enhance={({ cancel }) => {
-									if (!confirm(`Delete "${p.name}"? This can't be undone.`)) cancel();
-								}}
+							<button
+								type="button"
+								onclick={() => confirmRemove(p)}
+								class="flex h-11 w-11 items-center justify-center rounded-lg border border-border text-blocked hover:bg-blocked/10"
+								aria-label="Delete {p.name}"
 							>
-								<input type="hidden" name="id" value={p.id} />
-								<button
-									type="submit"
-									class="flex h-9 w-9 items-center justify-center rounded-lg border border-border text-blocked hover:bg-blocked/10"
-									aria-label="Delete {p.name}"
-								>
-									<Trash2 class="h-4 w-4" />
-								</button>
-							</form>
+								<Trash2 class="h-4 w-4" />
+							</button>
 						</li>
 					{/each}
 				</ul>
 			{/if}
 		</Card>
 	{/each}
+
+	<StepUpDialog
+		bind:open={dialogOpen}
+		title={dialogProps.title}
+		message={dialogProps.message}
+		action={dialogProps.action}
+		fields={dialogProps.fields}
+		submitLabel={dialogProps.submitLabel}
+		danger={dialogProps.danger}
+		error={dialogError}
+	/>
 </div>
