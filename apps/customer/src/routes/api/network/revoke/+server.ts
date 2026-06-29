@@ -1,9 +1,8 @@
-import { json, error } from '@sveltejs/kit';
-import { env } from '$env/dynamic/private';
+import { json } from '@sveltejs/kit';
 import { expireDueAccounts, reconcileGuestBindings } from '@veent/core';
 import { db } from '$lib/server/db';
 import { network } from '$lib/server/network';
-import { cronIpAllowed } from '$lib/server/rateLimit';
+import { requireCron } from '$lib/server/cron';
 import type { RequestHandler } from './$types';
 
 /**
@@ -15,9 +14,7 @@ import type { RequestHandler } from './$types';
  * OR rely on the router's hardware timeout and use this as a reconciler.
  */
 export const POST: RequestHandler = async (event) => {
-	if (!cronIpAllowed(event, env.CRON_IP_ALLOWLIST)) error(403, 'Forbidden');
-	const secret = event.request.headers.get('x-cron-secret');
-	if (!env.CRON_SECRET || secret !== env.CRON_SECRET) error(401, 'Unauthorized');
+	requireCron(event);
 
 	const revoked = await expireDueAccounts(db, network);
 	// Then sweep router bindings the DB no longer backs (wipe/cascade/crash orphans).

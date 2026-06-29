@@ -19,3 +19,17 @@ export function clientIp(event: RequestEvent): string {
 export function rateLimit(scope: string, identifier: string, max: number, windowMs = HOUR) {
 	return consumeRateLimit(db, { key: { scope, identifier }, max, windowMs });
 }
+
+/**
+ * Cron-endpoint IP allowlist: when `CRON_IP_ALLOWLIST` (comma-separated IPs) is set, only
+ * those source IPs may call. Unset → no IP restriction (the shared `CRON_SECRET` still
+ * applies). Returns true if allowed.
+ */
+export function cronIpAllowed(event: RequestEvent, allowlist: string | undefined): boolean {
+	const allow = allowlist
+		?.split(',')
+		.map((s) => s.trim())
+		.filter(Boolean);
+	if (!allow?.length) return true;
+	return allow.includes(clientIp(event));
+}

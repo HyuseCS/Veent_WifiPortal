@@ -45,7 +45,17 @@ async function revokeActiveMacs(db: DB, network: NetworkController, ids: string[
 		.where(
 			and(inArray(networkSessions.userId, ids), eq(networkSessions.status, SESSION_STATUS.active))
 		);
-	for (const { mac } of active) if (mac) await network.revoke(mac);
+	// Best-effort per-MAC: a single router error must not abort the sweep and block the
+	// delete/block that follows. Once the rows are gone, reconcileGuestBindings drops any
+	// router binding a failed revoke left behind (no active row backs it).
+	for (const { mac } of active) {
+		if (!mac) continue;
+		try {
+			await network.revoke(mac);
+		} catch {
+			// reconcileGuestBindings sweeps the orphaned router binding on the next cron.
+		}
+	}
 }
 
 /**

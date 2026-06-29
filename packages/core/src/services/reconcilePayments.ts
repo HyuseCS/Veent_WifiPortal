@@ -2,7 +2,7 @@ import { and, eq, gt, isNull, lte, or } from 'drizzle-orm';
 import { type DB, paymentCheckouts, paymentTransactions, packages } from '@veent/db';
 import { LEDGER_TYPE } from '../config';
 import type { PaymentEvent, PaymentProvider } from '../integrations/payments';
-import { addCredits } from './credits';
+import { addCreditsTx } from './credits';
 
 /** Normalized PaymentEvent.status → the raw gateway status we persist for Finance. */
 const STATUS_DB: Record<string, string> = {
@@ -37,7 +37,9 @@ export async function recordPaymentTransaction(
 	const row = {
 		id: evt.externalTransactionId,
 		status: STATUS_DB[evt.status] ?? evt.status.toUpperCase(),
-		amount: String(evt.amountMinor / 100),
+		// A garbled/missing gateway amount arrives as NaN (maya.toMinor) so the credit path
+		// refuses it; record 0 rather than writing 'NaN' into the numeric Finance column.
+		amount: String(Number.isFinite(evt.amountMinor) ? evt.amountMinor / 100 : 0),
 		currency: evt.currency,
 		fundSourceType: evt.fundSourceType ?? null,
 		fundSourceMasked: evt.fundSourceMasked ?? null,
@@ -56,14 +58,22 @@ export async function recordPaymentTransaction(
 		.values(row)
 		.onConflictDoUpdate({
 			target: paymentTransactions.id,
+			// Keep the latest detail when Maya resends or a later status transition (e.g.
+			// PENDING→SUCCESS) enriches a row a reconcile pass recorded first. networkId and
+			// the userId/packageId attribution stay INSERT-only (fixed at first record); the
+			// gateway-supplied detail below is what a transition can legitimately backfill.
 			set: {
 				status: row.status,
 				amount: row.amount,
+				currency: row.currency,
 				fundSourceType: row.fundSourceType,
 				fundSourceMasked: row.fundSourceMasked,
 				receiptNo: row.receiptNo,
+				referenceNo: row.referenceNo,
 				errorCode: row.errorCode,
-				errorMessage: row.errorMessage
+				errorMessage: row.errorMessage,
+				buyerName: row.buyerName,
+				buyerEmail: row.buyerEmail
 			}
 		});
 }
@@ -74,10 +84,13 @@ export async function recordPaymentTransaction(
  * Crediting is gated by an ATOMIC claim on payment_checkouts.status (pending→settled):
  * whichever path wins the claim credits, the other no-ops. So the webhook and these
  * reconcile paths can race freely without ever double-crediting (addCredits idempotency
- * on external_transaction_id is the second line of defence). Everything runs inside a
- * transaction, so if crediting throws the claim rolls back and the next pass retries —
- * a checkout is never marked settled without the credit actually landing.
+ * on external_transaction_id is the second line of defence). The claim AND the credit run
+ * inside ONE db.transaction, so a crash/throw between them rolls the claim back and the
+ * next pass retries — a checkout is never marked settled without the credit landing.
  */
+
+/** Why a credit attempt did not result in a new ledger entry (for the caller / logs). */
+export type CreditSkipReason = 'no_checkout' | 'already_settled' | 'amount_mismatch' | 'unknown_package';
 
 interface CreditArgs {
 	/** Match the checkout by gateway id (reconcile) or by referenceId (webhook). */
@@ -86,63 +99,80 @@ interface CreditArgs {
 	userId: string;
 	packageId: number;
 	externalTransactionId: string;
+	/**
+	 * The amount the gateway actually charged (minor units). Asserted against the checkout's
+	 * recorded amount before crediting — a mismatch (underpayment, partial capture, a fiatCost
+	 * edited under a stale checkout) must NOT credit.
+	 */
+	amountMinor: number;
 }
 
 /**
- * Claim the matching pending checkout and credit the buyer exactly once. If the row
- * is already settled, no-ops. If NO checkout row exists (legacy payments created before
- * this table, or any edge), it still credits — addCredits stays idempotent there.
+ * Claim the matching pending checkout and credit the buyer exactly once.
+ *
+ * Crediting now REQUIRES a matching payment_checkouts row whose recorded amount equals the
+ * amount the gateway charged. A reference with no checkout row is NOT credited (the per-attempt
+ * nonce + amount on that row are the binding that makes a paid event trustworthy); an amount
+ * mismatch is settled-but-not-credited and flagged. If the row is already settled, no-ops.
  */
 export async function creditCheckoutIfUnsettled(
 	db: DB,
 	args: CreditArgs
-): Promise<{ credited: boolean; balance?: number }> {
+): Promise<{ credited: boolean; balance?: number; reason?: CreditSkipReason }> {
 	const match = args.checkoutId
 		? eq(paymentCheckouts.id, args.checkoutId)
 		: eq(paymentCheckouts.referenceId, args.referenceId ?? '');
 
-	// Atomic claim: flip pending→settled. Postgres serializes the UPDATE, so under a
-	// webhook/reconcile race exactly one caller gets a row back — only it credits.
-	const claimed = await db
-		.update(paymentCheckouts)
-		.set({ status: 'settled', settledAt: new Date(), externalTransactionId: args.externalTransactionId })
-		.where(and(match, eq(paymentCheckouts.status, 'pending')))
-		.returning({ id: paymentCheckouts.id });
+	return db.transaction(async (tx) => {
+		// Atomic claim: flip pending→settled, returning the checkout's recorded amount so we
+		// can assert the gateway charged what we asked. Postgres serializes the UPDATE, so under
+		// a webhook/reconcile race exactly one caller gets a row back — only it credits.
+		const [claimed] = await tx
+			.update(paymentCheckouts)
+			.set({ status: 'settled', settledAt: new Date(), externalTransactionId: args.externalTransactionId })
+			.where(and(match, eq(paymentCheckouts.status, 'pending')))
+			.returning({ id: paymentCheckouts.id, amount: paymentCheckouts.amount });
 
-	const claimedId = claimed[0]?.id ?? null;
-	if (!claimedId) {
-		// Didn't win the claim: already settled (skip), or no row at all (legacy → credit;
-		// addCredits idempotency is the backstop there).
-		const [exists] = await db
-			.select({ id: paymentCheckouts.id })
-			.from(paymentCheckouts)
-			.where(match)
-			.limit(1);
-		if (exists) return { credited: false };
-	}
-
-	/** Undo a claim we can't fulfil, so a later pass retries — never settled-but-uncredited. */
-	const revert = async () => {
-		if (claimedId) {
-			await db
-				.update(paymentCheckouts)
-				.set({ status: 'pending', settledAt: null })
-				.where(eq(paymentCheckouts.id, claimedId));
+		if (!claimed) {
+			// Didn't win the claim: either already settled (a prior pass credited — skip), or NO
+			// checkout row exists at all. We no longer credit checkout-less payments — a paid event
+			// with no matching checkout is recorded for Finance (by the caller) but never credited.
+			const [exists] = await tx
+				.select({ id: paymentCheckouts.id })
+				.from(paymentCheckouts)
+				.where(match)
+				.limit(1);
+			return { credited: false, reason: exists ? 'already_settled' : 'no_checkout' };
 		}
-	};
 
-	const [pkg] = await db
-		.select({ credits: packages.creditsProvided })
-		.from(packages)
-		.where(eq(packages.id, args.packageId))
-		.limit(1);
-	if (!pkg) {
-		await revert();
-		return { credited: false };
-	}
+		// Amount integrity (currency is PHP-only and not stored per-checkout, so amount is the
+		// authoritative check). A mismatch keeps the claim (settled) to stop retries, but does
+		// not credit — surfaced so a spike is alertable.
+		const expectedMinor = Math.round(Number(claimed.amount) * 100);
+		if (!Number.isFinite(args.amountMinor) || args.amountMinor !== expectedMinor) {
+			console.warn('[credit] amount mismatch — refusing to credit', {
+				checkoutId: claimed.id,
+				externalTransactionId: args.externalTransactionId,
+				expectedMinor,
+				gotMinor: args.amountMinor
+			});
+			return { credited: false, reason: 'amount_mismatch' };
+		}
 
-	try {
-		const result = await addCredits(db, {
+		const [pkg] = await tx
+			.select({ credits: packages.creditsProvided })
+			.from(packages)
+			.where(eq(packages.id, args.packageId))
+			.limit(1);
+		if (!pkg) {
+			// FK on payment_checkouts.package_id means this shouldn't happen; keep settled, no credit.
+			console.warn('[credit] checkout references unknown package', { packageId: args.packageId });
+			return { credited: false, reason: 'unknown_package' };
+		}
+
+		// Same transaction as the claim: if this throws, the claim rolls back and the next pass
+		// retries — never settled-but-uncredited. addCredits idempotency is the second guard.
+		const result = await addCreditsTx(tx, {
 			userId: args.userId,
 			amount: pkg.credits ?? 0,
 			type: LEDGER_TYPE.topup,
@@ -150,10 +180,7 @@ export async function creditCheckoutIfUnsettled(
 			externalTransactionId: args.externalTransactionId
 		});
 		return { credited: result.credited, balance: result.balance };
-	} catch (e) {
-		await revert();
-		throw e;
-	}
+	});
 }
 
 /** Mark a pending checkout as finished-unpaid (failed/expired/cancelled). */
@@ -213,7 +240,8 @@ export async function reconcilePendingPayments(
 					checkoutId: c.id,
 					userId: c.userId,
 					packageId: c.packageId,
-					externalTransactionId: evt.externalTransactionId
+					externalTransactionId: evt.externalTransactionId,
+					amountMinor: evt.amountMinor
 				});
 				if (r.credited) credited++;
 			} else if (evt.status === 'failed' || evt.status === 'cancelled') {
@@ -287,7 +315,8 @@ export async function reconcileCheckout(
 				checkoutId: claimed.id,
 				userId: claimed.userId,
 				packageId: claimed.packageId,
-				externalTransactionId: evt.externalTransactionId
+				externalTransactionId: evt.externalTransactionId,
+				amountMinor: evt.amountMinor
 			});
 			return { credited: r.credited };
 		}

@@ -10,7 +10,16 @@
  * a real router/controller telemetry feed exists it is seeded with sample rows;
  * the shape matches what a future feed would write.
  */
-import { pgTable, serial, integer, text, boolean, numeric, timestamp } from 'drizzle-orm/pg-core';
+import {
+	pgTable,
+	serial,
+	integer,
+	text,
+	boolean,
+	numeric,
+	timestamp,
+	uniqueIndex
+} from 'drizzle-orm/pg-core';
 import { adminUser } from './auth-admin';
 
 /**
@@ -87,4 +96,9 @@ export const networkHealth = pgTable('network_health', {
 	// cluster mirrors this value across all its current members. Null = unnamed (shown as
 	// "Cluster N" in the UI).
 	clusterName: text('cluster_name')
-});
+}, (t) => [
+	// `name` is the natural key the health sweep upserts on (one row per router interface /
+	// map pin). Unique so concurrent sweeps can't race two rows for the same AP, and so the
+	// service can use onConflictDoUpdate instead of select-then-insert.
+	uniqueIndex('network_health_name_key').on(t.name)
+]);

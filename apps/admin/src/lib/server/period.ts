@@ -10,7 +10,12 @@ export function parsePeriod(raw: string | null): { period: Period; from?: Date; 
 	const period: Period = raw === '7d' || raw === '90d' || raw === 'all' ? raw : '30d';
 	if (period === 'all') return { period };
 	const to = new Date();
-	const from = new Date(to.getTime() - DAYS[period] * 24 * 60 * 60 * 1000);
+	// Snap `from` to the START of the day N−1 days back, so the range covers N WHOLE calendar
+	// days (today + the prior N−1) instead of a rolling-ms window. A rolling window starts
+	// mid-day, leaving the first/last date_trunc buckets partial and under-reported.
+	const from = new Date(to);
+	from.setDate(from.getDate() - (DAYS[period] - 1));
+	from.setHours(0, 0, 0, 0);
 	return { period, from, to };
 }
 
