@@ -41,3 +41,6 @@ start_db.sh
 .agents/
 .claude/
 .gemini/
+CLAUDE.md
+GEMINI.md
+AGENTS.md
