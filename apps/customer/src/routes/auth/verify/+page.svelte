@@ -166,7 +166,7 @@
 						<span class="sr-only">Verifying…</span>
 					</span>
 					<span class="inline-flex items-center gap-2 group-data-[pending]:hidden">
-						Verify &amp; connect
+						Verify
 					</span>
 				</button>
 			</form>
