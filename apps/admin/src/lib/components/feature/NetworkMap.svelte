@@ -38,6 +38,29 @@
 	let query = $state('');
 	let sidebarOpen = $state(true);
 	let mapReady = $state(false);
+
+	// Mobile bottom-sheet drag-to-dismiss: the sheet follows the finger down (sheetDragY), and
+	// releasing past 30% of its height closes it; below that it snaps back. Desktop never drags
+	// (the handle is md:hidden), so sheetDragY stays 0 and the transform is identity there.
+	let sheetEl = $state<HTMLElement>();
+	let sheetDragY = $state(0);
+	let sheetDragging = $state(false);
+	let sheetStartY = 0;
+	function onSheetDown(e: PointerEvent) {
+		sheetDragging = true;
+		sheetStartY = e.clientY;
+		(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+	}
+	function onSheetMove(e: PointerEvent) {
+		if (!sheetDragging) return;
+		sheetDragY = Math.max(0, e.clientY - sheetStartY); // down-only
+	}
+	function onSheetUp() {
+		if (!sheetDragging) return;
+		sheetDragging = false;
+		if (sheetDragY > (sheetEl?.offsetHeight ?? 300) * 0.3) sidebarOpen = false;
+		sheetDragY = 0; // dismiss or snap back — reset for next open
+	}
 	// Coverage domes on/off (the Leaflet toggle control). Real-AP domes only — sandbox
 	// placement pins keep their bands regardless.
 	let coverageVisible = $state(true);
@@ -524,13 +547,26 @@
 <div class="relative h-full w-full overflow-hidden">
 	{#if sidebarOpen}
 		<aside
-			class="absolute z-[1000] flex flex-col bg-bg shadow-2xl max-md:inset-x-0 max-md:bottom-0 max-md:max-h-[70dvh] max-md:rounded-t-2xl max-md:border-t max-md:border-border md:top-0 md:bottom-0 md:left-0 md:w-85 md:border-r md:border-border md:shadow-none"
+			bind:this={sheetEl}
+			style="transform: translateY({sheetDragY}px)"
+			class="absolute z-[1000] flex flex-col bg-bg shadow-2xl max-md:inset-x-0 max-md:bottom-0 max-md:max-h-[70dvh] max-md:rounded-t-2xl max-md:border-t max-md:border-border md:top-0 md:bottom-0 md:left-0 md:w-85 md:border-r md:border-border md:shadow-none {sheetDragging
+				? ''
+				: 'transition-transform duration-200 motion-reduce:transition-none'}"
 		>
-			<!-- Drag-handle affordance — mobile bottom-sheet only. -->
+			<!-- Drag handle — mobile bottom-sheet only. The padded zone is a ~44px touch target;
+			     drag it down past 30% of the sheet to dismiss (snaps back below that). -->
 			<div
-				class="mx-auto mt-2 mb-1 h-1.5 w-10 shrink-0 rounded-full bg-border md:hidden"
-				aria-hidden="true"
-			></div>
+				class="flex shrink-0 cursor-grab touch-none justify-center py-3 md:hidden"
+				onpointerdown={onSheetDown}
+				onpointermove={onSheetMove}
+				onpointerup={onSheetUp}
+				onpointercancel={onSheetUp}
+				role="button"
+				tabindex="-1"
+				aria-label="Drag to dismiss list"
+			>
+				<span class="h-1.5 w-10 rounded-full bg-border" aria-hidden="true"></span>
+			</div>
 			<header class="flex h-14 items-center justify-between gap-2 border-b border-border px-4">
 				<div class="flex items-center gap-2.5">
 					<span class="text-sm font-semibold text-ink">Access Points</span>
@@ -587,7 +623,7 @@
 				/>
 			</div>
 
-			<div class="flex-1 overflow-y-auto">
+			<div class="flex-1 overflow-y-auto overscroll-contain">
 				<!-- New/edit pin panel — reused in the top workspace and inside a cluster group. -->
 				{#snippet pinPanel(pin: Pin)}
 					<PinPanel

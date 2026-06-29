@@ -157,7 +157,7 @@
 	<!-- KPIs + Revenue share the left column: KPIs keep their natural height, revenue fills
 	     the rest — so the sessions/network rows on the right can split the height evenly. -->
 	<div class="leftcol flex min-h-0 flex-col gap-4">
-		<section class="grid grid-cols-1 gap-4 sm:grid-cols-3">
+		<section class="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4">
 			{#each kpis as kpi (kpi.label)}
 				<KpiCard
 					{kpi}

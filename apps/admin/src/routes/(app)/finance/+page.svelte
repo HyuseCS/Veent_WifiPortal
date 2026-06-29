@@ -41,10 +41,10 @@
 </script>
 
 <!-- Period selector + Export CSV now live in the Topbar header (FinanceHeaderControls).
-     Full-height column so the charts stretch to the bottom of the page. -->
+     Desktop (md+) is a full-height one-screen column; mobile flows naturally and scrolls. -->
 <div class="flex flex-col gap-6 md:h-full">
 	<!-- KPIs -->
-	<section class="grid shrink-0 grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+	<section class="grid shrink-0 grid-cols-2 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-4">
 		{#each data.kpis as kpi (kpi.label)}
 			{@const c = chromeFor(kpi)}
 			<KpiCard
@@ -58,16 +58,17 @@
 	</section>
 
 	<!-- Revenue + method/access-point breakdowns (transactions list moved to /finance/transactions).
-	     flex-1 + min-h-0 so the cards fill the leftover height down to the page bottom. Revenue
-	     spans 2 of 3 columns; the two donuts stack vertically in the 3rd column. -->
-	<section class="grid min-h-0 flex-1 grid-cols-1 items-stretch gap-4 lg:grid-cols-3">
+	     On md+, flex-1 + min-h-0 make the cards fill the leftover height down to the page bottom
+	     (one screen); on mobile they keep natural height and the page scrolls. Revenue spans 2 of
+	     3 columns; the two donuts stack vertically in the 3rd column. -->
+	<section class="grid grid-cols-1 gap-4 md:min-h-0 md:flex-1 lg:grid-cols-3 lg:items-stretch">
 		<Card class="flex min-h-65 flex-col lg:col-span-2">
 			<SectionHeading title="Settled revenue over time" class="mb-4">
 				{#snippet aside()}
 					<span class="font-mono text-sm text-muted">₱{revenueTotal.toLocaleString('en-PH')}</span>
 				{/snippet}
 			</SectionHeading>
-			<div class="min-h-0 flex-1">
+			<div class="min-h-[200px] flex-1 md:min-h-0">
 				{#if data.revenue.length > 0}
 					<RevenueChart data={data.revenue} />
 				{:else}
@@ -78,14 +79,14 @@
 			</div>
 		</Card>
 
-		<!-- Two donuts stacked on top of each other in the 3rd column. No min-height so they
-		     shrink to share the column height — keeps the page to one screen, no overflow. -->
-		<div class="flex min-h-0 flex-col gap-4">
-			<Card class="flex min-h-0 flex-1 flex-col">
+		<!-- Two donuts stacked in the 3rd column. On md+ they shrink to share the column height
+		     (one screen, no overflow); on mobile they keep natural height and stack/scroll. -->
+		<div class="flex flex-col gap-4 md:min-h-0">
+			<Card class="flex flex-col md:min-h-0 md:flex-1">
 				<SectionHeading title="By payment method" class="mb-4" />
 				<!-- Center the donut block in the leftover height so the card isn't top-heavy
 				     next to the taller chart panel. -->
-				<div class="flex min-h-0 flex-1 items-center">
+				<div class="flex items-center md:min-h-0 md:flex-1">
 					<DonutChart
 						data={data.breakdown}
 						centerValue="₱{settledTotal.toLocaleString('en-PH')}"
@@ -94,9 +95,9 @@
 				</div>
 			</Card>
 
-			<Card class="flex min-h-0 flex-1 flex-col">
+			<Card class="flex flex-col md:min-h-0 md:flex-1">
 				<SectionHeading title="By access point" class="mb-4" />
-				<div class="flex min-h-0 flex-1 items-center">
+				<div class="flex items-center md:min-h-0 md:flex-1">
 					<DonutChart
 						data={data.apRevenue}
 						label="Revenue by access point"

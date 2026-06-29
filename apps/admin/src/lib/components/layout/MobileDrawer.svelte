@@ -48,9 +48,11 @@
 	});
 </script>
 
-<!-- Backdrop — mobile only; click to dismiss. Fades via CSS (reduced-motion collapses it). -->
+<!-- Backdrop — mobile only; click to dismiss. Fades via CSS (reduced-motion collapses it).
+     z-[1090]/[1100] (not z-40/50): on /map, Leaflet's panes + controls reach z-1000 and the
+     map container makes no stacking context, so a lower nav overlay sinks under the map. -->
 <div
-	class="fixed inset-0 z-40 bg-black/50 transition-opacity duration-200 md:hidden {mobileNav.open
+	class="fixed inset-0 z-[1090] bg-black/50 transition-opacity duration-200 md:hidden {mobileNav.open
 		? 'opacity-100'
 		: 'pointer-events-none opacity-0'}"
 	aria-hidden="true"
@@ -61,7 +63,7 @@
      when closed so its links stay out of the tab order. `md:hidden` removes it on desktop. -->
 <div
 	id="mobile-nav-drawer"
-	class="fixed inset-y-0 left-0 z-50 flex h-dvh w-72 flex-col bg-sidebar text-sidebar-text shadow-xl transition-transform duration-200 md:hidden {mobileNav.open
+	class="fixed inset-y-0 left-0 z-[1100] flex h-dvh w-72 flex-col bg-sidebar text-sidebar-text shadow-xl transition-transform duration-200 md:hidden {mobileNav.open
 		? 'translate-x-0'
 		: '-translate-x-full'}"
 	role="dialog"
