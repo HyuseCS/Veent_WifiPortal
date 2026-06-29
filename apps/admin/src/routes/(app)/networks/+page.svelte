@@ -6,9 +6,9 @@
 		RouterLogPanel,
 		CoverageMap,
 		KpiCard,
+		KpiCarousel,
 		WipeDialog
 	} from '$lib/components/feature';
-	import Router from 'lucide-svelte/icons/router';
 	import Users from 'lucide-svelte/icons/users';
 	import Gauge from 'lucide-svelte/icons/gauge';
 	import Timer from 'lucide-svelte/icons/timer';
@@ -61,7 +61,6 @@
 	const cntHealthy = $derived(networks.filter((n) => n.tone === 'online').length);
 	const cntDegraded = $derived(networks.filter((n) => n.tone === 'warning').length);
 	const cntOffline = $derived(networks.filter((n) => n.tone === 'blocked').length);
-	const onlineCount = $derived(cntHealthy + cntDegraded);
 	const usersTotal = $derived(networks.reduce((s, n) => s + n.users, 0));
 
 	// Metrics arrive pre-formatted ("47 Mbps", "22ms") — pull the leading number to aggregate.
@@ -94,11 +93,15 @@
 	};
 	const kpis = $derived<NetKpi[]>([
 		{
-			label: 'Access Points',
-			value: String(total),
-			icon: icon(Router),
-			caption: `${onlineCount} online`,
-			captionTone: 'online'
+			label: 'Alerts',
+			value: String(alerts),
+			icon: icon(TriangleAlert),
+			// Honest at zero: green "all clear" instead of a red "needs attention" on 0.
+			caption: alerts > 0 ? 'view affected APs' : 'all clear',
+			tone: alerts > 0 ? 'blocked' : 'online',
+			captionTone: alerts > 0 ? 'blocked' : 'online',
+			// Clicking drills into the offending APs (degraded + offline). No-op at zero.
+			onclick: alerts > 0 ? showAlerts : undefined
 		},
 		{
 			label: 'Connected Users',
@@ -119,17 +122,6 @@
 			unit: avgLat == null ? undefined : 'ms',
 			icon: icon(Timer),
 			caption: 'across active APs'
-		},
-		{
-			label: 'Alerts',
-			value: String(alerts),
-			icon: icon(TriangleAlert),
-			// Honest at zero: green "all clear" instead of a red "needs attention" on 0.
-			caption: alerts > 0 ? 'view affected APs' : 'all clear',
-			tone: alerts > 0 ? 'blocked' : 'online',
-			captionTone: alerts > 0 ? 'blocked' : 'online',
-			// Clicking drills into the offending APs (degraded + offline). No-op at zero.
-			onclick: alerts > 0 ? showAlerts : undefined
 		}
 	]);
 
@@ -227,11 +219,13 @@
 	</div>
 {:else}
 <div class="contents">
-	<!-- SCREEN 1: KPIs + coverage map + side panels -->
-	<div class="min-h-full snap-start space-y-5 pt-5 pb-5">
+	<!-- SCREEN 1: KPIs + coverage map + side panels. min-h-full (the full-screen snap section)
+	     is desktop-only — on mobile the map/log are gone, so let this shrink to content and the
+	     access points pull up right under it instead of sitting a screen-height below. -->
+	<div class="snap-start space-y-5 pt-5 pb-5 md:min-h-full">
 		<!-- KPI STRIP -->
-		<section class="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-5">
-			{#each kpis as k (k.label)}
+		<KpiCarousel items={kpis}>
+			{#snippet card(k)}
 				<KpiCard
 					kpi={{ label: k.label, value: k.value }}
 					icon={k.icon}
@@ -242,13 +236,14 @@
 					onclick={k.onclick}
 					compact
 				/>
-			{/each}
-		</section>
+			{/snippet}
+		</KpiCarousel>
 
 		<!-- MAP + RIGHT PANELS -->
 		<div class="grid gap-5 xl:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)] xl:items-stretch">
-			<!-- Coverage map -->
-			<Card padding="p-0" class="flex h-[60dvh] flex-col overflow-hidden xl:h-[65vh]">
+			<!-- Coverage map — hidden on mobile (display:none also skips Leaflet tile loads); the
+			     interactive map is desktop-only, AP health is still covered by the cards below. -->
+			<Card padding="p-0" class="hidden h-[60dvh] flex-col overflow-hidden md:flex xl:h-[65vh]">
 				<div class="flex flex-wrap items-start justify-between gap-3 px-5 pt-4 pb-3">
 					<div>
 						<h2 class="text-base font-semibold text-ink">Coverage Map</h2>
@@ -297,7 +292,8 @@
 					</div>
 				</Card>
 
-				<div class="h-[37vh] xl:h-auto xl:min-h-0 xl:flex-1">
+				<!-- Inline log — desktop/tablet only; mobile opens /networks/logs from the header. -->
+				<div class="hidden h-[37vh] md:block xl:h-auto xl:min-h-0 xl:flex-1">
 					<RouterLogPanel />
 				</div>
 			</div>

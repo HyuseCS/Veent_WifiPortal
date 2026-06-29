@@ -9,6 +9,8 @@ import { customerAuthSchema, customerProfile } from '@veent/db';
 import { db } from '$lib/server/db';
 import { normalizePhone } from '$lib/phone';
 import { sendOtp } from '$lib/server/otp';
+import { enforceOtpSendLimit } from '$lib/server/otpRateLimit';
+import { getPortalContext } from '$lib/server/portal';
 
 // Issue 2b/C1: pin cookie `Secure` to the ORIGIN protocol (NOT NODE_ENV). With the TLS portal
 // (ORIGIN=https://…) every portal session cookie is Secure, so it can't be sidejacked off the
@@ -82,6 +84,16 @@ export const auth = betterAuth({
 				getTempName: (phone) => phone
 			},
 			sendOTP: async ({ phoneNumber: phone, code }) => {
+				// Charge the per-phone (+ per-MAC) send cap HERE — the one seam EVERY send passes
+				// through, including a direct POST to /api/auth/phone-number/send-otp that skips the
+				// form actions and would otherwise bypass the limit (SMS-bomb a number / drain the
+				// operator's SMS credits). The form actions enforce first for a friendly retry
+				// message and set locals.otpLimitEnforced so their sends aren't double-counted here.
+				// On a direct call there's no portal context, so this falls back to a phone-only cap.
+				const ev = getRequestEvent();
+				if (!ev.locals.otpLimitEnforced) {
+					await enforceOtpSendLimit(phone, getPortalContext(ev)?.mac);
+				}
 				await sendOtp(phone, code);
 			}
 		}),

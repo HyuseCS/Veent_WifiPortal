@@ -7,7 +7,8 @@ import {
 	numeric,
 	doublePrecision,
 	timestamp,
-	index
+	index,
+	uniqueIndex
 } from 'drizzle-orm/pg-core';
 import { customerUser } from './auth-customer';
 
@@ -248,11 +249,14 @@ export const rateLimits = pgTable(
 		attempts: integer('attempts').notNull().default(0),
 		lastAttemptAt: timestamp('last_attempt_at').notNull().defaultNow()
 	},
-	// Looked up on every OTP request (mac/phone) or scoped check (scope+identifier).
+	// Looked up on every OTP request (mac/phone) or scoped check (scope+identifier). UNIQUE per
+	// key type so `consumeRateLimit`'s insert-if-absent upsert is race-safe (one counter row per
+	// key, never duplicates from a concurrent first attempt). Postgres treats NULLs as distinct,
+	// so a mac/phone row (null scope+identifier) never collides under the scope index, etc.
 	(t) => [
-		index('rate_limits_mac_address_idx').on(t.macAddress),
-		index('rate_limits_phone_number_idx').on(t.phoneNumber),
-		index('rate_limits_scope_identifier_idx').on(t.scope, t.identifier)
+		uniqueIndex('rate_limits_mac_address_key').on(t.macAddress),
+		uniqueIndex('rate_limits_phone_number_key').on(t.phoneNumber),
+		uniqueIndex('rate_limits_scope_identifier_key').on(t.scope, t.identifier)
 	]
 );
 

@@ -10,6 +10,10 @@ import type { RequestHandler } from './$types';
  */
 export const GET: RequestHandler = async (event) => {
 	if (!event.locals.user) error(401, 'Not authenticated');
+	// Mandatory 2FA: same as /api/connected — the (app) layout doesn't guard this API route, and
+	// hooks expose locals.user pre-enrollment, so enforce enrollment here or an un-enrolled
+	// session could read the router system log directly.
+	if (!event.locals.user.twoFactorEnabled) error(403, 'Two-factor enrollment required');
 	if (!network.listRouterLog) return json({ entries: [] });
 	try {
 		const entries = await network.listRouterLog({ limit: 60 });

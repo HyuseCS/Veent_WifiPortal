@@ -203,6 +203,7 @@
 		display: none;
 	}
 	.table-cards tbody tr {
+		position: relative; /* anchor for .tc-corner (e.g. the Users select checkbox) */
 		border: 1px solid var(--color-border);
 		border-radius: 0.5rem;
 		background: var(--color-bg);
@@ -236,6 +237,21 @@
 		content: none;
 	}
 	.table-cards td:empty {
+		display: none;
+	}
+	/* Pin a cell to the card's top-right corner (no label), e.g. the row's select checkbox. */
+	.table-cards td.tc-corner {
+		position: absolute;
+		top: 0.375rem;
+		right: 0.375rem;
+		padding: 0.25rem;
+	}
+	.table-cards td.tc-corner::before {
+		content: none;
+	}
+	/* Drop a cell from the card entirely on mobile — used for "—" placeholder values whose
+	   LABEL ···· — row would just be noise (desktop keeps the cell for column alignment). */
+	.table-cards td.tc-skip {
 		display: none;
 	}
 	.table-cards tbody tr.tc-detail {

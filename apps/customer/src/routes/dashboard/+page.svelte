@@ -5,7 +5,7 @@
 	import { toasts } from '$lib/toasts.svelte';
 	import Icon from '$lib/Icon.svelte';
 	import DeviceList from '$lib/DeviceList.svelte';
-	import { liveAccount, connectAccountLive } from '$lib/live.svelte';
+	import { liveAccount, connectAccountLive, resetAccountLive } from '$lib/live.svelte';
 	import { resolve } from '$app/paths';
 	import type { PageServerData, ActionData } from './$types';
 	import logo from '$lib/assets/parafiber-logo.webp';
@@ -68,6 +68,23 @@
 	// and label; the countdown is shared.
 	const access = $derived(live?.access ?? data.access);
 	const devices = $derived(live?.devices ?? data.devices);
+	// Last 3 octets of a MAC — client mirror of $lib/server/account-view's `macTail` (server code
+	// can't be imported into the client bundle).
+	function macTailOf(m: string | null): string | null {
+		if (!m) return null;
+		const parts = m.split(':');
+		return parts.length >= 3 ? parts.slice(-3).join(':') : m;
+	}
+	// "Is THIS device bound" — recomputed on the CLIENT from the load-resolved MAC against the
+	// (masked) device list, NOT the view's server flag. The SSE stream's `?mac=` is fixed at
+	// connect time, so a frame opened before the device was detected reports thisDeviceBound=false
+	// forever and overrides the fresh `load` data — that's the "shows connected only after a manual
+	// refresh" bug. Matching `data.mac` (re-resolved each load) against the list tails fixes it;
+	// falls back to the server flag when we have no MAC at all.
+	const myTail = $derived(macTailOf(mac || null));
+	const thisDeviceBound = $derived(
+		myTail ? devices.list.some((d) => d.macTail === myTail) : devices.thisDeviceBound
+	);
 	// Paused: the window is frozen and all devices are unbound. `expiresAt` is the FROZEN end
 	// (may be in the past), so countdown/expiry logic must ignore it and use the held remaining.
 	const paused = $derived(access.paused);
@@ -99,10 +116,10 @@
 	// This device has live account time but isn't bound (auto-bind hit the cap, or a
 	// router hiccup). Surface a connect/replace prompt. Suppressed while paused — the band
 	// offers Resume instead, which reconnects the device.
-	const needsConnect = $derived(access.active && !paused && hasMac && !devices.thisDeviceBound);
+	const needsConnect = $derived(access.active && !paused && hasMac && !thisDeviceBound);
 	// The app-bar dot reflects THIS device — account time alone isn't "online" if this
 	// device isn't actually bound.
-	const thisOnline = $derived(access.active && devices.thisDeviceBound && !isExpired);
+	const thisOnline = $derived(access.active && thisDeviceBound && !isExpired);
 
 	// Per-action pending flags. Each drives its form's `data-pending` binding so the button
 	// spinner shows immediately on tap — and, crucially, so Svelte OWNS the attribute after
@@ -114,9 +131,11 @@
 		startingFree = true;
 		return async ({ result, update }) => {
 			if (result.type === 'success') {
-				toasts.show(`You're online — ${minutes} min of free account time, shared across your devices.`);
+				location.reload(); // see confirmBuy — reload so connected state shows immediately
+				return;
 			}
 			await update();
+			resetAccountLive();
 			startingFree = false;
 		};
 	};
@@ -125,9 +144,13 @@
 	const reconnect: SubmitFunction = () => {
 		connecting = true;
 		return async ({ result, update }) => {
-			if (result.type === 'success') toasts.show("You're online on this device.");
-			else if (result.type === 'failure') toasts.show('Could not connect this device.', 'error');
+			if (result.type === 'success') {
+				location.reload(); // see confirmBuy — reload so connected state shows immediately
+				return;
+			}
+			if (result.type === 'failure') toasts.show('Could not connect this device.', 'error');
 			await update();
+			resetAccountLive();
 			connecting = false;
 		};
 	};
@@ -138,14 +161,18 @@
 			buying = true;
 			return async ({ result, update }) => {
 				if (result.type === 'success') {
-					toasts.show(
-						`You're now connected with ${tier.name}. Enjoy your ${tier.durationMinutes} minutes.`
-					);
-					sheet = null;
-				} else if (result.type === 'failure') {
+					// Hard reload so the new connected state shows immediately. The in-place `update()`
+					// returns correct data (verified) but the live-backed view doesn't reliably
+					// re-render it — the page would otherwise look stuck for ~a minute until the SSE
+					// pushes. A full reload matches the manual refresh that always works.
+					location.reload();
+					return;
+				}
+				if (result.type === 'failure') {
 					toasts.show('Could not start that tier. Please try again.', 'error');
 				}
 				await update();
+				resetAccountLive();
 				buying = false;
 			};
 		};
@@ -156,6 +183,7 @@
 			if (result.type === 'success') toasts.show('Your time is paused and held.');
 			else if (result.type === 'failure') toasts.show('Could not pause your time.', 'error');
 			await update();
+			resetAccountLive();
 		};
 	};
 
@@ -164,6 +192,7 @@
 			if (result.type === 'success') toasts.show("You're back online — time resumed.");
 			else if (result.type === 'failure') toasts.show('Could not resume your time.', 'error');
 			await update();
+			resetAccountLive();
 		};
 	};
 

@@ -24,6 +24,7 @@
 	} from '$lib/components/ui';
 	import PromoteDialog from './PromoteDialog.svelte';
 	import OwnerChangeDialog from './OwnerChangeDialog.svelte';
+	import TableSortControl from './TableSortControl.svelte';
 
 	// Presentational table for the owner-only Staff page. Row actions post directly to
 	// the page's form actions (?/setStatus, ?/remove, ?/promote); the route enforces
@@ -148,7 +149,7 @@
 				bind:value={query}
 				placeholder="Search name or email…"
 				label="Search staff"
-				class="ml-auto min-w-60 flex-1 sm:max-w-xs"
+				class="ml-auto min-w-0 flex-1 sm:max-w-xs"
 			/>
 			{#if onadd}
 				<!-- Icon-only; "Add staff" shows as a native hover tooltip (title) + a11y label. -->
@@ -158,34 +159,14 @@
 			{/if}
 			<!-- Mobile sort: the sortable <thead> is hidden in card mode, so expose the same
 			     keys here. md:hidden — desktop keeps the clickable headers. -->
-			<div class="flex w-full items-center gap-2 md:hidden">
-				<label for="staff-sort" class="sr-only">Sort staff by</label>
-				<select
-					id="staff-sort"
-					class="min-h-11 flex-1 rounded-lg border border-border bg-bg px-3 text-sm text-ink"
-					value={sortKey ?? ''}
-					onchange={(e) => toggleSort(e.currentTarget.value as SortKey)}
-				>
-					<option value="" disabled>Sort by…</option>
-					{#each headers.filter((h) => h.key) as h (h.label)}
-						<option value={h.key}>{h.label}</option>
-					{/each}
-				</select>
-				{#if sortKey}
-					<button
-						type="button"
-						onclick={() => sortKey && toggleSort(sortKey)}
-						aria-label="Toggle sort direction ({sortDir === 'asc' ? 'ascending' : 'descending'})"
-						class="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-border bg-bg text-muted transition-colors hover:text-ink"
-					>
-						{#if sortDir === 'asc'}
-							<ChevronUp class="h-4 w-4" aria-hidden="true" />
-						{:else}
-							<ChevronDown class="h-4 w-4" aria-hidden="true" />
-						{/if}
-					</button>
-				{/if}
-			</div>
+			<TableSortControl
+				id="staff-sort"
+				label="Sort staff by"
+				{headers}
+				{sortKey}
+				{sortDir}
+				onToggle={(k) => toggleSort(k as SortKey)}
+			/>
 		</div>
 	{/snippet}
 

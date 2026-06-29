@@ -41,8 +41,7 @@ export const load: PageServerLoad = async (event) => {
 	// help — which it can't behind a hotspot that NATs client traffic to its own IP (we'd see
 	// the router's address, not the device). Without this fallback the dashboard shows the
 	// "device not detected" warning on every return-to-dashboard in those setups.
-	// `let` because the single-device fallback below can still refine it.
-	let mac = await resolveMacForUser(event, user.id);
+	const mac = await resolveMacForUser(event, user.id);
 
 	const tiers = await db
 		.select()
@@ -50,16 +49,6 @@ export const load: PageServerLoad = async (event) => {
 		.where(and(eq(packages.type, 'tier'), eq(packages.isActive, true)));
 
 	let access = await getActiveAccess(db, user.id);
-
-	// Edge-case fallback for "can't detect device": after the gateway hop (Maya bounces to
-	// the system browser, dropping the portal cookie) AND when the router IP→MAC lookup is
-	// unavailable, neither path knows the device — yet it's plainly online. If the account
-	// has EXACTLY ONE bound device, that device IS this one, so adopt its MAC. Gated to a
-	// single device so we can never mis-label "this device" (or wire disconnect/buy to the
-	// wrong MAC) on a multi-device account — those still fall through to the honest warning.
-	if (!mac && access && !access.paused && access.devices.length === 1) {
-		mac = access.devices[0].macAddress ?? mac;
-	}
 
 	// Auto-bind: a returning device with live account time should get online with zero
 	// taps. Best-effort — a router hiccup must never break the dashboard render. Skipped while
@@ -87,6 +76,12 @@ export const load: PageServerLoad = async (event) => {
 	// The live, per-account slice (balance, free-time, access window, devices) — same shape
 	// the SSE feed pushes (`$lib/server/account-view`), so cross-device updates merge cleanly.
 	const view = await buildAccountView(db, user.id, mac);
+	// TEMP DIAGNOSTIC: every dashboard load logs the resolved MAC + bound state. After a buy,
+	// `update()` should re-run this load and log a SECOND line with thisBound=true. Remove once
+	// the "needs a refresh to show connected" bug is understood.
+	console.info(
+		`[dash-load] mac=${mac ?? 'null'} active=${view.access.active} thisBound=${view.devices.thisDeviceBound} devices=${view.devices.count}`
+	);
 
 	// Issue 2b/B: mint a CNA→browser handoff token for THIS session so the page can offer an
 	// "Open in your browser to manage credits" link. The token is short-TTL + single-use

@@ -4,12 +4,17 @@
 	import CircleCheck from 'lucide-svelte/icons/circle-check';
 	import Wallet from 'lucide-svelte/icons/wallet';
 	import type { Component } from 'svelte';
+	import { navigating, page } from '$app/state';
 	import { Card, SectionHeading } from '$lib/components/ui';
 	import { KpiCard, RevenueChart, DonutChart } from '$lib/components/feature';
 	import type { Kpi } from '$lib/types';
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();
+
+	// Changing the period (Topbar) is a same-route navigation that re-runs the load; show a
+	// skeleton while it resolves so the page doesn't sit on stale numbers with no feedback.
+	const loading = $derived(navigating.to?.url.pathname === page.url.pathname);
 
 	// lucide types don't match Svelte's `Component` structurally; cast as the other pages do.
 	const icon = (c: unknown) => c as Component;
@@ -40,11 +45,35 @@
 	const settledTotal = $derived(data.breakdown.reduce((sum, s) => sum + s.amount, 0));
 </script>
 
+{#snippet skelCard()}
+	<div class="flex flex-col gap-3 rounded-xl border border-border bg-bg p-4 shadow-sm">
+		<div class="h-3 w-20 rounded bg-surface"></div>
+		<div class="h-6 w-16 rounded bg-surface"></div>
+		<div class="h-3 w-24 rounded bg-surface"></div>
+	</div>
+{/snippet}
+
+{#if loading}
+	<!-- Skeleton silhouette mirroring KPIs · revenue chart · two donuts, so the period switch
+	     paints instantly while the new range loads (no layout shift on resolve). -->
+	<div class="flex animate-pulse flex-col gap-6 md:h-full" aria-hidden="true">
+		<section class="grid shrink-0 grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+			{#each Array.from({ length: 4 }, (_, i) => i) as i (i)}{@render skelCard()}{/each}
+		</section>
+		<section class="grid grid-cols-1 gap-4 md:min-h-0 md:flex-1 lg:grid-cols-3">
+			<div class="min-h-65 rounded-xl border border-border bg-bg shadow-sm lg:col-span-2"></div>
+			<div class="grid grid-cols-2 gap-4 lg:flex lg:flex-col">
+				<div class="min-h-48 rounded-xl border border-border bg-bg shadow-sm lg:flex-1"></div>
+				<div class="min-h-48 rounded-xl border border-border bg-bg shadow-sm lg:flex-1"></div>
+			</div>
+		</section>
+	</div>
+{:else}
 <!-- Period selector + Export CSV now live in the Topbar header (FinanceHeaderControls).
-     Full-height column so the charts stretch to the bottom of the page. -->
+     Desktop (md+) is a full-height one-screen column; mobile flows naturally and scrolls. -->
 <div class="flex flex-col gap-6 md:h-full">
 	<!-- KPIs -->
-	<section class="grid shrink-0 grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+	<section class="grid shrink-0 grid-cols-2 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-4">
 		{#each data.kpis as kpi (kpi.label)}
 			{@const c = chromeFor(kpi)}
 			<KpiCard
@@ -58,16 +87,17 @@
 	</section>
 
 	<!-- Revenue + method/access-point breakdowns (transactions list moved to /finance/transactions).
-	     flex-1 + min-h-0 so the cards fill the leftover height down to the page bottom. Revenue
-	     spans 2 of 3 columns; the two donuts stack vertically in the 3rd column. -->
-	<section class="grid min-h-0 flex-1 grid-cols-1 items-stretch gap-4 lg:grid-cols-3">
+	     On md+, flex-1 + min-h-0 make the cards fill the leftover height down to the page bottom
+	     (one screen); on mobile they keep natural height and the page scrolls. Revenue spans 2 of
+	     3 columns; the two donuts stack vertically in the 3rd column. -->
+	<section class="grid grid-cols-1 gap-4 md:min-h-0 md:flex-1 lg:grid-cols-3 lg:items-stretch">
 		<Card class="flex min-h-65 flex-col lg:col-span-2">
 			<SectionHeading title="Settled revenue over time" class="mb-4">
 				{#snippet aside()}
 					<span class="font-mono text-sm text-muted">₱{revenueTotal.toLocaleString('en-PH')}</span>
 				{/snippet}
 			</SectionHeading>
-			<div class="min-h-0 flex-1">
+			<div class="min-h-[200px] flex-1 md:min-h-0">
 				{#if data.revenue.length > 0}
 					<RevenueChart data={data.revenue} />
 				{:else}
@@ -78,33 +108,56 @@
 			</div>
 		</Card>
 
-		<!-- Two donuts stacked on top of each other in the 3rd column. No min-height so they
-		     shrink to share the column height — keeps the page to one screen, no overflow. -->
-		<div class="flex min-h-0 flex-col gap-4">
-			<Card class="flex min-h-0 flex-1 flex-col">
-				<SectionHeading title="By payment method" class="mb-4" />
-				<!-- Center the donut block in the leftover height so the card isn't top-heavy
-				     next to the taller chart panel. -->
-				<div class="flex min-h-0 flex-1 items-center">
-					<DonutChart
-						data={data.breakdown}
-						centerValue="₱{settledTotal.toLocaleString('en-PH')}"
-						centerLabel="Settled"
-					/>
+		<!-- Two donuts. Below lg: a 2-up grid (compact cards) so they sit side-by-side instead of
+		     two tall stacked blocks. At lg they return to the stacked 3rd column, sharing its height
+		     (one screen, no overflow) — desktop is byte-identical (compact hidden, original shown). -->
+		<div class="grid grid-cols-2 gap-4 md:min-h-0 lg:flex lg:flex-col">
+			<Card padding="p-3 lg:p-5" class="flex flex-col md:min-h-0 md:flex-1">
+				<SectionHeading title="By payment method" class="mb-3 lg:mb-4" />
+				<!-- lg: center the donut in the leftover column height (avoids a top-heavy card next to
+				     the taller chart). Below lg: plain flow so the donut sits right under the title. -->
+				<div class="md:min-h-0 lg:flex lg:flex-1 lg:items-center">
+					<div class="w-full lg:hidden">
+						<DonutChart
+							data={data.breakdown}
+							compact
+							centerValue="₱{settledTotal.toLocaleString('en-PH')}"
+							centerLabel="Settled"
+						/>
+					</div>
+					<div class="hidden w-full lg:block">
+						<DonutChart
+							data={data.breakdown}
+							centerValue="₱{settledTotal.toLocaleString('en-PH')}"
+							centerLabel="Settled"
+						/>
+					</div>
 				</div>
 			</Card>
 
-			<Card class="flex min-h-0 flex-1 flex-col">
-				<SectionHeading title="By access point" class="mb-4" />
-				<div class="flex min-h-0 flex-1 items-center">
-					<DonutChart
-						data={data.apRevenue}
-						label="Revenue by access point"
-						centerValue="₱{settledTotal.toLocaleString('en-PH')}"
-						centerLabel="Settled"
-					/>
+			<Card padding="p-3 lg:p-5" class="flex flex-col md:min-h-0 md:flex-1">
+				<SectionHeading title="By access point" class="mb-3 lg:mb-4" />
+				<div class="md:min-h-0 lg:flex lg:flex-1 lg:items-center">
+					<div class="w-full lg:hidden">
+						<DonutChart
+							data={data.apRevenue}
+							label="Revenue by access point"
+							compact
+							centerValue="₱{settledTotal.toLocaleString('en-PH')}"
+							centerLabel="Settled"
+						/>
+					</div>
+					<div class="hidden w-full lg:block">
+						<DonutChart
+							data={data.apRevenue}
+							label="Revenue by access point"
+							centerValue="₱{settledTotal.toLocaleString('en-PH')}"
+							centerLabel="Settled"
+						/>
+					</div>
 				</div>
 			</Card>
 		</div>
 	</section>
 </div>
+{/if}

@@ -1,5 +1,5 @@
 {
-  "id": "5a1febe9-58dd-4f9f-9d14-074c67ef7cb0",
+  "id": "44db2711-b63d-4e30-92e3-3e210e80539d",
   "prevId": "9641b80c-8acb-4d2c-a9c5-1cb42df59c2a",
   "version": "7",
   "dialect": "postgresql",
@@ -1096,12 +1096,6 @@
           "type": "integer",
           "primaryKey": false,
           "notNull": false
-        },
-        "last_known_mac": {
-          "name": "last_known_mac",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
         }
       },
       "indexes": {},
@@ -1854,8 +1848,8 @@
         }
       },
       "indexes": {
-        "rate_limits_mac_address_idx": {
-          "name": "rate_limits_mac_address_idx",
+        "rate_limits_mac_address_key": {
+          "name": "rate_limits_mac_address_key",
           "columns": [
             {
               "expression": "mac_address",
@@ -1864,13 +1858,13 @@
               "nulls": "last"
             }
           ],
-          "isUnique": false,
+          "isUnique": true,
           "concurrently": false,
           "method": "btree",
           "with": {}
         },
-        "rate_limits_phone_number_idx": {
-          "name": "rate_limits_phone_number_idx",
+        "rate_limits_phone_number_key": {
+          "name": "rate_limits_phone_number_key",
           "columns": [
             {
               "expression": "phone_number",
@@ -1879,13 +1873,13 @@
               "nulls": "last"
             }
           ],
-          "isUnique": false,
+          "isUnique": true,
           "concurrently": false,
           "method": "btree",
           "with": {}
         },
-        "rate_limits_scope_identifier_idx": {
-          "name": "rate_limits_scope_identifier_idx",
+        "rate_limits_scope_identifier_key": {
+          "name": "rate_limits_scope_identifier_key",
           "columns": [
             {
               "expression": "scope",
@@ -1900,7 +1894,7 @@
               "nulls": "last"
             }
           ],
-          "isUnique": false,
+          "isUnique": true,
           "concurrently": false,
           "method": "btree",
           "with": {}

@@ -6,7 +6,7 @@
 	import TriangleAlert from 'lucide-svelte/icons/triangle-alert';
 	import Ban from 'lucide-svelte/icons/ban';
 	import type { Component } from 'svelte';
-	import { UsersTable, KpiCard, WipeDialog } from '$lib/components/feature';
+	import { UsersTable, KpiCard, KpiCarousel, WipeDialog } from '$lib/components/feature';
 	import { Button } from '$lib/components/ui';
 	import type { StatusTone } from '$lib/types';
 	import { live, connectLive } from '$lib/live.svelte';
@@ -77,10 +77,11 @@
 	let wipeOpen = $state(false);
 </script>
 
-<!-- Full-height flex column so the table body scrolls, not the page (see UsersTable's Table). -->
-<div class="flex flex-col gap-5 md:h-full">
-	<section class="grid shrink-0 grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-5">
-		{#each kpis as k (k.label)}
+<!-- Full-height flex column so the table body scrolls, not the page (see UsersTable's Table).
+     h-full (not md:h-full) so the body-scrolls-not-page behaviour also holds on mobile. -->
+<div class="flex flex-col gap-5 h-full">
+	<KpiCarousel items={kpis} class="shrink-0">
+		{#snippet card(k)}
 			<KpiCard
 				kpi={{ label: k.label, value: k.value }}
 				icon={k.icon}
@@ -89,15 +90,22 @@
 				captionTone={k.captionTone}
 				compact
 			/>
-		{/each}
-	</section>
+		{/snippet}
+	</KpiCarousel>
 
-	<UsersTable {users}>
+	<UsersTable {users} isOwner={data.isOwner}>
 		{#snippet actions()}
 			{#if data.isOwner}
-				<Button variant="danger" onclick={() => (wipeOpen = true)}>
+				<!-- Icon-only below sm so the toolbar stays one line on mobile; full label at sm+. -->
+				<Button
+					variant="danger"
+					onclick={() => (wipeOpen = true)}
+					title="Wipe database"
+					aria-label="Wipe database"
+					class="shrink-0 max-sm:w-11 max-sm:px-0"
+				>
 					<Trash2 class="h-4 w-4" aria-hidden="true" />
-					Wipe database
+					<span class="hidden sm:inline">Wipe database</span>
 				</Button>
 			{/if}
 		{/snippet}

@@ -1,5 +1,8 @@
 import { dev, building } from '$app/environment';
 import { env } from '$env/dynamic/private';
+import { logger } from '$lib/server/logger';
+
+const log = logger('env');
 
 /**
  * Boot-time environment check (called once from hooks.server.ts). Fails fast on a
@@ -26,11 +29,11 @@ export function validateEnv(): void {
 	if (missing.length > 0) {
 		const msg = `Missing required environment variable(s): ${missing.join(', ')}`;
 		if (!dev) throw new Error(msg);
-		console.warn(`[env] ${msg} — required before production.`);
+		log.warn(`${msg} — required before production.`);
 	}
 
 	// Email is degrade-to-stub, so warn (don't fail) when unconfigured in production.
 	if (!dev && (!env.RESEND_API_KEY || !env.EMAIL_FROM)) {
-		console.warn('[env] RESEND_API_KEY / EMAIL_FROM unset — staff invites & wipe codes will not send real email.');
+		log.warn('RESEND_API_KEY / EMAIL_FROM unset — staff invites & wipe codes will not send real email.');
 	}
 }

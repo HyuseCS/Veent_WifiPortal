@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
-	import { Button, Field } from '$lib/components/ui';
+	import { Button, Field, BaseDialog } from '$lib/components/ui';
 	import { namesMatch } from '$lib/confirm';
 
 	// Opens a request to demote/remove an OWNER. Owner-only; gated server-side too. The
@@ -21,32 +21,22 @@
 		form?: { error?: string; action?: string } | null;
 	} = $props();
 
-	let el = $state<HTMLDialogElement>();
 	let action = $state<'demote' | 'remove'>('demote');
 	let typedName = $state('');
 	let code = $state('');
 
-	$effect(() => {
-		if (open) {
-			action = 'demote';
-			typedName = '';
-			code = '';
-			el?.showModal();
-		} else {
-			el?.close();
-		}
-	});
+	const reset = () => {
+		action = 'demote';
+		typedName = '';
+		code = '';
+	};
 
 	const canSubmit = $derived(
 		!!member && namesMatch(typedName, member.name) && /^\d{6}$/.test(code)
 	);
 </script>
 
-<dialog
-	bind:this={el}
-	onclose={() => (open = false)}
-	class="m-auto w-full max-w-sm rounded-lg border border-border bg-bg p-6 text-ink backdrop:bg-black/50"
->
+<BaseDialog bind:open {reset}>
 	{#if member}
 		<h2 class="text-lg font-semibold text-ink">
 			{isSelf ? 'Step down as owner' : `Change ${member.name}'s owner role`}
@@ -110,4 +100,4 @@
 			</div>
 		</form>
 	{/if}
-</dialog>
+</BaseDialog>

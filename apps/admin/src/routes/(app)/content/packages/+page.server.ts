@@ -1,6 +1,7 @@
 import { error, fail } from '@sveltejs/kit';
-import { getAdminRole, STAFF_ROLE } from '@veent/core';
+import { STAFF_ROLE } from '@veent/core';
 import { db } from '$lib/server/db';
+import { requireOwner as ownerGate } from '$lib/server/auth-guard';
 import {
 	listPackages,
 	createPackage,
@@ -23,12 +24,8 @@ export const load: PageServerLoad = async (event) => {
 };
 
 /** Re-assert owner from the DB (never trust client state) on every mutation. */
-async function requireOwner(userId: string | undefined) {
-	if (!userId || (await getAdminRole(db, userId)) !== STAFF_ROLE.owner) {
-		return fail(403, { error: 'Only the owner can manage packages.' });
-	}
-	return null;
-}
+const requireOwner = (userId: string | undefined) =>
+	ownerGate(userId, 'Only the owner can manage packages.');
 
 const isType = (v: string): v is PackageType => (PACKAGE_TYPES as readonly string[]).includes(v);
 

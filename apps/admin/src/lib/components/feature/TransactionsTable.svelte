@@ -7,6 +7,7 @@
 	import type { TransactionRow, StatusTone } from '$lib/types';
 	import { createSort } from '$lib/sortable.svelte';
 	import { EmptyState, SearchInput, StatusBadge, Table } from '$lib/components/ui';
+	import TableSortControl from './TableSortControl.svelte';
 
 	// The Finance transactions panel. Mirrors <UsersTable>: client-side search + clickable-header
 	// sort run purely over the already-loaded `transactions` (no extra loads / DB hits), composed
@@ -98,38 +99,18 @@
 				bind:value={query}
 				placeholder="Search buyer or receipt…"
 				label="Search transactions"
-				class="ml-auto min-w-60 flex-1 sm:max-w-xs"
+				class="ml-auto min-w-0 flex-1 sm:max-w-xs"
 			/>
 			<!-- Mobile sort: the sortable <thead> is hidden in card mode, so expose the same
 			     keys here. md:hidden — desktop keeps the clickable headers. -->
-			<div class="flex w-full items-center gap-2 md:hidden">
-				<label for="tx-sort" class="sr-only">Sort transactions by</label>
-				<select
-					id="tx-sort"
-					class="min-h-11 flex-1 rounded-lg border border-border bg-bg px-3 text-sm text-ink"
-					value={sort.key ?? ''}
-					onchange={(e) => sort.toggle(e.currentTarget.value as SortKey)}
-				>
-					<option value="" disabled>Sort by…</option>
-					{#each headers as h (h.label)}
-						<option value={h.key}>{h.label}</option>
-					{/each}
-				</select>
-				{#if sort.key}
-					<button
-						type="button"
-						onclick={() => sort.toggle(sort.key!)}
-						aria-label="Toggle sort direction ({sort.dir === 'asc' ? 'ascending' : 'descending'})"
-						class="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-border bg-bg text-muted transition-colors hover:text-ink"
-					>
-						{#if sort.dir === 'asc'}
-							<ChevronUp class="h-4 w-4" aria-hidden="true" />
-						{:else}
-							<ChevronDown class="h-4 w-4" aria-hidden="true" />
-						{/if}
-					</button>
-				{/if}
-			</div>
+			<TableSortControl
+				id="tx-sort"
+				label="Sort transactions by"
+				{headers}
+				sortKey={sort.key}
+				sortDir={sort.dir}
+				onToggle={(k) => sort.toggle(k as SortKey)}
+			/>
 		</div>
 	{/snippet}
 
@@ -178,19 +159,30 @@
 			<td data-label="Status" class="px-4 py-2.5">
 				<StatusBadge tone={tx.statusTone} label={cleanStatus(tx.status)} />
 			</td>
-			<td data-label="Amount" class="px-4 py-2.5 font-mono font-semibold text-ink">{tx.amount}</td>
+			<td data-label="Amount" class="px-4 py-2.5 font-mono font-semibold text-ink max-sm:text-base"
+				>{tx.amount}</td
+			>
 			<td data-label="Method" class="px-4 py-2.5 text-ink">
 				{tx.fundSourceType}{#if tx.fundSourceMasked}<span class="ml-1 font-mono text-xs text-muted"
 						>•{tx.fundSourceMasked}</span
 					>{/if}
 			</td>
-			<td data-label="Buyer" class="px-4 py-2.5 text-ink">
-				<span class="block truncate">{tx.buyerName}</span>
-				{#if tx.buyerEmail}<span class="block truncate text-xs text-muted">{tx.buyerEmail}</span
+			<td data-label="Buyer" class="px-4 py-2.5 text-ink tc-full">
+				<span class="block min-w-0 truncate max-sm:text-base">{tx.buyerName}</span>
+				{#if tx.buyerEmail}<span class="block min-w-0 truncate text-xs text-muted"
+						>{tx.buyerEmail}</span
 					>{/if}
 			</td>
-			<td data-label="Access point" class="px-4 py-2.5 text-ink">{tx.apName ?? '—'}</td>
-			<td data-label="Receipt" class="px-4 py-2.5 font-mono text-xs text-muted">{tx.receiptNo ?? '—'}</td>
+			<td
+				data-label="Access point"
+				class="px-4 py-2.5 text-ink"
+				class:tc-skip={!tx.apName}>{tx.apName ?? '—'}</td
+			>
+			<td
+				data-label="Receipt"
+				class="px-4 py-2.5 font-mono text-xs text-muted"
+				class:tc-skip={!tx.receiptNo}>{tx.receiptNo ?? '—'}</td
+			>
 		</tr>
 	{/each}
 

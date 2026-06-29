@@ -1,7 +1,8 @@
 import { fail } from '@sveltejs/kit';
 import { dev } from '$app/environment';
-import { refreshNetworkHealth, getAdminRole, STAFF_ROLE } from '@veent/core';
+import { refreshNetworkHealth, STAFF_ROLE } from '@veent/core';
 import { db } from '$lib/server/db';
+import { requireOwner as ownerGate } from '$lib/server/auth-guard';
 import { network } from '$lib/server/network';
 import { mailer } from '$lib/server/email';
 import { checkAdminEmailLimit } from '$lib/server/emailRateLimit';
@@ -20,12 +21,8 @@ import type { Actions, PageServerLoad } from './$types';
 const wipeKey = (userId: string) => `network:${userId}`;
 
 /** Re-asserts owner from the DB (never trust client state) for the destructive actions. */
-async function requireOwner(userId: string | undefined) {
-	if (!userId || (await getAdminRole(db, userId)) !== STAFF_ROLE.owner) {
-		return fail(403, { error: 'Only the owner can modify the network database.' });
-	}
-	return null;
-}
+const requireOwner = (userId: string | undefined) =>
+	ownerGate(userId, 'Only the owner can modify the network database.');
 
 /** Per-interface health for the Networks page. Pulls a live sample from the router
  * (link/users/throughput) into `network_health` on view, then reads it back. The

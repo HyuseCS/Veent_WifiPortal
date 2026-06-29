@@ -1,0 +1,1 @@
+CREATE INDEX IF NOT EXISTS "admin_owner_change_request_initiated_by_idx" ON "admin_owner_change_request" USING btree ("initiated_by");

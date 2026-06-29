@@ -322,6 +322,10 @@ export async function listNetworkHealth(db: DB, now: Date = new Date()): Promise
 	for (const c of counts) if (c.networkId != null) activeByNetwork.set(c.networkId, c.n);
 
 	// Recent connections per AP for the card log (newest first, capped per AP).
+	// ponytail: wide-then-slice — pull the 400 newest sessions globally, then keep the
+	// first 15 per AP in memory. Bounded and fine while AP count is small; the ceiling is
+	// that with many APs the 400-row window could starve a low-traffic AP of its log.
+	// Upgrade path if that happens: a per-AP LATERAL (top-15-per-network) or pagination.
 	const LOGS_PER_AP = 15;
 	const logRows = await db
 		.select({

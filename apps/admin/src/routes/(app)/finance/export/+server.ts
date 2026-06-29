@@ -3,12 +3,8 @@ import { db } from '$lib/server/db';
 import { listTransactions } from '$lib/server/queries';
 import { parsePeriod } from '$lib/server/period';
 import { rateLimit } from '$lib/server/rateLimit';
+import { cell } from '$lib/server/csv';
 import type { RequestHandler } from './$types';
-
-/** RFC-4180 cell: wrap in quotes and double inner quotes when it contains , " or newline. */
-function cell(v: string): string {
-	return /[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
-}
 
 /**
  * GET /finance/export?period= — streams the filtered transactions as a CSV download.

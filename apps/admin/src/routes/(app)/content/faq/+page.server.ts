@@ -1,6 +1,6 @@
 import { fail } from '@sveltejs/kit';
-import { getAdminRole, STAFF_ROLE } from '@veent/core';
 import { db } from '$lib/server/db';
+import { requireOwner as ownerGate } from '$lib/server/auth-guard';
 import {
 	listFaqs,
 	createFaq,
@@ -15,12 +15,8 @@ import type { Actions, PageServerLoad } from './$types';
 // re-assert owner per-handler (loads don't run on form POSTs).
 export const load: PageServerLoad = async () => ({ faqs: await listFaqs(db) });
 
-async function requireOwner(userId: string | undefined) {
-	if (!userId || (await getAdminRole(db, userId)) !== STAFF_ROLE.owner) {
-		return fail(403, { error: 'Only the owner can manage content.' });
-	}
-	return null;
-}
+const requireOwner = (userId: string | undefined) =>
+	ownerGate(userId, 'Only the owner can manage content.');
 
 function parseFaq(form: FormData): { input: FaqInput } | { error: string } {
 	const question = String(form.get('question') ?? '').trim();

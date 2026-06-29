@@ -1,25 +1,15 @@
 import { fail } from '@sveltejs/kit';
-import { getAdminRole, getSessionLimits, updateSessionLimits, STAFF_ROLE } from '@veent/core';
+import { getSessionLimits, updateSessionLimits } from '@veent/core';
 import { db } from '$lib/server/db';
+import { requireOwner as ownerGate } from '$lib/server/auth-guard';
+import { parseIntField } from '$lib/server/formValidation';
 import type { Actions, PageServerLoad } from './$types';
 
 // Section-level owner gate lives in content/+layout.server.ts; the save action re-asserts it.
 export const load: PageServerLoad = async () => ({ limits: await getSessionLimits(db) });
 
-async function requireOwner(userId: string | undefined) {
-	if (!userId || (await getAdminRole(db, userId)) !== STAFF_ROLE.owner) {
-		return fail(403, { error: 'Only the owner can manage content.' });
-	}
-	return null;
-}
-
-/** Parse a required positive integer within [min, max]; returns NaN on anything invalid. */
-function intIn(form: FormData, key: string, min: number, max: number): number {
-	const raw = String(form.get(key) ?? '').trim();
-	const n = Number(raw);
-	if (raw === '' || !Number.isInteger(n) || n < min || n > max) return NaN;
-	return n;
-}
+const requireOwner = (userId: string | undefined) =>
+	ownerGate(userId, 'Only the owner can manage content.');
 
 export const actions: Actions = {
 	save: async (event) => {
@@ -27,17 +17,17 @@ export const actions: Actions = {
 		if (denied) return denied;
 
 		const form = await event.request.formData();
-		const maxDevicesPerAccount = intIn(form, 'maxDevicesPerAccount', 1, 20);
-		const freeTimeMinutes = intIn(form, 'freeTimeMinutes', 1, 1440);
-		const freeTimeCooldownHours = intIn(form, 'freeTimeCooldownHours', 0, 168);
+		const maxDevicesPerAccount = parseIntField(form, 'maxDevicesPerAccount', { min: 1, max: 20 });
+		const freeTimeMinutes = parseIntField(form, 'freeTimeMinutes', { min: 1, max: 1440 });
+		const freeTimeCooldownHours = parseIntField(form, 'freeTimeCooldownHours', { min: 0, max: 168 });
 
-		if (Number.isNaN(maxDevicesPerAccount)) {
+		if (maxDevicesPerAccount === null) {
 			return fail(400, { error: 'Device cap must be a whole number from 1 to 20.' });
 		}
-		if (Number.isNaN(freeTimeMinutes)) {
+		if (freeTimeMinutes === null) {
 			return fail(400, { error: 'Free-time minutes must be a whole number from 1 to 1440.' });
 		}
-		if (Number.isNaN(freeTimeCooldownHours)) {
+		if (freeTimeCooldownHours === null) {
 			return fail(400, { error: 'Cooldown hours must be a whole number from 0 to 168.' });
 		}
 

@@ -6,10 +6,10 @@ import {
 	extendAccessAndBindDevice,
 	deleteCustomers,
 	wipeCustomers,
-	getAdminRole,
 	STAFF_ROLE
 } from '@veent/core';
 import { db } from '$lib/server/db';
+import { requireOwner } from '$lib/server/auth-guard';
 import { network } from '$lib/server/network';
 import { mailer } from '$lib/server/email';
 import { checkAdminEmailLimit } from '$lib/server/emailRateLimit';
@@ -17,14 +17,6 @@ import { wipeCodeEmail } from '$lib/server/emails/wipe-code';
 import { issueWipeCode, consumeWipeCode } from '$lib/server/wipe-verification';
 import { listUsers } from '$lib/server/queries';
 import type { Actions, PageServerLoad } from './$types';
-
-/** Re-asserts owner from the DB (never trust client state) for wipe actions. */
-async function requireOwner(userId: string | undefined) {
-	if (!userId || (await getAdminRole(db, userId)) !== STAFF_ROLE.owner) {
-		return fail(403, { error: 'Only the owner can wipe the customer database.' });
-	}
-	return null;
-}
 
 /** A real device MAC (six colon-separated hex octets). */
 const MAC_RE = /^[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}$/;
@@ -96,8 +88,12 @@ export const actions: Actions = {
 	},
 
 	/** Bulk hard-delete: removes the selected customers (cascades to all their
-	 *  domain + auth rows) after dropping any live router grants. */
+	 *  domain + auth rows) after dropping any live router grants. Owner-only — this is
+	 *  irreversible mass destruction, the same class of action as `wipe`, so it must not
+	 *  be reachable by a non-owner admin (the `requireOwner` re-reads the role from the DB). */
 	delete: async (event) => {
+		const denied = await requireOwner(event.locals.user?.id);
+		if (denied) return denied;
 		const ids = String((await event.request.formData()).get('userIds') ?? '')
 			.split(',')
 			.map((s) => s.trim())

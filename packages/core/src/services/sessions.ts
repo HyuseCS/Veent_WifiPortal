@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, isNotNull, isNull, lte } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNotNull, isNull, lte, or } from 'drizzle-orm';
 import { type DB, customerProfile, networkSessions, packages } from '@veent/db';
 import type { NetworkController } from '../integrations/network';
 import { SESSION_STATUS } from '../config';
@@ -64,6 +64,12 @@ async function bindMacTx(
 		maxDevices: number;
 	}
 ): Promise<BindPlan> {
+	// Canonicalize the MAC to uppercase at the DB-binding boundary so the same physical device
+	// presenting `aa:bb:…` then `AA:BB:…` reuses ONE network_sessions row instead of spawning a
+	// duplicate (which would burn a device-cap slot via spurious LRU eviction). The router layer
+	// already uppercases everywhere; this keeps the stored binding consistent with it.
+	const macAddress = opts.macAddress.toUpperCase();
+
 	const [profile] = await tx
 		.select({ accessExpiresAt: customerProfile.accessExpiresAt })
 		.from(customerProfile)
@@ -99,7 +105,7 @@ async function bindMacTx(
 		.where(
 			and(
 				eq(networkSessions.userId, opts.userId),
-				eq(networkSessions.macAddress, opts.macAddress),
+				eq(networkSessions.macAddress, macAddress),
 				eq(networkSessions.status, SESSION_STATUS.active)
 			)
 		)
@@ -145,7 +151,7 @@ async function bindMacTx(
 			.insert(networkSessions)
 			.values({
 				userId: opts.userId,
-				macAddress: opts.macAddress,
+				macAddress,
 				packageId: opts.packageId,
 				status: SESSION_STATUS.active,
 				startedAt: now,
@@ -615,21 +621,41 @@ export async function startFreeAccessAndBindDevice(
 
 	const limits = await getSessionLimits(db);
 	const claimed = await db.transaction(async (tx) => {
-		const [profile] = await tx
-			.select({ lastFreeSessionAt: customerProfile.lastFreeSessionAt })
-			.from(customerProfile)
-			.where(eq(customerProfile.userId, input.userId))
-			.limit(1);
-
-		const status = getFreeTimeStatus(profile?.lastFreeSessionAt ?? null, now, limits);
-		if (!status.eligible) return { eligible: false as const, nextEligibleAt: status.nextEligibleAt };
-
-		await tx
+		// Atomic cooldown claim: the conditional WHERE is the race guard. A plain
+		// SELECT-then-UPDATE lets parallel free-time requests all read the same stale
+		// `lastFreeSessionAt`, all pass the eligibility check under READ COMMITTED, and each
+		// grant a session — bypassing the cooldown. Folding the eligibility test into the
+		// UPDATE's WHERE means only ONE concurrent claim flips the row (mirrors how
+		// `spendCreditsTx` guards balance with a conditional UPDATE rather than a lock).
+		// `lastFreeSessionAt <= cutoff` is the SQL form of `now >= lastFreeSessionAt + cooldown`.
+		const cutoff = new Date(now.getTime() - limits.freeTimeCooldownHours * 60 * 60 * 1000);
+		const [won] = await tx
 			.update(customerProfile)
 			.set({ lastFreeSessionAt: now })
-			.where(eq(customerProfile.userId, input.userId));
+			.where(
+				and(
+					eq(customerProfile.userId, input.userId),
+					or(
+						isNull(customerProfile.lastFreeSessionAt),
+						lte(customerProfile.lastFreeSessionAt, cutoff)
+					)
+				)
+			)
+			.returning({ userId: customerProfile.userId });
 
-		return { eligible: true as const, durationMinutes: status.durationMinutes };
+		if (!won) {
+			// Not eligible, or lost the race to a concurrent claim. Re-read to report when the
+			// (now-winning) claim's cooldown lapses.
+			const [profile] = await tx
+				.select({ lastFreeSessionAt: customerProfile.lastFreeSessionAt })
+				.from(customerProfile)
+				.where(eq(customerProfile.userId, input.userId))
+				.limit(1);
+			const status = getFreeTimeStatus(profile?.lastFreeSessionAt ?? null, now, limits);
+			return { eligible: false as const, nextEligibleAt: status.nextEligibleAt };
+		}
+
+		return { eligible: true as const, durationMinutes: limits.freeTimeMinutes };
 	});
 
 	if (!claimed.eligible) {

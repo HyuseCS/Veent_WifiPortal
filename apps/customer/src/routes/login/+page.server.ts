@@ -42,6 +42,8 @@ export const actions: Actions = {
 			}
 			throw error;
 		}
+		// Already charged above — tell the auth sendOTP callback not to charge it again.
+		event.locals.otpLimitEnforced = true;
 
 		await auth.api.sendPhoneNumberOTP({ body: { phoneNumber: phone } });
 

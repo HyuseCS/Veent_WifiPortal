@@ -1,9 +1,11 @@
 import { randomUUID } from 'node:crypto';
-import { and, desc, eq } from 'drizzle-orm';
-import { adminOwnerChangeRequest, adminOwnerChangeApproval, adminUser } from '@veent/db';
+import { and, desc, eq, inArray } from 'drizzle-orm';
+import { adminOwnerChangeRequest, adminOwnerChangeApproval, adminUser, adminSession } from '@veent/db';
 import { listOwners, executeOwnerChange, type Owner } from '@veent/core';
 import { db } from '$lib/server/db';
-import { isUnanimous } from '$lib/owner-change-rules';
+import { logger } from '$lib/server/logger';
+import { isUnanimous, assembleOpenRequests } from '$lib/owner-change-rules';
+import type { OwnerChangeAction, OpenOwnerChange } from '$lib/owner-change-rules';
 
 /**
  * Owner demotion/removal governed by UNANIMOUS approval of all OTHER owners. This
@@ -16,26 +18,12 @@ import { isUnanimous } from '$lib/owner-change-rules';
  * executes the instant every CURRENT owner except the target has approved.
  */
 
-export type OwnerChangeAction = 'demote' | 'remove';
+// Type definitions + the pure panel-assembly live in $lib/owner-change-rules (no DB),
+// re-exported here so existing importers (staff page) are unaffected.
+export type { OwnerChangeAction, OpenOwnerChange } from '$lib/owner-change-rules';
 
 /** 7 days — generous for a multi-person sign-off, short enough to not linger forever. */
 const REQUEST_TTL_MS = 7 * 24 * 60 * 60 * 1000;
-
-/** A pending request as the staff page renders it. */
-export interface OpenOwnerChange {
-	id: string;
-	targetId: string;
-	targetName: string;
-	action: OwnerChangeAction;
-	initiatedById: string;
-	initiatedByName: string;
-	/** Current owners whose approval is required (all owners except the target). */
-	requiredOwnerIds: string[];
-	/** Of the required owners, those who have approved. */
-	approvedOwnerIds: string[];
-	expiresAt: number;
-	expired: boolean;
-}
 
 type CreateResult =
 	| {
@@ -201,7 +189,18 @@ export async function evaluate(requestId: string): Promise<boolean> {
 		targetUserId: req.targetUserId,
 		action: req.action as OwnerChangeAction
 	});
-	if (did) await markStatus(requestId, 'executed');
+	if (did) {
+		await markStatus(requestId, 'executed');
+		// #10 defense-in-depth: kill the (ex-)owner's admin sessions so a demote forces a
+		// fresh sign-in, not just the per-request role re-check in hooks.server.ts. (A
+		// `remove` already cascades sessions away with the user; this is a harmless no-op
+		// there.) Best-effort — never fail the executed change over a session cleanup.
+		try {
+			await db.delete(adminSession).where(eq(adminSession.userId, req.targetUserId));
+		} catch (err) {
+			logger('owner-change').warn('session revoke after demote failed:', (err as Error)?.message);
+		}
+	}
 	return did;
 }
 
@@ -251,28 +250,40 @@ export async function listOpenRequests(): Promise<OpenOwnerChange[]> {
 	const owners = await listOwners(db);
 	const ownerIds = owners.map((o) => o.id);
 	const nameById = new Map(owners.map((o) => [o.id, o.name] as const));
-	const now = Date.now();
 
-	const out: OpenOwnerChange[] = [];
-	for (const r of rows) {
-		const approvals = await db
-			.select({ ownerId: adminOwnerChangeApproval.ownerId })
-			.from(adminOwnerChangeApproval)
-			.where(eq(adminOwnerChangeApproval.requestId, r.id));
-		const requiredOwnerIds = ownerIds.filter((id) => id !== r.targetId);
-		const approvedOwnerIds = approvals.map((a) => a.ownerId).filter((id) => ownerIds.includes(id));
-		out.push({
+	// One round-trip for ALL approvals (was one query per request — the #6 N+1), grouped
+	// by request id. Then the panel view is assembled by the pure rules helper.
+	const approvals = await db
+		.select({
+			requestId: adminOwnerChangeApproval.requestId,
+			ownerId: adminOwnerChangeApproval.ownerId
+		})
+		.from(adminOwnerChangeApproval)
+		.where(
+			inArray(
+				adminOwnerChangeApproval.requestId,
+				rows.map((r) => r.id)
+			)
+		);
+	const approvalsByRequest = new Map<string, string[]>();
+	for (const a of approvals) {
+		const list = approvalsByRequest.get(a.requestId);
+		if (list) list.push(a.ownerId);
+		else approvalsByRequest.set(a.requestId, [a.ownerId]);
+	}
+
+	return assembleOpenRequests(
+		rows.map((r) => ({
 			id: r.id,
 			targetId: r.targetId,
 			targetName: r.targetName,
 			action: r.action as OwnerChangeAction,
 			initiatedById: r.initiatedById,
-			initiatedByName: nameById.get(r.initiatedById) ?? '—',
-			requiredOwnerIds,
-			approvedOwnerIds,
-			expiresAt: r.expiresAt.getTime(),
-			expired: r.expiresAt.getTime() < now
-		});
-	}
-	return out;
+			expiresAt: r.expiresAt.getTime()
+		})),
+		ownerIds,
+		nameById,
+		approvalsByRequest,
+		Date.now()
+	);
 }

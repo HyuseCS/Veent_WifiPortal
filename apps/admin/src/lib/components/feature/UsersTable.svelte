@@ -20,10 +20,17 @@
 	import type { AdminUserRow, StatusTone } from '$lib/types';
 	import { createSort } from '$lib/sortable.svelte';
 	import { EmptyState, IconButton, SearchInput, StatusBadge, Table } from '$lib/components/ui';
+	import TableSortControl from './TableSortControl.svelte';
 
 	// `actions` lets the page slot owner-only controls (the Wipe button) into the toolbar
 	// without this component owning the gated dialog/flow — data flow stays on the page.
-	let { users, actions }: { users: AdminUserRow[]; actions?: Snippet } = $props();
+	// `isOwner` gates the destructive bulk-delete bar; the server action enforces owner-only
+	// regardless, this just keeps the control from being shown to admins who can't use it.
+	let {
+		users,
+		actions,
+		isOwner = false
+	}: { users: AdminUserRow[]; actions?: Snippet; isOwner?: boolean } = $props();
 
 	// Client-side view state over the already-loaded rows (no extra loads / no DB hits):
 	// a text search + clickable-header sort. Status is reachable via the Status column
@@ -119,41 +126,21 @@
 				bind:value={query}
 				placeholder="Search phone or MAC…"
 				label="Search users"
-				class="min-w-60 flex-1"
+				class="min-w-0 flex-1"
 			/>
 			<div class="ml-auto flex items-center gap-3">
 				{@render actions?.()}
 			</div>
 			<!-- Mobile sort: the sortable <thead> is hidden in card mode, so expose the same
 			     keys here. md:hidden — desktop keeps the clickable headers. -->
-			<div class="flex w-full items-center gap-2 md:hidden">
-				<label for="users-sort" class="sr-only">Sort users by</label>
-				<select
-					id="users-sort"
-					class="min-h-11 flex-1 rounded-lg border border-border bg-bg px-3 text-sm text-ink"
-					value={sort.key ?? ''}
-					onchange={(e) => sort.toggle(e.currentTarget.value as SortKey)}
-				>
-					<option value="" disabled>Sort by…</option>
-					{#each headers.filter((h) => h.key) as h (h.label)}
-						<option value={h.key}>{h.label}</option>
-					{/each}
-				</select>
-				{#if sort.key}
-					<button
-						type="button"
-						onclick={() => sort.toggle(sort.key!)}
-						aria-label="Toggle sort direction ({sort.dir === 'asc' ? 'ascending' : 'descending'})"
-						class="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-border bg-bg text-muted transition-colors hover:text-ink"
-					>
-						{#if sort.dir === 'asc'}
-							<ChevronUp class="h-4 w-4" aria-hidden="true" />
-						{:else}
-							<ChevronDown class="h-4 w-4" aria-hidden="true" />
-						{/if}
-					</button>
-				{/if}
-			</div>
+			<TableSortControl
+				id="users-sort"
+				label="Sort users by"
+				{headers}
+				sortKey={sort.key}
+				sortDir={sort.dir}
+				onToggle={(k) => sort.toggle(k as SortKey)}
+			/>
 		</div>
 	{/snippet}
 
@@ -215,21 +202,24 @@
 
 	{#each sorted as user (user.id)}
 		<tr class="hover:bg-surface" class:bg-surface={selected.has(user.id)}>
-			<td data-label="Select" class="px-4 py-3">
+			<td data-label="Select" class="tc-corner px-4 py-3">
 				<input
 					type="checkbox"
-					class="h-4 w-4 accent-brand"
+					class="h-4 w-4 accent-brand max-sm:h-5 max-sm:w-5"
 					aria-label="Select {user.phone}"
 					checked={selected.has(user.id)}
 					onchange={(e) => toggle(user.id, e.currentTarget.checked)}
 				/>
 			</td>
-			<td data-label="User" class="px-4 py-3">
-				<span class="truncate font-mono font-medium text-ink">{fmtPhone(user.phone)}</span>
+			<td data-label="User" class="tc-full px-4 py-3 max-sm:pr-9">
+				<span class="truncate font-mono font-medium text-ink max-sm:text-base">
+					{fmtPhone(user.phone)}
+				</span>
 			</td>
 			<td data-label="Balance" class="px-4 py-3">
 				<span
-					class="inline-flex items-center gap-1.5 font-mono font-semibold {user.tone === 'warning'
+					class="inline-flex items-center gap-1.5 font-mono font-semibold max-sm:text-base {user.tone ===
+					'warning'
 						? 'text-warning'
 						: 'text-ink'}"
 				>
@@ -239,7 +229,11 @@
 					{/if}
 				</span>
 			</td>
-			<td data-label="Time Left" class="px-4 py-3 font-mono text-ink">{user.timeLeft ?? '—'}</td>
+			<td
+				data-label="Time Left"
+				class="px-4 py-3 font-mono text-ink"
+				class:tc-skip={!user.timeLeft}>{user.timeLeft ?? '—'}</td
+			>
 			<td data-label="Devices" class="px-4 py-3">
 				{#if user.deviceCount > 0}
 					<button
@@ -264,7 +258,7 @@
 					<span class="font-mono text-xs text-muted">—</span>
 				{/if}
 			</td>
-			<td data-label="Location" class="px-4 py-3">
+			<td data-label="Location" class="px-4 py-3" class:tc-skip={!user.location}>
 				{#if user.location}
 					<span class="inline-flex min-w-0 items-center gap-1.5 text-sm text-ink">
 						<MapPin class="h-3.5 w-3.5 shrink-0 text-muted" aria-hidden="true" />
@@ -364,9 +358,10 @@
 	{/snippet}
 </Table>
 
-<!-- Floating bulk bar: appears only with a selection. Delete is the one bulk action with a
-     backing form action; select/clear are local UI state. -->
-{#if selected.size > 0}
+<!-- Floating bulk bar: appears only with a selection, and only for an owner (the `?/delete`
+     action is owner-only server-side; non-owners never see the control). Delete is the one
+     bulk action with a backing form action; select/clear are local UI state. -->
+{#if selected.size > 0 && isOwner}
 	<div
 		transition:fade={{ duration: 150 }}
 		class="fixed bottom-6 left-1/2 z-30 flex -translate-x-1/2 items-center gap-2 rounded-2xl bg-sidebar py-2 pr-2 pl-4 shadow-lg"

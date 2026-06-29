@@ -38,7 +38,9 @@ export const POST: RequestHandler = async (event) => {
 		// Observability: surface verification failures (spoofed/garbled events, gateway lookup
 		// errors) — a spike here is a signal worth alerting on.
 		console.warn('[webhook] verification failed:', (e as Error).message);
-		error(400, `Webhook verification failed: ${(e as Error).message}`);
+		// Keep the detail in the server log only — don't reflect internal/gateway error text to an
+		// unauthenticated caller (info disclosure / payment-id probing aid).
+		error(400, 'Webhook verification failed');
 	}
 
 	// Resolve the buyer from the pending checkout we recorded at creation — referenceId is

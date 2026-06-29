@@ -30,6 +30,12 @@ export const auth = betterAuth({
 	database: drizzleAdapter(db, { provider: 'pg', schema: adminAuthSchema }),
 	emailAndPassword: {
 		enabled: true,
+		// No public self-signup. Staff are created ONLY via the owner-only /staff invite flow
+		// (internalAdapter.createUser) — never the better-auth POST /api/auth/sign-up/email route,
+		// which is mounted by the handler and would otherwise let anyone create an admin_user row
+		// (email-squatting an invitee's address / DB pollution). This keeps the "no browser
+		// owner-signup" guarantee true for the auth API surface, not just the page routes.
+		disableSignUp: true,
 		// Staff invites reuse the password-reset token machinery: the owner invites a
 		// member, we issue a reset token, and the member sets their password on the
 		// /activate page. The token URL is emailed via the Resend mailer (stub-logs

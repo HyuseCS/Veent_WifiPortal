@@ -67,10 +67,10 @@
 
 <Card
 	{onclick}
-	padding={compact ? 'p-3.5' : 'p-5'}
+	padding={compact ? 'p-3 sm:p-3.5' : 'p-3.5 sm:p-5'}
 	class="group flex flex-col {compact
 		? 'gap-2'
-		: 'gap-4'} hover:-translate-y-0.5 hover:border-brand/30 hover:shadow-md {onclick
+		: 'gap-2 sm:gap-4'} hover:-translate-y-0.5 hover:border-brand/30 hover:shadow-md {onclick
 		? 'hover:border-brand/40 focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:outline-none'
 		: ''}"
 >
@@ -92,7 +92,7 @@
 		<p
 			class="font-mono {compact
 				? 'text-2xl'
-				: 'text-3xl'} font-bold tracking-tight {valueTone[tone]}"
+				: 'text-2xl sm:text-3xl'} font-bold tracking-tight {valueTone[tone]}"
 		>
 			{kpi.value}{#if unit}<span class="ml-1 text-sm font-semibold text-muted">{unit}</span>{/if}
 		</p>

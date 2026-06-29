@@ -4,7 +4,7 @@
 	import X from 'lucide-svelte/icons/x';
 	import type { Component } from 'svelte';
 	import { enhance } from '$app/forms';
-	import { Button, IconButton } from '$lib/components/ui';
+	import { Button, IconButton, BaseDialog } from '$lib/components/ui';
 
 	// Shared input styling, matching <Field>'s input (rows here use placeholders + aria-labels
 	// instead of per-row visible labels, so the repeater stays compact and aligned).
@@ -24,7 +24,6 @@
 	let sent = $state<string[]>([]);
 	let failed = $state<{ email: string; error: string }[]>([]);
 	let submitting = $state(false);
-	let el = $state<HTMLDialogElement>();
 
 	// Rows are tracked by stable id so a keyed {#each} preserves each uncontrolled input's typed
 	// value across add/remove (no need to mirror field values in state). `nextId` only ever grows.
@@ -45,20 +44,11 @@
 		failed = [];
 	}
 
-	$effect(() => {
-		if (open) el?.showModal();
-		else el?.close();
-	});
+	// BaseDialog runs `reset` on open (the originals reset on close — same clean-form effect)
+	// and restores focus to the "Add staff" trigger when the dialog closes.
 </script>
 
-<dialog
-	bind:this={el}
-	onclose={() => {
-		open = false;
-		reset();
-	}}
-	class="m-auto w-full max-w-lg rounded-lg border border-border bg-bg p-6 text-ink backdrop:bg-black/50"
->
+<BaseDialog bind:open {reset} class="max-w-lg">
 	<div class="flex items-center gap-3">
 		<span
 			class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-brand/10 text-brand"
@@ -173,4 +163,4 @@
 			</Button>
 		</div>
 	</form>
-</dialog>
+</BaseDialog>
