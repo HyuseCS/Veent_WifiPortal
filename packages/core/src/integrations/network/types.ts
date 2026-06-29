@@ -38,10 +38,9 @@ export interface NetworkApSample {
 /** Input for proactively transitioning a granted device into an *active* hotspot session. */
 export interface ActivateSessionInput {
 	macAddress: string;
-	/** Current LAN IP of the device, when known — RouterOS hotspot login wants both MAC + IP. */
+	/** Current LAN IP of the device, when known — the RouterOS hotspot login needs MAC + IP. When
+	 * omitted, the controller resolves it from the router's own host/lease/ARP tables. */
 	ipAddress?: string;
-	/** Session lifetime hint; the controller may map this to a hotspot session-timeout. */
-	durationMinutes: number;
 }
 
 export interface NetworkController {
@@ -52,11 +51,11 @@ export interface NetworkController {
 	 * Proactively place an already-granted device into an *active* hotspot session so the OS
 	 * captive probe clears immediately (Issue 2 — "post-auth captive-state delay"). `grant`
 	 * only adds an `ip-binding type=bypassed`, which lets traffic through but does NOT put the
-	 * device in `/ip/hotspot/active`, so the OS can linger on "Sign in to network". A controller
-	 * that can drive a hotspot login (e.g. MikroTik v7 REST `/ip/hotspot/active/login`)
-	 * implements this; activation is a UX layer ON TOP of the durable `grant` binding, so a
-	 * failure here must never revoke access. Idempotent. Optional: stub/dev and controllers
-	 * without a login path omit it, and callers treat it as best-effort.
+	 * device in `/ip/hotspot/active`, so the OS can linger on "Sign in to network". The MikroTik
+	 * controller drives `/ip/hotspot/active/login` over the **binary API** (RouterOS v6 has no
+	 * REST). Activation is a UX layer ON TOP of the durable `grant` binding, so a failure here
+	 * must never revoke access. Idempotent. Optional: stub/dev and controllers without a hotspot
+	 * login path omit it, and callers treat it as best-effort.
 	 */
 	activateSession?(input: ActivateSessionInput): Promise<void>;
 	/** Re-block a device. Idempotent — revoking an already-blocked MAC is a no-op. */
