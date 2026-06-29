@@ -4,7 +4,6 @@
 	import ChevronDown from 'lucide-svelte/icons/chevron-down';
 	import ChevronUp from 'lucide-svelte/icons/chevron-up';
 	import ChevronsUpDown from 'lucide-svelte/icons/chevrons-up-down';
-	import ListFilter from 'lucide-svelte/icons/list-filter';
 	import Crown from 'lucide-svelte/icons/crown';
 	import RotateCcw from 'lucide-svelte/icons/rotate-ccw';
 	import Search from 'lucide-svelte/icons/search';
@@ -25,6 +24,7 @@
 	} from '$lib/components/ui';
 	import PromoteDialog from './PromoteDialog.svelte';
 	import OwnerChangeDialog from './OwnerChangeDialog.svelte';
+	import TableSortControl from './TableSortControl.svelte';
 
 	// Presentational table for the owner-only Staff page. Row actions post directly to
 	// the page's form actions (?/setStatus, ?/remove, ?/promote); the route enforces
@@ -158,44 +158,15 @@
 				</Button>
 			{/if}
 			<!-- Mobile sort: the sortable <thead> is hidden in card mode, so expose the same
-			     keys here. md:hidden — desktop keeps the clickable headers. Sits inline with the
-			     search (icon-only), no w-full. -->
-			<div class="flex items-center gap-2 md:hidden">
-				<label for="staff-sort" class="sr-only">Sort staff by</label>
-				<!-- Icon-only: a square select with a centred sort glyph; the chosen value is hidden
-				     (text-transparent) — the native picker still lists the columns. -->
-				<div class="relative shrink-0">
-					<ListFilter
-						class="pointer-events-none absolute top-1/2 left-1/2 h-4 w-4 -translate-x-1/2 -translate-y-1/2 text-muted"
-						aria-hidden="true"
-					/>
-					<select
-						id="staff-sort"
-						class="h-11 w-11 cursor-pointer appearance-none rounded-lg border border-border bg-bg text-transparent"
-						value={sortKey ?? ''}
-						onchange={(e) => toggleSort(e.currentTarget.value as SortKey)}
-					>
-						<option value="" disabled>Sort by…</option>
-						{#each headers.filter((h) => h.key) as h (h.label)}
-							<option value={h.key} class="text-ink">{h.label}</option>
-						{/each}
-					</select>
-				</div>
-				{#if sortKey}
-					<button
-						type="button"
-						onclick={() => sortKey && toggleSort(sortKey)}
-						aria-label="Toggle sort direction ({sortDir === 'asc' ? 'ascending' : 'descending'})"
-						class="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-border bg-bg text-muted transition-colors hover:text-ink"
-					>
-						{#if sortDir === 'asc'}
-							<ChevronUp class="h-4 w-4" aria-hidden="true" />
-						{:else}
-							<ChevronDown class="h-4 w-4" aria-hidden="true" />
-						{/if}
-					</button>
-				{/if}
-			</div>
+			     keys here. md:hidden — desktop keeps the clickable headers. -->
+			<TableSortControl
+				id="staff-sort"
+				label="Sort staff by"
+				{headers}
+				{sortKey}
+				{sortDir}
+				onToggle={(k) => toggleSort(k as SortKey)}
+			/>
 		</div>
 	{/snippet}
 

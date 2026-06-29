@@ -3,11 +3,11 @@
 	import ChevronDown from 'lucide-svelte/icons/chevron-down';
 	import ChevronUp from 'lucide-svelte/icons/chevron-up';
 	import ChevronsUpDown from 'lucide-svelte/icons/chevrons-up-down';
-	import ListFilter from 'lucide-svelte/icons/list-filter';
 	import type { Component } from 'svelte';
 	import type { TransactionRow, StatusTone } from '$lib/types';
 	import { createSort } from '$lib/sortable.svelte';
 	import { EmptyState, SearchInput, StatusBadge, Table } from '$lib/components/ui';
+	import TableSortControl from './TableSortControl.svelte';
 
 	// The Finance transactions panel. Mirrors <UsersTable>: client-side search + clickable-header
 	// sort run purely over the already-loaded `transactions` (no extra loads / DB hits), composed
@@ -102,44 +102,15 @@
 				class="ml-auto min-w-0 flex-1 sm:max-w-xs"
 			/>
 			<!-- Mobile sort: the sortable <thead> is hidden in card mode, so expose the same
-			     keys here. md:hidden — desktop keeps the clickable headers. Sits inline with the
-			     search (icon-only), no w-full. -->
-			<div class="flex items-center gap-2 md:hidden">
-				<label for="tx-sort" class="sr-only">Sort transactions by</label>
-				<!-- Icon-only: a square select with a centred sort glyph; the chosen value is hidden
-				     (text-transparent) — the native picker still lists the columns. -->
-				<div class="relative shrink-0">
-					<ListFilter
-						class="pointer-events-none absolute top-1/2 left-1/2 h-4 w-4 -translate-x-1/2 -translate-y-1/2 text-muted"
-						aria-hidden="true"
-					/>
-					<select
-						id="tx-sort"
-						class="h-11 w-11 cursor-pointer appearance-none rounded-lg border border-border bg-bg text-transparent"
-						value={sort.key ?? ''}
-						onchange={(e) => sort.toggle(e.currentTarget.value as SortKey)}
-					>
-						<option value="" disabled>Sort by…</option>
-						{#each headers as h (h.label)}
-							<option value={h.key} class="text-ink">{h.label}</option>
-						{/each}
-					</select>
-				</div>
-				{#if sort.key}
-					<button
-						type="button"
-						onclick={() => sort.toggle(sort.key!)}
-						aria-label="Toggle sort direction ({sort.dir === 'asc' ? 'ascending' : 'descending'})"
-						class="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-border bg-bg text-muted transition-colors hover:text-ink"
-					>
-						{#if sort.dir === 'asc'}
-							<ChevronUp class="h-4 w-4" aria-hidden="true" />
-						{:else}
-							<ChevronDown class="h-4 w-4" aria-hidden="true" />
-						{/if}
-					</button>
-				{/if}
-			</div>
+			     keys here. md:hidden — desktop keeps the clickable headers. -->
+			<TableSortControl
+				id="tx-sort"
+				label="Sort transactions by"
+				{headers}
+				sortKey={sort.key}
+				sortDir={sort.dir}
+				onToggle={(k) => sort.toggle(k as SortKey)}
+			/>
 		</div>
 	{/snippet}
 

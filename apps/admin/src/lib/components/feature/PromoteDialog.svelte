@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
-	import { Button, Field } from '$lib/components/ui';
+	import { Button, Field, BaseDialog } from '$lib/components/ui';
 	import { namesMatch } from '$lib/confirm';
 
 	// Owner-only step-up confirmation for promoting an admin to owner. Two gates the owner
@@ -19,30 +19,20 @@
 		form?: { error?: string; action?: string } | null;
 	} = $props();
 
-	let el = $state<HTMLDialogElement>();
 	let typedName = $state('');
 	let code = $state('');
 
-	// Drive the native <dialog> from `open`; reset the inputs each time it's reopened.
-	$effect(() => {
-		if (open) {
-			typedName = '';
-			code = '';
-			el?.showModal();
-		} else {
-			el?.close();
-		}
-	});
+	// Clear the inputs each time the dialog reopens (BaseDialog calls this on open).
+	const reset = () => {
+		typedName = '';
+		code = '';
+	};
 
 	// Both gates must pass before the confirm button enables (server re-checks both).
 	const canSubmit = $derived(!!member && namesMatch(typedName, member.name) && /^\d{6}$/.test(code));
 </script>
 
-<dialog
-	bind:this={el}
-	onclose={() => (open = false)}
-	class="m-auto w-full max-w-sm rounded-lg border border-border bg-bg p-6 text-ink backdrop:bg-black/50"
->
+<BaseDialog bind:open {reset}>
 	{#if member}
 		<h2 class="text-lg font-semibold text-ink">Promote to owner</h2>
 		<p class="mt-2 text-sm text-muted">
@@ -92,4 +82,4 @@
 			</div>
 		</form>
 	{/if}
-</dialog>
+</BaseDialog>

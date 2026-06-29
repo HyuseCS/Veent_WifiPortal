@@ -1,7 +1,6 @@
 import { error, fail, type RequestEvent } from '@sveltejs/kit';
 import { env } from '$env/dynamic/private';
 import {
-	getAdminRole,
 	setStaffStatus,
 	removeStaff,
 	promoteToOwner,
@@ -12,6 +11,7 @@ import {
 import { adminProfile } from '@veent/db';
 import { APIError } from 'better-auth/api';
 import { auth, inviteSendFailures } from '$lib/server/auth';
+import { requireOwner as ownerGate } from '$lib/server/auth-guard';
 import { db } from '$lib/server/db';
 import { mailer } from '$lib/server/email';
 import { checkAdminEmailLimit } from '$lib/server/emailRateLimit';
@@ -52,12 +52,8 @@ export const load: PageServerLoad = async (event) => {
 };
 
 /** Re-asserts owner from the DB (never trust client state) for every mutation. */
-async function requireOwner(userId: string | undefined) {
-	if (!userId || (await getAdminRole(db, userId)) !== STAFF_ROLE.owner) {
-		return fail(403, { error: 'Only the owner can manage staff.' });
-	}
-	return null;
-}
+const requireOwner = (userId: string | undefined) =>
+	ownerGate(userId, 'Only the owner can manage staff.');
 
 /**
  * TOTP step-up shared by the owner-change actions: per-IP rate limit + verify the

@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
-	import { Button, Field } from '$lib/components/ui';
+	import { Button, Field, BaseDialog } from '$lib/components/ui';
 
 	// Owner-only, step-up-verified "wipe entire <X> database" dialog, shared by the Users and
 	// Networks pages. The flow is identical on both: request a one-time code (emailed to the
@@ -30,27 +30,17 @@
 		form?: { error?: string; action?: string } | null;
 	} = $props();
 
-	let el = $state<HTMLDialogElement>();
 	let step = $state<'request' | 'confirm'>('request');
 	let code = $state('');
 
-	// Drive the native <dialog> from `open`; reset to step 1 each time it's reopened.
-	$effect(() => {
-		if (open) {
-			step = 'request';
-			code = '';
-			el?.showModal();
-		} else {
-			el?.close();
-		}
-	});
+	// Reset to step 1 each time the dialog reopens (BaseDialog calls this on open).
+	const reset = () => {
+		step = 'request';
+		code = '';
+	};
 </script>
 
-<dialog
-	bind:this={el}
-	onclose={() => (open = false)}
-	class="m-auto w-full max-w-sm rounded-lg border border-border bg-bg p-6 text-ink backdrop:bg-black/50"
->
+<BaseDialog bind:open {reset}>
 	<h2 class="text-lg font-semibold text-blocked">{title}</h2>
 	<p class="mt-2 text-sm text-muted">
 		This permanently deletes <strong>all {count} {noun}</strong> and {detail}. This cannot be undone.
@@ -111,4 +101,4 @@
 			</div>
 		</form>
 	{/if}
-</dialog>
+</BaseDialog>

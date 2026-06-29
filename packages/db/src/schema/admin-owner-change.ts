@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, uniqueIndex, primaryKey } from 'drizzle-orm/pg-core';
+import { pgTable, text, timestamp, uniqueIndex, index, primaryKey } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { adminUser } from './auth-admin';
 
@@ -34,7 +34,10 @@ export const adminOwnerChangeRequest = pgTable(
 		// At most one open request per target — the backstop for the in-code check.
 		uniqueIndex('owner_change_one_pending_per_target')
 			.on(t.targetUserId)
-			.where(sql`${t.status} = 'pending'`)
+			.where(sql`${t.status} = 'pending'`),
+		// Forward-looking: lets "requests I started" lookups (and the #6 approvals batch)
+		// hit an index instead of a scan. Cheap, additive.
+		index('admin_owner_change_request_initiated_by_idx').on(t.initiatedBy)
 	]
 );
 

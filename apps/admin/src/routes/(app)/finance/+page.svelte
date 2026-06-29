@@ -4,12 +4,17 @@
 	import CircleCheck from 'lucide-svelte/icons/circle-check';
 	import Wallet from 'lucide-svelte/icons/wallet';
 	import type { Component } from 'svelte';
+	import { navigating, page } from '$app/state';
 	import { Card, SectionHeading } from '$lib/components/ui';
 	import { KpiCard, RevenueChart, DonutChart } from '$lib/components/feature';
 	import type { Kpi } from '$lib/types';
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();
+
+	// Changing the period (Topbar) is a same-route navigation that re-runs the load; show a
+	// skeleton while it resolves so the page doesn't sit on stale numbers with no feedback.
+	const loading = $derived(navigating.to?.url.pathname === page.url.pathname);
 
 	// lucide types don't match Svelte's `Component` structurally; cast as the other pages do.
 	const icon = (c: unknown) => c as Component;
@@ -40,6 +45,30 @@
 	const settledTotal = $derived(data.breakdown.reduce((sum, s) => sum + s.amount, 0));
 </script>
 
+{#snippet skelCard()}
+	<div class="flex flex-col gap-3 rounded-xl border border-border bg-bg p-4 shadow-sm">
+		<div class="h-3 w-20 rounded bg-surface"></div>
+		<div class="h-6 w-16 rounded bg-surface"></div>
+		<div class="h-3 w-24 rounded bg-surface"></div>
+	</div>
+{/snippet}
+
+{#if loading}
+	<!-- Skeleton silhouette mirroring KPIs · revenue chart · two donuts, so the period switch
+	     paints instantly while the new range loads (no layout shift on resolve). -->
+	<div class="flex animate-pulse flex-col gap-6 md:h-full" aria-hidden="true">
+		<section class="grid shrink-0 grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+			{#each Array.from({ length: 4 }, (_, i) => i) as i (i)}{@render skelCard()}{/each}
+		</section>
+		<section class="grid grid-cols-1 gap-4 md:min-h-0 md:flex-1 lg:grid-cols-3">
+			<div class="min-h-65 rounded-xl border border-border bg-bg shadow-sm lg:col-span-2"></div>
+			<div class="grid grid-cols-2 gap-4 lg:flex lg:flex-col">
+				<div class="min-h-48 rounded-xl border border-border bg-bg shadow-sm lg:flex-1"></div>
+				<div class="min-h-48 rounded-xl border border-border bg-bg shadow-sm lg:flex-1"></div>
+			</div>
+		</section>
+	</div>
+{:else}
 <!-- Period selector + Export CSV now live in the Topbar header (FinanceHeaderControls).
      Desktop (md+) is a full-height one-screen column; mobile flows naturally and scrolls. -->
 <div class="flex flex-col gap-6 md:h-full">
@@ -131,3 +160,4 @@
 		</div>
 	</section>
 </div>
+{/if}

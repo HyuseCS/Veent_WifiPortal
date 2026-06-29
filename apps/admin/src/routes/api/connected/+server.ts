@@ -2,7 +2,10 @@ import { error } from '@sveltejs/kit';
 import { db } from '$lib/server/db';
 import { dashboardSnapshot } from '$lib/server/queries';
 import { subscribe } from '$lib/server/dashboard-feed';
+import { logger } from '$lib/server/logger';
 import type { RequestHandler } from './$types';
+
+const log = logger('sse');
 
 /**
  * GET /api/connected — Server-Sent Events stream of the whole dashboard
@@ -36,7 +39,7 @@ export const GET: RequestHandler = async (event) => {
 	const openCount = (openStreams.get(userId) ?? 0) + 1;
 	openStreams.set(userId, openCount);
 	// Observability: open SSE connection count per user (resource-usage / leak signal).
-	console.info('[sse] connected', { userId, open: openCount });
+	log.info('connected', { userId, open: openCount });
 	let released = false;
 	const release = () => {
 		if (released) return;
@@ -44,7 +47,7 @@ export const GET: RequestHandler = async (event) => {
 		const n = (openStreams.get(userId) ?? 1) - 1;
 		if (n <= 0) openStreams.delete(userId);
 		else openStreams.set(userId, n);
-		console.info('[sse] disconnected', { userId, open: Math.max(0, n) });
+		log.info('disconnected', { userId, open: Math.max(0, n) });
 	};
 
 	const encoder = new TextEncoder();
