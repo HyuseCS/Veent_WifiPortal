@@ -183,6 +183,13 @@
       "when": 1782377475297,
       "tag": "0025_heavy_forge",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1782716627295,
+      "tag": "0026_calm_gabe_jones",
+      "breakpoints": true
     }
   ]
 }

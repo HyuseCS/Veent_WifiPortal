@@ -66,9 +66,12 @@
 		};
 	};
 
+	let resending = $state(false);
 	const onResend: SubmitFunction = () => {
+		resending = true;
 		return async ({ result, update }) => {
 			await update();
+			resending = false;
 			if (result.type === 'success') {
 				secondsLeft = 45;
 				resent = true;
@@ -103,7 +106,19 @@
 				Sent to <strong class="font-semibold text-ink">{data.maskedPhone}</strong>.
 			</p>
 
-			<form method="post" action="?/verify" use:enhance={onVerify}>
+			<!-- `group` + data-pending drive the button spinner via CSS the instant it's tapped,
+			pre-hydration (app.html inline script) and hydrated (`submitting`) alike. NOTE: the
+			6-box OTP aggregates digits into the hidden `code` field via JS, so a valid submit
+			needs hydration — the button is correctly `disabled` until `complete`. This just makes
+			the pending feedback immediate once it IS submittable. -->
+			<form
+				method="post"
+				action="?/verify"
+				class="group"
+				data-pending-form
+				data-pending={submitting ? '' : null}
+				use:enhance={onVerify}
+			>
 				<input type="hidden" name="code" value={code} />
 
 				<div class="mb-3 flex gap-2.5">
@@ -141,17 +156,18 @@
 				<button
 					type="submit"
 					disabled={!complete || submitting}
-					class="flex h-[54px] w-full items-center justify-center gap-2 rounded-xl bg-cta text-base font-bold text-white transition-colors hover:bg-cta-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cta disabled:cursor-not-allowed disabled:opacity-40"
+					class="flex h-[54px] w-full items-center justify-center gap-2 rounded-xl bg-cta text-base font-bold text-white transition-colors hover:bg-cta-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cta disabled:cursor-not-allowed disabled:opacity-40 group-data-[pending]:pointer-events-none group-data-[pending]:opacity-80"
 				>
-					{#if submitting}
+					<span class="hidden items-center gap-2 group-data-[pending]:inline-flex">
 						<span
 							class="inline-block h-[18px] w-[18px] animate-spin rounded-full border-[2.5px] border-white/40 border-t-white"
 							aria-hidden="true"
 						></span>
 						<span class="sr-only">Verifying…</span>
-					{:else}
-						Verify &amp; connect
-					{/if}
+					</span>
+					<span class="inline-flex items-center gap-2 group-data-[pending]:hidden">
+						Verify
+					</span>
 				</button>
 			</form>
 
@@ -162,10 +178,24 @@
 					Didn't get it? Resend code in
 					<span class="font-mono font-semibold text-ink">{timer}</span>
 				{:else}
-					<form method="post" action="?/resend" use:enhance={onResend} class="inline">
+					<!-- The resend form POSTs natively (no JS needed), so the pre-hydration
+					data-pending feedback is a real win here, not just cosmetic. -->
+					<form
+						method="post"
+						action="?/resend"
+						use:enhance={onResend}
+						class="group inline"
+						data-pending-form
+						data-pending={resending ? '' : null}
+					>
 						Didn't get it?
-						<button type="submit" class="font-semibold text-brand hover:text-brand-hover">
-							Resend code
+						<button
+							type="submit"
+							disabled={resending}
+							class="font-semibold text-brand hover:text-brand-hover group-data-[pending]:pointer-events-none group-data-[pending]:opacity-60"
+						>
+							<span class="group-data-[pending]:hidden">Resend code</span>
+							<span class="hidden group-data-[pending]:inline">Sending…</span>
 						</button>
 					</form>
 				{/if}

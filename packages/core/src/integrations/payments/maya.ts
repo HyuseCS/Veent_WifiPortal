@@ -26,6 +26,58 @@ function basicAuth(key: string): string {
 	return `Basic ${Buffer.from(`${key}:`).toString('base64')}`;
 }
 
+/** Per-attempt timeout for an outbound Maya call. */
+const MAYA_FETCH_TIMEOUT_MS = 8_000;
+/** Extra attempts after the first on a transient failure (timeout / network error / 5xx / 429). */
+const MAYA_FETCH_RETRIES = 2;
+
+/** A single `fetch` bounded by an AbortController timeout — a hung Maya API can't pin us forever. */
+async function fetchWithTimeout(
+	url: string,
+	init: RequestInit,
+	timeoutMs: number
+): Promise<Response> {
+	const controller = new AbortController();
+	const timer = setTimeout(() => controller.abort(), timeoutMs);
+	try {
+		return await fetch(url, { ...init, signal: controller.signal });
+	} finally {
+		clearTimeout(timer);
+	}
+}
+
+/**
+ * `fetch` with a timeout AND a small bounded retry. Retries only TRANSIENT failures — a
+ * timeout/abort, a network error, or a 5xx/429 upstream — never a deterministic 4xx (e.g. 404
+ * "no such payment", 401 bad key), which would just fail identically every time. On the final
+ * attempt the response (even a 5xx) is returned so the caller's existing `!res.ok` branch can
+ * surface the upstream detail; a final timeout/network error is normalized to a clear message.
+ *
+ * Why this matters here: every webhook hit triggers an authoritative outbound re-fetch. Without
+ * a timeout, a slow Maya API holds the request (and a DB pool slot) open, so a burst of webhooks
+ * during a Maya slowdown can exhaust the request pool. The cap bounds that blast radius.
+ */
+async function fetchWithRetry(
+	url: string,
+	init: RequestInit,
+	timeoutMs = MAYA_FETCH_TIMEOUT_MS,
+	retries = MAYA_FETCH_RETRIES
+): Promise<Response> {
+	for (let attempt = 0; ; attempt++) {
+		try {
+			const res = await fetchWithTimeout(url, init, timeoutMs);
+			if ((res.status >= 500 || res.status === 429) && attempt < retries) continue;
+			return res;
+		} catch (e) {
+			if (attempt < retries) continue;
+			if (e instanceof Error && e.name === 'AbortError') {
+				throw new Error(`maya: request timed out after ${timeoutMs}ms`);
+			}
+			throw e instanceof Error ? e : new Error(String(e));
+		}
+	}
+}
+
 /**
  * Parse a Maya major-unit amount (pesos) to integer minor units (centavos). Returns NaN —
  * never a silent 0 — for a missing/garbled amount, so the credit-time amount check refuses
@@ -197,7 +249,8 @@ export function createMayaProvider(config: MayaConfig): PaymentProvider {
 			if (!paymentId) throw new Error('maya: webhook payload missing payment id');
 
 			// Authoritative re-fetch — this is what makes an unsigned webhook trustworthy.
-			const res = await fetch(`${base}/payments/v1/payments/${encodeURIComponent(paymentId)}`, {
+			// Bounded by a timeout + small retry so a slow Maya API can't pin this request.
+			const res = await fetchWithRetry(`${base}/payments/v1/payments/${encodeURIComponent(paymentId)}`, {
 				headers: { authorization: basicAuth(config.secretKey) }
 			});
 			if (!res.ok) {
@@ -227,7 +280,8 @@ export function createMayaProvider(config: MayaConfig): PaymentProvider {
 			if (!config.secretKey) throw new Error('maya: secretKey not configured');
 
 			// Outbound read of the checkout's current state — the reconcile safety net.
-			const res = await fetch(`${base}/checkout/v1/checkouts/${encodeURIComponent(checkoutId)}`, {
+			// Same timeout + retry bound as the webhook re-fetch.
+			const res = await fetchWithRetry(`${base}/checkout/v1/checkouts/${encodeURIComponent(checkoutId)}`, {
 				headers: { authorization: basicAuth(config.secretKey) }
 			});
 			if (res.status === 404) return null; // gateway has no record (yet)

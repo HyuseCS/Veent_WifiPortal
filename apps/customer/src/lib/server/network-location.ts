@@ -1,7 +1,7 @@
 import type { RequestEvent } from '@sveltejs/kit';
 import { dev } from '$app/environment';
 import { env } from '$env/dynamic/private';
-import { and, asc, desc, eq, isNotNull } from 'drizzle-orm';
+import { and, asc, desc, eq, isNotNull, isNull, ne, or } from 'drizzle-orm';
 import { customerProfile, networkHealth, networkSessions } from '@veent/db';
 import { SESSION_STATUS, resolveDeviceMac, resolveNetworkIdByApName } from '@veent/core';
 import { db } from '$lib/server/db';
@@ -28,10 +28,92 @@ export async function resolveMac(event: RequestEvent): Promise<string | null> {
 		const mac = await resolveDeviceMac(network, ip);
 		// Cache a fresh IP→MAC result in the portal cookie so the next load in this
 		// browser survives a transient IP change (cellular flip) without re-resolving.
-		if (mac) persistResolvedMac(event, mac);
+		if (mac) {
+			persistResolvedMac(event, mac);
+		} else {
+			// "Device not detected" lands here: no portal cookie (e.g. the system browser
+			// after the Maya hop) AND the router couldn't map this client IP → MAC. The IP it
+			// saw is the key clue — if it isn't the device's LAN IP (e.g. it's the router/NAT
+			// address, or the phone fell back to cellular so it's a WAN IP), the lookup can't win.
+			console.warn('[mac] unresolved — no portal cookie; router IP→MAC returned null', { ip });
+		}
 		return mac;
-	} catch {
+	} catch (e) {
+		console.warn('[mac] IP→MAC lookup threw', { msg: (e as Error).message });
 		return null;
+	}
+}
+
+/**
+ * The MAC this account most recently connected with — the last-resort device identity.
+ * The user authenticated through the captive portal ON this device (the OTP flow binds it),
+ * so a `network_sessions` row carries its MAC even after the access window lapsed. Most-recent
+ * row regardless of status: it's the same physical device on a reconnect in nearly all cases.
+ */
+export async function lastKnownMac(userId: string): Promise<string | null> {
+	const [row] = await db
+		.select({ mac: networkSessions.macAddress })
+		.from(networkSessions)
+		.where(and(eq(networkSessions.userId, userId), isNotNull(networkSessions.macAddress)))
+		.orderBy(desc(networkSessions.startedAt))
+		.limit(1);
+	return row?.mac ?? null;
+}
+
+/**
+ * MAC resolution with a per-user last resort. `resolveMac` (portal cookie → router IP→MAC) is
+ * the live detector; when BOTH miss it falls back to `lastKnownMac`. Both miss exactly in the
+ * cases that produce the "device not detected" warning: the portal cookie is gone (the CNA and
+ * the system browser have separate cookie jars — so it's absent after the Maya hop, or whenever
+ * the buyer isn't in the browser that hit the `?mac=` redirect), AND the IP→MAC lookup can't
+ * help because the hotspot NATs client traffic to its OWN address (we then see the router's IP,
+ * e.g. 10.0.0.1, not the device). A fresh portal entry (new `?mac=` cookie) always wins, so the
+ * fallback only fills the gap; a user who genuinely switched devices reconnects through the
+ * portal to refresh it.
+ */
+export async function resolveMacForUser(event: RequestEvent, userId: string): Promise<string | null> {
+	const live = await resolveMac(event);
+	if (live) {
+		// Durably remember the freshly-seen MAC on the account (keyed by userId, NOT a cookie) so a
+		// later cross-browser hop — the Maya return lands in the system browser with no portal
+		// cookie — can still recover it without making the buyer reconnect through the portal.
+		await rememberAccountMac(userId, live);
+		return live;
+	}
+	// Live detection missed (no portal cookie + IP→MAC defeated by the hotspot NAT). Fall back to
+	// the durable account MAC first — it covers a buyer who was seen earlier but has no session row
+	// yet (e.g. topped up before ever binding a device) — then the most-recent session's MAC.
+	return (await accountMac(userId)) ?? (await lastKnownMac(userId));
+}
+
+/** Read the durable per-account MAC (`customer_profile.last_known_mac`). */
+async function accountMac(userId: string): Promise<string | null> {
+	const [row] = await db
+		.select({ mac: customerProfile.lastKnownMac })
+		.from(customerProfile)
+		.where(eq(customerProfile.userId, userId))
+		.limit(1);
+	return row?.mac ?? null;
+}
+
+/**
+ * Persist a freshly-resolved MAC onto the account as the durable, cookie-independent fallback.
+ * Conditional (only when missing or changed) so a stable device doesn't churn the row on every
+ * load; best-effort so a write hiccup never breaks MAC resolution.
+ */
+async function rememberAccountMac(userId: string, mac: string): Promise<void> {
+	try {
+		await db
+			.update(customerProfile)
+			.set({ lastKnownMac: mac })
+			.where(
+				and(
+					eq(customerProfile.userId, userId),
+					or(isNull(customerProfile.lastKnownMac), ne(customerProfile.lastKnownMac, mac))
+				)
+			);
+	} catch (e) {
+		console.warn('[mac] failed to persist account MAC', { msg: (e as Error).message });
 	}
 }
 

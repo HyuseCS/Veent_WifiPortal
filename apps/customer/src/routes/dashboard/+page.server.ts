@@ -16,7 +16,7 @@ import {
 import { db } from '$lib/server/db';
 import { network } from '$lib/server/network';
 import { buildAccountView } from '$lib/server/account-view';
-import { resolveMac } from '$lib/server/network-location';
+import { resolveMacForUser } from '$lib/server/network-location';
 import { maskPhone } from '$lib/server/otp';
 import type { Actions, PageServerLoad } from './$types';
 import { auth } from '$lib/server/auth';
@@ -36,7 +36,13 @@ export const load: PageServerLoad = async (event) => {
 
 	const account = await getAccount(db, user.id);
 	const blocked = account?.blocked ?? false;
-	let mac = await resolveMac(event);
+	// resolveMacForUser falls back to the account's last-known device MAC when the portal
+	// cookie is gone (CNA/system-browser split, Maya hop) AND the router IP→MAC lookup can't
+	// help — which it can't behind a hotspot that NATs client traffic to its own IP (we'd see
+	// the router's address, not the device). Without this fallback the dashboard shows the
+	// "device not detected" warning on every return-to-dashboard in those setups.
+	// `let` because the single-device fallback below can still refine it.
+	let mac = await resolveMacForUser(event, user.id);
 
 	const tiers = await db
 		.select()
@@ -82,11 +88,25 @@ export const load: PageServerLoad = async (event) => {
 	// the SSE feed pushes (`$lib/server/account-view`), so cross-device updates merge cleanly.
 	const view = await buildAccountView(db, user.id, mac);
 
+	// Issue 2b/B: mint a CNA→browser handoff token for THIS session so the page can offer an
+	// "Open in your browser to manage credits" link. The token is short-TTL + single-use
+	// (auth.ts oneTimeToken); opening the link in the system browser mints a session there
+	// (see /auth/handoff) so the guest skips a second OTP. Best-effort — a token hiccup must
+	// never break the dashboard render; the link is simply omitted then.
+	let handoffUrl: string | null = null;
+	try {
+		const r = await auth.api.generateOneTimeToken({ headers: event.request.headers });
+		if (r?.token) handoffUrl = `${event.url.origin}/auth/handoff?token=${encodeURIComponent(r.token)}`;
+	} catch (err) {
+		console.warn('[handoff] token generation failed:', (err as Error).message);
+	}
+
 	return {
 		maskedPhone: phone ? maskPhone(phone) : null,
 		mac,
 		hasMac: !!mac,
 		tiers,
+		handoffUrl,
 		...view
 	};
 };
@@ -104,7 +124,7 @@ export const actions: Actions = {
 		if (!user) return redirect(302, '/login');
 
 		const form = await event.request.formData();
-		const mac = String(form.get('mac') ?? '') || (await resolveMac(event)) || '';
+		const mac = String(form.get('mac') ?? '') || (await resolveMacForUser(event, user.id)) || '';
 		if (!MAC_RE.test(mac)) return fail(400, { error: NO_DEVICE });
 
 		const account = await getAccount(db, user.id);
@@ -128,7 +148,7 @@ export const actions: Actions = {
 		if (!user) return redirect(302, '/login');
 
 		const form = await event.request.formData();
-		const mac = String(form.get('mac') ?? '') || (await resolveMac(event)) || '';
+		const mac = String(form.get('mac') ?? '') || (await resolveMacForUser(event, user.id)) || '';
 		const packageId = Number(form.get('packageId'));
 		if (!Number.isFinite(packageId)) return fail(400, { error: 'Missing package' });
 		// Validate the device BEFORE spending credits — otherwise a bad MAC debits the
@@ -169,7 +189,7 @@ export const actions: Actions = {
 		if (!user) return redirect(302, '/login');
 
 		const form = await event.request.formData();
-		const mac = String(form.get('mac') ?? '') || (await resolveMac(event)) || '';
+		const mac = String(form.get('mac') ?? '') || (await resolveMacForUser(event, user.id)) || '';
 		if (!MAC_RE.test(mac)) return fail(400, { error: NO_DEVICE });
 
 		const account = await getAccount(db, user.id);

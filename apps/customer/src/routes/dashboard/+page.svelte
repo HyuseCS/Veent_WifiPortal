@@ -104,27 +104,39 @@
 	// device isn't actually bound.
 	const thisOnline = $derived(access.active && devices.thisDeviceBound && !isExpired);
 
+	// Per-action pending flags. Each drives its form's `data-pending` binding so the button
+	// spinner shows immediately on tap — and, crucially, so Svelte OWNS the attribute after
+	// hydration and clears the value the app.html capture-phase listener set on submit
+	// (otherwise the inline-script-set data-pending would stick and freeze the spinner).
+	let startingFree = $state(false);
 	const startFreeTime: SubmitFunction = () => {
 		const minutes = freeTime.durationMinutes;
+		startingFree = true;
 		return async ({ result, update }) => {
 			if (result.type === 'success') {
 				toasts.show(`You're online — ${minutes} min of free account time, shared across your devices.`);
 			}
 			await update();
+			startingFree = false;
 		};
 	};
 
+	let connecting = $state(false);
 	const reconnect: SubmitFunction = () => {
+		connecting = true;
 		return async ({ result, update }) => {
 			if (result.type === 'success') toasts.show("You're online on this device.");
 			else if (result.type === 'failure') toasts.show('Could not connect this device.', 'error');
 			await update();
+			connecting = false;
 		};
 	};
 
+	let buying = $state(false);
 	const confirmBuy = (tier: Tier): SubmitFunction => {
-		return () =>
-			async ({ result, update }) => {
+		return () => {
+			buying = true;
+			return async ({ result, update }) => {
 				if (result.type === 'success') {
 					toasts.show(
 						`You're now connected with ${tier.name}. Enjoy your ${tier.durationMinutes} minutes.`
@@ -134,7 +146,9 @@
 					toasts.show('Could not start that tier. Please try again.', 'error');
 				}
 				await update();
+				buying = false;
 			};
+		};
 	};
 
 	const pauseTime: SubmitFunction = () => {
@@ -275,12 +289,26 @@
 											You have account time left — connect this device to get online.
 										</div>
 									{/if}
-									<form method="post" action="?/bindThisDevice" use:enhance={reconnect}>
+									<form
+										method="post"
+										action="?/bindThisDevice"
+										use:enhance={reconnect}
+										class="group"
+										data-pending={connecting ? '' : null}
+										data-pending-form
+									>
 										<input type="hidden" name="mac" value={mac} />
 										<button
-											class="flex h-11 items-center gap-2 rounded-xl bg-brand px-4 text-sm font-bold text-white transition-colors hover:bg-brand-hover hover:cursor-pointer"
+											disabled={connecting}
+											class="flex h-11 items-center gap-2 rounded-xl bg-brand px-4 text-sm font-bold text-white transition-colors hover:bg-brand-hover hover:cursor-pointer group-data-[pending]:pointer-events-none group-data-[pending]:opacity-70"
 										>
-											<Icon name="refresh-cw" size={16} />
+											<span
+												class="hidden h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white group-data-[pending]:inline-block"
+												aria-hidden="true"
+											></span>
+											<span class="group-data-[pending]:hidden">
+												<Icon name="refresh-cw" size={16} />
+											</span>
 											{devices.atCap ? 'Replace oldest device' : 'Connect this device'}
 										</button>
 									</form>
@@ -454,12 +482,23 @@
 									</div>
 								</div>
 							</div>
-							<form method="post" action="?/startFreeTime" use:enhance={startFreeTime}>
+							<form
+								method="post"
+								action="?/startFreeTime"
+								use:enhance={startFreeTime}
+								class="group"
+								data-pending={startingFree ? '' : null}
+								data-pending-form
+							>
 								<input type="hidden" name="mac" value={mac} />
 								<button
-									disabled={!hasMac}
-									class="flex h-[50px] w-full items-center justify-center rounded-xl bg-cta text-[15px] font-bold text-white transition-colors hover:bg-cta-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cta hover:cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 lg:h-14 lg:text-base"
+									disabled={!hasMac || startingFree}
+									class="flex h-[50px] w-full items-center justify-center gap-2 rounded-xl bg-cta text-[15px] font-bold text-white transition-colors hover:bg-cta-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cta hover:cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 lg:h-14 lg:text-base group-data-[pending]:pointer-events-none group-data-[pending]:opacity-70"
 								>
+									<span
+										class="hidden h-[18px] w-[18px] animate-spin rounded-full border-[2.5px] border-white/40 border-t-white group-data-[pending]:inline-block"
+										aria-hidden="true"
+									></span>
 									Start {freeTime.durationMinutes}-min Free Access
 								</button>
 							</form>
@@ -572,6 +611,22 @@
 							</button>
 						</form>
 					</div>
+
+					{#if data.handoffUrl}
+						<!-- Issue 2b/B — CNA→browser handoff. The WiFi sign-in popup (CNA) has its own
+						cookie jar, so a session started there doesn't exist in the real browser. This
+						link carries a single-use, short-TTL token that mints a session in the system
+						browser (see /auth/handoff), so the guest skips a second OTP. Only meaningful
+						inside the captive popup; harmless elsewhere, so it's phrased as a hint. -->
+						<a
+							href={data.handoffUrl}
+							rel="noopener"
+							class="mt-3 flex min-h-[44px] items-center justify-center gap-1.5 text-center text-[12.5px] font-medium text-muted transition-colors hover:text-ink"
+						>
+							On the WiFi sign-in screen? Open in your browser to manage credits
+							<Icon name="arrow-right" size={15} strokeWidth={2.1} />
+						</a>
+					{/if}
 				</div>
 			</div>
 		{/if}
@@ -617,13 +672,24 @@
 						</span>
 					</div>
 				</div>
-				<form method="post" action="?/buyTier" use:enhance={confirmBuy(sheet.tier)}>
+				<form
+					method="post"
+					action="?/buyTier"
+					use:enhance={confirmBuy(sheet.tier)}
+					class="group"
+					data-pending={buying ? '' : null}
+					data-pending-form
+				>
 					<input type="hidden" name="mac" value={mac} />
 					<input type="hidden" name="packageId" value={sheet.tier.id} />
 					<button
-						disabled={!hasMac}
-						class="mb-2.5 flex h-[52px] w-full items-center justify-center rounded-xl bg-cta text-base font-bold text-white transition-colors hover:bg-cta-hover hover:cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
+						disabled={!hasMac || buying}
+						class="mb-2.5 flex h-[52px] w-full items-center justify-center gap-2 rounded-xl bg-cta text-base font-bold text-white transition-colors hover:bg-cta-hover hover:cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 group-data-[pending]:pointer-events-none group-data-[pending]:opacity-70"
 					>
+						<span
+							class="hidden h-[18px] w-[18px] animate-spin rounded-full border-[2.5px] border-white/40 border-t-white group-data-[pending]:inline-block"
+							aria-hidden="true"
+						></span>
 						Confirm — spend {sheet.tier.creditCost} cr
 					</button>
 				</form>

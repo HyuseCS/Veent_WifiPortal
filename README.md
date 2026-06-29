@@ -45,7 +45,12 @@ cp apps/admin/.env.example    apps/admin/.env
 #    auth domains. They do NOT need to match anyone else's machine.
 openssl rand -base64 32     # run once per app, paste each result into its .env
 
-# 3. Bring up the database.
+# 3. Set CRON_SECRET in apps/customer/.env (ships empty). The cron endpoints
+#    (revoke/reconcile) are fail-closed without it, and the local scheduler
+#    (`dev:cron`, below) reads this value — leave it empty and access never expires.
+openssl rand -base64 32     # paste into apps/customer/.env → CRON_SECRET=
+
+# 4. Bring up the database.
 bun run db:start            # start Postgres (docker compose; runs in the foreground)
 bun run db:migrate          # apply the committed migrations → all tables
 ```
@@ -60,10 +65,45 @@ Docker Postgres (`localhost:5432`), not a shared server.
 
 ## Develop
 
+Run each in its own terminal:
+
 ```sh
 bun run dev:customer        # http://localhost:5173
 bun run dev:admin           # http://localhost:5174
+bun run dev:cron            # the revoke/reconcile scheduler — REQUIRED for access to expire (see below)
 ```
+
+### Local cron — run `dev:cron` alongside the dev server
+
+In production a scheduler (systemd timer / crontab — `docs/DEPLOYMENT.md` §8) POSTs the
+customer cron endpoints every minute. A dev box has no such scheduler, so `dev:cron` stands
+in for it. **Treat it as part of running the dev server**, not an optional extra — without it:
+
+- **Paid/free time never expires** — `/api/network/revoke` is what removes the router bypass
+  when a window lapses. No cron → a granted device stays online forever.
+- **Missed-webhook payments never settle** — `/api/payments/reconcile` is the safety net that
+  credits a payment whose webhook never arrived (common in local dev, where Maya can't reach
+  your laptop).
+- **State drifts** — expired-but-`active` sessions pile up and orphan router bypasses linger,
+  which clogs the per-account device cap and causes flaky reconnects / "connected then
+  dropped" flicker on a real router.
+
+```sh
+bun run dev:cron            # POSTs /api/network/revoke + /api/payments/reconcile once a minute
+```
+
+Prerequisite: `CRON_SECRET` must be set in `apps/customer/.env` (Setup step 3) — the endpoints
+are fail-closed and `dev:cron` exits if it's missing. The script reads `CRON_SECRET` + the base
+URL from `apps/customer/.env`; override with env vars:
+
+```sh
+DEV_CRON_INTERVAL_MS=20000 bun run dev:cron     # tick every 20s instead of 60s
+DEV_CRON_BASE_URL=http://127.0.0.1:5173 bun run dev:cron   # default; change if your port differs
+```
+
+It changes nothing about the app — production still uses an external scheduler. (Admin's
+`/api/network/health/refresh` cron isn't covered here; add it to the script if you need the
+Networks page to refresh without a viewer.)
 
 ### Git hooks (optional, one-time per clone)
 

@@ -28,6 +28,19 @@ export function validateEnv(): void {
 			if (!env[k]) missing.push(k);
 		}
 	}
+	// Issue 2b/C1: the portal mints session cookies; on open guest WiFi they MUST ride HTTPS or
+	// they're sniffable off the air (sidejacking) — and the cookie `Secure` flag itself keys off
+	// the ORIGIN protocol (see auth.ts `useSecureCookies`). So in prod ORIGIN is required AND must
+	// be https. In dev we only warn (below), so http://localhost keeps working.
+	const origin = env.ORIGIN ?? '';
+	if (!origin) {
+		missing.push('ORIGIN');
+	} else if (!dev && !origin.startsWith('https://')) {
+		throw new Error(
+			`ORIGIN must be https:// in production — portal session cookies require TLS to be Secure (got "${origin}").`
+		);
+	}
+
 	if (missing.length === 0) return;
 
 	const msg = `Missing required environment variable(s): ${missing.join(', ')}`;
