@@ -9,7 +9,6 @@
 		KpiCarousel,
 		WipeDialog
 	} from '$lib/components/feature';
-	import Router from 'lucide-svelte/icons/router';
 	import Users from 'lucide-svelte/icons/users';
 	import Gauge from 'lucide-svelte/icons/gauge';
 	import Timer from 'lucide-svelte/icons/timer';
@@ -62,7 +61,6 @@
 	const cntHealthy = $derived(networks.filter((n) => n.tone === 'online').length);
 	const cntDegraded = $derived(networks.filter((n) => n.tone === 'warning').length);
 	const cntOffline = $derived(networks.filter((n) => n.tone === 'blocked').length);
-	const onlineCount = $derived(cntHealthy + cntDegraded);
 	const usersTotal = $derived(networks.reduce((s, n) => s + n.users, 0));
 
 	// Metrics arrive pre-formatted ("47 Mbps", "22ms") — pull the leading number to aggregate.
@@ -104,13 +102,6 @@
 			captionTone: alerts > 0 ? 'blocked' : 'online',
 			// Clicking drills into the offending APs (degraded + offline). No-op at zero.
 			onclick: alerts > 0 ? showAlerts : undefined
-		},
-		{
-			label: 'Access Points',
-			value: String(total),
-			icon: icon(Router),
-			caption: `${onlineCount} online`,
-			captionTone: 'online'
 		},
 		{
 			label: 'Connected Users',

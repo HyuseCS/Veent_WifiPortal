@@ -86,8 +86,9 @@
 		{/if}
 	</div>
 
-	<!-- xl+: original flat grid (byte-identical to the pre-carousel layout) -->
-	<div class="hidden gap-4 xl:grid xl:grid-cols-5">
+	<!-- xl+: flat grid, one equal column per metric so the strip always spans full width
+	     regardless of count (5 metrics → byte-identical to the original grid-cols-5). -->
+	<div class="hidden gap-4 xl:grid" style="grid-template-columns: repeat({items.length}, minmax(0, 1fr))">
 		{#each items as item, i (i)}{@render card(item)}{/each}
 	</div>
 </div>
