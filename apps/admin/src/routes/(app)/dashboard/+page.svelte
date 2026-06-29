@@ -166,6 +166,16 @@
 					period={kpiMeta[kpi.label]?.period}
 				/>
 			{/each}
+			<!-- Mobile only: Active Sessions joins the KPI strip as a tile; the full live table
+			     (its own section below) is hidden below md and returns at md+. -->
+			<div class="md:hidden">
+				<KpiCard
+					kpi={{ label: 'Active Sessions', value: String(activeSessions.length) }}
+					icon={icon(Wifi)}
+					helper="Connected now"
+					tone="online"
+				/>
+			</div>
 		</section>
 
 		<Card class="flex min-h-0 flex-1 flex-col">
@@ -191,8 +201,8 @@
 		</Card>
 	</div>
 
-	<!-- Active Sessions -->
-	<section class="sessions flex min-h-0 flex-col">
+	<!-- Active Sessions — full live table at md+; on mobile it's the KPI tile in the strip above. -->
+	<section class="sessions hidden min-h-0 flex-col md:flex">
 		<Table title="Active Sessions" cards class="min-h-0 flex-1">
 			{#snippet aside()}
 				{#if activeSessions.length > 0}
