@@ -1,4 +1,10 @@
-import type { NetworkController, GrantInput, NetworkApSample, RouterLogEntry } from './types';
+import type {
+	NetworkController,
+	GrantInput,
+	NetworkApSample,
+	RouterLogEntry,
+	ActivateSessionInput
+} from './types';
 
 export interface MikrotikConfig {
 	host: string;
@@ -15,6 +21,18 @@ export interface MikrotikConfig {
 	/** Router interfaces to omit from health sampling even if a hotspot binds them
 	 * (e.g. a wired/management `ether2` that isn't a guest AP). Matched by exact name. */
 	excludeInterfaces?: string[];
+	/**
+	 * Hotspot login identity used by `activateSession` (over the binary API — RouterOS v6 has no
+	 * REST). Setting `hotspotLoginUser` OPTS IN to activation: after a grant the controller logs
+	 * the device into the hotspot via `/ip/hotspot/active/login` so it appears in
+	 * `/ip/hotspot/active` immediately and the OS captive "Sign in to network" banner clears at
+	 * once. Must name a real hotspot user on the guest profile (e.g. a shared `veent-guest`) — the
+	 * deployment profile is `login-by=http-chap`, so the device-MAC-as-user shortcut does NOT
+	 * apply. When unset, `activateSession` is not exposed (grant/revoke still work; the banner just
+	 * clears a little slower).
+	 */
+	hotspotLoginUser?: string;
+	hotspotLoginPassword?: string;
 }
 
 /**
@@ -202,7 +220,7 @@ export function createMikrotikController(config: MikrotikConfig): NetworkControl
 		}
 	}
 
-	return {
+	const controller: NetworkController = {
 		name: 'mikrotik',
 
 		async grant(input: GrantInput): Promise<void> {
@@ -419,6 +437,39 @@ export function createMikrotikController(config: MikrotikConfig): NetworkControl
 			});
 		}
 	};
+
+	// Expose activateSession ONLY when a hotspot login user is configured, so callers'
+	// optional-chaining (`network.activateSession?.(…)`) correctly no-ops on setups that don't opt
+	// in. Activation runs over the SAME binary API as grant/revoke (RouterOS v6 has no REST) — it's
+	// a UX layer ON TOP of the durable `grant` binding, so a failure here must never affect access;
+	// the caller treats it as best-effort.
+	if (config.hotspotLoginUser) {
+		controller.activateSession = async (input: ActivateSessionInput): Promise<void> => {
+			const mac = input.macAddress.toUpperCase();
+			await withConn(async (conn) => {
+				// RouterOS hotspot login wants the device IP; resolve it from the router's own tables
+				// when the caller didn't pass one (the session layer only has the MAC).
+				let ip = input.ipAddress?.trim() || '';
+				if (!ip) {
+					const ips = await ipsForMac(conn, mac);
+					ip = ips[0] ?? '';
+				}
+				// Without an IP RouterOS can't match the host — nothing to activate. Best-effort: bail.
+				if (!ip) return;
+
+				// /ip hotspot active login — the same command proven by hand on the router console.
+				// Param names mirror the console exactly (`mac-address`, not `mac`).
+				await conn.write('/ip/hotspot/active/login', [
+					`=ip=${ip}`,
+					`=mac-address=${mac}`,
+					`=user=${config.hotspotLoginUser}`,
+					`=password=${config.hotspotLoginPassword ?? ''}`
+				]);
+			});
+		};
+	}
+
+	return controller;
 }
 
 /** Minimal shape of the node-routeros connection we use. */

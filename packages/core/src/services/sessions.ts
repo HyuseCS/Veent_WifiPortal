@@ -191,6 +191,18 @@ async function afterBind(
 		}
 	}
 	await attributeAp(db, network, userId, rowId, macAddress);
+
+	// Proactively log the device into the hotspot so the OS captive "Sign in to network" banner
+	// clears immediately (Issue 2). This is a UX layer ON TOP of the durable grant — best-effort,
+	// so a failure here must never undo the access we just granted. Optional: only the MikroTik
+	// controller with a hotspot login user configured implements it.
+	if (network.activateSession) {
+		try {
+			await network.activateSession({ macAddress });
+		} catch (err) {
+			console.warn('[sessions] activateSession failed (access still granted):', (err as Error).message);
+		}
+	}
 }
 
 /**

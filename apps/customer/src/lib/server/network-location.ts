@@ -1,7 +1,7 @@
 import type { RequestEvent } from '@sveltejs/kit';
 import { dev } from '$app/environment';
 import { env } from '$env/dynamic/private';
-import { and, asc, desc, eq, isNotNull } from 'drizzle-orm';
+import { and, asc, desc, eq, isNotNull, isNull, ne, or } from 'drizzle-orm';
 import { customerProfile, networkHealth, networkSessions } from '@veent/db';
 import { SESSION_STATUS, resolveDeviceMac, resolveNetworkIdByApName } from '@veent/core';
 import { db } from '$lib/server/db';
@@ -72,7 +72,49 @@ export async function lastKnownMac(userId: string): Promise<string | null> {
  * portal to refresh it.
  */
 export async function resolveMacForUser(event: RequestEvent, userId: string): Promise<string | null> {
-	return (await resolveMac(event)) ?? (await lastKnownMac(userId));
+	const live = await resolveMac(event);
+	if (live) {
+		// Durably remember the freshly-seen MAC on the account (keyed by userId, NOT a cookie) so a
+		// later cross-browser hop — the Maya return lands in the system browser with no portal
+		// cookie — can still recover it without making the buyer reconnect through the portal.
+		await rememberAccountMac(userId, live);
+		return live;
+	}
+	// Live detection missed (no portal cookie + IP→MAC defeated by the hotspot NAT). Fall back to
+	// the durable account MAC first — it covers a buyer who was seen earlier but has no session row
+	// yet (e.g. topped up before ever binding a device) — then the most-recent session's MAC.
+	return (await accountMac(userId)) ?? (await lastKnownMac(userId));
+}
+
+/** Read the durable per-account MAC (`customer_profile.last_known_mac`). */
+async function accountMac(userId: string): Promise<string | null> {
+	const [row] = await db
+		.select({ mac: customerProfile.lastKnownMac })
+		.from(customerProfile)
+		.where(eq(customerProfile.userId, userId))
+		.limit(1);
+	return row?.mac ?? null;
+}
+
+/**
+ * Persist a freshly-resolved MAC onto the account as the durable, cookie-independent fallback.
+ * Conditional (only when missing or changed) so a stable device doesn't churn the row on every
+ * load; best-effort so a write hiccup never breaks MAC resolution.
+ */
+async function rememberAccountMac(userId: string, mac: string): Promise<void> {
+	try {
+		await db
+			.update(customerProfile)
+			.set({ lastKnownMac: mac })
+			.where(
+				and(
+					eq(customerProfile.userId, userId),
+					or(isNull(customerProfile.lastKnownMac), ne(customerProfile.lastKnownMac, mac))
+				)
+			);
+	} catch (e) {
+		console.warn('[mac] failed to persist account MAC', { msg: (e as Error).message });
+	}
 }
 
 /** One structured success line per resolution, tagged with the branch that won — feeds the
