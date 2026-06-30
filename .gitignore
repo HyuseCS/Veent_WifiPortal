@@ -1,5 +1,9 @@
 node_modules
 
+#IDEs
+.vscode
+.idea
+
 # Output (match in every workspace package, not just repo root)
 .output
 .vercel
@@ -19,11 +23,15 @@ Thumbs.db
 !.env.example
 !.env.test
 
+# Generated production service config (contains secrets) — see scripts/setup-prod.ts
+deploy/
+
 # Vite
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 # Playwright
 test-results
+.playwright-mcp/
 
 # graphify (knowledge-graph build output)
 graphify-out/
@@ -32,3 +40,12 @@ graphify-out/
 .venv/
 
 start_db.sh
+
+# AI agent tooling — machine-local, not part of the app (vendored skills, configs)
+.agents/
+.claude/
+.gemini/
+.vibecode-backup
+CLAUDE.md
+GEMINI.md
+AGENTS.md
