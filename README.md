@@ -1,11 +1,12 @@
 # Veent WiFi Portal — monorepo
 
-Two independent SvelteKit apps on one shared Postgres database, managed as a bun workspace.
+Three independent SvelteKit apps on one shared Postgres database, managed as a bun workspace.
 
 ```
 apps/
   customer/   veent-customer — captive portal for wifi end-users   (portal.veent.io)
-  admin/      veent-admin    — staff management dashboard           (admin.veent.io)
+  admin/      radius-admin   — staff management dashboard           (admin.veent.io)
+  locator/    veent-locator  — public read-only AP/coverage map     (radius.veent.io)
 packages/
   db/         @veent/db      — shared Drizzle schema + client; the single migration source
 compose.yaml  shared Postgres for local dev
@@ -13,8 +14,9 @@ compose.yaml  shared Postgres for local dev
 
 ### Why it's split this way
 
-- **Two apps, deployed separately.** Each app has its own SvelteKit build, adapter and
-  `ORIGIN`, so they can ship to separate subdomains and scale independently.
+- **Three apps, deployed separately.** Each app has its own SvelteKit build, adapter and
+  `ORIGIN`, so they can ship to separate subdomains and scale independently. (`customer` +
+  `admin` drive the router; `locator` is a read-only map and touches neither router nor telemetry.)
 - **One database, one schema.** All tables live in `packages/db`. Only that package runs
   migrations, so the customer and admin schemas can never drift apart.
 - **Separate auth domains.** Customers and staff are different populations. There are two
@@ -39,6 +41,7 @@ bun install                 # resolves the workspace, links @veent/db into each 
 cp packages/db/.env.example   packages/db/.env
 cp apps/customer/.env.example apps/customer/.env
 cp apps/admin/.env.example    apps/admin/.env
+cp apps/locator/.env.example  apps/locator/.env   # needs DATABASE_URL or `bun run build` fails
 
 # 2. Set a DISTINCT BETTER_AUTH_SECRET in EACH app's .env (do not leave it empty).
 #    The two secrets must differ — that's what isolates the customer and admin
@@ -56,7 +59,7 @@ bun run db:migrate          # apply the committed migrations → all tables
 ```
 
 > Run `db:migrate` (applies the migrations checked into `packages/db/drizzle`), **not**
-> `db:generate`. Only schema *authors* run `db:generate`, after editing
+> `db:generate`. Only schema _authors_ run `db:generate`, after editing
 > `packages/db/src/schema` — and they commit the generated SQL. See
 > [Database](#database-run-from-the-repo-root--delegates-to-veentdb) below.
 
@@ -70,6 +73,7 @@ Run each in its own terminal:
 ```sh
 bun run dev:customer        # http://localhost:5173
 bun run dev:admin           # http://localhost:5174
+bun run dev:locator         # http://localhost:5172 — public AP/coverage map
 bun run dev:cron            # the revoke/reconcile scheduler — REQUIRED for access to expire (see below)
 ```
 
@@ -184,7 +188,7 @@ just run it again with the new URL after an ngrok restart. Inspect or remove wit
 3. **Complete the payment promptly.** A Maya checkout **expires after ~1 hour**; if you let
    it lapse you get a `PAYMENT_EXPIRED` webhook with no underlying payment, and re-fetching
    it returns `PY0009 "Payment does not exist"` — that's expected for an unpaid checkout, not
-   a bug. Only a *completed* payment fires `PAYMENT_SUCCESS` and credits the balance.
+   a bug. Only a _completed_ payment fires `PAYMENT_SUCCESS` and credits the balance.
 
 On success you should see, in order: a `POST /api/webhooks/payment` → `200` in the ngrok
 inspector, a new `topup` row in `credit_ledger`, the balance updated on `/dashboard`, and a
@@ -192,13 +196,13 @@ inspector, a new `topup` row in `credit_ledger`, the balance updated on `/dashbo
 
 ### Troubleshooting
 
-| Symptom | Likely cause |
-|---|---|
-| No `POST /api/webhooks/payment` in the ngrok inspector after paying | Webhook not registered, or pointing at a **stale ngrok URL** — re-run `bun run maya:webhooks register <url>` (check with `maya:webhooks list`) |
-| Webhook arrives but responds `400 … verification failed` | Signature verification failed: `MAYA_SECRET_KEY` empty/wrong, or sandbox↔production key mismatch (Maya's re-fetch returns `401`) |
-| Webhook arrives but responds `400 … verification failed` after a checkout sat unpaid | The checkout **expired** before payment — Maya's re-fetch returns `PY0009 "Payment does not exist"` (expected for an unpaid/expired checkout) |
-| Checkout page (Maya) errors on **Continue to payment** | `MAYA_PUBLIC_KEY` empty/wrong |
-| Webhook `200` but balance unchanged | The event wasn't `PAYMENT_SUCCESS` (e.g. expired/failed) — credits are added only on a confirmed paid payment |
+| Symptom                                                                              | Likely cause                                                                                                                                   |
+| ------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| No `POST /api/webhooks/payment` in the ngrok inspector after paying                  | Webhook not registered, or pointing at a **stale ngrok URL** — re-run `bun run maya:webhooks register <url>` (check with `maya:webhooks list`) |
+| Webhook arrives but responds `400 … verification failed`                             | Signature verification failed: `MAYA_SECRET_KEY` empty/wrong, or sandbox↔production key mismatch (Maya's re-fetch returns `401`)               |
+| Webhook arrives but responds `400 … verification failed` after a checkout sat unpaid | The checkout **expired** before payment — Maya's re-fetch returns `PY0009 "Payment does not exist"` (expected for an unpaid/expired checkout)  |
+| Checkout page (Maya) errors on **Continue to payment**                               | `MAYA_PUBLIC_KEY` empty/wrong                                                                                                                  |
+| Webhook `200` but balance unchanged                                                  | The event wasn't `PAYMENT_SUCCESS` (e.g. expired/failed) — credits are added only on a confirmed paid payment                                  |
 
 ## Database (run from the repo root — delegates to @veent/db)
 
@@ -220,7 +224,7 @@ dashboard also reads the shared customer tables).
 
 The golden rule: **the migrations in `packages/db/drizzle` are the single source of
 truth for the DB.** Everyone — every laptop, staging, prod — reaches the same schema by
-running the *same committed migrations* on a fresh-or-up-to-date database. Never change a
+running the _same committed migrations_ on a fresh-or-up-to-date database. Never change a
 database any other way, or it drifts and the next `db:migrate` breaks for that machine.
 
 **Changing the schema (authors only):**
@@ -278,14 +282,15 @@ psql "postgres://root:mysecretpassword@localhost:5432/postgres" -c 'DROP DATABAS
 ## Deploying to production
 
 See **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)** for the first-run runbook on the
-on-site device — env, migrations, building with `adapter-node`, running both servers
-under systemd, the router + cron setup, and the pre-production checklist.
+on-site device — the one-command `bun run setup:prod` (auto-detects the device's LAN IP),
+env, migrations, building with `adapter-node`, running the servers under systemd, the
+router + cron setup, and the pre-production checklist.
 
 ## Other
 
 ```sh
-bun run build               # build both apps
-bun run check               # svelte-check both apps
+bun run build               # build all apps
+bun run check               # svelte-check all apps
 bun run lint                # prettier + eslint across the workspace
 bun run format
 ```
