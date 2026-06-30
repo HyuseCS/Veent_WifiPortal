@@ -125,7 +125,6 @@
 	// (otherwise the inline-script-set data-pending would stick and freeze the spinner).
 	let startingFree = $state(false);
 	const startFreeTime: SubmitFunction = () => {
-		const minutes = freeTime.durationMinutes;
 		startingFree = true;
 		return async ({ result, update }) => {
 			if (result.type === 'success') {
