@@ -4,7 +4,13 @@
 > current: when you fix one, flip its status and note the commit/PR. Deep
 > rationale for the architectural items lives in [`ARCHITECTURE_REVIEW.md`](./ARCHITECTURE_REVIEW.md).
 >
-> Last updated: 2026-06-29
+> Last updated: 2026-06-30
+>
+> **Network note (2026-06-30):** the hotspot LAN was re-IP'd from `10.0.0.0/24` to
+> **`10.210.0.0/18`** — router/API now `10.210.0.1`, the app/portal host now `10.210.0.9`
+> (was `10.0.0.147`). Dated entries and captured measurements below keep their **original**
+> `10.0.0.x` addresses (that's what was observed then); only live action items are repointed
+> to the new addresses.
 
 ## Status at a glance
 
@@ -235,7 +241,7 @@ The API user's password no longer crosses the wire in cleartext, closing the
 shared-segment sniff/MITM exposure.
 
 **Reminder:** the cert was created with `days-valid=3650` — it will expire in ~10
-years; no rotation needed soon, but note it exists. Pin `10.0.0.147` to a static
+years; no rotation needed soon, but note it exists. Pin `10.210.0.9` (the app host) to a static
 DHCP lease so the *Available From* restriction can't break on a lease change.
 
 **Diagnosed 2026-06-25 — "api-ssl hangs" was the Available From restriction, not a

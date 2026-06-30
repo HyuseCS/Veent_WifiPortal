@@ -65,7 +65,7 @@ DB access window + the revoke cron, exactly as for grant/revoke.
    ```
 
    If it shows the `I` (invalid) flag after enabling, the profile's gateway IP isn't on the
-   interface — confirm `/ip address print where interface="vlan70 hotspot"` has `10.0.0.1/24`.
+   interface — confirm `/ip address print where interface="vlan70 hotspot"` has `10.210.0.1/18`.
 
 2. **A shared hotspot user for activation.** Create the user named in `MIKROTIK_HOTSPOT_USER`,
    ideally on a profile that allows concurrent logins so one user can back many devices:

@@ -11,6 +11,14 @@
 > rewritten section at the bottom. The **only remaining blocker is Problem #1 (router API), which
 > is purely router/ops** — no application code is outstanding.
 
+> **UPDATE (2026-06-30, network re-IP):** the hotspot network was moved off `10.0.0.0/24` to
+> **`10.210.0.0/18`** — gateway/router API now `10.210.0.1`, portal/app host now `10.210.0.9`
+> (was the app server `10.0.0.147` / dev-host `10.0.0.196`). The dated snapshots and captured
+> log output below still show the **old** addresses on purpose (that's what was observed then);
+> only the forward-looking "Operational steps remaining" list is kept current. After the move,
+> restart the hotspot so its dynamic rules regenerate on the new subnet, and prune the stale
+> walled-garden IP entries (see `docs/mikrotik/walled-garden.md`).
+
 ## Environment (the fact that reframed everything)
 
 - **Router:** MikroTik **CCR1036-8G-2S+**, **RouterOS 6.49.18 (stable)**.
@@ -166,6 +174,8 @@ router-side. **No application code is outstanding.**
 **Operational steps remaining (router/host, not code):**
 1. **Restart both apps** so they pick up `8729`/`TLS=true` (and re-test the buy-flow grant).
 2. **Re-upload `docs/mikrotik/login.html` to the router** (the repo copy is correct at
-   `10.0.0.147:5173`; the router's uploaded copy still redirects to `.196`).
-3. *(optional)* Fix the Winbox LAN allowlist (`10.0.0.0/32` → `/24`, see Problem #1 box).
+   `10.210.0.9:5173` after the 2026-06-30 re-IP; re-upload if the router's copy still points at
+   an old `10.0.0.x` host).
+3. *(optional)* Fix the Winbox LAN allowlist to cover the new subnet (`10.210.0.0/18`; the old
+   entry was a no-op `10.0.0.0/32`, see Problem #1 box).
 4. *(optional, enables #2)* set `MIKROTIK_HOTSPOT_USER`/`MIKROTIK_HOTSPOT_PASSWORD` in both `.env`.

@@ -93,7 +93,8 @@ Only when a host needs **non-HTTP/HTTPS**, or the portal origin is a bare LAN IP
 hostname (mirrors `ADMIN_WG_IPS` + the IP branch for `ORIGIN`):
 
 ```
-/ip hotspot walled-garden ip add action=accept dst-address=10.5.50.1 comment=veent-admin
+# Live deployment: the portal/admin origin is the bare IP 10.210.0.9 (on 10.210.0.0/18).
+/ip hotspot walled-garden ip add action=accept dst-address=10.210.0.9 comment=veent-admin
 ```
 
 ---
