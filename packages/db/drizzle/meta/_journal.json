@@ -204,6 +204,13 @@
       "when": 1782701569096,
       "tag": "0028_superb_daredevil",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1782779204203,
+      "tag": "0029_premium_living_lightning",
+      "breakpoints": true
     }
   ]
 }

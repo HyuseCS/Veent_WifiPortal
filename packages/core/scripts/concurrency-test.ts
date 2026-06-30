@@ -22,6 +22,16 @@ const DATABASE_URL =
 const db = createDb(DATABASE_URL, { max: 30 });
 const network = createStubNetworkController(() => {}); // silent no-op router
 
+// Host/database only — never log the user:password embedded in DATABASE_URL.
+function redactDbUrl(url: string): string {
+	try {
+		const u = new URL(url);
+		return `${u.protocol}//${u.host}${u.pathname}`;
+	} catch {
+		return '(unparseable DATABASE_URL)';
+	}
+}
+
 const PREFIX = 'cctest_';
 let failures = 0;
 function check(name: string, cond: boolean, detail = '') {
@@ -67,7 +77,7 @@ async function cleanup() {
 }
 
 async function main() {
-	console.log(`\n🔌 Concurrency probe against ${DATABASE_URL}\n`);
+	console.log(`\n🔌 Concurrency probe against ${redactDbUrl(DATABASE_URL)}\n`);
 	await cleanup(); // in case a prior run died mid-way
 
 	// One paid tier: costs 20 credits, grants 180 min.

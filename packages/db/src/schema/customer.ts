@@ -10,6 +10,7 @@ import {
 	index,
 	uniqueIndex
 } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
 import { customerUser } from './auth-customer';
 
 /**
@@ -142,7 +143,14 @@ export const paymentTransactions = pgTable(
 	(t) => [
 		index('payment_transactions_user_id_idx').on(t.userId),
 		index('payment_transactions_created_at_idx').on(t.createdAt),
-		index('payment_transactions_status_idx').on(t.status)
+		index('payment_transactions_status_idx').on(t.status),
+		// One terminal payment = one Finance row. The same payment can arrive under two gateway
+		// ids (webhook → payment id; reconcile/poll → checkout id) but always the same reference_no,
+		// so a partial unique index lets Postgres reject the divergent duplicate (recorder collapses
+		// onto the existing row). Partial (NOT NULL): a failed event may carry no referenceNo.
+		uniqueIndex('payment_transactions_reference_no_key')
+			.on(t.referenceNo)
+			.where(sql`${t.referenceNo} IS NOT NULL`)
 	]
 );
 
