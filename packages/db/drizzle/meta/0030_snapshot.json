@@ -2221,7 +2221,12 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "router_model_range_meters_positive": {
+          "name": "router_model_range_meters_positive",
+          "value": "\"router_model\".\"range_meters\" > 0"
+        }
+      },
       "isRLSEnabled": false
     }
   },

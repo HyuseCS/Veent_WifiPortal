@@ -89,14 +89,27 @@
 			class="space-y-2 rounded-lg border border-brand/30 bg-surface p-3"
 		>
 			<div class="grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
-				<input name="id" placeholder="model-id (slug)" autocomplete="off" class={inputClass} />
-				<input name="name" placeholder="Display name" autocomplete="off" class={inputClass} />
+				<input
+					name="id"
+					placeholder="model-id (slug)"
+					aria-label="Model id (slug)"
+					autocomplete="off"
+					class={inputClass}
+				/>
+				<input
+					name="name"
+					placeholder="Display name"
+					aria-label="Display name"
+					autocomplete="off"
+					class={inputClass}
+				/>
 				<input
 					name="rangeMeters"
 					type="number"
 					min="10"
 					max="5000"
 					placeholder="Range (m)"
+					aria-label="Range in metres"
 					class="{inputClass} sm:w-32"
 				/>
 			</div>
@@ -119,7 +132,13 @@
 					<form method="post" action="?/updateModel" use:enhance={onResult} class="space-y-2">
 						<input type="hidden" name="id" value={m.id} />
 						<div class="grid gap-2 sm:grid-cols-[1fr_auto_auto]">
-							<input name="name" value={m.name} autocomplete="off" class={inputClass} />
+							<input
+								name="name"
+								value={m.name}
+								aria-label="Display name"
+								autocomplete="off"
+								class={inputClass}
+							/>
 							<input
 								name="rangeMeters"
 								type="number"
@@ -159,7 +178,7 @@
 							<button
 								type="button"
 								onclick={() => openEdit(m.id)}
-								class="flex h-9 w-9 items-center justify-center rounded text-muted hover:bg-surface hover:text-ink"
+								class="flex h-11 w-11 items-center justify-center rounded text-muted hover:bg-surface hover:text-ink"
 								aria-label="Edit {m.name}"
 							>
 								<Pencil class="h-4 w-4" aria-hidden="true" />
@@ -169,7 +188,7 @@
 								onclick={() => (confirmingId = confirmingId === m.id ? null : m.id)}
 								disabled={models.length <= 1}
 								title={models.length <= 1 ? 'Keep at least one model' : 'Delete model'}
-								class="flex h-9 w-9 items-center justify-center rounded text-muted hover:bg-surface hover:text-blocked disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-muted"
+								class="flex h-11 w-11 items-center justify-center rounded text-muted hover:bg-surface hover:text-blocked disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-muted"
 								aria-label="Delete {m.name}"
 							>
 								<Trash2 class="h-4 w-4" aria-hidden="true" />
@@ -192,7 +211,7 @@
 								<button
 									type="button"
 									onclick={() => (confirmingId = null)}
-									class="min-h-[36px] rounded border border-border px-3 text-xs font-medium text-ink hover:bg-surface"
+									class="min-h-11 rounded border border-border px-3 text-xs font-medium text-ink hover:bg-surface"
 								>
 									Cancel
 								</button>
@@ -200,7 +219,7 @@
 									<input type="hidden" name="id" value={m.id} />
 									<button
 										type="submit"
-										class="min-h-[36px] rounded bg-blocked px-3 text-xs font-medium text-white hover:opacity-90"
+										class="min-h-11 rounded bg-blocked px-3 text-xs font-medium text-white hover:opacity-90"
 									>
 										Delete
 									</button>

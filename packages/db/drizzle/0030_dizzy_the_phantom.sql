@@ -2,7 +2,8 @@ CREATE TABLE "router_model" (
 	"id" text PRIMARY KEY NOT NULL,
 	"name" text NOT NULL,
 	"range_meters" integer NOT NULL,
-	"sort_order" integer DEFAULT 0 NOT NULL
+	"sort_order" integer DEFAULT 0 NOT NULL,
+	CONSTRAINT "router_model_range_meters_positive" CHECK ("router_model"."range_meters" > 0)
 );
 --> statement-breakpoint
 -- Baseline catalog row so the catalog is never empty after this migration (the app

@@ -28,6 +28,11 @@
 	// model id (first/lowest sortOrder) used for new pins.
 	const rng = (id: string | null | undefined) => rangeFor(models, id);
 	const defModel = $derived(defaultModelId(models));
+	// Normalize a stored model id to a *live* catalog id: a deleted catalog row leaves the AP's
+	// `model` dangling, so fall back to the default — otherwise PinPanel's <select> binds to no
+	// option and a save would persist the stale id.
+	const liveModel = (id: string | null | undefined) =>
+		id && models.some((m) => m.id === id) ? id : defModel;
 
 	// lucide-svelte icons type as the legacy component signature; EmptyState's `icon` prop
 	// wants the runes `Component` type. Same cast the dashboard page uses.
@@ -204,7 +209,7 @@
 		spawnPin({
 			apId: ap.id,
 			targetId: null,
-			model: ap.model ?? defModel,
+			model: liveModel(ap.model),
 			range: ap.rangeMeters ?? rng(ap.model),
 			name: ap.name,
 			address: ap.address ?? '',
@@ -282,7 +287,7 @@
 				...p,
 				name: value,
 				targetId: match.id,
-				model: match.model ?? defModel,
+				model: liveModel(match.model),
 				range: match.rangeMeters ?? rng(match.model),
 				cluster: match.clusterName ?? p.cluster
 			};

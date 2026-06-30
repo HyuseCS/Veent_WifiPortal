@@ -71,4 +71,24 @@ describe('computeClusters', () => {
 		expect(clusters[0].name).toBe('Atrium');
 		expect(clusters[0].named).toBe(true);
 	});
+
+	it('derives a missing radius from the RouterModel catalog', () => {
+		// Both APs omit rangeMeters (null), so the overlap radius must come from the catalog entry
+		// for their model — not the explicit-override path the other tests exercise.
+		const mk = (id: string, c: { lat: number; lng: number }): ClusterableAp => ({
+			id,
+			latitude: String(c.lat),
+			longitude: String(c.lng),
+			model: 'wide',
+			rangeMeters: null,
+			clusterName: null
+		});
+		// 500 m catalog radius → the ~55 m-apart domes overlap → one cluster.
+		const wide: RouterModel[] = [{ id: 'wide', name: 'Wide', rangeMeters: 500 }];
+		expect(computeClusters([mk('a', NEAR_A), mk('b', NEAR_B)], wide).clusters).toHaveLength(1);
+		// Same coords, 10 m catalog radius → domes can't reach → no cluster. Proves the radius is
+		// read from the matching catalog entry, not a constant.
+		const tiny: RouterModel[] = [{ id: 'wide', name: 'Wide', rangeMeters: 10 }];
+		expect(computeClusters([mk('a', NEAR_A), mk('b', NEAR_B)], tiny).clusters).toHaveLength(0);
+	});
 });

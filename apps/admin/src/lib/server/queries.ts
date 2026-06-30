@@ -766,11 +766,19 @@ export async function listRouterModels(db: DB): Promise<RouterModelRow[]> {
 export async function createRouterModel(
 	db: DB,
 	model: { id: string; name: string; rangeMeters: number }
-): Promise<void> {
+): Promise<boolean> {
 	const [{ next }] = await db
 		.select({ next: sql<number>`coalesce(max(${routerModel.sortOrder}), -1) + 1`.mapWith(Number) })
 		.from(routerModel);
-	await db.insert(routerModel).values({ ...model, sortOrder: next });
+	// onConflictDoNothing → the insert itself is the uniqueness check: a concurrent add of the
+	// same id yields 0 rows here instead of surfacing a primary-key violation as a 500. Returns
+	// whether a row was actually inserted.
+	const inserted = await db
+		.insert(routerModel)
+		.values({ ...model, sortOrder: next })
+		.onConflictDoNothing()
+		.returning({ id: routerModel.id });
+	return inserted.length > 0;
 }
 
 /** Edit a model's display name and advertised range. The `id` slug is immutable — APs
@@ -780,13 +788,26 @@ export async function updateRouterModel(
 	db: DB,
 	id: string,
 	fields: { name: string; rangeMeters: number }
-): Promise<void> {
-	await db.update(routerModel).set(fields).where(eq(routerModel.id, id));
+): Promise<boolean> {
+	// `returning` makes the UPDATE the existence check too — 0 rows means the id is gone, so the
+	// caller can 404 without a separate (race-prone) read.
+	const updated = await db
+		.update(routerModel)
+		.set(fields)
+		.where(eq(routerModel.id, id))
+		.returning({ id: routerModel.id });
+	return updated.length > 0;
 }
 
 /** Remove a model from the catalog. Safe: network_health.model is a loose text ref (no FK),
  * so APs on a deleted model fall back to the default range — exactly like an unknown id.
  * Caller owns the "can't delete the last model" guard (the catalog must never be empty). */
-export async function deleteRouterModel(db: DB, id: string): Promise<void> {
-	await db.delete(routerModel).where(eq(routerModel.id, id));
+export async function deleteRouterModel(db: DB, id: string): Promise<boolean> {
+	// `returning` reports whether a row actually existed, so the caller can 404 on a stale id
+	// without a pre-read.
+	const deleted = await db
+		.delete(routerModel)
+		.where(eq(routerModel.id, id))
+		.returning({ id: routerModel.id });
+	return deleted.length > 0;
 }

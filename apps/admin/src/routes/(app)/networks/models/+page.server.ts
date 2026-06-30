@@ -54,11 +54,11 @@ export const actions: Actions = {
 		if (!id || !name || rangeMeters === null) {
 			return fail(400, { action: 'addModel', error: 'Check the id, name, and range (10–5000 m).' });
 		}
-		// Reject a duplicate id rather than letting the PK violation surface as a 500.
-		if ((await listRouterModels(db)).some((m) => m.id === id)) {
-			return fail(409, { action: 'addModel', error: `A model with id "${id}" already exists.` });
+		// The insert is the uniqueness check (ON CONFLICT DO NOTHING): a duplicate — even one added
+		// concurrently — comes back as "not inserted" here instead of a 500.
+		if (!(await createRouterModel(db, { id, name, rangeMeters }))) {
+			return fail(409, { action: 'addModel', id, error: `A model with id "${id}" already exists.` });
 		}
-		await createRouterModel(db, { id, name, rangeMeters });
 		return { ok: true, action: 'addModel', id };
 	},
 
@@ -72,12 +72,16 @@ export const actions: Actions = {
 		const name = modelName(form.get('name'));
 		const rangeMeters = modelRange(form.get('rangeMeters'));
 		if (!id || !name || rangeMeters === null) {
-			return fail(400, { action: 'updateModel', error: 'Check the name and range (10–5000 m).' });
+			return fail(400, {
+				action: 'updateModel',
+				id: id ?? undefined,
+				error: 'Check the name and range (10–5000 m).'
+			});
 		}
-		if (!(await listRouterModels(db)).some((m) => m.id === id)) {
-			return fail(404, { action: 'updateModel', error: 'That model no longer exists.' });
+		// The UPDATE reports whether the row existed — 0 rows → it was deleted out from under us.
+		if (!(await updateRouterModel(db, id, { name, rangeMeters }))) {
+			return fail(404, { action: 'updateModel', id, error: 'That model no longer exists.' });
 		}
-		await updateRouterModel(db, id, { name, rangeMeters });
 		return { ok: true, action: 'updateModel', id };
 	},
 
@@ -91,14 +95,17 @@ export const actions: Actions = {
 		const id = modelSlug((await event.request.formData()).get('id'));
 		if (!id) return fail(400, { action: 'deleteModel', error: 'Unknown model.' });
 
-		const models = await listRouterModels(db);
-		if (!models.some((m) => m.id === id)) {
-			return fail(404, { action: 'deleteModel', error: 'That model no longer exists.' });
+		// Last-model guard still needs a count read (the catalog must never be empty — the app
+		// treats the first model as the default). ponytail: read-then-delete, so two owners racing
+		// the last two deletes could empty it; owner-only config makes that impossible in practice,
+		// upgrade to a conditional delete if that ever stops holding.
+		if ((await listRouterModels(db)).length <= 1) {
+			return fail(400, { action: 'deleteModel', id, error: 'Keep at least one model in the catalog.' });
 		}
-		if (models.length <= 1) {
-			return fail(400, { action: 'deleteModel', error: 'Keep at least one model in the catalog.' });
+		// The DELETE reports whether the row existed, so a stale id 404s without a second read.
+		if (!(await deleteRouterModel(db, id))) {
+			return fail(404, { action: 'deleteModel', id, error: 'That model no longer exists.' });
 		}
-		await deleteRouterModel(db, id);
 		return { ok: true, action: 'deleteModel', id };
 	}
 };
