@@ -18,7 +18,11 @@ export async function verifyStepUp(
 	code: string,
 	opts: { scope: string; action: string }
 ) {
-	const rl = await rateLimit(opts.scope, clientIp(event), 5, 15 * 60 * 1000);
+	// Key the throttle on the acting account (step-up is always authenticated): rotating IPs
+	// can't sidestep it, and users behind a shared NAT don't throttle each other. IP is only a
+	// fallback for the should-never-happen case of no resolved user.
+	const identifier = event.locals.user?.id ?? clientIp(event);
+	const rl = await rateLimit(opts.scope, identifier, 5, 15 * 60 * 1000);
 	if (!rl.allowed) {
 		return fail(429, { action: opts.action, error: 'Too many attempts. Please wait a few minutes.' });
 	}

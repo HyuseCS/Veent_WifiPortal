@@ -49,11 +49,13 @@
 		};
 		dialogOpen = true;
 	}
-	// `form` is a union of per-action success/failure shapes; for these presentation-only
-	// checks we just need an optional error + action, so read it through a loose view.
+	// Surface a step-up/validation error inside the dialog only when it belongs to the dialog
+	// that's currently open — otherwise a failed `remove` would bleed into a freshly-opened
+	// `togglePublished` dialog. `form` is a union of per-action shapes; for this presentation-only
+	// check we just need an optional error + action, so read it through a loose view.
 	const fv = $derived(form as { ok?: boolean; action?: string; error?: string } | null);
 	const dialogError = $derived(
-		fv?.error && (fv.action === 'togglePublished' || fv.action === 'remove') ? fv.error : null
+		fv?.error && dialogProps.action === `?/${fv.action}` ? fv.error : null
 	);
 
 	type Faq = PageData['faqs'][number];
