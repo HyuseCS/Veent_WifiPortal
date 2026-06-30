@@ -4,7 +4,7 @@
 	 * dependency-free Icon so the locator pulls no icon package into its bundle.
 	 * `stroke="currentColor"` means colour follows the `text-*` utility on the element.
 	 */
-	type IconName = 'search' | 'x' | 'menu' | 'map-pin';
+	type IconName = 'search' | 'x' | 'menu' | 'map-pin' | 'sun' | 'moon' | 'chevron-down';
 
 	let {
 		name,
@@ -39,5 +39,19 @@
 	{:else if name === 'map-pin'}
 		<path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
 		<circle cx="12" cy="10" r="3" />
+	{:else if name === 'sun'}
+		<circle cx="12" cy="12" r="4" />
+		<path d="M12 2v2" />
+		<path d="M12 20v2" />
+		<path d="m4.93 4.93 1.41 1.41" />
+		<path d="m17.66 17.66 1.41 1.41" />
+		<path d="M2 12h2" />
+		<path d="M20 12h2" />
+		<path d="m6.34 17.66-1.41 1.41" />
+		<path d="m19.07 4.93-1.41 1.41" />
+	{:else if name === 'moon'}
+		<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" />
+	{:else if name === 'chevron-down'}
+		<path d="m6 9 6 6 6-6" />
 	{/if}
 </svg>
