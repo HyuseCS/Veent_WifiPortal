@@ -33,12 +33,12 @@ client-side hosts go below.
 
 ## Two layers
 
-| RouterOS path | Matches on | Use for |
-|---|---|---|
-| `/ip hotspot walled-garden` | `dst-host` (TLS SNI / HTTP Host — **hostname**, supports `*` wildcards) | HTTP/HTTPS hosts (all the payment + captcha + portal hosts) |
-| `/ip hotspot walled-garden ip` | `dst-address` (**IP/CIDR**, all protocols) | A host that needs non-HTTP/HTTPS, or a portal origin given as a bare IP |
+| RouterOS path                  | Matches on                                                              | Use for                                                                 |
+| ------------------------------ | ----------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| `/ip hotspot walled-garden`    | `dst-host` (TLS SNI / HTTP Host — **hostname**, supports `*` wildcards) | HTTP/HTTPS hosts (all the payment + captcha + portal hosts)             |
+| `/ip hotspot walled-garden ip` | `dst-address` (**IP/CIDR**, all protocols)                              | A host that needs non-HTTP/HTTPS, or a portal origin given as a bare IP |
 
-The host layer can only match the **hostname** (SNI), never the path — so opening `www.google.com`
+The host layer can only match the **hostname** (SNI), never the path — so allowing `*.google.com`
 for reCAPTCHA also exposes Google search to pre-auth devices. That's an accepted, bounded
 trade-off (other domains stay blocked); see the note in `setup-router.ts`.
 
@@ -46,7 +46,8 @@ trade-off (other domains stay blocked); see the note in `setup-router.ts`.
 
 ## Hosts to allow (`/ip hotspot walled-garden`)
 
-These mirror `PAYMENT_HOSTS` + `CHECKOUT_ASSET_HOSTS` in `apps/admin/scripts/setup-router.ts`.
+These mirror the `PAYMENT_HOSTS` array in `apps/admin/scripts/setup-router.ts`, which in turn
+mirrors what is **live on the router** (the captcha hosts use `*.` wildcards there — match that).
 **Pin this list against that array** when either changes.
 
 ```
@@ -56,12 +57,15 @@ These mirror `PAYMENT_HOSTS` + `CHECKOUT_ASSET_HOSTS` in `apps/admin/scripts/set
 /ip hotspot walled-garden add action=allow dst-host=paymaya.com    comment=veent-admin
 /ip hotspot walled-garden add action=allow dst-host=*.paymaya.com  comment=veent-admin
 
-# Google reCAPTCHA — Maya's checkout embeds the google.com reCAPTCHA variant.
-# www.google.com is REQUIRED and is a deliberate, bounded leak (see setup-router.ts note).
-/ip hotspot walled-garden add action=allow dst-host=www.google.com    comment=veent-admin
-/ip hotspot walled-garden add action=allow dst-host=www.gstatic.com   comment=veent-admin
-/ip hotspot walled-garden add action=allow dst-host=recaptcha.net     comment=veent-admin
-/ip hotspot walled-garden add action=allow dst-host=www.recaptcha.net comment=veent-admin
+# GCash e-wallet checkout — Maya/PayMongo redirect the buyer to GCash to authorize payment.
+/ip hotspot walled-garden add action=allow dst-host=gcash.com      comment=veent-admin
+/ip hotspot walled-garden add action=allow dst-host=*.gcash.com    comment=veent-admin
+
+# Google reCAPTCHA — Maya's checkout embeds the google.com reCAPTCHA variant. Wildcards to
+# match the live router. *.google.com is REQUIRED and is a deliberate, bounded leak (see note above).
+/ip hotspot walled-garden add action=allow dst-host=*.google.com    comment=veent-admin
+/ip hotspot walled-garden add action=allow dst-host=*.gstatic.com   comment=veent-admin
+/ip hotspot walled-garden add action=allow dst-host=*.recaptcha.net comment=veent-admin
 
 # Other gateways named in Rule #2 — harmless if unused on this deployment.
 /ip hotspot walled-garden add action=allow dst-host=*.paymongo.com comment=veent-admin
@@ -107,9 +111,10 @@ hostname (mirrors `ADMIN_WG_IPS` + the IP branch for `ORIGIN`):
 ```
 
 Symptoms a missing entry causes:
+
 - Checkout redirect (`payments-web*.maya.ph`) shows a closed connection → a `*.maya.ph` rule is missing.
 - Checkout page renders but the captcha never appears (works on a fully-online device) → a
-  `www.google.com` / `www.gstatic.com` / `recaptcha.net` rule is missing.
+  `*.google.com` / `*.gstatic.com` / `*.recaptcha.net` rule is missing.
 - Card payment dead-ends after entering card details → the bank ACS host is missing (see 3DS above).
 
 ## Idempotency / cleanup

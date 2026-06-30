@@ -91,52 +91,45 @@ const isIp = (h: string): boolean => /^[0-9.]+(\/\d{1,2})?$/.test(h) || h.includ
  * card payments may still need the bank's domain added per deployment.
  *
  * The Maya checkout page renders a Google reCAPTCHA, which loads from SEPARATE
- * domains. Without them the captcha never appears on a device behind the portal,
- * the page looks broken, and the phone may flip to cellular ("no internet"), which
- * then breaks our IP→MAC device detection.
+ * domains (NOT under *.maya.ph, so the payment wildcards don't cover them). Without
+ * them the captcha never appears on a device behind the portal, the page looks
+ * broken, and the phone may flip to cellular ("no internet"), which then breaks our
+ * IP→MAC device detection. Symptom: "captcha doesn't show on phone but works on a
+ * device with full internet".
  *
- * Captcha hosts, by risk:
- *   - `www.gstatic.com`  — static asset CDN (reCAPTCHA JS/images); serves no
- *     browsable services, so opening it leaks no real internet.
- *   - `www.recaptcha.net` — Google's dedicated reCAPTCHA host; serves nothing else.
- *   - `www.google.com`   — REQUIRED: Maya's checkout embeds the google.com variant of
- *     reCAPTCHA (confirmed from the router's DNS cache — the device resolves
- *     www.google.com + gstatic, never recaptcha.net). The walled garden can only match
- *     the TLS SNI (host), not the path, so this also exposes Google search to
- *     UNAUTHENTICATED devices. That's an accepted, bounded trade-off: without it the
- *     captcha can't render and mobile Maya payments dead-end. Pre-auth devices reach
- *     google.com only — other domains stay blocked, so it isn't open internet.
+ * This list mirrors EXACTLY what is live on the router's walled garden — re-running
+ * is a no-op (idempotency matches on `dst-host`, so a mismatched host here would add
+ * a redundant entry). The captcha hosts are whitelisted as wildcards to match the
+ * router:
+ *   - `*.gstatic.com`   — static asset CDN (reCAPTCHA JS/images); serves no browsable
+ *     services, so opening it leaks no real internet.
+ *   - `*.recaptcha.net` — Google's dedicated reCAPTCHA host; serves nothing else.
+ *   - `*.google.com`    — REQUIRED: Maya's checkout embeds the google.com variant of
+ *     reCAPTCHA. The walled garden can only match the TLS SNI (host), not the path, so
+ *     this also exposes Google search to UNAUTHENTICATED devices. That's an accepted,
+ *     bounded trade-off: without it the captcha can't render and mobile Maya payments
+ *     dead-end. Pre-auth devices reach google.com only — other domains stay blocked,
+ *     so it isn't open internet.
  */
 const PAYMENT_HOSTS = [
 	'maya.ph',
 	'*.maya.ph',
 	'paymaya.com',
 	'*.paymaya.com',
-	// Google reCAPTCHA (Maya checkout). google.com is required + a deliberate leak — see note above.
-	'www.google.com',
-	'www.recaptcha.net',
-	'www.gstatic.com',
+	// GCash e-wallet checkout — Maya/PayMongo redirect the buyer to GCash to authorize the payment
+	// (payments.gcash.com). Wildcard covers the auth/redirect subdomains.
+	'gcash.com',
+	'*.gcash.com',
+	// Google reCAPTCHA (Maya checkout). *.google.com is required + a deliberate leak — see note above.
+	'*.google.com',
+	'*.gstatic.com',
+	'*.recaptcha.net',
 	// Other gateways named in Rule #2; harmless if unused.
 	'*.paymongo.com',
 	'*.xendit.co'
 ];
 
-/**
- * Third-party assets the gateway's OWN checkout page loads. Without these the page
- * renders but its CAPTCHA never appears, soft-locking the buyer on a captive-portal
- * (walled-garden-only) device — the payment can't be submitted. Maya Checkout uses
- * Google reCAPTCHA, served from these hosts (NOT under *.maya.ph, so the payment
- * wildcards above don't cover them). Symptom this fixes: "captcha doesn't show on
- * phone but works on a device with full internet".
- */
-const CHECKOUT_ASSET_HOSTS = [
-	'www.google.com', // reCAPTCHA API + challenge iframe
-	'www.gstatic.com', // reCAPTCHA static JS/images
-	'recaptcha.net', // reCAPTCHA alternate host (some networks/regions)
-	'www.recaptcha.net'
-];
-
-const hosts = new Set([...splitList(ADMIN_WG_HOSTS), ...PAYMENT_HOSTS, ...CHECKOUT_ASSET_HOSTS]);
+const hosts = new Set([...splitList(ADMIN_WG_HOSTS), ...PAYMENT_HOSTS]);
 const ips = new Set(splitList(ADMIN_WG_IPS));
 
 // Derive the admin host from ORIGIN and slot it into the right layer.

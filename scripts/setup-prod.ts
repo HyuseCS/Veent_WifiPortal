@@ -23,12 +23,16 @@
 import { existsSync, readFileSync, writeFileSync, mkdirSync, copyFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
+import { createSocket } from 'node:dgram';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const DRY = process.argv.includes('--dry-run');
 const PLATFORM = process.platform; // 'linux' | 'win32' | 'darwin'
+// Force a specific LAN IP instead of auto-detecting (e.g. a static IP the box will
+// move to). `--ip=10.0.0.50` or `PROD_LAN_IP=10.0.0.50 bun run setup:prod`.
+const IP_OVERRIDE = argValue('--ip') ?? process.env.PROD_LAN_IP ?? '';
 
 // ── Tunables ────────────────────────────────────────────────────────────────
 const DB_NAME = 'radius';
@@ -37,9 +41,12 @@ const DB_HOST = 'localhost';
 const DB_PORT = 5432;
 // Admin connection used ONLY to create the role/db. Override via PG_ADMIN_URL.
 const PG_ADMIN_URL = process.env.PG_ADMIN_URL ?? 'postgres://postgres@localhost:5432/postgres';
+// Long-lived servers, in cron-index order: APPS[0]=customer, APPS[1]=admin (the
+// crontab below references those two by index). locator is the public AP map.
 const APPS = [
 	{ name: 'customer', pkg: 'veent-customer', port: 3001 },
-	{ name: 'admin', pkg: 'radius-admin', port: 3002 }
+	{ name: 'admin', pkg: 'radius-admin', port: 3002 },
+	{ name: 'locator', pkg: 'veent-locator', port: 3003 }
 ] as const;
 
 // ── Tiny logging / exec helpers ─────────────────────────────────────────────
@@ -100,6 +107,21 @@ if (!bunV) fail('bun is required — install from https://bun.sh');
 if (!nodeV) warn('node not found — install Node to run the built servers (or use `bun ./build`).');
 if (!psqlV) warn('psql not found — DB provisioning will be skipped; create the DB manually.');
 
+// ── 0b. Detect THIS device's LAN IP ──────────────────────────────────────────
+// The whole point of "easy migration": on a new box, derive the LAN URLs from the
+// machine's own IP instead of hand-editing every .env + login.html. We aim a UDP
+// socket at the router (no packet is sent — connect() just makes the OS pick the
+// egress interface) and read back the local address, so we get the IP on the
+// router/guest subnet specifically (correct even on a multi-homed box). `--ip=` /
+// PROD_LAN_IP overrides it for a static IP the box will move to later.
+step('Detecting this device LAN IP');
+const routerHost = firstExistingEnv('MIKROTIK_HOST') || '10.0.0.1';
+const LAN_IP = IP_OVERRIDE || (await detectLanIp(routerHost)) || '';
+if (IP_OVERRIDE) log(`using forced IP: ${LAN_IP} (--ip / PROD_LAN_IP)`);
+else if (LAN_IP) log(`detected LAN IP: ${LAN_IP} (egress toward ${routerHost})`);
+else warn(`could not detect a LAN IP toward ${routerHost} — ORIGIN/login.html left as-is; set them by hand or pass --ip=<addr>.`);
+if (LAN_IP) log(`LAN URLs → customer http://${LAN_IP}:${APPS[0].port} · admin http://${LAN_IP}:${APPS[1].port} · locator http://${LAN_IP}:${APPS[2].port}`);
+
 // ── 1. Provision the local Postgres DB + role ────────────────────────────────
 step('Provisioning local Postgres database');
 let dbPassword = '';
@@ -146,6 +168,13 @@ for (const app of APPS) {
 	// Distinct per-app auth secret; shared cron secret.
 	ensureEnvVar(env, 'BETTER_AUTH_SECRET', gen(32));
 	ensureEnvVar(env, 'CRON_SECRET', cronSecret);
+	// Point ORIGIN at this device on its prod port. Only touches a blank/localhost or
+	// existing-LAN-IP ORIGIN, so a re-run on a moved box refreshes the IP, while a real
+	// https domain (TLS-proxy deploy) the operator set is left untouched.
+	if (LAN_IP) {
+		const origin = `http://${LAN_IP}:${app.port}`;
+		log(`ORIGIN ${setLanOrigin(env, origin)}: ${origin}`);
+	}
 	log(`apps/${app.name}/.env ready (secrets generated where blank).`);
 }
 
@@ -164,7 +193,7 @@ const ownerEmail = envValue(join(ROOT, 'apps/admin/.env'), 'OWNER_EMAIL');
 if (ownerEmail) run('bun', ['run', '--filter', 'radius-admin', 'bootstrap:owner']);
 else warn('OWNER_EMAIL not set in apps/admin/.env — skipping. Set OWNER_* and run `bun run --filter radius-admin bootstrap:owner`.');
 
-step('Building both apps');
+step('Building all apps');
 run('bun', ['run', 'build']);
 
 // ── 4. Emit OS-specific service + cron config under ./deploy ──────────────────
@@ -175,6 +204,30 @@ const nodeBin = PLATFORM === 'win32' ? capture('where', ['node']).split(/\r?\n/)
 
 if (PLATFORM === 'win32') emitWindows();
 else emitSystemd();
+
+// Ready-to-upload captive-portal login page, pointed at THIS device's customer portal.
+// We rewrite the redirect host:port in the committed template (docs/mikrotik/login.html)
+// rather than overwrite the template itself — deploy/login.html is the machine-specific
+// artifact you upload to the router (Files → hotspot/login.html).
+emitLoginHtml();
+function emitLoginHtml() {
+	if (!LAN_IP) {
+		warn('No LAN IP — skipping deploy/login.html. Edit docs/mikrotik/login.html by hand.');
+		return;
+	}
+	const tmplPath = join(ROOT, 'docs/mikrotik/login.html');
+	if (!existsSync(tmplPath)) {
+		warn('docs/mikrotik/login.html not found — skipping login.html generation.');
+		return;
+	}
+	const portalUrl = `http://${LAN_IP}:${APPS[0].port}`;
+	// Replace the scheme+host+port of the two redirect URLs with this device's portal URL.
+	// The `(?=\/\?)` lookahead matches ONLY an authority immediately followed by `/?…` (the
+	// real `url=`/`href=` links), so the example URLs in the template's comment are untouched.
+	const html = readFileSync(tmplPath, 'utf8').replace(/https?:\/\/[^/"'\s]+(?=\/\?)/g, portalUrl);
+	writeOut(join(deploy, 'login.html'), html);
+	log(`login.html redirect → ${portalUrl}/  (upload deploy/login.html to the router)`);
+}
 
 function emitSystemd() {
 	for (const app of APPS) {
@@ -200,9 +253,10 @@ WantedBy=multi-user.target
 * * * * * curl -fsS -X POST -H "x-cron-secret: ${cronSecret}" http://127.0.0.1:${APPS[1].port}/api/network/health/refresh
 `;
 	writeOut(join(deploy, 'crontab'), cron);
+	const units = APPS.map((a) => `radius-${a.name}`).join(' ');
 	console.log('\n  Next (Linux, run as root):');
 	console.log(`    sudo cp ${deploy}/radius-*.service /etc/systemd/system/`);
-	console.log('    sudo systemctl daemon-reload && sudo systemctl enable --now radius-customer radius-admin');
+	console.log(`    sudo systemctl daemon-reload && sudo systemctl enable --now ${units}`);
 	console.log(`    crontab ${deploy}/crontab`);
 }
 
@@ -233,14 +287,15 @@ schtasks /Create /SC MINUTE /TN "Radius-Health" /TR "powershell -c \\"Invoke-Web
 
 // ── 5. Final checklist ───────────────────────────────────────────────────────
 step('Remaining manual steps (deployment-specific)');
-console.log(`  1. Fill real secrets in apps/*/.env:
-       customer: MAYA_PUBLIC_KEY / MAYA_SECRET_KEY (+ MAYA_SANDBOX=false), ITEXMO_API_CODE/EMAIL/PASSWORD, ORIGIN
-       admin:    MIKROTIK_HOST/USER/PASSWORD, RESEND_API_KEY/EMAIL_FROM, OWNER_*, ORIGIN, set NETWORK_CONTROLLER=mikrotik
-  2. Remove the temporary /register admin hole before serving users.
-  3. Router: edit docs/mikrotik/login.html to the prod portal URL & upload it; run:
+console.log(`  1. Fill real secrets in apps/*/.env (ORIGIN was set to this device's LAN IP automatically${LAN_IP ? ` → ${LAN_IP}` : ''}):
+       customer: MAYA_PUBLIC_KEY / MAYA_SECRET_KEY (+ MAYA_SANDBOX=false), ITEXMO_API_CODE/EMAIL/PASSWORD
+       admin:    MIKROTIK_HOST/USER/PASSWORD, RESEND_API_KEY/EMAIL_FROM, OWNER_*, NETWORK_CONTROLLER=mikrotik
+       (LAN http ORIGIN is allowed; for a PUBLIC portal put TLS in front and set ORIGIN=https://<domain>.)
+  2. Router: upload deploy/login.html (already pointed at this device) to the hotspot, then run:
        bun run --filter radius-admin setup:router
-  4. Install + start the services and crons printed above.
-  5. (Optional) Put Caddy/nginx in front for HTTPS — see docs/DEPLOYMENT.md.`);
+       (on a server move, re-point api-ssl: setup:router --restrict-api — see docs/DEPLOYMENT.md §7a)
+  3. Install + start the services and crons printed above.
+  4. (Optional) Put Caddy/nginx in front for HTTPS — see docs/DEPLOYMENT.md.`);
 console.log(`\n✔ setup ${DRY ? '(dry run) ' : ''}complete.\n`);
 
 // ── helpers ──────────────────────────────────────────────────────────────────
@@ -258,6 +313,79 @@ function firstExistingEnv(key: string): string | null {
 		if (v) return v;
 	}
 	return null;
+}
+/** Read a `--name value` or `--name=value` flag from argv. */
+function argValue(name: string): string | undefined {
+	const i = process.argv.findIndex((a) => a === name || a.startsWith(`${name}=`));
+	if (i < 0) return undefined;
+	const a = process.argv[i];
+	return a.includes('=') ? a.slice(a.indexOf('=') + 1) : process.argv[i + 1];
+}
+/** True for a loopback / RFC1918 / .lan|.local host — the deploys we let ORIGIN stay http on. */
+function isPrivateLanHost(host: string): boolean {
+	if (host === 'localhost' || host === '127.0.0.1') return true;
+	if (host.endsWith('.lan') || host.endsWith('.local')) return true;
+	const m = /^(\d+)\.(\d+)\.\d+\.\d+$/.exec(host);
+	if (!m) return false;
+	const [a, b] = [Number(m[1]), Number(m[2])];
+	return a === 10 || (a === 192 && b === 168) || (a === 172 && b >= 16 && b <= 31);
+}
+/**
+ * Set ORIGIN to this device's LAN URL — but only when it's safe to (re)write: a blank /
+ * localhost default, or an existing http LAN-IP origin (so a moved box refreshes to the
+ * new IP). A real https domain the operator set for a TLS-proxy deploy is left untouched.
+ */
+function setLanOrigin(file: string, origin: string): 'set' | 'kept' {
+	const current = envValue(file, 'ORIGIN');
+	let host = '';
+	try {
+		host = current ? new URL(current).hostname : '';
+	} catch {
+		host = '';
+	}
+	const writable = !current || (current.startsWith('http://') && isPrivateLanHost(host));
+	if (!writable) return 'kept';
+	if (current === origin) return 'kept';
+	if (DRY) return 'set';
+	const re = /^ORIGIN=.*$/m;
+	let text = existsSync(file) ? readFileSync(file, 'utf8') : '';
+	const line = `ORIGIN="${origin}"`;
+	text = re.test(text) ? text.replace(re, line) : `${text}${text.endsWith('\n') || !text ? '' : '\n'}${line}\n`;
+	writeFileSync(file, text);
+	return 'set';
+}
+/**
+ * This machine's LAN IP on the route toward `target`. A connected UDP socket makes the OS
+ * choose the egress interface WITHOUT sending a packet; we read the bound local address. No
+ * dependency on the target being reachable/listening. IPv4 only (the router/guest subnet).
+ */
+function detectLanIp(target: string): Promise<string | null> {
+	return new Promise((resolve) => {
+		const sock = createSocket('udp4');
+		let settled = false;
+		const finish = (ip: string | null) => {
+			if (settled) return;
+			settled = true;
+			try {
+				sock.close();
+			} catch {
+				/* already closed */
+			}
+			resolve(ip && ip !== '0.0.0.0' ? ip : null);
+		};
+		sock.once('error', () => finish(null));
+		try {
+			sock.connect(9, target, () => {
+				try {
+					finish(sock.address().address);
+				} catch {
+					finish(null);
+				}
+			});
+		} catch {
+			finish(null);
+		}
+	});
 }
 function fail(msg: string): never {
 	console.error(`\n✖ ${msg}\n`);

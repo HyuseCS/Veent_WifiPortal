@@ -28,17 +28,27 @@ export function validateEnv(): void {
 			if (!env[k]) missing.push(k);
 		}
 	}
-	// Issue 2b/C1: the portal mints session cookies; on open guest WiFi they MUST ride HTTPS or
+	// Issue 2b/C1: the portal mints session cookies; on open guest WiFi they SHOULD ride HTTPS or
 	// they're sniffable off the air (sidejacking) — and the cookie `Secure` flag itself keys off
-	// the ORIGIN protocol (see auth.ts `useSecureCookies`). So in prod ORIGIN is required AND must
-	// be https. In dev we only warn (below), so http://localhost keeps working.
+	// the ORIGIN protocol (see auth.ts `useSecureCookies`). So in prod a PUBLIC ORIGIN must be
+	// https. A LAN-appliance deploy (`node build` served on a private-IP/.lan host, no public TLS)
+	// is the documented exception: http is allowed there but warned, since the trade-off is local
+	// and deliberate. In dev we only warn (below), so http://localhost keeps working.
 	const origin = env.ORIGIN ?? '';
 	if (!origin) {
 		missing.push('ORIGIN');
-	} else if (!dev && !origin.startsWith('https://')) {
-		throw new Error(
-			`ORIGIN must be https:// in production — portal session cookies require TLS to be Secure (got "${origin}").`
-		);
+	} else if (!dev && origin.startsWith('http://')) {
+		if (isPrivateLanOrigin(origin)) {
+			console.warn(
+				`[env] ORIGIN is http:// on a LAN host ("${origin}") — session cookies are NOT Secure and are ` +
+					'sniffable on open WiFi. Acceptable for a LAN appliance; put TLS in front for a public portal.'
+			);
+		} else {
+			throw new Error(
+				`ORIGIN must be https:// for a public portal — session cookies require TLS to be Secure (got "${origin}"). ` +
+					'Only a private-LAN host (RFC1918 IP / .lan / localhost) may use http.'
+			);
+		}
 	}
 
 	if (missing.length === 0) return;
@@ -46,4 +56,25 @@ export function validateEnv(): void {
 	const msg = `Missing required environment variable(s): ${missing.join(', ')}`;
 	if (!dev) throw new Error(msg);
 	console.warn(`[env] ${msg} — required before production.`);
+}
+
+/**
+ * True when ORIGIN's host is a private-LAN address (loopback, RFC1918 IPv4, or a `.lan`/`.local`
+ * name) — the only hosts allowed to serve the portal over plain http in production. Anything
+ * public (a real domain / routable IP) must use https. Mirrors `isPrivateLanHost` in
+ * scripts/setup-prod.ts, which writes the LAN ORIGIN this validates.
+ */
+function isPrivateLanOrigin(origin: string): boolean {
+	let host: string;
+	try {
+		host = new URL(origin).hostname;
+	} catch {
+		return false;
+	}
+	if (host === 'localhost' || host === '127.0.0.1') return true;
+	if (host.endsWith('.lan') || host.endsWith('.local')) return true;
+	const m = /^(\d+)\.(\d+)\.\d+\.\d+$/.exec(host);
+	if (!m) return false;
+	const [a, b] = [Number(m[1]), Number(m[2])];
+	return a === 10 || (a === 192 && b === 168) || (a === 172 && b >= 16 && b <= 31);
 }
