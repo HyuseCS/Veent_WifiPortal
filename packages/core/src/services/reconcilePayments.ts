@@ -73,38 +73,36 @@ export async function recordPaymentTransaction(
 	// gateway ids — the webhook keys on the payment id, while the on-return poll / reconcile cron
 	// may fall back to the checkout id when Maya doesn't surface the payment id. Left unchecked
 	// that writes two PAYMENT_SUCCESS rows for one payment and double-counts "settled revenue".
-	// Both paths carry the SAME referenceNo (requestReferenceNumber / our referenceId echo), so
-	// if a row already exists for this referenceNo under a different id, update THAT row instead
-	// of inserting a divergent duplicate. (One Maya checkout = one referenceNo = one terminal
-	// payment, so collapsing is correct.) Best-effort: a partial unique index on reference_no
-	// would also close the rare simultaneous-insert race; deferred — this is reporting-only and
-	// the two paths normally fire seconds apart, not concurrently.
-	if (row.referenceNo) {
-		const [existing] = await db
-			.select({ id: paymentTransactions.id })
-			.from(paymentTransactions)
-			.where(eq(paymentTransactions.referenceNo, row.referenceNo))
-			.limit(1);
-		if (existing && existing.id !== row.id) {
+	// Both paths carry the SAME referenceNo (requestReferenceNumber / our referenceId echo), so a
+	// partial unique index on reference_no (payment_transactions_reference_no_key) lets Postgres
+	// reject the divergent duplicate atomically — closing the simultaneous-insert race a prior
+	// select-then-update couldn't. (One Maya checkout = one referenceNo = one terminal payment.)
+	try {
+		await db
+			.insert(paymentTransactions)
+			.values(row)
+			.onConflictDoUpdate({
+				target: paymentTransactions.id,
+				// Keep the latest detail when Maya resends or a later status transition (e.g.
+				// PENDING→SUCCESS) enriches a row a reconcile pass recorded first. networkId and
+				// the userId/packageId attribution stay INSERT-only (fixed at first record); the
+				// gateway-supplied detail is what a transition can legitimately backfill.
+				set: detail
+			});
+	} catch (e) {
+		// 23505 = unique_violation: the same payment arrived under a DIFFERENT id and tripped the
+		// reference_no index (the id-conflict clause above only catches same-id resends). Collapse
+		// onto the existing row instead of writing a divergent duplicate. All callers pass `db`
+		// (never a tx), so the failed INSERT doesn't poison a surrounding transaction.
+		if (row.referenceNo && (e as { code?: string }).code === '23505') {
 			await db
 				.update(paymentTransactions)
 				.set(detail)
-				.where(eq(paymentTransactions.id, existing.id));
+				.where(eq(paymentTransactions.referenceNo, row.referenceNo));
 			return;
 		}
+		throw e;
 	}
-
-	await db
-		.insert(paymentTransactions)
-		.values(row)
-		.onConflictDoUpdate({
-			target: paymentTransactions.id,
-			// Keep the latest detail when Maya resends or a later status transition (e.g.
-			// PENDING→SUCCESS) enriches a row a reconcile pass recorded first. networkId and
-			// the userId/packageId attribution stay INSERT-only (fixed at first record); the
-			// gateway-supplied detail is what a transition can legitimately backfill.
-			set: detail
-		});
 }
 
 /**

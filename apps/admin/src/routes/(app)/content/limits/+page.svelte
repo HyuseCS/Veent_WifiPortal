@@ -1,10 +1,14 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
 	import { enhance } from '$app/forms';
-	import { Card, Button } from '$lib/components/ui';
+	import { Card, Button, Field } from '$lib/components/ui';
 	import type { PageData, ActionData } from './$types';
 
 	let { data, form }: { data: PageData; form: ActionData } = $props();
+
+	// Per-save MFA: a valid authenticator code is required to save (server re-checks it).
+	let code = $state('');
+	const codeValid = $derived(/^\d{6}$/.test(code));
 
 	// Seed the form once from the saved limits; edits stay local until saved. `untrack`
 	// makes the one-time read of `data` explicit so it isn't treated as a live dependency.
@@ -79,8 +83,20 @@
 				</label>
 			{/each}
 
+			<Field
+				id="limits-code"
+				name="code"
+				label="Authenticator code"
+				inputmode="numeric"
+				autocomplete="one-time-code"
+				placeholder="6-digit code"
+				value={code}
+				oninput={(e) => (code = e.currentTarget.value)}
+				class="max-w-40 font-mono tracking-widest"
+			/>
+
 			<div>
-				<Button type="submit">Save limits</Button>
+				<Button type="submit" disabled={!codeValid}>Save limits</Button>
 			</div>
 		</form>
 	</Card>

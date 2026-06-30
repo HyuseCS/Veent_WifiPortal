@@ -1,10 +1,10 @@
 # Production deployment — first run
 
 How to bring the portal up on the real device (the box on-site, not a dev laptop).
-There are two long-lived servers — the **customer** captive portal and the **admin**
-dashboard — plus a Postgres database and two cron jobs. This is a self-hosted setup:
-both apps use `@sveltejs/adapter-node`, so `bun run build` emits a `build/index.js`
-you run with `node build`.
+There are three long-lived servers — the **customer** captive portal, the **admin**
+dashboard, and the **locator** public AP map — plus a Postgres database and the cron
+jobs. This is a self-hosted setup: each app uses `@sveltejs/adapter-node`, so
+`bun run build` emits a `build/index.js` you run with `node build`.
 
 > Dev note: `bun run dev` (vite) is **not** a production server. It runs with
 > `dev === true`, which activates dev-only bypasses (placeholder device MAC, the
@@ -23,15 +23,25 @@ bun run setup:prod             # do it
 ```
 
 It's **cross-platform** (Linux/Windows/macOS) and **idempotent** (re-run it to update).
-It: checks prerequisites, provisions a local Postgres DB + role, writes the env files
-and **generates** `BETTER_AUTH_SECRET`/`CRON_SECRET`, installs deps, migrates, seeds,
-bootstraps the owner (if `OWNER_*` is set), builds, and writes OS-specific service +
-cron config under `./deploy/` (systemd units on Linux, NSSM script on Windows) with
-the exact privileged commands to finish. It never runs sudo/admin itself.
+It checks prerequisites, **auto-detects this device's LAN IP** and writes the per-app
+`ORIGIN`s plus a ready-to-upload `deploy/login.html` from it, provisions a local Postgres
+database and role, writes the env files and **generates** `BETTER_AUTH_SECRET`/`CRON_SECRET`,
+installs deps, migrates, seeds, bootstraps the owner (if `OWNER_*` is set), builds, and writes
+OS-specific service + cron config under `./deploy/` (systemd units on Linux, NSSM script on
+Windows) with the exact privileged commands to finish. It never runs sudo/admin itself.
+
+**Zero-touch IP on a box move.** The script picks the device's LAN IP (the egress address
+toward the router — correct even on a multi-homed box) and writes `http://<ip>:3001/3002/3003`
+into the customer/admin/locator `ORIGIN`s, plus `deploy/login.html` pointed at the customer
+portal. Re-running on a new box (or after a lease change) refreshes a stale LAN-IP `ORIGIN`
+automatically; a real `https://` domain you set for a TLS deploy is left untouched. Override
+detection with `--ip=10.0.0.50` or `PROD_LAN_IP=10.0.0.50` (e.g. a static IP the box will
+move to). The router api-ssl _Available From_ is **not** repointed automatically — that stays
+the explicit `setup:router --restrict-api` step (**§7a**).
 
 It does **not** install system packages (bun/node/Postgres), fill external secrets
-(Maya/iTexMo/Resend/MikroTik/`OWNER_*`), configure the router, or set up TLS — do
-those by hand (the script prints the checklist). The manual walkthrough below documents
+(Maya/iTexMo/Resend/MikroTik/`OWNER_*`), upload `login.html` / run `setup:router`, or set up
+TLS — do those by hand (the script prints the checklist). The manual walkthrough below documents
 every step the script performs, for when you want to understand or override it.
 
 ---
@@ -59,13 +69,21 @@ Copy the templates and fill **real** values (never commit the filled files):
 ```bash
 cp apps/customer/.env.example apps/customer/.env
 cp apps/admin/.env.example    apps/admin/.env
+cp apps/locator/.env.example  apps/locator/.env
 ```
+
+> **Every** app needs a `.env` with a non-empty `DATABASE_URL` — `bun run build` builds all
+> three (customer, admin, locator) and each opens its DB client at import, so a missing
+> `apps/locator/.env` fails the whole build. `setup:prod` writes all three for you.
 
 Minimum for production:
 
 **`apps/customer/.env`**
+
 - `DATABASE_URL` — the prod DB
-- `ORIGIN` — public URL of the portal (e.g. `https://portal.example.com`)
+- `ORIGIN` — the portal's URL. `setup:prod` **auto-sets this** to `http://<device-ip>:3001`.
+  A private-LAN host (RFC1918 IP / `.lan` / localhost) may stay on **http**; a portal exposed
+  beyond the LAN **must** be `https://<domain>` behind TLS (validateEnv hard-fails otherwise).
 - `BETTER_AUTH_SECRET` — 32+ random chars (**required**; the app refuses to start without it)
 - `NETWORK_CONTROLLER="mikrotik"`
 - `MIKROTIK_HOST` / `MIKROTIK_USER` / `MIKROTIK_PASSWORD` — the router API login (the customer
@@ -82,12 +100,17 @@ Minimum for production:
 > production a missing **required** var aborts the boot with a clear message instead of failing
 > on first request. Required — customer: `DATABASE_URL`, `BETTER_AUTH_SECRET`, `CRON_SECRET`,
 > `MAYA_PUBLIC_KEY`, `MAYA_SECRET_KEY` (+ `MIKROTIK_*` when `NETWORK_CONTROLLER=mikrotik`);
-> admin: `DATABASE_URL`, `BETTER_AUTH_SECRET`, `ORIGIN` (+ mikrotik conditional). In dev these
+> admin: `DATABASE_URL`, `BETTER_AUTH_SECRET`, `ORIGIN` (+ mikrotik conditional). The customer
+> app also requires `ORIGIN` to be `https://` **unless** its host is a private-LAN address (then
+> http is allowed but warned — the LAN-appliance exception). In dev these
 > only warn.
 
 **`apps/admin/.env`**
+
 - `DATABASE_URL` — same DB
-- `ORIGIN` — the admin's **LAN** address (e.g. `http://10.5.50.1:5174` or `http://admin.lan`)
+- `ORIGIN` — the admin's **LAN** address. Served directly on the LAN, this must match the
+  port the service listens on (`PORT=3002`), e.g. `http://10.5.50.1:3002` — or a proxied
+  hostname like `http://admin.lan`. (`5174` is the Vite _dev_ port, not the prod one.)
 - `BETTER_AUTH_SECRET` — a **distinct** 32+ char secret (must differ from the customer one)
 - `NETWORK_CONTROLLER="mikrotik"` + `MIKROTIK_HOST/USER/PASSWORD` (and `MIKROTIK_PORT/TLS` if needed)
 - `HEALTH_EXCLUDE_INTERFACES` — interfaces to hide from the Networks view (e.g. `ether2`)
@@ -95,6 +118,11 @@ Minimum for production:
 - `CRON_SECRET` — for the health-refresh cron
 - `RESEND_API_KEY` + `EMAIL_FROM` — staff invite emails (without it, invites only log)
 - `OWNER_EMAIL` / `OWNER_PASSWORD` / `OWNER_NAME` — used once by `bootstrap:owner`
+
+**`apps/locator/.env`** (public AP-map app, runs as `radius-locator` on `PORT=3003`)
+
+- `DATABASE_URL` — same DB (read-only; the locator never touches routers or telemetry)
+- `ORIGIN` — the public URL the map is served at
 
 ## 3. Database
 
@@ -107,7 +135,7 @@ bun run --filter radius-admin bootstrap:owner    # create the first owner (uses 
 ## 4. Build
 
 ```bash
-bun run build        # builds both apps → apps/*/build/index.js
+bun run build        # builds all apps → apps/*/build/index.js
 ```
 
 ## 5. Run the servers (systemd)
@@ -136,9 +164,13 @@ WantedBy=multi-user.target
 `EnvironmentFile=…/apps/admin/.env`, `Environment=PORT=3002`,
 `ExecStart=/usr/bin/node apps/admin/build`.
 
+`/etc/systemd/system/radius-locator.service` — the public AP-map app, same shape with
+`EnvironmentFile=…/apps/locator/.env`, `Environment=PORT=3003`,
+`ExecStart=/usr/bin/node apps/locator/build`. (`setup:prod` generates this unit too.)
+
 ```bash
 sudo systemctl daemon-reload
-sudo systemctl enable --now radius-customer radius-admin
+sudo systemctl enable --now radius-customer radius-admin radius-locator
 ```
 
 (Alternative: `bun --env-file=apps/customer/.env ./apps/customer/build` auto-loads the
@@ -177,7 +209,7 @@ MIKROTIK_TLS_INSECURE="true"   # the router cert is self-signed
 ```
 
 **On the router (one-time):** a self-signed cert attached to `api-ssl`, enabled with
-*Available From* restricted to the app server's LAN IP, and cleartext `api` turned off:
+_Available From_ restricted to the app server's LAN IP, and cleartext `api` turned off:
 
 ```
 /certificate add name=api-cert common-name=10.0.0.1 key-usage=tls-server,key-cert-sign days-valid=3650
@@ -187,11 +219,11 @@ MIKROTIK_TLS_INSECURE="true"   # the router cert is self-signed
 /ip dhcp-server lease make-static [find address=<APP_SERVER_IP>]   # pin the server IP
 ```
 
-Pin the app server's LAN IP (static, or a static DHCP lease) so the *Available From*
+Pin the app server's LAN IP (static, or a static DHCP lease) so the _Available From_
 restriction can't break on a lease change.
 
 > **⚠️ Moving from one box to another (e.g. dev laptop → on-site server).** The router's
-> api-ssl *Available From* is pinned to the OLD machine's IP, so the new server gets
+> api-ssl _Available From_ is pinned to the OLD machine's IP, so the new server gets
 > `SOCKTMOUT` / connection-refused until you repoint it.
 >
 > **Automated (run from the NEW server, once it can reach the router):** it detects this
@@ -204,7 +236,7 @@ restriction can't break on a lease change.
 > ```
 >
 > Chicken-and-egg: if the router currently restricts api-ssl to the OLD box, the new server
-> can't connect at all — temporarily **widen** the router's api-ssl *Available From* (or open
+> can't connect at all — temporarily **widen** the router's api-ssl _Available From_ (or open
 > it) so the new server can reach it, then run the command above to re-lock it to the new IP.
 >
 > **Manual equivalent** (on the router CLI):
@@ -252,9 +284,9 @@ header set to each app's `CRON_SECRET`:
 - [ ] Built + running via `node build` (not `vite dev`).
 - [ ] TLS in front; `ORIGIN` matches the public URL.
 - [ ] Router API on **api-ssl (8729)** — both apps' `.env` set `MIKROTIK_TLS="true"` /
-      `MIKROTIK_PORT="8729"`; router *Available From* = the app server's IP; cleartext `api`
+      `MIKROTIK_PORT="8729"`; router _Available From_ = the app server's IP; cleartext `api`
       disabled (`/ip service set api disabled=yes`). **On a server move, repoint the `Available From` IP.**
-- [ ] **App server IP pinned to a static DHCP lease** on the router — the api-ssl *Available From*
+- [ ] **App server IP pinned to a static DHCP lease** on the router — the api-ssl _Available From_
       restriction is by IP, so if the server's lease drifts, api-ssl silently drops the connection
       (no health, latency `—`) while nothing logs an error. A static lease makes the restriction durable.
 - [ ] Router `login.html` points at prod; walled garden provisioned; crons scheduled.
@@ -267,7 +299,7 @@ git pull
 bun install
 bun run db:migrate          # if there are new migrations
 bun run build
-sudo systemctl restart radius-customer radius-admin
+sudo systemctl restart radius-customer radius-admin radius-locator
 ```
 
 ## Troubleshooting setup
@@ -275,19 +307,22 @@ sudo systemctl restart radius-customer radius-admin
 Most setup failures are a **missing env var** or the **router IP restriction**. Symptom → cause → fix:
 
 **`createDb: connection string is required` during `bun run build`**
+
 - `bun run build` builds **every** workspace app (customer, admin, **locator**); each creates its DB
   client at import, so an empty/missing `DATABASE_URL` in **any** app's `.env` fails the whole build.
 - Fix: give every app a `.env` with a non-empty `DATABASE_URL` — `cp apps/<app>/.env.example apps/<app>/.env`.
-  `.env` files are gitignored, so a fresh clone has none. The value needn't reach a live DB to *build*
+  `.env` files are gitignored, so a fresh clone has none. The value needn't reach a live DB to _build_
   (postgres-js connects lazily); it just has to be present.
 
 **App aborts on boot with "… is required in production" (a `validateEnv` failure)**
+
 - `validateEnv()` hard-fails in prod on a missing **required** var — customer: `DATABASE_URL`,
   `BETTER_AUTH_SECRET`, `CRON_SECRET`, `MAYA_PUBLIC_KEY`, `MAYA_SECRET_KEY` (+ `MIKROTIK_*` when
   `NETWORK_CONTROLLER=mikrotik`); admin: `DATABASE_URL`, `BETTER_AUTH_SECRET`, `ORIGIN` (+ mikrotik).
 - Fix: set the named var. (In dev these only warn — so a build/dev box can hide a gap that prod rejects.)
 
 **DB: `ECONNREFUSED` / `password authentication failed` / `database "local" does not exist`**
+
 - Postgres isn't running, or `DATABASE_URL` doesn't match it. With Docker: `docker compose up -d db`
   (`compose.yaml` → user `root`, password `mysecretpassword`, db `local`, port `5432`).
 - **Prod:** change the default password in **both** `compose.yaml` and `DATABASE_URL`, and bind
@@ -295,19 +330,22 @@ Most setup failures are a **missing env var** or the **router IP restriction**. 
   service name (`@db:5432`), not `localhost`.
 
 **Router: `SOCKTMOUT` / connection refused / timeout to the router**
-- The api-ssl *Available From* is pinned to a different server IP (classic after moving boxes), or
+
+- The api-ssl _Available From_ is pinned to a different server IP (classic after moving boxes), or
   `MIKROTIK_PORT`/`MIKROTIK_TLS` are wrong, or the cert/api-ssl service isn't set up.
 - Fix: confirm `MIKROTIK_TLS="true"`, `MIKROTIK_PORT="8729"`, `MIKROTIK_TLS_INSECURE="true"`, then
   repoint with `bun run --filter radius-admin setup:router --restrict-api` (or the manual
   `/ip service set api-ssl address=<this-server>/32`). If you've locked yourself out, temporarily
-  widen the router's api-ssl *Available From*, then re-lock. See **§7a**.
+  widen the router's api-ssl _Available From_, then re-lock. See **§7a**.
 
 **Router cert: `failure: CA not found` when signing the api-ssl cert**
+
 - A `tls-server`-only cert can't self-sign. Create it with `key-usage=tls-server,key-cert-sign`,
   then `sign` (see **§7a**).
 
 **Networks page suddenly shows no health / latency stuck at `—` (was working before)**
-- Almost always the app server's IP **drifted off** the IP pinned in the api-ssl *Available From*
+
+- Almost always the app server's IP **drifted off** the IP pinned in the api-ssl _Available From_
   restriction (a DHCP lease change). api-ssl then silently drops the SYN, so node-routeros hangs to
   its timeout and the health sweep gets nothing — and **no error is logged**. Plain `api` (8728) may
   still appear to work, masking it.
@@ -321,31 +359,38 @@ Most setup failures are a **missing env var** or the **router IP restriction**. 
   `/user group set [find name=<group>] policy=...,test` (append `test`, don't drop the others).
 
 **Migrations say "applied successfully" but a column is missing**
+
 - A dev-only quirk: drizzle skips a migration whose timestamp predates a since-discarded one already
   recorded in `__drizzle_migrations`. A **fresh prod DB applies everything in order**, so this won't
   happen in prod. On a dev box: the migrations are idempotent (`IF NOT EXISTS`) — apply the skipped
   one's SQL by hand to catch up. **Never `db:push` in prod — only `db:migrate`.**
 
 **OTP never arrives / "iTexMo not configured"**
+
 - Missing `ITEXMO_API_CODE` / `ITEXMO_EMAIL` / `ITEXMO_PASSWORD` (prod refuses to send rather than
   silently swallow the code). Trial iTexMo accounts must use sender id `ITM.TEST3`.
 
 **Maya checkout shows a closed connection / can't load**
+
 - The hotspot walled garden doesn't allow the Maya domains — run `bun run --filter radius-admin setup:router`.
   (Card 3-D Secure may still need the issuing bank's ACS domain added per deployment.)
 
 **Guests connect to WiFi but never see the portal**
+
 - The router `login.html` doesn't point at the prod portal URL (or wasn't uploaded). Edit
   `docs/mikrotik/login.html` → upload to the hotspot (**§7**).
 
 **Paid time never expires, or paid users go uncredited**
+
 - The crons aren't scheduled. Add the revoke + reconcile crons (**§8**).
 
 **App "runs" but behaves like dev (placeholder device MAC, OTP printed to console, weak secret)**
+
 - You're running `vite dev`, not `node build` — production must run the built output, where
   `dev === false` (see the dev note at the top).
 
 **Your operator/dev machine lost internet after its purchased time expired**
+
 - Expected: the revoke cron drops an expired guest bypass. Give the operator box a **standing**
   bypass instead: `/ip hotspot ip-binding add mac-address=<MAC> type=bypassed comment=dev-laptop`
   (the cron only touches `veent-portal`-tagged guest bindings).

@@ -1,6 +1,7 @@
-import { fail } from '@sveltejs/kit';
+import { fail, type RequestEvent } from '@sveltejs/kit';
 import { db } from '$lib/server/db';
 import { requireOwner as ownerGate } from '$lib/server/auth-guard';
+import { verifyStepUp } from '$lib/server/step-up';
 import {
 	listFaqs,
 	createFaq,
@@ -41,12 +42,20 @@ function faqId(form: FormData): number | null {
 	return Number.isInteger(id) && id > 0 ? id : null;
 }
 
+// Every FAQ write is owner-only AND TOTP step-up-gated (a code per save). The code is the
+// LAST gate — after field validation, so a rotating code isn't wasted on a form error.
+const stepUp = (event: RequestEvent, code: FormDataEntryValue | null, action: string) =>
+	verifyStepUp(event, String(code ?? ''), { scope: 'admin_content_step_up', action });
+
 export const actions: Actions = {
 	create: async (event) => {
 		const denied = await requireOwner(event.locals.user?.id);
 		if (denied) return denied;
-		const parsed = parseFaq(await event.request.formData());
+		const form = await event.request.formData();
+		const parsed = parseFaq(form);
 		if ('error' in parsed) return fail(400, { action: 'create', error: parsed.error });
+		const denied2 = await stepUp(event, form.get('code'), 'create');
+		if (denied2) return denied2;
 		const id = await createFaq(db, parsed.input);
 		return { ok: true, action: 'create', id };
 	},
@@ -59,6 +68,8 @@ export const actions: Actions = {
 		if (id == null) return fail(400, { action: 'update', error: 'Invalid entry.' });
 		const parsed = parseFaq(form);
 		if ('error' in parsed) return fail(400, { action: 'update', error: parsed.error, id });
+		const denied2 = await stepUp(event, form.get('code'), 'update');
+		if (denied2) return denied2;
 		await updateFaq(db, id, parsed.input);
 		return { ok: true, action: 'update', id };
 	},
@@ -69,6 +80,8 @@ export const actions: Actions = {
 		const form = await event.request.formData();
 		const id = faqId(form);
 		if (id == null) return fail(400, { action: 'togglePublished', error: 'Invalid entry.' });
+		const denied2 = await stepUp(event, form.get('code'), 'togglePublished');
+		if (denied2) return denied2;
 		await setFaqPublished(db, id, form.get('isPublished') === 'true');
 		return { ok: true, action: 'togglePublished', id };
 	},
@@ -79,6 +92,8 @@ export const actions: Actions = {
 		const form = await event.request.formData();
 		const id = faqId(form);
 		if (id == null) return fail(400, { action: 'remove', error: 'Invalid entry.' });
+		const denied2 = await stepUp(event, form.get('code'), 'remove');
+		if (denied2) return denied2;
 		await deleteFaq(db, id);
 		return { ok: true, action: 'remove', id };
 	}

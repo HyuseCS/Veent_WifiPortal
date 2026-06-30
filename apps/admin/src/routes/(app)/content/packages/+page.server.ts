@@ -1,7 +1,8 @@
-import { error, fail } from '@sveltejs/kit';
+import { error, fail, type RequestEvent } from '@sveltejs/kit';
 import { STAFF_ROLE } from '@veent/core';
 import { db } from '$lib/server/db';
 import { requireOwner as ownerGate } from '$lib/server/auth-guard';
+import { verifyStepUp } from '$lib/server/step-up';
 import {
 	listPackages,
 	createPackage,
@@ -84,12 +85,21 @@ function packageId(form: FormData): number | null {
 	return Number.isInteger(id) && id > 0 ? id : null;
 }
 
+// Every content write is owner-only AND TOTP step-up-gated (a deliberate code per save, so a
+// fat-fingered change can't land without re-confirming identity). The code is the LAST gate —
+// checked after field validation so a rotating code isn't wasted on an unrelated form error.
+const stepUp = (event: RequestEvent, code: FormDataEntryValue | null, action: string) =>
+	verifyStepUp(event, String(code ?? ''), { scope: 'admin_content_step_up', action });
+
 export const actions: Actions = {
 	create: async (event) => {
 		const denied = await requireOwner(event.locals.user?.id);
 		if (denied) return denied;
-		const parsed = parsePackage(await event.request.formData());
+		const form = await event.request.formData();
+		const parsed = parsePackage(form);
 		if ('error' in parsed) return fail(400, { action: 'create', error: parsed.error });
+		const denied2 = await stepUp(event, form.get('code'), 'create');
+		if (denied2) return denied2;
 		const id = await createPackage(db, parsed.input);
 		return { ok: true, action: 'create', id };
 	},
@@ -102,6 +112,8 @@ export const actions: Actions = {
 		if (id == null) return fail(400, { action: 'update', error: 'Invalid package.' });
 		const parsed = parsePackage(form);
 		if ('error' in parsed) return fail(400, { action: 'update', error: parsed.error, id });
+		const denied2 = await stepUp(event, form.get('code'), 'update');
+		if (denied2) return denied2;
 		await updatePackage(db, id, parsed.input);
 		return { ok: true, action: 'update', id };
 	},
@@ -112,6 +124,8 @@ export const actions: Actions = {
 		const form = await event.request.formData();
 		const id = packageId(form);
 		if (id == null) return fail(400, { action: 'toggleActive', error: 'Invalid package.' });
+		const denied2 = await stepUp(event, form.get('code'), 'toggleActive');
+		if (denied2) return denied2;
 		await setPackageActive(db, id, form.get('isActive') === 'true');
 		return { ok: true, action: 'toggleActive', id };
 	},
@@ -122,6 +136,8 @@ export const actions: Actions = {
 		const form = await event.request.formData();
 		const id = packageId(form);
 		if (id == null) return fail(400, { action: 'remove', error: 'Invalid package.' });
+		const denied2 = await stepUp(event, form.get('code'), 'remove');
+		if (denied2) return denied2;
 		await deletePackage(db, id);
 		return { ok: true, action: 'remove', id };
 	}
