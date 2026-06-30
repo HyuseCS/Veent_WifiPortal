@@ -1,5 +1,9 @@
 node_modules
 
+#IDEs
+.vscode
+.idea
+
 # Output (match in every workspace package, not just repo root)
 .output
 .vercel
@@ -41,6 +45,7 @@ start_db.sh
 .agents/
 .claude/
 .gemini/
+.vibecode-backup
 CLAUDE.md
 GEMINI.md
 AGENTS.md
