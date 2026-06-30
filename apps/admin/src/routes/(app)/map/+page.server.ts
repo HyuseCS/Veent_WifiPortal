@@ -5,14 +5,20 @@ import {
 	createNetworkPlace,
 	deleteNetworkPlace,
 	listNetworkHealth,
+	listRouterModels,
 	setClusterName,
 	updateNetworkPlace
 } from '$lib/server/queries';
-import { routerModels, rangeFor, DEFAULT_MODEL_ID } from '$lib/router-models';
+import { rangeFor, defaultModelId, type RouterModel } from '$lib/router-models';
 import { reachesAny } from '$lib/reach';
 import type { Actions, PageServerLoad } from './$types';
 
-export const load: PageServerLoad = async () => ({ networks: await listNetworkHealth(db) });
+export const load: PageServerLoad = async () => ({
+	networks: await listNetworkHealth(db),
+	// The catalog feeds the client model picker (and re-sizes domes); ordered with the
+	// default model first (see listRouterModels).
+	models: await listRouterModels(db)
+});
 
 /** A finite number within [min, max], else null. */
 function coord(raw: FormDataEntryValue | null, min: number, max: number): number | null {
@@ -26,10 +32,11 @@ function apId(raw: FormDataEntryValue | null): number | null {
 	return Number.isInteger(n) && n > 0 ? n : null;
 }
 
-/** Catalog-validated model id (unknown/empty → default), so we never persist an orphan. */
-function modelId(raw: FormDataEntryValue | null): string {
+/** Catalog-validated model id (unknown/empty → default), so we never persist an orphan.
+ * Validated against the live catalog passed in, not a hardcoded list. */
+function modelId(raw: FormDataEntryValue | null, models: RouterModel[]): string {
 	const m = String(raw ?? '').trim();
-	return routerModels.some((r) => r.id === m) ? m : DEFAULT_MODEL_ID;
+	return models.some((r) => r.id === m) ? m : defaultModelId(models);
 }
 
 /** Operator-calibrated radius in metres, clamped to a sane band; null if absent/invalid
@@ -47,7 +54,8 @@ async function clusterReachable(
 	lat: number,
 	lng: number,
 	range: number,
-	excludeId: number | null
+	excludeId: number | null,
+	models: RouterModel[]
 ): Promise<boolean> {
 	if (!name) return true;
 	const members = await clusterMembers(db, name, excludeId);
@@ -59,7 +67,7 @@ async function clusterReachable(
 		.map((m) => ({
 			lat: Number(m.latitude),
 			lng: Number(m.longitude),
-			range: m.rangeMeters ?? rangeFor(m.model)
+			range: m.rangeMeters ?? rangeFor(models, m.model)
 		}));
 	return reachesAny(lat, lng, range, domes);
 }
@@ -79,10 +87,11 @@ export const actions: Actions = {
 		}
 
 		const address = String(form.get('address') ?? '').trim() || null;
-		const model = modelId(form.get('model'));
+		const models = await listRouterModels(db);
+		const model = modelId(form.get('model'), models);
 		const range = rangeMeters(form.get('range'));
 		const cluster = String(form.get('cluster') ?? '').trim() || null;
-		if (!(await clusterReachable(cluster, lat, lng, range ?? rangeFor(model), null))) {
+		if (!(await clusterReachable(cluster, lat, lng, range ?? rangeFor(models, model), null, models))) {
 			return fail(400, { error: 'Too far from that cluster.' });
 		}
 		// Keep full precision from the map click; the column rounds to 6 decimals.
@@ -115,10 +124,11 @@ export const actions: Actions = {
 		}
 
 		const address = String(form.get('address') ?? '').trim() || null;
-		const model = modelId(form.get('model'));
+		const models = await listRouterModels(db);
+		const model = modelId(form.get('model'), models);
 		const range = rangeMeters(form.get('range'));
 		const cluster = String(form.get('cluster') ?? '').trim() || null;
-		if (!(await clusterReachable(cluster, lat, lng, range ?? rangeFor(model), id))) {
+		if (!(await clusterReachable(cluster, lat, lng, range ?? rangeFor(models, model), id, models))) {
 			return fail(400, { error: 'Too far from that cluster.' });
 		}
 		await updateNetworkPlace(db, id, {

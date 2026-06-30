@@ -16,5 +16,6 @@ export { default as StaffTable } from './StaffTable.svelte';
 export { default as NetworkMap } from './NetworkMap.svelte';
 export { default as CoverageMap } from './CoverageMap.svelte';
 export { default as RouterLogPanel } from './RouterLogPanel.svelte';
+export { default as RouterModelsPanel } from './RouterModelsPanel.svelte';
 export { default as WipeDialog } from './WipeDialog.svelte';
 export { default as OwnerChangePanel } from './OwnerChangePanel.svelte';

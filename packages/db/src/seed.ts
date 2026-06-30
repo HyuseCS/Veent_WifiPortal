@@ -9,10 +9,17 @@
  */
 import { eq } from 'drizzle-orm';
 import { createDb } from './client';
-import { packages, networkHealth } from './schema';
+import { packages, networkHealth, routerModel } from './schema';
 
 type SeedPackage = typeof packages.$inferInsert;
 type SeedAp = typeof networkHealth.$inferInsert;
+type SeedRouterModel = typeof routerModel.$inferInsert;
+
+// Router/AP catalog. The lowest sortOrder is the default model (new pins + the
+// fallback range for an AP with a null/unknown model). Operator-editable from /networks.
+const seedRouterModels: SeedRouterModel[] = [
+	{ id: 'suncomm-ap3000g', name: 'Suncomm AP3000G', rangeMeters: 200, sortOrder: 0 }
+];
 
 // Three package "types":
 //   free   — the 15-min free window (no fiat, no credit cost)
@@ -73,6 +80,27 @@ async function seed() {
 	}
 
 	console.log(`\nPackages: ${inserted} inserted, ${seedPackages.length - inserted} skipped.`);
+
+	// Router model catalog — idempotent by id.
+	let modelsInserted = 0;
+	for (const m of seedRouterModels) {
+		const existing = await db
+			.select({ id: routerModel.id })
+			.from(routerModel)
+			.where(eq(routerModel.id, m.id))
+			.limit(1);
+
+		if (existing.length === 0) {
+			await db.insert(routerModel).values(m);
+			modelsInserted++;
+			console.log(`+ ${m.name}`);
+		} else {
+			console.log(`= ${m.name} (exists, skipped)`);
+		}
+	}
+	console.log(
+		`Router models: ${modelsInserted} inserted, ${seedRouterModels.length - modelsInserted} skipped.`
+	);
 
 	// Network health — idempotent by AP name.
 	let apsInserted = 0;

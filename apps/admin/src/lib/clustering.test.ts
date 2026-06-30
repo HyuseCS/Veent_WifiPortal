@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import { computeClusters, type ClusterableAp } from './clustering';
+import type { RouterModel } from './router-models';
+
+// Every test AP sets an explicit rangeMeters override, so the catalog is never consulted
+// for the fallback — an empty catalog is enough to satisfy the signature here.
+const MODELS: RouterModel[] = [];
 
 // Helper: build a placeable AP. Coords as strings (the DB/NetworkAp shape).
 function ap(over: Partial<ClusterableAp> & { id: string; lat: number; lng: number }): ClusterableAp {
@@ -19,10 +24,10 @@ const FAR = { lat: 14.7, lng: 121.0 }; // ~11 km away → no overlap
 
 describe('computeClusters', () => {
 	it('groups two overlapping APs into one cluster', () => {
-		const { clusters, clusteredIds } = computeClusters([
-			ap({ id: 'a', ...NEAR_A }),
-			ap({ id: 'b', ...NEAR_B })
-		]);
+		const { clusters, clusteredIds } = computeClusters(
+			[ap({ id: 'a', ...NEAR_A }), ap({ id: 'b', ...NEAR_B })],
+			MODELS
+		);
 		expect(clusters).toHaveLength(1);
 		expect(clusters[0].members.map((m) => m.id).sort()).toEqual(['a', 'b']);
 		expect(clusters[0].named).toBe(false);
@@ -32,36 +37,36 @@ describe('computeClusters', () => {
 	});
 
 	it('leaves two distant unnamed APs ungrouped', () => {
-		const { clusters, clusteredIds } = computeClusters([
-			ap({ id: 'a', ...NEAR_A }),
-			ap({ id: 'b', ...FAR })
-		]);
+		const { clusters, clusteredIds } = computeClusters(
+			[ap({ id: 'a', ...NEAR_A }), ap({ id: 'b', ...FAR })],
+			MODELS
+		);
 		expect(clusters).toHaveLength(0);
 		expect(clusteredIds.size).toBe(0);
 	});
 
 	it('keeps a lone *named* AP as a cluster', () => {
-		const { clusters } = computeClusters([ap({ id: 'a', ...NEAR_A, clusterName: 'Lobby' })]);
+		const { clusters } = computeClusters([ap({ id: 'a', ...NEAR_A, clusterName: 'Lobby' })], MODELS);
 		expect(clusters).toHaveLength(1);
 		expect(clusters[0].named).toBe(true);
 		expect(clusters[0].name).toBe('Lobby');
 	});
 
 	it('unions distant APs sharing a manual cluster name (hybrid auto+manual)', () => {
-		const { clusters } = computeClusters([
-			ap({ id: 'a', ...NEAR_A, clusterName: 'Campus' }),
-			ap({ id: 'b', ...FAR, clusterName: 'Campus' })
-		]);
+		const { clusters } = computeClusters(
+			[ap({ id: 'a', ...NEAR_A, clusterName: 'Campus' }), ap({ id: 'b', ...FAR, clusterName: 'Campus' })],
+			MODELS
+		);
 		expect(clusters).toHaveLength(1);
 		expect(clusters[0].name).toBe('Campus');
 		expect(clusters[0].members.map((m) => m.id).sort()).toEqual(['a', 'b']);
 	});
 
 	it('mirrors a stored name onto an overlap-joined member that had none', () => {
-		const { clusters } = computeClusters([
-			ap({ id: 'a', ...NEAR_A, clusterName: 'Atrium' }),
-			ap({ id: 'b', ...NEAR_B }) // overlaps a, no name of its own
-		]);
+		const { clusters } = computeClusters(
+			[ap({ id: 'a', ...NEAR_A, clusterName: 'Atrium' }), ap({ id: 'b', ...NEAR_B })],
+			MODELS
+		);
 		expect(clusters).toHaveLength(1);
 		expect(clusters[0].name).toBe('Atrium');
 		expect(clusters[0].named).toBe(true);

@@ -61,6 +61,25 @@ export const adminProfile = pgTable('admin_profile', {
 });
 
 /**
+ * Catalog of router/AP models — the operator-editable source of truth for a model's
+ * advertised coverage range. `network_health.model` stores `id` (a slug key), not the
+ * range, so editing `range_meters` here re-sizes every AP on that model automatically.
+ *
+ *   id          — slug key stored on network_health.model (e.g. 'suncomm-ap3000g').
+ *   name        — human display name ('Suncomm AP3000G').
+ *   rangeMeters — advertised/illustrative outdoor range in metres (not survey-grade).
+ *   sortOrder   — display order; the lowest is the *default* model (new pins + the
+ *                 fallback range for an AP with a null/unknown model). No is_default
+ *                 flag: deleting the default simply promotes the next, never orphans.
+ */
+export const routerModel = pgTable('router_model', {
+	id: text('id').primaryKey(),
+	name: text('name').notNull(),
+	rangeMeters: integer('range_meters').notNull(),
+	sortOrder: integer('sort_order').notNull().default(0)
+});
+
+/**
  * Per-access-point health snapshot (ERD has none yet — admin-owned). Raw metrics
  * only; the app derives display tone/labels (like the other admin view mappers).
  *
@@ -84,8 +103,9 @@ export const networkHealth = pgTable('network_health', {
 	// count toward this pin (network_sessions attribution). Lets a map pin be named
 	// anything while still tracking a specific interface. Null = no binding.
 	interfaceName: text('interface_name'),
-	// Router/AP model id (catalog key in apps/admin/src/lib/router-models.ts). Drives
-	// the simulated coverage radius on the map. Null = use the default model's range.
+	// Router/AP model id — a slug key into the `router_model` catalog. Drives the
+	// simulated coverage radius on the map. Loose ref (no FK): an unknown/null model
+	// falls back to the default model's range, so deleting a catalog row is safe.
 	model: text('model'),
 	// Operator-calibrated coverage radius in metres, overriding the model's advertised
 	// range to match real-world reach (walls, height, interference). Null = fall back to

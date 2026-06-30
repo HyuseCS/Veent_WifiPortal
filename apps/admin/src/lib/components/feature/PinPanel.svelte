@@ -5,13 +5,14 @@
 	import type { SubmitFunction } from '@sveltejs/kit';
 	import type { NetworkAp } from '$lib/types';
 	import type { Pin } from '$lib/networkMap';
-	import { routerModels } from '$lib/router-models';
+	import type { RouterModel } from '$lib/router-models';
 
 	// The new/edit pin editor — one card per active pin. Extracted from NetworkMap.svelte;
 	// the parent owns the pins state + Leaflet layers and passes the mutators in. Functions
 	// are keyed by localId (called with `pin.localId`) so they stay stable parent refs.
 	let {
 		pin,
+		models,
 		allClusterNames,
 		creatingCluster,
 		geoMsg,
@@ -30,6 +31,7 @@
 		requestDelete
 	}: {
 		pin: Pin;
+		models: RouterModel[];
 		allClusterNames: string[];
 		creatingCluster: Record<number, boolean>;
 		geoMsg: Record<number, string>;
@@ -68,7 +70,7 @@
 		onchange={(e) => setModel(pin.localId, e.currentTarget.value)}
 		class="mt-1.5 w-full rounded border border-border bg-bg px-2 py-1.5 text-xs text-ink"
 	>
-		{#each routerModels as m (m.id)}
+		{#each models as m (m.id)}
 			<option value={m.id}>{m.name} — {m.rangeMeters} m advertised</option>
 		{/each}
 	</select>
