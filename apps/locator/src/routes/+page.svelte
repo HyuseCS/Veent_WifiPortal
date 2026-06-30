@@ -131,7 +131,11 @@
 					L.DomEvent.on(a, 'click', L.DomEvent.stop).on(a, 'click', () => {
 						if (!navigator.geolocation) return;
 						navigator.geolocation.getCurrentPosition(
-							(pos) => mapInstance?.setView([pos.coords.latitude, pos.coords.longitude], 15),
+							(pos) => {
+								// Keep the sidebar's nearest-first ordering in sync, like the initial flow.
+								userLoc = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+								mapInstance?.setView([pos.coords.latitude, pos.coords.longitude], 15);
+							},
 							() => {},
 							{ enableHighAccuracy: true, timeout: 8000 }
 						);
@@ -237,7 +241,7 @@
 			     drag it down past 30% of the sheet to dismiss (snaps back below that). The header
 			     close button is the keyboard/screen-reader equivalent. -->
 			<div
-				class="flex shrink-0 cursor-grab touch-none justify-center py-3 md:hidden"
+				class="flex min-h-[44px] shrink-0 cursor-grab touch-none items-center justify-center md:hidden"
 				onpointerdown={onSheetDown}
 				onpointermove={onSheetMove}
 				onpointerup={onSheetUp}
@@ -326,7 +330,7 @@
 								<button
 									type="button"
 									onclick={() => (collapsed[cluster.name] = !collapsed[cluster.name])}
-									class="flex h-9 w-9 shrink-0 items-center justify-center rounded text-muted hover:bg-surface hover:text-ink"
+									class="flex h-11 w-11 shrink-0 items-center justify-center rounded text-muted hover:bg-surface hover:text-ink"
 									aria-label={collapsed[cluster.name] ? 'Expand cluster' : 'Collapse cluster'}
 									aria-expanded={!collapsed[cluster.name]}
 								>
@@ -343,7 +347,7 @@
 								<button
 									type="button"
 									onclick={() => focusCluster(cluster)}
-									class="flex min-h-[40px] flex-1 items-center gap-2 text-left"
+									class="flex min-h-[44px] flex-1 items-center gap-2 text-left"
 									title="Show this cluster on the map"
 								>
 									<span class="truncate text-sm font-semibold text-ink">{cluster.name}</span>
