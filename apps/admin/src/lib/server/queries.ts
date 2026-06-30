@@ -17,7 +17,8 @@ import {
 	adminUser,
 	adminProfile,
 	adminRole,
-	networkHealth
+	networkHealth,
+	routerModel
 } from '@veent/db';
 import { SESSION_STATUS, LEDGER_TYPE } from '@veent/core';
 import type {
@@ -729,4 +730,84 @@ export async function deleteNetworkPlace(db: DB, id: number): Promise<void> {
 export async function wipeNetworks(db: DB): Promise<number> {
 	const removed = await db.delete(networkHealth).returning({ id: networkHealth.id });
 	return removed.length;
+}
+
+/** One router/AP catalog model plus how many APs currently reference it. `usageCount`
+ * powers the "in use by N APs" hint so an owner deletes a model with eyes open. */
+export type RouterModelRow = {
+	id: string;
+	name: string;
+	rangeMeters: number;
+	sortOrder: number;
+	usageCount: number;
+};
+
+/** The full router model catalog, ordered so the first row is the default model
+ * (lowest sortOrder). LEFT JOIN counts referencing APs per model. Shape is a superset
+ * of `RouterModel`, so the same rows feed both the map picker and the /networks editor. */
+export async function listRouterModels(db: DB): Promise<RouterModelRow[]> {
+	return db
+		.select({
+			id: routerModel.id,
+			name: routerModel.name,
+			rangeMeters: routerModel.rangeMeters,
+			sortOrder: routerModel.sortOrder,
+			// LEFT JOIN → 0 for an unused model (count of a NULL-joined id is 0, not 1).
+			usageCount: sql<number>`count(${networkHealth.id})`.mapWith(Number)
+		})
+		.from(routerModel)
+		.leftJoin(networkHealth, eq(networkHealth.model, routerModel.id))
+		.groupBy(routerModel.id)
+		.orderBy(asc(routerModel.sortOrder), asc(routerModel.id));
+}
+
+/** Add a model to the catalog. `id` is the immutable slug stored on network_health.model;
+ * new models append at the end (max sortOrder + 1) so existing default/order is untouched. */
+export async function createRouterModel(
+	db: DB,
+	model: { id: string; name: string; rangeMeters: number }
+): Promise<boolean> {
+	const [{ next }] = await db
+		.select({ next: sql<number>`coalesce(max(${routerModel.sortOrder}), -1) + 1`.mapWith(Number) })
+		.from(routerModel);
+	// onConflictDoNothing → the insert itself is the uniqueness check: a concurrent add of the
+	// same id yields 0 rows here instead of surfacing a primary-key violation as a 500. Returns
+	// whether a row was actually inserted.
+	const inserted = await db
+		.insert(routerModel)
+		.values({ ...model, sortOrder: next })
+		.onConflictDoNothing()
+		.returning({ id: routerModel.id });
+	return inserted.length > 0;
+}
+
+/** Edit a model's display name and advertised range. The `id` slug is immutable — APs
+ * reference it by value (loose link), so renaming the slug would orphan them; rename the
+ * label instead. Editing rangeMeters re-sizes every AP on this model that has no override. */
+export async function updateRouterModel(
+	db: DB,
+	id: string,
+	fields: { name: string; rangeMeters: number }
+): Promise<boolean> {
+	// `returning` makes the UPDATE the existence check too — 0 rows means the id is gone, so the
+	// caller can 404 without a separate (race-prone) read.
+	const updated = await db
+		.update(routerModel)
+		.set(fields)
+		.where(eq(routerModel.id, id))
+		.returning({ id: routerModel.id });
+	return updated.length > 0;
+}
+
+/** Remove a model from the catalog. Safe: network_health.model is a loose text ref (no FK),
+ * so APs on a deleted model fall back to the default range — exactly like an unknown id.
+ * Caller owns the "can't delete the last model" guard (the catalog must never be empty). */
+export async function deleteRouterModel(db: DB, id: string): Promise<boolean> {
+	// `returning` reports whether a row actually existed, so the caller can 404 on a stale id
+	// without a pre-read.
+	const deleted = await db
+		.delete(routerModel)
+		.where(eq(routerModel.id, id))
+		.returning({ id: routerModel.id });
+	return deleted.length > 0;
 }

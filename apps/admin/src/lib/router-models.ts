@@ -1,10 +1,11 @@
 /**
- * Router/AP catalog for the coverage simulator. The single source of truth for a
- * model's advertised range — `network_health.model` stores the id (catalog key),
- * not the range, so editing a range here re-sizes every AP's dome automatically.
+ * Pure helpers over the router/AP catalog. The catalog itself now lives in the DB
+ * (`router_model` table) and is operator-editable from /networks — callers pass the
+ * loaded list in (server: from a query; client: from `load` data). No module-level
+ * catalog state, so there's nothing to leak across requests on the server.
  *
- * `rangeMeters` is the *advertised / illustrative* outdoor range, not a measured
- * or survey-grade value. The simulator draws plausible-visual coverage, not RSSI.
+ * `rangeMeters` is the *advertised / illustrative* outdoor range, not a measured or
+ * survey-grade value. The simulator draws plausible-visual coverage, not RSSI.
  */
 export interface RouterModel {
 	/** Catalog key stored on network_health.model. */
@@ -14,19 +15,28 @@ export interface RouterModel {
 	rangeMeters: number;
 }
 
-export const routerModels: RouterModel[] = [
-	// Wi-Fi 6 outdoor AP, dual high-gain omni. 500 m is the operator's advertised
-	// figure (unpublished spec) — a calibration starting point, not a measurement.
-	{ id: 'sancom-ap3000g', name: 'Sancom AP3000G', rangeMeters: 500 }
-];
+/**
+ * Range used only when the catalog is empty (no models at all). Defensive: the
+ * catalog is seeded with a baseline row and the UI blocks deleting the last model,
+ * so this should never actually be hit — it just keeps `rangeFor` total.
+ */
+export const FALLBACK_RANGE = 200;
 
-/** Fallback model when an AP has no stored model (or an unknown one). */
-export const DEFAULT_MODEL_ID = 'sancom-ap3000g';
+/**
+ * The default model id for a catalog = its first entry. Callers pass the list already
+ * ordered by `sort_order` (see `listRouterModels`), so "first" is the lowest sortOrder.
+ * Empty catalog → '' (and `rangeFor` then uses FALLBACK_RANGE).
+ */
+export function defaultModelId(models: RouterModel[]): string {
+	return models[0]?.id ?? '';
+}
 
-/** Advertised range for a model id; falls back to the default model's range. */
-export function rangeFor(modelId: string | null | undefined): number {
-	const byId = (id: string) => routerModels.find((m) => m.id === id);
-	const model = (modelId && byId(modelId)) || byId(DEFAULT_MODEL_ID);
-	// Catalog is never empty, but guard the lookup chain rather than assert non-null.
-	return model?.rangeMeters ?? 0;
+/**
+ * Advertised range for a model id within `models`; falls back to the default (first)
+ * model's range, then FALLBACK_RANGE if the catalog is empty. Unknown/null id → default,
+ * so a pin on a deleted model still renders a sane dome.
+ */
+export function rangeFor(models: RouterModel[], id: string | null | undefined): number {
+	const model = (id && models.find((m) => m.id === id)) || models[0];
+	return model?.rangeMeters ?? FALLBACK_RANGE;
 }

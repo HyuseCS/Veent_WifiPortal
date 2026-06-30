@@ -13,7 +13,7 @@
 	import type { SubmitFunction } from '@sveltejs/kit';
 	import type { NetworkAp } from '$lib/types';
 	import { SearchInput, EmptyState } from '$lib/components/ui';
-	import { rangeFor, DEFAULT_MODEL_ID } from '$lib/router-models';
+	import { rangeFor, defaultModelId, type RouterModel } from '$lib/router-models';
 	import { distanceMeters } from '$lib/geo';
 	import { computeClusters, type Cluster } from '$lib/clustering';
 	import { geocode } from '$lib/geocode';
@@ -21,7 +21,18 @@
 	import { NetworkMapController } from '$lib/networkMap.controller';
 	import PinPanel from './PinPanel.svelte';
 
-	let { networks }: { networks: NetworkAp[] } = $props();
+	let { networks, models }: { networks: NetworkAp[]; models: RouterModel[] } = $props();
+
+	// Catalog helpers bound to the loaded model list (the catalog now lives in the DB and
+	// rides in via `load` data). `rng` = range for a model id; `defModel` = the default
+	// model id (first/lowest sortOrder) used for new pins.
+	const rng = (id: string | null | undefined) => rangeFor(models, id);
+	const defModel = $derived(defaultModelId(models));
+	// Normalize a stored model id to a *live* catalog id: a deleted catalog row leaves the AP's
+	// `model` dangling, so fall back to the default — otherwise PinPanel's <select> binds to no
+	// option and a save would persist the stale id.
+	const liveModel = (id: string | null | undefined) =>
+		id && models.some((m) => m.id === id) ? id : defModel;
 
 	// lucide-svelte icons type as the legacy component signature; EmptyState's `icon` prop
 	// wants the runes `Component` type. Same cast the dashboard page uses.
@@ -95,7 +106,7 @@
 
 	// Coverage-overlap clustering lives in `$lib/clustering` (pure + tested); the server's
 	// join guard reuses the same `$lib/reach` math so the two can't drift.
-	const clustering = $derived(computeClusters(placed));
+	const clustering = $derived(computeClusters(placed, models));
 	const clusters = $derived(clustering.clusters);
 	const clusteredIds = $derived(clustering.clusteredIds);
 
@@ -134,7 +145,7 @@
 		void focusedApId;
 		void coverageVisible;
 		void clusteredIds;
-		if (mapReady) mapCtl.renderDomes(placed, { coverageVisible, editingApId, focusedApId, clusteredIds });
+		if (mapReady) mapCtl.renderDomes(placed, { coverageVisible, editingApId, focusedApId, clusteredIds, models });
 	});
 
 	// Scale the focused pin up (.sel) and restore all others — no marker re-creation.
@@ -170,12 +181,12 @@
 	// Drop a fresh AP pin (map click or the "Add router" button). If it lands within reach of a
 	// cluster, pre-assign it to the nearest one and expand that group so its fields show there.
 	function addPin(lat: number, lng: number) {
-		const range = rangeFor(DEFAULT_MODEL_ID);
+		const range = rng(defModel);
 		const host = nearestCluster(lat, lng, range, null);
 		spawnPin({
 			apId: null,
 			targetId: null,
-			model: DEFAULT_MODEL_ID,
+			model: defModel,
 			range,
 			name: '',
 			address: '',
@@ -198,8 +209,8 @@
 		spawnPin({
 			apId: ap.id,
 			targetId: null,
-			model: ap.model ?? DEFAULT_MODEL_ID,
-			range: ap.rangeMeters ?? rangeFor(ap.model),
+			model: liveModel(ap.model),
+			range: ap.rangeMeters ?? rng(ap.model),
 			name: ap.name,
 			address: ap.address ?? '',
 			lat: Number(ap.latitude),
@@ -212,7 +223,7 @@
 			nearestCluster(
 				Number(ap.latitude),
 				Number(ap.longitude),
-				ap.rangeMeters ?? rangeFor(ap.model),
+				ap.rangeMeters ?? rng(ap.model),
 				ap.id
 			);
 		if (host) collapsed = { ...collapsed, [host.key]: false };
@@ -234,13 +245,13 @@
 	}
 
 	function rangeOf(localId: number): number {
-		return pins.find((p) => p.localId === localId)?.range ?? rangeFor(DEFAULT_MODEL_ID);
+		return pins.find((p) => p.localId === localId)?.range ?? rng(defModel);
 	}
 
 	// Switching model resets the calibrated range to that model's advertised figure (a
 	// different device = a different baseline); the operator can re-tune from there.
 	function setModel(localId: number, model: string) {
-		const range = rangeFor(model);
+		const range = rng(model);
 		pins = pins.map((p) => (p.localId === localId ? { ...p, model, range } : p));
 		redrawPin(localId, range);
 	}
@@ -276,12 +287,12 @@
 				...p,
 				name: value,
 				targetId: match.id,
-				model: match.model ?? DEFAULT_MODEL_ID,
-				range: match.rangeMeters ?? rangeFor(match.model),
+				model: liveModel(match.model),
+				range: match.rangeMeters ?? rng(match.model),
 				cluster: match.clusterName ?? p.cluster
 			};
 		});
-		if (match) redrawPin(localId, match.rangeMeters ?? rangeFor(match.model));
+		if (match) redrawPin(localId, match.rangeMeters ?? rng(match.model));
 	}
 
 	// Per-pin "+ New cluster…" mode (operator typing a fresh name vs picking an existing one).
@@ -350,7 +361,7 @@
 		return others.some(
 			(m) =>
 				distanceMeters(pin.lat, pin.lng, Number(m.latitude), Number(m.longitude)) <
-				pin.range + (m.rangeMeters ?? rangeFor(m.model))
+				pin.range + (m.rangeMeters ?? rng(m.model))
 		);
 	}
 
@@ -369,7 +380,7 @@
 				if (m.id === excludeApId || m.latitude == null || m.longitude == null) continue;
 				const gap =
 					distanceMeters(lat, lng, Number(m.latitude), Number(m.longitude)) -
-					(range + (m.rangeMeters ?? rangeFor(m.model)));
+					(range + (m.rangeMeters ?? rng(m.model)));
 				if (gap < 0 && (best === null || gap < bestGap)) {
 					bestGap = gap;
 					best = c;
@@ -417,8 +428,8 @@
 		spawnPin({
 			apId: null,
 			targetId: null,
-			model: DEFAULT_MODEL_ID,
-			range: rangeFor(DEFAULT_MODEL_ID),
+			model: defModel,
+			range: rng(defModel),
 			name: '',
 			address: hit.label,
 			lat: hit.lat,
@@ -628,6 +639,7 @@
 				{#snippet pinPanel(pin: Pin)}
 					<PinPanel
 						{pin}
+						{models}
 						{allClusterNames}
 						{creatingCluster}
 						{geoMsg}

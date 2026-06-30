@@ -1,4 +1,4 @@
-import { rangeFor } from '$lib/router-models';
+import { rangeFor, type RouterModel } from '$lib/router-models';
 import { domesOverlap } from '$lib/reach';
 
 /**
@@ -44,12 +44,15 @@ export interface ClusteringResult<T extends ClusterableAp = ClusterableAp> {
  * ponytail: O(n²) pair scan + union-find — fine for tens of APs; swap for a spatial grid
  * only at hundreds.
  */
-export function computeClusters<T extends ClusterableAp>(placed: T[]): ClusteringResult<T> {
+export function computeClusters<T extends ClusterableAp>(
+	placed: T[],
+	models: RouterModel[]
+): ClusteringResult<T> {
 	const aps = placed.map((ap) => ({
 		ap,
 		lat: Number(ap.latitude),
 		lng: Number(ap.longitude),
-		r: ap.rangeMeters ?? rangeFor(ap.model)
+		r: ap.rangeMeters ?? rangeFor(models, ap.model)
 	}));
 	const parent = aps.map((_, i) => i);
 	const find = (x: number): number => (parent[x] === x ? x : (parent[x] = find(parent[x])));

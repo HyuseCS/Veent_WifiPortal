@@ -1,5 +1,5 @@
 import type { NetworkAp } from '$lib/types';
-import { rangeFor } from '$lib/router-models';
+import { rangeFor, type RouterModel } from '$lib/router-models';
 import { HEAD_ICON, LOCATE_ICON, LAYERS_ICON, escapeHtml } from '$lib/networkMap';
 import { FALLBACK_CENTER, tileUrl, TILE_SUBDOMAINS, TILE_ATTRIBUTION } from '$lib/map';
 
@@ -39,6 +39,8 @@ export interface RenderDomeOpts {
 	editingApId: string | null;
 	focusedApId: string | null;
 	clusteredIds: Set<string>;
+	/** Catalog for the fallback range when an AP has no rangeMeters override. */
+	models: RouterModel[];
 }
 
 export interface SpawnInit {
@@ -266,7 +268,7 @@ export class NetworkMapController {
 			if (opts.focusedApId !== null && opts.focusedApId !== ap.id) continue;
 			const lat = Number(ap.latitude);
 			const lng = Number(ap.longitude);
-			const range = ap.rangeMeters ?? rangeFor(ap.model);
+			const range = ap.rangeMeters ?? rangeFor(opts.models, ap.model);
 			this.drawCircle(group, lat, lng, range, ap.tone, opts.clusteredIds.has(ap.id));
 		}
 	}
