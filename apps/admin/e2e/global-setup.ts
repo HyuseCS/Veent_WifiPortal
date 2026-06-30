@@ -9,7 +9,7 @@
  * The captured TOTP secret is written alongside the storageState so specs can mint a
  * fresh step-up code for promote / owner-change actions.
  */
-import { chromium, type FullConfig } from '@playwright/test';
+import { chromium } from '@playwright/test';
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
@@ -23,7 +23,7 @@ import {
 } from './config';
 import { selfTest, totp } from './totp';
 
-export default async function globalSetup(_config: FullConfig) {
+export default async function globalSetup() {
 	selfTest();
 
 	// Seed the test DB via the existing script, pointed at the throwaway DB.

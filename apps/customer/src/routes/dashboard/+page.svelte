@@ -154,7 +154,7 @@
 	};
 
 	let buying = $state(false);
-	const confirmBuy = (tier: Tier): SubmitFunction => {
+	const confirmBuy = (): SubmitFunction => {
 		return () => {
 			buying = true;
 			return async ({ result, update }) => {
@@ -674,7 +674,7 @@
 											<form
 												method="post"
 												action="?/buyTier"
-												use:enhance={confirmBuy(tier)}
+												use:enhance={confirmBuy()}
 												class="group"
 												data-pending={buying ? '' : null}
 												data-pending-form
@@ -777,6 +777,10 @@
 						link carries a single-use, short-TTL token that mints a session in the system
 						browser (see /auth/handoff), so the guest skips a second OTP. Only meaningful
 						inside the captive popup; harmless elsewhere, so it's phrased as a hint. -->
+						<!-- handoffUrl is an absolute, server-built URL (origin + /auth/handoff + token)
+						that must open in the system browser from the captive popup, so resolve() (for
+						app-internal relative paths) doesn't apply here. -->
+						<!-- eslint-disable svelte/no-navigation-without-resolve -->
 						<a
 							href={data.handoffUrl}
 							rel="noopener"
@@ -785,6 +789,7 @@
 							On the WiFi sign-in screen? Open in your browser to manage credits
 							<Icon name="arrow-right" size={15} strokeWidth={2.1} />
 						</a>
+						<!-- eslint-enable svelte/no-navigation-without-resolve -->
 					{/if}
 				</div>
 			</div>

@@ -1,11 +1,26 @@
 import { json, error } from '@sveltejs/kit';
 import { eq } from 'drizzle-orm';
+import { createHmac } from 'node:crypto';
+import { env } from '$env/dynamic/private';
 import { customerUser, packages, paymentCheckouts } from '@veent/db';
 import { creditCheckoutIfUnsettled, recordPaymentTransaction } from '@veent/core';
 import { db } from '$lib/server/db';
 import { payments } from '$lib/server/payments';
 import { rateLimit, clientIp } from '$lib/server/rateLimit';
 import type { RequestHandler } from './$types';
+
+/**
+ * Salted, truncated fingerprint of a sensitive value (buyer email, client IP, internal user id)
+ * for fraud-review logs. Keeps the one signal that matters — whether the SAME value recurs across
+ * unattributed events (an attack pattern) — without writing raw PII / identifiers to logs at rest.
+ * HMAC with the server secret so low-entropy inputs (IPs, emails) can't be brute-forced back out
+ * of the digest; null/empty stays null so "absent" is still distinguishable from "present".
+ */
+function fingerprint(value: string | null | undefined): string | null {
+	if (!value) return null;
+	const secret = env.BETTER_AUTH_SECRET || 'veent-portal-dev-secret';
+	return createHmac('sha256', secret).update(value).digest('base64url').slice(0, 12);
+}
 
 /**
  * POST /api/webhooks/payment — the source of truth for adding credits.
@@ -109,20 +124,21 @@ export const POST: RequestHandler = async (event) => {
 		// (only the gateway's masked fund source, which carries no full PAN).
 		console.warn('[webhook] UNATTRIBUTED paid event — recorded, not credited', {
 			txId: evt.externalTransactionId,
-			referenceId: evt.referenceId,
+			referenceId: evt.referenceId, // random 32-hex nonce — no PII
 			amountMinor: evt.amountMinor,
 			currency: evt.currency,
-			// Why each leg failed attribution, so the alert points at the cause.
+			// Why each leg failed attribution, so the alert points at the cause. Sensitive legs are
+			// fingerprinted (correlation, no raw value) or reduced to presence — never logged raw.
 			hadCheckoutRow: !!co,
-			refUserId,
-			refPackageId,
+			refUserFp: fingerprint(refUserId),
+			hadRefPackage: refPackageId !== null,
 			userExists,
 			pkgExists,
 			fundSourceType: evt.fundSourceType ?? null,
 			fundSourceMasked: evt.fundSourceMasked ?? null,
-			buyerEmail: evt.buyerEmail ?? null,
+			buyerEmailFp: fingerprint(evt.buyerEmail),
 			receiptNo: evt.receiptNo ?? null,
-			ip: clientIp(event)
+			ipFp: fingerprint(clientIp(event))
 		});
 		return json({ ok: true, recorded: true, credited: false, reason: 'unattributed' });
 	}

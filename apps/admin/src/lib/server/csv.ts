@@ -11,5 +11,5 @@
  */
 export function cell(v: string): string {
 	const guarded = /^[=+\-@\t\r]/.test(v) ? `'${v}` : v;
-	return /[",\n]/.test(guarded) ? `"${guarded.replace(/"/g, '""')}"` : guarded;
+	return /[",\n\r]/.test(guarded) ? `"${guarded.replace(/"/g, '""')}"` : guarded;
 }

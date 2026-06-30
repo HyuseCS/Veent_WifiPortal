@@ -33,10 +33,10 @@
 		atStart = track.scrollLeft <= 1;
 		atEnd = track.scrollLeft + track.clientWidth >= track.scrollWidth - 1;
 	}
-	// Re-measure after mount and whenever the item count changes.
+	// Re-measure after mount and whenever the item count changes. Reading items.length
+	// inside the guard registers it as a dependency without a bare unused expression.
 	$effect(() => {
-		items.length;
-		update();
+		if (items.length >= 0) update();
 	});
 
 	// Nudge by one column (a card's width + the grid gap).
@@ -69,7 +69,7 @@
 				type="button"
 				onclick={() => go(-1)}
 				aria-label="Previous metrics"
-				class="absolute top-1/2 left-1 z-10 flex h-10 w-10 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full border border-border bg-bg/90 text-ink shadow-md backdrop-blur transition-colors hover:bg-bg"
+				class="absolute top-1/2 left-1 z-10 flex h-11 w-11 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full border border-border bg-bg/90 text-ink shadow-md backdrop-blur transition-colors hover:bg-bg"
 			>
 				<ChevronLeft class="h-5 w-5" aria-hidden="true" />
 			</button>
@@ -79,7 +79,7 @@
 				type="button"
 				onclick={() => go(1)}
 				aria-label="More metrics"
-				class="absolute top-1/2 right-1 z-10 flex h-10 w-10 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full border border-border bg-bg/90 text-ink shadow-md backdrop-blur transition-colors hover:bg-bg"
+				class="absolute top-1/2 right-1 z-10 flex h-11 w-11 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full border border-border bg-bg/90 text-ink shadow-md backdrop-blur transition-colors hover:bg-bg"
 			>
 				<ChevronRight class="h-5 w-5" aria-hidden="true" />
 			</button>

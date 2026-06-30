@@ -22,7 +22,10 @@ export default defineConfig({
 		// Point the preview server at the throwaway DB + stub router (never the dev DB,
 		// never the real MikroTik). Process env overrides the .env file values.
 		env: TEST_ENV,
-		reuseExistingServer: !process.env.CI,
+		// Always start our own preview server with TEST_ENV. Reusing an arbitrary
+		// existing server on this port could attach the suite to a preview started
+		// without TEST_ENV (dev DB / real router) and silently corrupt real data.
+		reuseExistingServer: false,
 		timeout: 180_000
 	}
 });

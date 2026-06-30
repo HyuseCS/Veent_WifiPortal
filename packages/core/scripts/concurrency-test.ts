@@ -13,7 +13,7 @@ import { createDb } from '@veent/db';
 import { customerUser, customerProfile, packages, networkSessions, creditLedger } from '@veent/db/schema';
 import { startPaidAccessAndBindDevice, startFreeAccessAndBindDevice } from '@veent/core';
 import { createStubNetworkController } from '@veent/core/integrations';
-import { eq, like, inArray } from 'drizzle-orm';
+import { eq, like } from 'drizzle-orm';
 
 const DATABASE_URL =
 	process.env.DATABASE_URL ?? 'postgres://root:mysecretpassword@localhost:5432/local';
@@ -101,7 +101,7 @@ async function main() {
 		const results = await Promise.allSettled(
 			Array.from({ length: N }, (_, i) => buy(uid, i))
 		);
-		const ok = results.filter((r) => r.status === 'fulfilled' && (r.value as any).ok).length;
+		const ok = results.filter((r) => r.status === 'fulfilled' && r.value.ok).length;
 		const rejected = results.filter((r) => r.status === 'rejected').length;
 		const bal = await balanceOf(uid);
 		console.log(`\n── A: same user × ${N} concurrent buys (balance 100, cost ${COST}) ──`);
@@ -121,7 +121,7 @@ async function main() {
 		const t0 = performance.now();
 		const results = await Promise.allSettled(ids.map((id, i) => buy(id, i)));
 		const ms = Math.round(performance.now() - t0);
-		const ok = results.filter((r) => r.status === 'fulfilled' && (r.value as any).ok).length;
+		const ok = results.filter((r) => r.status === 'fulfilled' && r.value.ok).length;
 		const rejected = results.filter((r) => r.status === 'rejected').length;
 		const balances = await Promise.all(ids.map(balanceOf));
 		const allZero = balances.every((b) => b === 0);
@@ -143,7 +143,7 @@ async function main() {
 		const results = await Promise.allSettled(
 			Array.from({ length: N }, (_, i) => startFreeAccessAndBindDevice(db, network, { userId: uid, macAddress: mac(100 + i) }))
 		);
-		const eligible = results.filter((r) => r.status === 'fulfilled' && (r.value as any).ok).length;
+		const eligible = results.filter((r) => r.status === 'fulfilled' && r.value.ok).length;
 		console.log(`\n── C: same user × ${N} concurrent free-time claims (12h cooldown) ──`);
 		console.log(`   claimsGranted=${eligible}  (expected 1 if cooldown is race-safe)`);
 		check(
@@ -164,6 +164,8 @@ main().catch(async (e) => {
 	console.error('probe crashed:', e);
 	try {
 		await cleanup();
-	} catch {}
+	} catch (cleanupErr) {
+		console.error('cleanup after crash failed:', cleanupErr);
+	}
 	process.exit(2);
 });
