@@ -35,11 +35,11 @@ export const auth = betterAuth({
 	// account-collision / takeover surface (SECURITY_RISKS R3). The phoneNumber plugin is the
 	// only credential provider.
 	emailAndPassword: { enabled: false },
-	// Sessions expire a fixed 24h after login (was defaulting to 7 days). Refresh
+	// Sessions expire a fixed 12h after login (was 24h, originally 7 days). Refresh
 	// is disabled so the expiry is pinned to login time and never slides on
-	// activity — a guest who logs in today must re-authenticate ~24h later.
+	// activity — a guest who logs in now must re-authenticate ~12h later.
 	session: {
-		expiresIn: 60 * 60 * 24, // 24 hours
+		expiresIn: 60 * 60 * 12, // 12 hours
 		disableSessionRefresh: true
 	},
 	// Every customer_user must have a 1:1 customer_profile (holds credit_balance,
