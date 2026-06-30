@@ -14,6 +14,8 @@ export interface PublicLocation {
 	online: boolean;
 	lat: number;
 	lng: number;
+	/** Operator-assigned cluster grouping (mirrored from admin's map). null = ungrouped. */
+	clusterName: string | null;
 }
 
 /** Access points that have coordinates set, for plotting on the map. */
@@ -25,7 +27,8 @@ export async function listPublicLocations(db: DB): Promise<PublicLocation[]> {
 			address: networkHealth.address,
 			online: networkHealth.online,
 			latitude: networkHealth.latitude,
-			longitude: networkHealth.longitude
+			longitude: networkHealth.longitude,
+			clusterName: networkHealth.clusterName
 		})
 		.from(networkHealth)
 		.where(and(isNotNull(networkHealth.latitude), isNotNull(networkHealth.longitude)))
@@ -38,6 +41,7 @@ export async function listPublicLocations(db: DB): Promise<PublicLocation[]> {
 		address: r.address,
 		online: r.online,
 		lat: Number(r.latitude),
-		lng: Number(r.longitude)
+		lng: Number(r.longitude),
+		clusterName: r.clusterName
 	}));
 }
