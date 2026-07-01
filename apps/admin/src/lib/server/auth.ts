@@ -50,7 +50,9 @@ export const auth = betterAuth({
 		sendResetPassword: async ({ user, url, token }) => {
 			let isReset = false;
 			try {
-				isReset = (new URL(url).searchParams.get('callbackURL') ?? '').includes('reset-password');
+				const cb = new URL(url).searchParams.get('callbackURL');
+				// Exact pathname match — a loose includes() could misclassify unrelated paths.
+				isReset = !!cb && new URL(cb, env.ORIGIN).pathname === '/reset-password';
 			} catch {
 				// Unparseable url → fall through to the invite/activation path (the original behaviour).
 			}
@@ -59,8 +61,9 @@ export const auth = betterAuth({
 				// Self-serve forgot-password for an existing member. The action always returns a
 				// generic response (no account enumeration), so a send failure is only logged —
 				// surfacing it would leak whether the address exists. A reset never bypasses TOTP.
-				const link = `${env.ORIGIN}/reset-password?token=${token}`;
-				const { subject, html, text } = resetPasswordEmail({ url: link, name: user.name });
+				const link = new URL('/reset-password', env.ORIGIN);
+				link.searchParams.set('token', token); // encodes reserved chars in the token
+				const { subject, html, text } = resetPasswordEmail({ url: link.href, name: user.name });
 				try {
 					await mailer.send({ to: user.email, subject, html, text });
 				} catch (err) {
@@ -73,8 +76,9 @@ export const auth = betterAuth({
 			// recipient only (dev). On failure we record it (see inviteSendFailures) rather than
 			// throw, because better-auth swallows a thrown callback error — the invite action
 			// reads the record and rolls the half-created account back.
-			const activateUrl = `${env.ORIGIN}/activate?token=${token}`;
-			const { subject, html, text } = activationEmail({ url: activateUrl, name: user.name });
+			const activateUrl = new URL('/activate', env.ORIGIN);
+			activateUrl.searchParams.set('token', token); // encodes reserved chars in the token
+			const { subject, html, text } = activationEmail({ url: activateUrl.href, name: user.name });
 			try {
 				await mailer.send({ to: user.email, subject, html, text });
 				inviteSendFailures.delete(user.email);

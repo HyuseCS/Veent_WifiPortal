@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { page } from '$app/state';
 	import { enhance } from '$app/forms';
+	import { resolve } from '$app/paths';
 	import { Button, Field } from '$lib/components/ui';
 	import type { ActionData } from './$types';
 
@@ -67,8 +68,11 @@
 				<p class="text-xs text-blocked" role="alert">{form.message}</p>
 			{/if}
 
-			<div class="text-right">
-				<a href="/forgot-password" class="text-xs text-muted underline hover:text-ink">
+			<div class="flex justify-end">
+				<a
+					href={resolve('/forgot-password')}
+					class="inline-flex min-h-[44px] items-center text-xs text-muted underline hover:text-ink"
+				>
 					Forgot password?
 				</a>
 			</div>

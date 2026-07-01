@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { page } from '$app/state';
 	import { enhance } from '$app/forms';
+	import { resolve } from '$app/paths';
 	import { Button, Field } from '$lib/components/ui';
 	import type { ActionData, PageData } from './$types';
 
@@ -23,8 +24,13 @@
 
 		{#if !data.hasToken}
 			<div class="rounded-xl border border-border bg-bg p-6 text-center text-sm text-muted">
-				This reset link is missing its token. Request a new one from the
-				<a href="/forgot-password" class="underline hover:text-ink">forgot password</a> page.
+				<p>This reset link is missing its token.</p>
+				<a
+					href={resolve('/forgot-password')}
+					class="mt-2 inline-flex min-h-[44px] items-center justify-center underline hover:text-ink"
+				>
+					Request a new one
+				</a>
 			</div>
 		{:else}
 			<form

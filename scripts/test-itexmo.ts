@@ -11,6 +11,7 @@
  * sender id must be "ITM.TEST3" and the recipient must be a registered test number.
  */
 import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 
 function loadEnv(path: string): Record<string, string> {
 	const out: Record<string, string> = {};
@@ -28,7 +29,7 @@ if (!recipient) {
 	process.exit(1);
 }
 
-const env = loadEnv(new URL('../apps/customer/.env', import.meta.url).pathname);
+const env = loadEnv(fileURLToPath(new URL('../apps/customer/.env', import.meta.url)));
 const { ITEXMO_API_CODE, ITEXMO_EMAIL, ITEXMO_PASSWORD, ITEXMO_SENDER_ID } = env;
 
 if (!ITEXMO_API_CODE || !ITEXMO_EMAIL || !ITEXMO_PASSWORD) {
