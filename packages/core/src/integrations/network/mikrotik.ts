@@ -590,11 +590,28 @@ async function openConn(config: MikrotikConfig): Promise<RosConn> {
 	return conn;
 }
 
+export interface WalledGardenDeny {
+	/** Exact host to deny (no wildcard), e.g. `connectivitycheck.gstatic.com`. */
+	host: string;
+	/** Optional HTTP path to scope the deny to, e.g. `/generate_204`. HTTP-only (the router can't
+	 * see the path of an HTTPS request), so a bare-host deny is stronger where you can afford it. */
+	path?: string;
+}
+
 export interface WalledGardenInput {
 	/** DNS hostnames to allow pre-auth, e.g. `admin.veent.lan` (matched as `*host`). */
 	hosts?: string[];
 	/** LAN IPs/CIDRs to allow pre-auth at the IP layer, e.g. `10.5.50.1`. */
 	ips?: string[];
+	/**
+	 * Hosts to explicitly DENY pre-auth, placed ABOVE the `hosts` allows so they win (walled-garden
+	 * rules are first-match, top-to-bottom). Used to punch back the OS connectivity-check probes that
+	 * a broad allow like `*.google.com`/`*.gstatic.com` would otherwise let through — an accidental
+	 * pre-auth 204 makes Android flash "Connected" then revert (see
+	 * docs/problems/captive-connected-flap-on-free-time.md). Denying the exact probe host still lets
+	 * reCAPTCHA (a different host/path) load.
+	 */
+	denies?: WalledGardenDeny[];
 	/** Comment on the entries we create, so a re-run updates rather than duplicates. */
 	tag?: string;
 }
@@ -602,6 +619,7 @@ export interface WalledGardenInput {
 export interface WalledGardenResult {
 	hosts: { value: string; created: boolean }[];
 	ips: { value: string; created: boolean }[];
+	denies: { value: string; created: boolean }[];
 }
 
 /**
@@ -609,8 +627,9 @@ export interface WalledGardenResult {
  * reach the given hosts/IPs *before* authenticating — the same mechanism the
  * payment gateways use, here pointed at the LAN-served admin dashboard.
  *
- *   hosts → /ip/hotspot/walled-garden        (HTTP-layer, dst-host)
- *   ips   → /ip/hotspot/walled-garden/ip     (all protocols, dst-address)
+ *   denies → /ip/hotspot/walled-garden  action=deny  (added at the TOP so they beat the allows)
+ *   hosts  → /ip/hotspot/walled-garden               (HTTP-layer, dst-host, action=allow)
+ *   ips    → /ip/hotspot/walled-garden/ip            (all protocols, dst-address)
  *
  * Re-running is safe: entries already carrying our tag are left in place.
  */
@@ -619,9 +638,52 @@ export async function provisionWalledGarden(
 	input: WalledGardenInput
 ): Promise<WalledGardenResult> {
 	const tag = input.tag ?? 'veent-admin';
-	const result: WalledGardenResult = { hosts: [], ips: [] };
+	const result: WalledGardenResult = { hosts: [], ips: [], denies: [] };
 	const conn = await openConn(config);
 	try {
+		// Deny rules must sit ABOVE the allow rules they override (walled-garden matching is first-match,
+		// top-to-bottom). Target the FIRST real allow — a non-empty, non-dynamic, enabled `dst-host`
+		// allow — and `place-before` it, so denies land just ahead of the payment/reCAPTCHA allows. We
+		// deliberately skip the leading dynamic/placeholder rows (empty dst-host): referencing a dynamic
+		// entry's id is fragile, and there's no need to sit above it. undefined → append (fresh garden,
+		// or no allow to precede).
+		const beforeId =
+			(input.denies?.length ?? 0) > 0
+				? (await conn.write('/ip/hotspot/walled-garden/print', [])).find(
+						(r) =>
+							r.action === 'allow' &&
+							(r['dst-host'] ?? '') !== '' &&
+							r.dynamic !== 'true' &&
+							r.disabled !== 'true'
+					)?.['.id']
+				: undefined;
+		for (const deny of input.denies ?? []) {
+			// Idempotency: an equivalent deny already present → skip (never add a duplicate on re-run).
+			// Match host case-insensitively (RouterOS lower-cases dst-host, but don't rely on our input
+			// being pre-normalised) and compare the path exactly (empty when unset). Print the whole
+			// table rather than a server-side `?dst-host=` filter so a casing difference can't hide an
+			// existing row and let a duplicate through.
+			const wantHost = deny.host.toLowerCase();
+			const wantPath = deny.path ?? '';
+			const rows = await conn.write('/ip/hotspot/walled-garden/print', []);
+			const already = rows.some(
+				(r) =>
+					r.action === 'deny' &&
+					(r['dst-host'] ?? '').toLowerCase() === wantHost &&
+					(r.path ?? '') === wantPath
+			);
+			if (already) {
+				result.denies.push({ value: deny.host, created: false });
+				continue;
+			}
+			const params = ['=action=deny', `=dst-host=${deny.host}`, `=comment=${tag}`];
+			if (deny.path) params.push(`=path=${deny.path}`);
+			// Omit place-before on a fresh (empty) walled garden — there's nothing to sit ahead of.
+			if (beforeId) params.push(`=place-before=${beforeId}`);
+			await conn.write('/ip/hotspot/walled-garden/add', params);
+			result.denies.push({ value: deny.host, created: true });
+		}
+
 		for (const host of input.hosts ?? []) {
 			const existing = await conn.write('/ip/hotspot/walled-garden/print', [`?dst-host=${host}`]);
 			if (existing.length > 0) {

@@ -14,6 +14,7 @@ export {
 	type MikrotikConfig,
 	type WalledGardenInput,
 	type WalledGardenResult,
+	type WalledGardenDeny,
 	type RestrictApiInput,
 	type RestrictApiResult
 } from './mikrotik';
