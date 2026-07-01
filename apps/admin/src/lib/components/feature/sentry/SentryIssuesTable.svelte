@@ -1,6 +1,9 @@
 <script lang="ts">
-	import Check from 'lucide-svelte/icons/check';
+	import ArrowDown from 'lucide-svelte/icons/arrow-down';
+	import ArrowUp from 'lucide-svelte/icons/arrow-up';
 	import BellOff from 'lucide-svelte/icons/bell-off';
+	import Check from 'lucide-svelte/icons/check';
+	import ChevronsUpDown from 'lucide-svelte/icons/chevrons-up-down';
 	import ExternalLink from 'lucide-svelte/icons/external-link';
 	import ShieldCheck from 'lucide-svelte/icons/shield-check';
 	import TriangleAlert from 'lucide-svelte/icons/triangle-alert';
@@ -14,14 +17,56 @@
 	// re-checks active-staff auth and rate-limits); this component is presentation only.
 	let { issues, degraded = false }: { issues: SentryIssue[]; degraded?: boolean } = $props();
 
-	const columns = [
-		{ label: 'Issue' },
-		{ label: 'Level' },
-		{ label: 'Events' },
-		{ label: 'Users' },
-		{ label: 'Last seen' },
+	type SortKey = 'title' | 'level' | 'count' | 'userCount' | 'lastSeen';
+	const columns: { label: string; key?: SortKey; srOnly?: boolean }[] = [
+		{ label: 'Issue', key: 'title' },
+		{ label: 'Level', key: 'level' },
+		{ label: 'Events', key: 'count' },
+		{ label: 'Users', key: 'userCount' },
+		{ label: 'Last seen', key: 'lastSeen' },
 		{ label: 'Actions', srOnly: true }
 	];
+
+	// Client-side sort over the already-loaded rows (Sentry ships them frequency-desc). A header
+	// click sorts by that column; clicking the same header again flips direction. Text sorts A→Z
+	// by default, everything else high→low (most events / most recent first — the triage order).
+	let sortKey = $state<SortKey | null>(null);
+	let sortDir = $state<'asc' | 'desc'>('desc');
+
+	const levelRank: Record<string, number> = { fatal: 4, error: 3, warning: 2, info: 1, debug: 0 };
+	const sortVal = (i: SentryIssue, key: SortKey): string | number => {
+		switch (key) {
+			case 'title':
+				return i.title.toLowerCase();
+			case 'level':
+				return levelRank[i.level] ?? -1;
+			case 'lastSeen':
+				return new Date(i.lastSeen).getTime() || 0;
+			case 'count':
+				return i.count;
+			case 'userCount':
+				return i.userCount;
+		}
+	};
+
+	const sorted = $derived.by(() => {
+		const key = sortKey;
+		if (!key) return issues;
+		const dir = sortDir === 'asc' ? 1 : -1;
+		return [...issues].sort((a, b) => {
+			const av = sortVal(a, key);
+			const bv = sortVal(b, key);
+			return av < bv ? -dir : av > bv ? dir : 0;
+		});
+	});
+
+	function toggleSort(key: SortKey) {
+		if (sortKey === key) sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+		else {
+			sortKey = key;
+			sortDir = key === 'title' ? 'asc' : 'desc';
+		}
+	}
 
 	// Map Sentry level → badge tone. Errors/fatals read as blocked, warnings as warning, the rest
 	// (info/debug) as the calm online tone.
@@ -39,17 +84,63 @@
 	}
 </script>
 
-<Table {columns} cards class="min-h-0 flex-1">
+<Table cards>
 	{#snippet toolbar()}
 		<div class="flex items-center gap-3 px-4 py-3">
 			<h2 class="text-base font-semibold text-ink">Unresolved issues</h2>
-			<span class="ml-auto text-xs text-muted">most frequent first</span>
+			<span class="ml-auto text-xs text-muted">
+				{sortKey ? 'click a column to re-sort' : 'most frequent first'}
+			</span>
 		</div>
 	{/snippet}
 
-	{#each issues as issue (issue.id)}
+	{#snippet headRow()}
+		<tr class="border-b border-border bg-surface">
+			{#each columns as col (col.label)}
+				<th
+					class="px-4 py-2.5 text-left text-[11px] font-semibold tracking-wider text-muted uppercase"
+					aria-sort={col.key && sortKey === col.key
+						? sortDir === 'asc'
+							? 'ascending'
+							: 'descending'
+						: undefined}
+				>
+					{#if col.key}
+						{@const active = sortKey === col.key}
+						<button
+							type="button"
+							onclick={() => col.key && toggleSort(col.key)}
+							class="group inline-flex items-center gap-1 tracking-wider uppercase transition-colors hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand {active
+								? 'text-ink'
+								: ''}"
+						>
+							{col.label}
+							{#if active}
+								{#if sortDir === 'asc'}
+									<ArrowUp class="h-3 w-3" aria-hidden="true" />
+								{:else}
+									<ArrowDown class="h-3 w-3" aria-hidden="true" />
+								{/if}
+							{:else}
+								<ChevronsUpDown
+									class="h-3 w-3 opacity-30 transition-opacity group-hover:opacity-60"
+									aria-hidden="true"
+								/>
+							{/if}
+						</button>
+					{:else if col.srOnly}
+						<span class="sr-only">{col.label}</span>
+					{:else}
+						{col.label}
+					{/if}
+				</th>
+			{/each}
+		</tr>
+	{/snippet}
+
+	{#each sorted as issue (issue.id)}
 		<tr class="hover:bg-surface">
-			<td class="tc-full px-4 py-3">
+			<td class="tc-full px-4 py-3 md:w-full md:max-w-0">
 				<div class="min-w-0">
 					<div class="truncate font-medium text-ink">{issue.title}</div>
 					{#if issue.culprit}

@@ -23,12 +23,10 @@
 		description="Set SENTRY_AUTH_TOKEN, SENTRY_ORG_SLUG and SENTRY_PROJECT_ID to load issues and event volume here."
 	/>
 {:else}
-	<div class="flex flex-col gap-6 md:h-full">
+	<div class="flex flex-col gap-6">
 		<SentryHeader dashboardUrl={data.dashboardUrl} />
 		<SentryKpis kpis={data.kpis} />
 		<SentryVolumeChart points={data.volume} degraded={data.degraded.volume} />
-		<div class="flex min-h-0 flex-1 flex-col">
-			<SentryIssuesTable issues={data.issues} degraded={data.degraded.issues} />
-		</div>
+		<SentryIssuesTable issues={data.issues} degraded={data.degraded.issues} />
 	</div>
 {/if}

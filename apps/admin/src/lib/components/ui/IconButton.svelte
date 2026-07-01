@@ -33,6 +33,7 @@
 	{type}
 	{disabled}
 	aria-label={label}
+	title={label}
 	{onclick}
 	class="flex h-11 w-11 items-center justify-center rounded-md outline-none transition-[background-color,color,transform] duration-150 focus-visible:ring-2 focus-visible:ring-brand/40 active:scale-90 disabled:cursor-not-allowed disabled:opacity-40 disabled:active:scale-100 {disabled
 		? 'text-muted'
