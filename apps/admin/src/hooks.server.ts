@@ -22,7 +22,8 @@ if (SENTRY_DSN && !building) {
 		sentryOptions({
 			dsn: SENTRY_DSN,
 			app: 'admin',
-			environment: priv.SENTRY_ENVIRONMENT ?? (dev ? 'development' : 'production'),
+			environment:
+				priv.SENTRY_ENVIRONMENT ?? pub.PUBLIC_SENTRY_ENVIRONMENT ?? (dev ? 'development' : 'production'),
 			release: priv.SENTRY_RELEASE,
 			tracesSampleRate: dev ? 1.0 : Number(priv.SENTRY_TRACES_SAMPLE_RATE ?? '0.2')
 		})

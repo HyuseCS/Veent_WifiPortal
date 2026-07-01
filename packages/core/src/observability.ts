@@ -15,7 +15,7 @@
  *    depends on telemetry.
  */
 import { captureException, startSpan } from '@sentry/core';
-import type { ErrorEvent, EventHint, TransactionEvent } from '@sentry/core';
+import type { ErrorEvent, TransactionEvent } from '@sentry/core';
 
 type AnyEvent = ErrorEvent | TransactionEvent;
 
@@ -76,7 +76,7 @@ function scrub(value: unknown, seen: WeakSet<object>, depth = 0): unknown {
  * IP, and masks any PII that reached the message/breadcrumbs/request/contexts. User identity is
  * kept to `{ id }` only (set at the hook call site) — this never re-adds it.
  */
-export function scrubEvent<T extends AnyEvent>(event: T, _hint?: EventHint): T {
+export function scrubEvent<T extends AnyEvent>(event: T): T {
 	// Hard-strip the request envelope — cookies & auth headers carry session material.
 	if (event.request) {
 		delete event.request.cookies;
@@ -86,6 +86,9 @@ export function scrubEvent<T extends AnyEvent>(event: T, _hint?: EventHint): T {
 			}
 		}
 		delete event.request.data; // form/JSON bodies can hold email/phone/MAC
+		// Mask PII that survives in what's left — URL, query_string, path segments, custom
+		// headers (e.g. `?email=…`, a MAC in the path). Deleting the obvious carriers isn't enough.
+		scrub(event.request, new WeakSet());
 	}
 	// Never ship an IP even if some integration attached one.
 	if (event.user) {
@@ -181,7 +184,7 @@ export function sentryOptions(input: SentryInitInput) {
 		tracesSampleRate: input.tracesSampleRate,
 		sendDefaultPii: false,
 		initialScope: { tags: { app: input.app } },
-		beforeSend: (event: ErrorEvent, hint: EventHint) => scrubEvent(event, hint),
+		beforeSend: (event: ErrorEvent) => scrubEvent(event),
 		beforeSendTransaction: (event: TransactionEvent) => scrubEvent(event)
 	};
 }

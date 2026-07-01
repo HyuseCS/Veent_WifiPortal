@@ -21,7 +21,14 @@ export function logger(scope: string) {
 			const err =
 				args.find((a): a is Error => a instanceof Error) ??
 				new Error(`${prefix} ${args.map(String).join(' ')}`);
-			captureHandled(err, { tags: { scope } });
+			// Keep the call-site message (the non-Error args) as Sentry context — otherwise an
+			// Issue triages with just the bare error and loses "what were we doing" (e.g. '2FA enable …').
+			const detail = args
+				.filter((a) => !(a instanceof Error))
+				.map(String)
+				.join(' ')
+				.trim();
+			captureHandled(err, { tags: { scope }, extra: detail ? { detail } : undefined });
 		}
 	};
 }

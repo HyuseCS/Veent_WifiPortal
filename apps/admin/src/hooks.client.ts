@@ -14,7 +14,7 @@ if (dsn) {
 		...sentryOptions({
 			dsn,
 			app: 'admin',
-			environment: dev ? 'development' : 'production',
+			environment: env.PUBLIC_SENTRY_ENVIRONMENT ?? (dev ? 'development' : 'production'),
 			tracesSampleRate: dev ? 1.0 : 0.2
 		}),
 		integrations: [Sentry.browserTracingIntegration()]

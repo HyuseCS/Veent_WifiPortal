@@ -28,6 +28,8 @@ describe('scrubEvent', () => {
 	it('strips request cookies, auth headers, body, and user IP', () => {
 		const e = scrubEvent({
 			request: {
+				url: 'https://admin/users?email=juan@example.com',
+				query_string: 'email=juan@example.com',
 				cookies: { session: 'abc' },
 				headers: { Cookie: 'x', Authorization: 'Bearer y', 'user-agent': 'ua' },
 				data: { email: 'a@b.com' }
@@ -39,6 +41,9 @@ describe('scrubEvent', () => {
 		expect(e.request?.headers?.Authorization).toBeUndefined();
 		expect(e.request?.headers?.['user-agent']).toBe('ua'); // non-sensitive header kept
 		expect(e.request?.data).toBeUndefined();
+		// PII surviving in the URL / query-string is masked, not shipped verbatim.
+		expect(e.request?.url).not.toContain('juan@example.com');
+		expect((e.request as { query_string?: string })?.query_string).not.toContain('juan@example.com');
 		expect(e.user?.id).toBe('u1'); // id kept — the useful signal
 		expect(e.user?.ip_address).toBeUndefined();
 		expect(e.user?.email).toBeUndefined();
