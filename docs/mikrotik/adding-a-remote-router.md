@@ -12,7 +12,7 @@ decision**, then per-router config.
 
 > **The hosting constraint (the thing that decides this):** the portal can only reach a
 > router it has a **network path to**. Today the app is hosted **locally** (on the LAN, e.g.
-> `10.0.0.147`), so it can only talk to routers on that LAN. A router at a far site is on a
+> `10.210.0.9` on `10.210.0.0/18`), so it can only talk to routers on that LAN. A router at a far site is on a
 > *different* network — a locally-hosted portal simply can't see it. There are only two ways
 > around that:
 >

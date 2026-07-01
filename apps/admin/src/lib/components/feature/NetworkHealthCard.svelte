@@ -3,9 +3,12 @@
 	import MapPin from 'lucide-svelte/icons/map-pin';
 	import Pencil from 'lucide-svelte/icons/pencil';
 	import Trash2 from 'lucide-svelte/icons/trash-2';
+	import Gauge from 'lucide-svelte/icons/gauge';
+	import { onDestroy } from 'svelte';
 	import { enhance } from '$app/forms';
 	import type { NetworkAp } from '$lib/types';
 	import { StatusBadge } from '$lib/components/ui';
+	import { editLock } from '$lib/edit-lock.svelte';
 
 	// `selected` rings the card and mirrors the coverage-map focus; clicking the card
 	// (or its onfocus) selects this AP on the page-level map. Location editing happens on
@@ -14,14 +17,42 @@
 		ap,
 		selected = false,
 		canDelete = false,
+		canConfigure = false,
 		onfocus
 	}: {
 		ap: NetworkAp;
 		selected?: boolean;
 		/** Owner-only: show the delete control (the server re-checks owner regardless). */
 		canDelete?: boolean;
+		/** Owner-only: show the router config (interface binding + bandwidth caps) editor. */
+		canConfigure?: boolean;
 		onfocus?: (id: string) => void;
 	} = $props();
+
+	// Kbps (stored) → Mbps (shown/edited). Blank when uncapped so the field reads "no limit".
+	const kbpsToMbps = (kbps: number | null): string => (kbps == null ? '' : String(kbps / 1000));
+
+	// Save state for the router-config form, kept local so each card shows its own feedback
+	// without threading page-level `form` data and matching ids.
+	let savingConfig = $state(false);
+	let configFeedback = $state<{ tone: 'ok' | 'error'; msg: string } | null>(null);
+
+	// Hold the shared edit-lock while the config panel is open, so the page drops scroll-snap
+	// and pauses live data swaps — otherwise a snap re-align or SSE frame yanks/resets the edit.
+	let releaseLock: (() => void) | null = null;
+	function onConfigToggle(event: Event) {
+		const open = (event.currentTarget as HTMLDetailsElement).open;
+		if (open) releaseLock ??= editLock.acquire();
+		else {
+			releaseLock?.();
+			releaseLock = null;
+		}
+	}
+	// Release if the card unmounts while still open (filter change / live removal).
+	onDestroy(() => {
+		releaseLock?.();
+		releaseLock = null;
+	});
 
 	// tone → token classes for the status icon tile + accents.
 	const toneIcon: Record<string, string> = {
@@ -167,4 +198,104 @@
 			</a>
 		</div>
 	</div>
+
+	{#if canConfigure}
+		<!-- Owner-only router config: interface binding + aggregate bandwidth caps. Collapsed by
+		     default to keep the card compact. All interactive bits stopPropagation so editing
+		     doesn't trigger the card's select-on-click. The server re-checks owner regardless. -->
+		<details class="border-t border-border pt-3" ontoggle={onConfigToggle}>
+			<summary
+				onclick={(e) => e.stopPropagation()}
+				class="flex cursor-pointer list-none items-center gap-1.5 text-xs font-semibold text-muted hover:text-ink"
+			>
+				<Gauge class="h-3.5 w-3.5" aria-hidden="true" />
+				Router &amp; bandwidth
+			</summary>
+			<!-- The interactive controls below (inputs, save button, summary) each stopPropagation
+			     so editing doesn't trigger the card's select-on-click; a stray click on form
+			     padding harmlessly just selects the card. -->
+			<form
+				method="post"
+				action="?/setApConfig"
+				use:enhance={() => {
+					savingConfig = true;
+					return async ({ result, update }) => {
+						await update();
+						savingConfig = false;
+						if (result.type === 'success') {
+							const w = (result.data as { warning?: string } | undefined)?.warning;
+							configFeedback = w ? { tone: 'error', msg: w } : { tone: 'ok', msg: 'Saved.' };
+						} else if (result.type === 'failure') {
+							const msg = (result.data as { error?: string } | undefined)?.error;
+							configFeedback = { tone: 'error', msg: msg ?? 'Could not save.' };
+						}
+						setTimeout(() => (configFeedback = null), 5000);
+					};
+				}}
+				class="mt-3 flex flex-col gap-2.5"
+			>
+				<input type="hidden" name="id" value={ap.id} />
+				<label class="flex flex-col gap-1 text-[11px] font-medium text-muted">
+					Router interface
+					<input
+						name="interfaceName"
+						value={ap.interfaceName ?? ''}
+						placeholder="e.g. vlan70 — blank uses the AP name"
+						onclick={(e) => e.stopPropagation()}
+						class="min-h-10 w-full rounded-lg border border-border bg-bg px-2.5 py-2 font-mono text-xs text-ink hover:border-brand/40 focus:border-brand focus:ring-2 focus:ring-brand/20 focus:outline-none"
+					/>
+				</label>
+				<div class="flex gap-2">
+					<label class="flex flex-1 flex-col gap-1 text-[11px] font-medium text-muted">
+						Max down (Mbps)
+						<input
+							name="maxDownMbps"
+							type="number"
+							min="0"
+							step="0.1"
+							inputmode="decimal"
+							value={kbpsToMbps(ap.maxDownKbps)}
+							placeholder="No limit"
+							onclick={(e) => e.stopPropagation()}
+							class="min-h-10 w-full rounded-lg border border-border bg-bg px-2.5 py-2 font-mono text-xs text-ink hover:border-brand/40 focus:border-brand focus:ring-2 focus:ring-brand/20 focus:outline-none"
+						/>
+					</label>
+					<label class="flex flex-1 flex-col gap-1 text-[11px] font-medium text-muted">
+						Max up (Mbps)
+						<input
+							name="maxUpMbps"
+							type="number"
+							min="0"
+							step="0.1"
+							inputmode="decimal"
+							value={kbpsToMbps(ap.maxUpKbps)}
+							placeholder="No limit"
+							onclick={(e) => e.stopPropagation()}
+							class="min-h-10 w-full rounded-lg border border-border bg-bg px-2.5 py-2 font-mono text-xs text-ink hover:border-brand/40 focus:border-brand focus:ring-2 focus:ring-brand/20 focus:outline-none"
+						/>
+					</label>
+				</div>
+				<div class="flex items-center justify-between gap-2">
+					{#if configFeedback}
+						<span
+							role="status"
+							class="text-[11px] font-medium {configFeedback.tone === 'ok'
+								? 'text-online'
+								: 'text-blocked'}">{configFeedback.msg}</span
+						>
+					{:else}
+						<span class="text-[11px] text-muted">A shared cap across all guests on this AP.</span>
+					{/if}
+					<button
+						type="submit"
+						disabled={savingConfig}
+						onclick={(e) => e.stopPropagation()}
+						class="min-h-10 shrink-0 rounded-lg bg-brand px-3.5 py-2 text-xs font-semibold text-white transition-colors duration-150 hover:bg-brand-hover disabled:opacity-50"
+					>
+						{savingConfig ? 'Saving…' : 'Save'}
+					</button>
+				</div>
+			</form>
+		</details>
+	{/if}
 </div>

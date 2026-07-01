@@ -5,6 +5,7 @@
 	import { FinanceHeaderControls, NetworkHeaderControls } from '$lib/components/feature';
 	import { nav } from '$lib/nav';
 	import { mobileNav } from '$lib/uiState.svelte';
+	import { editLock } from '$lib/edit-lock.svelte';
 	import type { LayoutData } from './$types';
 
 	let { children, data }: { children: Snippet; data: LayoutData } = $props();
@@ -51,7 +52,7 @@
 		</Topbar>
 		<main
 			class="flex-1 overflow-y-auto bg-canvas p-4 sm:p-6 {onNetworks
-				? 'md:snap-y md:snap-proximity [scrollbar-width:none] [&::-webkit-scrollbar]:hidden'
+				? `[scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${editLock.active ? '' : 'md:snap-y md:snap-proximity'}`
 				: ''}"
 		>
 			{@render children()}

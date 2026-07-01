@@ -11,6 +11,14 @@
 > rewritten section at the bottom. The **only remaining blocker is Problem #1 (router API), which
 > is purely router/ops** — no application code is outstanding.
 
+> **UPDATE (2026-06-30, network re-IP):** the hotspot network was moved off `10.0.0.0/24` to
+> **`10.210.0.0/18`** — gateway/router API now `10.210.0.1`, portal/app host now `10.210.0.9`
+> (was the app server `10.0.0.147` / dev-host `10.0.0.196`). The dated snapshots and captured
+> log output below still show the **old** addresses on purpose (that's what was observed then);
+> only the forward-looking "Operational steps remaining" list is kept current. After the move,
+> restart the hotspot so its dynamic rules regenerate on the new subnet, and prune the stale
+> walled-garden IP entries (see `docs/mikrotik/walled-garden.md`).
+
 ## Environment (the fact that reframed everything)
 
 - **Router:** MikroTik **CCR1036-8G-2S+**, **RouterOS 6.49.18 (stable)**.
@@ -18,9 +26,9 @@
   the **binary API** (`node-routeros`, port 8728 plain / 8729 api-ssl) — the same transport
   `grant`/`revoke`/health already use.
 - **Hotspot:** server on interface `"vlan70 hotspot"`, profile `hsprof1`
-  (`login-by=cookie,http-chap`, `http-cookie-lifetime=3d`, gateway `10.0.0.1`), DHCP `dhcp1`
-  serving pool `hs-pool-12` (`10.0.0.10–10.0.0.254`). App server reaches the router at
-  `MIKROTIK_HOST=10.0.0.1`.
+  (`login-by=cookie,http-chap`, `http-cookie-lifetime=3d`, gateway `10.210.0.1`), DHCP `dhcp1`
+  serving the `10.210.0.0/18` pool. App server reaches the router at
+  `MIKROTIK_HOST=10.210.0.1`.
 
 ---
 
@@ -32,7 +40,7 @@
 **completes** (raw `tls.connect` ~118ms), but the router **never answered the API login over TLS** —
 reproduced even with a hand-rolled RouterOS login on a raw TLS socket, so it was **not** node-routeros
 and **not** the app. The `api-ssl` service was bound to cert **`api-cert-radius`**, which carries
-`key-usage=key-cert-sign` (a CA cert → openssl: *"unsuitable certificate purpose"*); RouterOS completed
+`key-usage=key-cert-sign` (a CA cert → openssl: _"unsuitable certificate purpose"_); RouterOS completed
 TLS but wouldn't serve the API over it. A proper leaf cert **`api-leaf`** (`tls-server`, no
 `key-cert-sign`) already existed, unused.
 
@@ -67,15 +75,16 @@ Original failure for reference — buying a tier failed to provision internet:
   overhead. Set `MIKROTIK_TLS="false"`, `MIKROTIK_PORT="8728"`, `/ip service set api disabled=no`,
   **restart the app**.
 - **Reported still failing after that switch** — unresolved. Need to confirm whether the error is
-  *still* `TLSSocket`/8729 (env didn't take / app not restarted) or now a plain socket refused on
+  _still_ `TLSSocket`/8729 (env didn't take / app not restarted) or now a plain socket refused on
   8728 (api service disabled or `address=` allowlist excludes the app server).
 
 **Diagnostics still needed:**
+
 ```
 # on the router:
 /ip service print                 # is `api` enabled (no X)? port 8728? what address= filter?
 # on the app server:
-nc -zv 10.0.0.1 8728              # open vs refused
+nc -zv 10.210.0.1 8728            # open vs refused
 ```
 
 ### 2. The device does not show in `/ip hotspot active` — **CODE NOW IN TREE** (blocked only by #1)
@@ -105,11 +114,13 @@ delay — "Issue 2").
 At one point a brand-new device got internet with no sign-in prompt. Root cause: **no hotspot
 server existed on `vlan70`** (`/ip hotspot print` was empty), so traffic routed straight out.
 Fixed by recreating it:
+
 ```
 /ip hotspot add name=hotspot1 interface="vlan70 hotspot" address-pool=hs-pool-12 profile=hsprof1
 /ip hotspot enable hotspot1
 ```
-Watch for the `I` (invalid) flag → means `10.0.0.1/24` isn't on the interface.
+
+Watch for the `I` (invalid) flag → means `10.210.0.1/18` isn't on the interface.
 
 ### 4. "Device not detected" on the dashboard after a Maya payment
 
@@ -119,9 +130,9 @@ reconnecting through the portal. Two compounding causes, both **known/expected**
 - **No portal cookie** after the Maya hop — the CNA (captive mini-browser) and the system browser
   have **separate cookie jars**, so the `?mac=` cookie set at captive entry is absent on return.
 - **Router IP→MAC returns null** — the hotspot **NATs client traffic to its own gateway**, so the
-  app sees `10.0.0.1` (the router), not the device's `10.0.0.x`. The warning:
+  app sees `10.210.0.1` (the router), not the device's `10.210.x.x`. The warning:
   ```
-  [mac] unresolved — no portal cookie; router IP→MAC returned null { ip: '10.0.0.1' }
+  [mac] unresolved — no portal cookie; router IP→MAC returned null { ip: '10.210.0.1' }
   ```
 - Recovers automatically via `lastKnownMac` (the account's most recent device session) — **except**
   for an account that **topped up before ever binding a device** (no session to fall back to). That
@@ -164,8 +175,11 @@ service to the proper leaf cert (`api-leaf`); both `.env` files are on `8729`/`T
 router-side. **No application code is outstanding.**
 
 **Operational steps remaining (router/host, not code):**
+
 1. **Restart both apps** so they pick up `8729`/`TLS=true` (and re-test the buy-flow grant).
 2. **Re-upload `docs/mikrotik/login.html` to the router** (the repo copy is correct at
-   `10.0.0.147:5173`; the router's uploaded copy still redirects to `.196`).
-3. *(optional)* Fix the Winbox LAN allowlist (`10.0.0.0/32` → `/24`, see Problem #1 box).
+   `10.210.0.9:5173` after the 2026-06-30 re-IP; re-upload if the router's copy still points at
+   an old `10.0.0.x` host).
+3. *(optional)* Fix the Winbox LAN allowlist to cover the new subnet (`10.210.0.0/18`; the old
+   entry was a no-op `10.0.0.0/32`, see Problem #1 box).
 4. *(optional, enables #2)* set `MIKROTIK_HOTSPOT_USER`/`MIKROTIK_HOTSPOT_PASSWORD` in both `.env`.

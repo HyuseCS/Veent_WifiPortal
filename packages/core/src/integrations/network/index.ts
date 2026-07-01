@@ -9,6 +9,8 @@ export {
 	createMikrotikController,
 	provisionWalledGarden,
 	restrictApiService,
+	formatQueueRate,
+	ipv4NetworkOf,
 	type MikrotikConfig,
 	type WalledGardenInput,
 	type WalledGardenResult,

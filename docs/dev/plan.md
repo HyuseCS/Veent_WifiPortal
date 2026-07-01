@@ -142,7 +142,7 @@ Apps reach Postgres via the compose service name — set `DATABASE_URL=postgres:
 ## Step 4 — Networking & env for the on-site box
 
 - **Router reachability (bridge networking is fine).** Containers reach the MikroTik API
-  (`10.0.0.1:8729`) outbound through the host. With default bridge + NAT, the router sees the
+  (`10.210.0.1:8729`) outbound through the host. With default bridge + NAT, the router sees the
   **Docker host's LAN IP** as source — so the existing api-ssl *Available From* pin to the host IP
   keeps working. **No `network_mode: host` needed.** (Document this so nobody panics about the IP pin.)
 - **`ORIGIN`**: still the LAN/public URL of each app, matched to the published port (customer `:3001`,

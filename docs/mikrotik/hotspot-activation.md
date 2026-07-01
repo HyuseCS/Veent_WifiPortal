@@ -31,10 +31,10 @@ Activation is **opt-in via `MIKROTIK_HOTSPOT_USER`**. When it's set, the control
 `activateSession`; when blank, activation is simply unavailable (grant/revoke still work — the OS
 captive banner just clears a little slower).
 
-| Env | Required? | Meaning |
-|---|---|---|
-| `MIKROTIK_HOTSPOT_USER` | optional | The hotspot user to log the device in as. **Must be a real user on the guest hotspot profile.** Setting it enables activation. |
-| `MIKROTIK_HOTSPOT_PASSWORD` | optional | That user's password. |
+| Env                         | Required? | Meaning                                                                                                                        |
+| --------------------------- | --------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `MIKROTIK_HOTSPOT_USER`     | optional  | The hotspot user to log the device in as. **Must be a real user on the guest hotspot profile.** Setting it enables activation. |
+| `MIKROTIK_HOTSPOT_PASSWORD` | optional  | That user's password.                                                                                                          |
 
 There is **no** `MIKROTIK_REST_URL`. Activation reuses the existing
 `MIKROTIK_HOST`/`MIKROTIK_USER`/`MIKROTIK_PASSWORD`/`MIKROTIK_PORT`/`MIKROTIK_TLS` binary-API
@@ -65,7 +65,7 @@ DB access window + the revoke cron, exactly as for grant/revoke.
    ```
 
    If it shows the `I` (invalid) flag after enabling, the profile's gateway IP isn't on the
-   interface — confirm `/ip address print where interface="vlan70 hotspot"` has `10.0.0.1/24`.
+   interface — confirm `/ip address print where interface="vlan70 hotspot"` has `10.210.0.1/18`.
 
 2. **A shared hotspot user for activation.** Create the user named in `MIKROTIK_HOTSPOT_USER`,
    ideally on a profile that allows concurrent logins so one user can back many devices:
@@ -99,6 +99,7 @@ App-side, a failed activation logs (and is swallowed) in the customer app's term
 ```
 
 Common reasons:
+
 - **`invalid user name or password`** → `MIKROTIK_HOTSPOT_USER`/`PASSWORD` don't match a hotspot
   user on the profile.
 - **no log line at all, device not in active** → activation isn't firing: `MIKROTIK_HOTSPOT_USER`

@@ -1,4 +1,4 @@
-import type { NetworkController, GrantInput } from './types';
+import type { NetworkController, GrantInput, InterfaceLimitInput } from './types';
 
 /**
  * No-op network controller for local dev / until the real integration strategy
@@ -21,6 +21,13 @@ export function createStubNetworkController(
 		},
 		async revoke(macAddress: string): Promise<void> {
 			log(`[network:stub] REVOKE ${macAddress}`);
+		},
+		async applyInterfaceLimit(input: InterfaceLimitInput): Promise<void> {
+			const cap = (k: number | null) => (k == null ? '∞' : `${k}kbps`);
+			log(
+				`[network:stub] LIMIT ${input.apName} (${input.interfaceName}) ` +
+					`↓${cap(input.downKbps)} ↑${cap(input.upKbps)}`
+			);
 		},
 		async resolveMacByIp(ipAddress: string): Promise<string | null> {
 			// No router to query in dev — the admin-grant path no-ops gracefully.
