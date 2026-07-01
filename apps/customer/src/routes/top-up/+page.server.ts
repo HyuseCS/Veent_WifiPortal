@@ -1,7 +1,7 @@
 import { redirect, fail } from '@sveltejs/kit';
 import { and, eq, asc } from 'drizzle-orm';
 import { packages, paymentCheckouts } from '@veent/db';
-import { getAccount, getLatestLedgerId } from '@veent/core';
+import { getAccount, getLatestLedgerId, captureHandled } from '@veent/core';
 import { db } from '$lib/server/db';
 import { payments } from '$lib/server/payments';
 import { resolveCheckoutNetworkId, resolveMacForUser } from '$lib/server/network-location';
@@ -96,9 +96,13 @@ export const actions: Actions = {
 				});
 			} catch (e) {
 				console.warn('[topup] failed to record pending checkout:', (e as Error).message);
+				// The pending row is the reconcile safety net; losing it means a missed webhook
+				// can't self-heal. Capture (grouped) but continue — the gateway already accepted.
+				captureHandled(e, { level: 'warning', tags: { area: 'payment', scope: 'pending-write' } });
 			}
 		} catch (e) {
 			// Gateway call failed (network, bad keys, Maya 4xx/5xx) — surface it.
+			captureHandled(e, { level: 'error', tags: { area: 'payment', scope: 'createCheckout' } });
 			return fail(503, { error: `Checkout unavailable: ${(e as Error).message}` });
 		}
 		// Outside the try: redirect() throws, and we must not catch that throw.

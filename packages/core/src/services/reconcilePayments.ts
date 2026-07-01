@@ -3,6 +3,7 @@ import { type DB, paymentCheckouts, paymentTransactions, packages } from '@veent
 import { LEDGER_TYPE } from '../config';
 import type { PaymentEvent, PaymentProvider } from '../integrations/payments';
 import { addCreditsTx } from './credits';
+import { captureHandled } from '../observability';
 
 /** Normalized PaymentEvent.status → the raw gateway status we persist for Finance. */
 const STATUS_DB: Record<string, string> = {
@@ -276,8 +277,10 @@ export async function reconcilePendingPayments(
 			} else if (evt.status === 'expired') {
 				await markUnpaid(db, c.id, 'expired');
 			}
-		} catch {
-			// transient (gateway/network) — leave pending, retry next pass
+		} catch (err) {
+			// transient (gateway/network) — leave pending, retry next pass. Capture so a Maya outage
+			// blocking reconcile is visible (grouped into one Issue across the pending set).
+			captureHandled(err, { level: 'error', tags: { area: 'reconcile', scope: 'cron' } });
 		}
 	}
 
@@ -349,8 +352,10 @@ export async function reconcileCheckout(
 		}
 		if (evt && (evt.status === 'failed' || evt.status === 'cancelled')) await markUnpaid(db, claimed.id, 'failed');
 		else if (evt?.status === 'expired') await markUnpaid(db, claimed.id, 'expired');
-	} catch {
-		// transient — the cron/webhook will still catch it
+	} catch (err) {
+		// transient — the cron/webhook will still catch it. Capture so a persistent Maya-verify
+		// failure on the return path is visible (grouped into one Issue).
+		captureHandled(err, { level: 'error', tags: { area: 'reconcile', scope: 'on-return' } });
 	}
 	return { credited: false };
 }

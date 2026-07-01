@@ -8,6 +8,7 @@ import { mailer } from '$lib/server/email';
 import { checkAdminEmailLimit } from '$lib/server/emailRateLimit';
 import { wipeCodeEmail } from '$lib/server/emails/wipe-code';
 import { issueWipeCode, consumeWipeCode } from '$lib/server/wipe-verification';
+import { logger } from '$lib/server/logger';
 import {
 	listNetworkHealth,
 	setNetworkInterface,
@@ -16,6 +17,8 @@ import {
 	deleteNetworkPlace
 } from '$lib/server/queries';
 import type { Actions, PageServerLoad } from './$types';
+
+const log = logger('networks');
 
 /** Step-up key namespace: keeps the network-wipe code from clobbering the customer-wipe
  * code for the same owner (both share the in-memory wipe-verification store, keyed by id). */
@@ -51,7 +54,8 @@ export const load: PageServerLoad = async (event) => {
 		try {
 			await refreshNetworkHealth(db, network);
 		} catch (err) {
-			console.error('[admin] network health refresh failed:', err);
+			// Router/controller down → capture (grouped) and fall back to last-known rows.
+			log.error('network health refresh failed:', err);
 		}
 		return listNetworkHealth(db);
 	})();
@@ -167,7 +171,7 @@ export const actions: Actions = {
 		try {
 			await mailer.send({ to: owner.email, subject, html, text });
 		} catch (err) {
-			console.warn('[email] network wipe code send failed:', (err as Error)?.message);
+			log.error('network wipe code send failed:', err);
 			return fail(502, {
 				action: 'requestWipeCode',
 				error: "Couldn't send the verification code. Please try again."

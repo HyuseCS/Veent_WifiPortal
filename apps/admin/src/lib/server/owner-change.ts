@@ -198,7 +198,7 @@ export async function evaluate(requestId: string): Promise<boolean> {
 		try {
 			await db.delete(adminSession).where(eq(adminSession.userId, req.targetUserId));
 		} catch (err) {
-			logger('owner-change').warn('session revoke after demote failed:', (err as Error)?.message);
+			logger('owner-change').error('session revoke after demote failed:', err);
 		}
 	}
 	return did;

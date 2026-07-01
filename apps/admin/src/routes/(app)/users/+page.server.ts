@@ -16,7 +16,10 @@ import { checkAdminEmailLimit } from '$lib/server/emailRateLimit';
 import { wipeCodeEmail } from '$lib/server/emails/wipe-code';
 import { issueWipeCode, consumeWipeCode } from '$lib/server/wipe-verification';
 import { listUsers } from '$lib/server/queries';
+import { logger } from '$lib/server/logger';
 import type { Actions, PageServerLoad } from './$types';
+
+const log = logger('users');
 
 /** A real device MAC (six colon-separated hex octets). */
 const MAC_RE = /^[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}$/;
@@ -81,7 +84,7 @@ export const actions: Actions = {
 				durationMinutes: COMP_MINUTES
 			});
 		} catch (err) {
-			console.error('[admin] allowWifi grant failed:', err);
+			log.error('allowWifi grant failed:', err);
 			return fail(502, { error: 'Network controller rejected the grant.' });
 		}
 		return { ok: true, action: 'allowWifi', minutes: COMP_MINUTES };
@@ -129,7 +132,7 @@ export const actions: Actions = {
 			await mailer.send({ to: owner.email, subject, html, text });
 		} catch (err) {
 			// Observability: email-delivery failure signal (no address/code logged).
-			console.warn('[email] wipe code send failed:', (err as Error)?.message);
+			log.error('customer wipe code send failed:', err);
 			return fail(502, {
 				action: 'requestWipeCode',
 				error: "Couldn't send the verification code. Please try again."
