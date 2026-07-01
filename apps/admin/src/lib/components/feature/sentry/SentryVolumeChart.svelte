@@ -17,7 +17,7 @@
 		n >= 1000 ? `${Number((n / 1000).toFixed(1))}k` : String(Math.round(n));
 </script>
 
-<Card class="flex min-h-65 flex-col">
+<Card class="flex min-h-65 flex-1 flex-col md:flex-none">
 	<SectionHeading title="Error volume (14 days)" class="mb-4">
 		{#snippet aside()}
 			<span class="font-mono text-sm text-muted">{total.toLocaleString('en-US')}</span>
