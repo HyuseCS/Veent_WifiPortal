@@ -41,7 +41,7 @@
 	// Networks page opts into vertical scroll-snap (two full-screen sections). Scoped here
 	// so the snap + hidden scrollbar apply only on that route, not the whole admin.
 	const onNetworks = $derived(page.url.pathname.startsWith('/networks'));
-	const onSentry = $derived(page.url.pathname.startsWith('/sentry'));
+	const onSentryIssues = $derived(page.url.pathname === '/sentry/issues');
 </script>
 
 <div class="flex h-dvh overflow-hidden bg-bg">
@@ -54,11 +54,13 @@
 			{#snippet actions()}
 				{#if onFinance}<FinanceHeaderControls />{/if}
 			{#if onNetworks}<NetworkHeaderControls />{/if}
-			{#if onSentry}<SentryHeaderControls />{/if}
+			{#if onSentryIssues}<SentryHeaderControls />{/if}
 			{/snippet}
 		</Topbar>
 		<main
-			class="flex-1 overflow-y-auto bg-canvas p-4 sm:p-6 {onNetworks
+			class="flex-1 overflow-y-auto bg-canvas {onSentryIssues
+				? ''
+				: 'p-4 sm:p-6'} {onNetworks
 				? `[scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${editLock.active ? '' : 'md:snap-y md:snap-proximity'}`
 				: ''}"
 		>

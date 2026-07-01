@@ -23,8 +23,11 @@
 	/>
 {:else}
 	<div class="flex flex-col gap-6">
-		<SentryKpis kpis={data.kpis} />
+		<SentryKpis kpis={data.kpis} dashboardUrl={data.dashboardUrl} />
 		<SentryVolumeChart points={data.volume} degraded={data.degraded.volume} />
-		<SentryIssuesTable issues={data.issues} degraded={data.degraded.issues} />
+		<!-- Table is inline on desktop; on mobile it's its own page reached via the "Open issues" KPI. -->
+		<div class="hidden md:block">
+			<SentryIssuesTable issues={data.issues} degraded={data.degraded.issues} />
+		</div>
 	</div>
 {/if}

@@ -12,11 +12,18 @@
 	import { EmptyState, IconButton, StatusBadge, Table } from '$lib/components/ui';
 	import type { StatusTone } from '$lib/types';
 	import type { SentryIssue } from '$lib/server/sentry/types';
+	import TableSortControl from '../TableSortControl.svelte';
 	import SentryIssueDialog from './SentryIssueDialog.svelte';
 
 	// Issues list. Row actions post to the page's ?/resolve and ?/ignore form actions (the route
 	// re-checks active-staff auth and rate-limits); this component is presentation only.
-	let { issues, degraded = false }: { issues: SentryIssue[]; degraded?: boolean } = $props();
+	// `fill`: grow to fill a full-height parent (the dedicated /sentry/issues page) instead of the
+	// capped inline height used on the dashboard.
+	let {
+		issues,
+		degraded = false,
+		fill = false
+	}: { issues: SentryIssue[]; degraded?: boolean; fill?: boolean } = $props();
 
 	type SortKey = 'title' | 'level' | 'count' | 'userCount' | 'lastSeen';
 	const columns: { label: string; key?: SortKey; srOnly?: boolean }[] = [
@@ -107,13 +114,24 @@
 	}
 </script>
 
-<Table cards class="md:max-h-[75vh]">
+<Table cards class={fill ? 'min-h-0 flex-1 rounded-none border-0 shadow-none' : 'md:max-h-[75vh]'}>
 	{#snippet toolbar()}
 		<div class="flex items-center gap-3 px-4 py-3">
 			<h2 class="text-base font-semibold text-ink">Unresolved issues</h2>
 			{#if sortKey}
-				<span class="ml-auto text-xs text-muted">click a column to re-sort</span>
+				<span class="ml-auto hidden text-xs text-muted md:inline">click a column to re-sort</span>
 			{/if}
+			<!-- Mobile sort: the sortable <thead> is hidden in card mode, so expose the same keys here. -->
+			<div class="ml-auto md:hidden">
+				<TableSortControl
+					id="sentry-issues-sort"
+					label="Sort issues by"
+					headers={columns}
+					{sortKey}
+					{sortDir}
+					onToggle={(k) => toggleSort(k as SortKey)}
+				/>
+			</div>
 		</div>
 	{/snippet}
 
