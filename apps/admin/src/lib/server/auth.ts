@@ -9,6 +9,7 @@ import { activateStaff } from '@veent/core';
 import { db } from '$lib/server/db';
 import { mailer } from '$lib/server/email';
 import { activationEmail } from '$lib/server/emails/activation';
+import { resetPasswordEmail } from '$lib/server/emails/reset-password';
 
 /**
  * Records a failed activation-email send so the invite action can roll back.
@@ -41,13 +42,39 @@ export const auth = betterAuth({
 		// /activate page. The token URL is emailed via the Resend mailer (stub-logs
 		// subject + recipient locally when RESEND_API_KEY is unset).
 		resetPasswordTokenExpiresIn: 60 * 60 * 24, // 24h, generous for an invite
-		sendResetPassword: async ({ user, token }) => {
-			const url = `${env.ORIGIN}/activate?token=${token}`;
-			const { subject, html, text } = activationEmail({ url, name: user.name });
-			// No token/URL logging in this path. The stub mailer logs subject + recipient
-			// only (dev). On failure we record it (see inviteSendFailures) rather than
-			// throw, because better-auth swallows a thrown callback error — the invite
-			// action reads the record and rolls the half-created account back.
+		// ONE better-auth reset-token callback serves two flows that both ride the
+		// password-reset machinery: the owner-only INVITE (redirectTo '/activate') and
+		// the self-serve FORGOT-PASSWORD (redirectTo '/reset-password'). We branch on the
+		// `callbackURL` query param specifically — NOT a substring of `url`, because
+		// better-auth's own endpoint path contains "reset-password" for BOTH flows.
+		sendResetPassword: async ({ user, url, token }) => {
+			let isReset = false;
+			try {
+				isReset = (new URL(url).searchParams.get('callbackURL') ?? '').includes('reset-password');
+			} catch {
+				// Unparseable url → fall through to the invite/activation path (the original behaviour).
+			}
+
+			if (isReset) {
+				// Self-serve forgot-password for an existing member. The action always returns a
+				// generic response (no account enumeration), so a send failure is only logged —
+				// surfacing it would leak whether the address exists. A reset never bypasses TOTP.
+				const link = `${env.ORIGIN}/reset-password?token=${token}`;
+				const { subject, html, text } = resetPasswordEmail({ url: link, name: user.name });
+				try {
+					await mailer.send({ to: user.email, subject, html, text });
+				} catch (err) {
+					console.warn('[email] password-reset send failed:', (err as Error)?.message);
+				}
+				return;
+			}
+
+			// Invite/activation path. No token/URL logging. The stub mailer logs subject +
+			// recipient only (dev). On failure we record it (see inviteSendFailures) rather than
+			// throw, because better-auth swallows a thrown callback error — the invite action
+			// reads the record and rolls the half-created account back.
+			const activateUrl = `${env.ORIGIN}/activate?token=${token}`;
+			const { subject, html, text } = activationEmail({ url: activateUrl, name: user.name });
 			try {
 				await mailer.send({ to: user.email, subject, html, text });
 				inviteSendFailures.delete(user.email);
