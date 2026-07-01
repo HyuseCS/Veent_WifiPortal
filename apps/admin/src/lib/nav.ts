@@ -32,5 +32,5 @@ export const nav: NavItem[] = [
 		ownerOnly: true
 	},
 	{ href: '/staff', label: 'Staff', icon: UserCog as unknown as Component, ownerOnly: true },
-	{ href: '/sentry', label: 'Sentry', icon: Activity as unknown as Component, ownerOnly: true }
+	{ href: '/sentry', label: 'Sentry', icon: Activity as unknown as Component }
 ];

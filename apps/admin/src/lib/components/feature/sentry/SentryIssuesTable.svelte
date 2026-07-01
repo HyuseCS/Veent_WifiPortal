@@ -10,8 +10,8 @@
 	import type { StatusTone } from '$lib/types';
 	import type { SentryIssue } from '$lib/server/sentry/types';
 
-	// Owner-only issues list. Row actions post to the page's ?/resolve and ?/ignore form actions
-	// (the route + facade re-assert owner and rate-limit); this component is presentation only.
+	// Issues list. Row actions post to the page's ?/resolve and ?/ignore form actions (the route
+	// re-checks active-staff auth and rate-limits); this component is presentation only.
 	let { issues, degraded = false }: { issues: SentryIssue[]; degraded?: boolean } = $props();
 
 	const columns = [

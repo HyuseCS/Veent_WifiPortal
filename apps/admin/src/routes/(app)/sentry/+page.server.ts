@@ -1,5 +1,4 @@
 import { fail, type RequestEvent } from '@sveltejs/kit';
-import { requireOwner } from '$lib/server/auth-guard';
 import { logger } from '$lib/server/logger';
 import { clientIp, rateLimit } from '$lib/server/rateLimit';
 import { getDashboard, ignoreIssue, isSentryConfigured, resolveIssue } from '$lib/server/sentry';
@@ -13,11 +12,12 @@ export const load: PageServerLoad = async () => {
 	return getDashboard();
 };
 
-/** Shared owner + rate-limit + id-parse guard for both mutations; runs the given Sentry call. */
+/** Shared staff-auth + rate-limit + id-parse guard for both mutations; runs the given Sentry call. */
 async function mutate(event: RequestEvent, action: string, run: (id: string) => Promise<void>) {
-	// Re-assert owner from the DB (loads don't run on POST) — a just-demoted owner is blocked here.
-	const denied = await requireOwner(event.locals.user?.id, 'Only the owner can manage Sentry issues.');
-	if (denied) return denied;
+	// Any signed-in active staff member may triage issues. hooks.server.ts only populates
+	// locals.user for ACTIVE staff (loads don't run on POST, so we re-check here), so its presence
+	// IS the authorization — a disabled or unauthenticated request has no user and is refused.
+	if (!event.locals.user?.id) return fail(401, { action, error: 'Not signed in.' });
 
 	const rl = await rateLimit('admin_sentry_mutate', clientIp(event), 30, 15 * 60 * 1000);
 	if (!rl.allowed) return fail(429, { action, error: 'Too many attempts. Please wait a few minutes.' });
