@@ -4,6 +4,9 @@ import { auth } from '$lib/server/auth';
 import { APIError } from 'better-auth/api';
 import { rateLimit, clientIp } from '$lib/server/rateLimit';
 import { finishStaffSignIn } from '$lib/server/postLogin';
+import { logger } from '$lib/server/logger';
+
+const log = logger('login');
 
 export const load: PageServerLoad = (event) => {
 	if (event.locals.user) {
@@ -31,6 +34,7 @@ export const actions: Actions = {
 			if (error instanceof APIError) {
 				return fail(400, { message: error.message || 'Sign in failed' });
 			}
+			log.error('sign-in unexpected error:', error);
 			return fail(500, { message: 'Unexpected error' });
 		}
 

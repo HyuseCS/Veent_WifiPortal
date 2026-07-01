@@ -18,8 +18,11 @@ import { network } from '$lib/server/network';
 import { buildAccountView } from '$lib/server/account-view';
 import { resolveMacForUser } from '$lib/server/network-location';
 import { maskPhone } from '$lib/server/otp';
+import { logger } from '$lib/server/logger';
 import type { Actions, PageServerLoad } from './$types';
 import { auth } from '$lib/server/auth';
+
+const log = logger('dashboard');
 
 /** Re-grant a known device on the router at most this often during dashboard loads. */
 const REBIND_REFRESH_MS = 60 * 1000;
@@ -168,7 +171,7 @@ export const actions: Actions = {
 				durationMinutes: pkg.durationMinutes ?? 0
 			});
 		} catch (err) {
-			console.error('[customer] buyTier grant failed (rolled back, not charged):', err);
+			log.error('buyTier grant failed (rolled back, not charged):', err);
 			return fail(502, {
 				error: 'The network grant failed — your credits were not charged. Please try again.'
 			});

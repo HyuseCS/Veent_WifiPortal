@@ -1,7 +1,10 @@
 import { json, error } from '@sveltejs/kit';
 import { network } from '$lib/server/network';
 import { rateLimit } from '$lib/server/rateLimit';
+import { logger } from '$lib/server/logger';
 import type { RequestHandler } from './$types';
+
+const log = logger('router-log');
 
 /**
  * GET /api/router-log — recent entries from the router's system log, newest first.
@@ -27,7 +30,8 @@ export const GET: RequestHandler = async (event) => {
 		const entries = await network.listRouterLog({ limit: 60 });
 		return json({ entries });
 	} catch (err) {
-		console.error('[admin] router log fetch failed:', err);
+		// Router unreachable / api-ssl failure → capture (grouped into one Sentry Issue) and degrade.
+		log.error('router log fetch failed:', err);
 		return json({ entries: [], error: 'Router log unavailable' });
 	}
 };

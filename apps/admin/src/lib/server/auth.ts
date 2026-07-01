@@ -9,6 +9,9 @@ import { activateStaff } from '@veent/core';
 import { db } from '$lib/server/db';
 import { mailer } from '$lib/server/email';
 import { activationEmail } from '$lib/server/emails/activation';
+import { logger } from '$lib/server/logger';
+
+const log = logger('invite-email');
 
 /**
  * Records a failed activation-email send so the invite action can roll back.
@@ -53,7 +56,7 @@ export const auth = betterAuth({
 				inviteSendFailures.delete(user.email);
 			} catch (err) {
 				// Observability: email-delivery failure signal (no address/token logged).
-				console.warn('[email] invite send failed:', (err as Error)?.message);
+				log.error('invite send failed:', err);
 				inviteSendFailures.set(user.email, err);
 			}
 		},

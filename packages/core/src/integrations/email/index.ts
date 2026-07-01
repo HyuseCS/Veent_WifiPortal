@@ -1,6 +1,7 @@
 import type { EmailProvider } from './types';
 import { createResendProvider, type ResendConfig } from './resend';
 import { createStubEmailProvider } from './stub';
+import { traceMethods } from '../../observability';
 
 export * from './types';
 export { createResendProvider, type ResendConfig } from './resend';
@@ -15,7 +16,8 @@ export type EmailConfig = ({ provider: 'resend' } & ResendConfig) | { provider: 
 export function createEmailProvider(config: EmailConfig): EmailProvider {
 	switch (config.provider) {
 		case 'resend':
-			return createResendProvider(config);
+			// traceMethods: `email.resend.send` span captures transactional-email send latency.
+			return traceMethods(createResendProvider(config), 'email.resend', 'email');
 		case 'stub':
 			return createStubEmailProvider();
 		default:
