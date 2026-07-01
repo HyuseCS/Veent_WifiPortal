@@ -3,6 +3,7 @@ import type { Actions, PageServerLoad } from './$types';
 import { auth } from '$lib/server/auth';
 import { normalizePhone } from '$lib/phone';
 import { PENDING_COOKIE, PENDING_MAX_AGE, serializePending } from '$lib/server/otp';
+import { enforceOtpSendLimit, RateLimitError, retryAfterMessage } from '$lib/server/otpRateLimit';
 import { getPortalContext } from '$lib/server/portal';
 import { dev } from '$app/environment';
 
@@ -10,7 +11,9 @@ export const load: PageServerLoad = (event) => {
 	if (event.locals.user) {
 		return redirect(302, '/dashboard');
 	}
-	return {};
+	// An "Open in your browser" handoff link that was already used or has expired bounces here
+	// with ?handoff=expired (see /auth/handoff) — surface a gentle note so the guest just logs in.
+	return { handoffExpired: event.url.searchParams.get('handoff') === 'expired' };
 };
 
 export const actions: Actions = {
@@ -28,11 +31,24 @@ export const actions: Actions = {
 			return fail(400, { phone: phoneRaw, message: 'Enter a valid Philippine mobile number.' });
 		}
 
+		// Throttle sends per phone + device MAC BEFORE hitting the SMS gateway, so a
+		// number can't be spammed and operator credits can't be drained.
+		const mac = getPortalContext(event)?.mac;
+		try {
+			await enforceOtpSendLimit(phone, mac);
+		} catch (error) {
+			if (error instanceof RateLimitError) {
+				return fail(429, { phone: phoneRaw, message: retryAfterMessage(error.retryAfterSec) });
+			}
+			throw error;
+		}
+		// Already charged above — tell the auth sendOTP callback not to charge it again.
+		event.locals.otpLimitEnforced = true;
+
 		await auth.api.sendPhoneNumberOTP({ body: { phoneNumber: phone } });
 
 		// Stash the captive-portal device MAC alongside the pending verification, so
 		// the dashboard can grant access after verify regardless of cookie survival.
-		const mac = getPortalContext(event)?.mac;
 		event.cookies.set(PENDING_COOKIE, serializePending({ phone, intent: 'login', mac }), {
 			path: '/',
 			httpOnly: true,

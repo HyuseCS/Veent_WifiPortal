@@ -12,7 +12,12 @@ function buildConfig(): NetworkConfig {
 			password: env.MIKROTIK_PASSWORD || '',
 			port: env.MIKROTIK_PORT ? Number(env.MIKROTIK_PORT) : undefined,
 			tls: env.MIKROTIK_TLS === 'true',
-			insecureTls: env.MIKROTIK_TLS_INSECURE === 'true'
+			insecureTls: env.MIKROTIK_TLS_INSECURE === 'true',
+			// MIKROTIK_HOTSPOT_USER opts in to proactive hotspot activation: after a grant the
+			// device is logged into the hotspot over the binary API so the OS captive check clears
+			// immediately (Issue 2). Optional — omit it and grant/revoke still work.
+			hotspotLoginUser: env.MIKROTIK_HOTSPOT_USER || undefined,
+			hotspotLoginPassword: env.MIKROTIK_HOTSPOT_PASSWORD || undefined
 		};
 	}
 	return { controller: 'stub' };

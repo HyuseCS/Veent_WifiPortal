@@ -38,56 +38,66 @@ Define tokens in each app's `layout.css`:
 }
 ```
 
-**Admin-only additions** (in `apps/admin/src/routes/layout.css`):
+### Admin theme
+
+The admin dashboard does **not** inherit the customer's teal+coral base — it ships its own `@theme` in `apps/admin/src/routes/layout.css`. Identity: a Parafiber royal-blue accent (hue 262) with a deep-navy sidebar (hue 266) and a sparing gold highlight. `cta` is a deliberate alias of `brand` (one accent, kept as a separate token only so the ~16 files using `bg-cta`/`text-cta` don't need editing).
 
 ```css
 @theme {
-  /* inherits everything above, adds: */
-  --color-sidebar:       oklch(0.10 0.020 195);
-  --color-sidebar-text:  oklch(0.75 0.010 195);
-  --color-sidebar-muted: oklch(0.48 0.008 195);
+  /* Accent — Parafiber royal blue. cta == brand (single accent). */
+  --color-brand:        oklch(0.54 0.22 262);
+  --color-brand-hover:  oklch(0.48 0.22 262);
+  --color-cta:          oklch(0.54 0.22 262);
+  --color-cta-hover:    oklch(0.48 0.22 262);
+
+  /* Highlight — bright Parafiber gold. Sparing (e.g. OWNER badge), never a status. */
+  --color-highlight:    oklch(0.86 0.18 98);
+
+  /* Surfaces — `bg` is the raised card; `canvas` is the recessed page background
+     behind cards (white cards lift off a light-gray gutter); `surface` is the
+     in-card tint (table headers, hover, pills). */
+  --color-bg:           oklch(1 0 0);
+  --color-canvas:       oklch(0.972 0.007 264);
+  --color-surface:      oklch(0.975 0.006 264);
+  --color-border:       oklch(0.91 0.006 264);
+
+  /* Text */
+  --color-ink:          oklch(0.16 0.01 264);
+  --color-muted:        oklch(0.5 0.01 264);
+
+  /* Status — blocked = oxblood danger, the only red, so it never reads as the accent. */
+  --color-online:       oklch(0.52 0.15 150);
+  --color-warning:      oklch(0.62 0.15 75);
+  --color-blocked:      oklch(0.42 0.15 18);
+
+  /* Sidebar — deep saturated Parafiber navy in both modes. */
+  --color-sidebar:       oklch(0.24 0.11 266);
+  --color-sidebar-text:  oklch(0.86 0.05 264);
+  --color-sidebar-muted: oklch(0.67 0.06 264);
 }
 ```
 
-### Theme presets
+### Light / dark mode
 
-The admin dashboard exposes a theme selector that persists to the database and injects a `data-theme` attribute on `<html>`. Each preset overrides only `--color-brand`, `--color-brand-hover`, `--color-cta`, and `--color-cta-hover` — the semantic structure stays constant.
+The admin ships **light and dark modes**, not color presets. A `ModeToggle` in the sidebar (`light` / `dark`) writes `data-theme` on `<html>` and persists to `localStorage` (`radius-admin-theme`); the initial value falls back to `prefers-color-scheme`. `@theme` is the light base; `:root[data-theme='dark']` overrides only what changes — accent and status colors are lifted for AA on dark surfaces while hues stay put, and `canvas` becomes a real dark navy (darker than the sidebar, so the sidebar still frames the content). Because components read the semantic tokens, none of them need `dark:` variants.
 
 ```css
-/* Teal + Coral (default) */
-[data-theme="teal"] {
-  --color-brand:       oklch(0.38 0.130 185);
-  --color-brand-hover: oklch(0.32 0.130 185);
-  --color-cta:         oklch(0.62 0.180 28);
-  --color-cta-hover:   oklch(0.56 0.180 28);
-}
-
-/* Jade + Amber */
-[data-theme="jade"] {
-  --color-brand:       oklch(0.34 0.130 155);
-  --color-brand-hover: oklch(0.28 0.130 155);
-  --color-cta:         oklch(0.72 0.170 72);
-  --color-cta-hover:   oklch(0.65 0.170 72);
-}
-
-/* Cobalt + Lime */
-[data-theme="cobalt"] {
-  --color-brand:       oklch(0.44 0.190 255);
-  --color-brand-hover: oklch(0.37 0.190 255);
-  --color-cta:         oklch(0.78 0.165 135);
-  --color-cta-hover:   oklch(0.72 0.165 135);
-}
-
-/* Near-black + Teal */
-[data-theme="mono"] {
-  --color-brand:       oklch(0.14 0.010 200);
-  --color-brand-hover: oklch(0.10 0.010 200);
-  --color-cta:         oklch(0.55 0.150 182);
-  --color-cta-hover:   oklch(0.48 0.150 182);
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --color-brand:    oklch(0.64 0.2 262);
+  --color-cta:      oklch(0.64 0.2 262);
+  --color-bg:       oklch(0.18 0.055 264);
+  --color-canvas:   oklch(0.14 0.05 264);
+  --color-surface:  oklch(0.23 0.055 264);
+  --color-border:   oklch(0.33 0.045 264);
+  --color-ink:      oklch(0.95 0.005 264);
+  --color-muted:    oklch(0.68 0.01 264);
+  --color-sidebar:  oklch(0.23 0.11 266);
+  /* status + highlight also lifted — see layout.css */
 }
 ```
 
-Text on `--color-brand` and `--color-cta` is always `white` — all four presets are mid-to-dark saturation, never pale fills.
+Text on `--color-brand`/`--color-cta` is always `white` — the accent is mid-to-dark saturation in both modes, never a pale fill.
 
 ---
 
@@ -369,9 +379,9 @@ Logo sits above the card stack, centered, `h-8` max. No nav. No hamburger menu. 
     <nav class="flex-1 space-y-0.5 px-3 py-2">
       <!-- Nav items -->
     </nav>
-    <!-- Theme selector at bottom -->
+    <!-- Light/dark mode toggle at bottom -->
     <div class="border-t border-white/10 p-3">
-      <!-- ThemePicker component -->
+      <!-- ModeToggle component -->
     </div>
   </aside>
 

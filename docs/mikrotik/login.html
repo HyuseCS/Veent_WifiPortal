@@ -6,17 +6,30 @@
   serve time, so the device lands on the portal with its MAC + the originally
   requested URL, which the SvelteKit app captures (see lib/server/portal.ts).
 
-  Set PORTAL_BASE to the portal's LAN address. Update it if the IP changes.
-  The portal host MUST be in the walled garden (IP → Hotspot → Walled Garden IP
-  List) or trapped devices can't reach it.
+  This file is a TEMPLATE. `bun run setup:prod` rewrites the redirect host:port to the
+  prod device's own LAN IP and writes the ready-to-upload copy to deploy/login.html —
+  edit by hand only if you're not using the setup script. The portal host MUST be in the
+  walled garden (IP → Hotspot → Walled Garden IP List) or trapped devices can't reach it.
+
+  *** http is OK on the LAN, https is REQUIRED for a PUBLIC portal ***
+  A LAN-appliance deploy (portal served on a private-IP host, no public exposure) may stay
+  on http://<LAN-IP> — the customer app's validateEnv allows http for RFC1918 / .lan hosts.
+  But the portal mints session cookies over OPEN guest WiFi, and on plain HTTP they're
+  sniffable off the air (sidejacking); the cookie `Secure` flag also keys off the ORIGIN
+  protocol. So if the portal is ever reachable beyond the LAN:
+    - serve it over https on a real domain (valid public cert),
+    - set ORIGIN=https://<portal-domain> (validateEnv hard-fails on a non-https PUBLIC host),
+    - point the redirect below at https://<portal-domain>,
+    - walled-garden the HTTPS portal origin (see docs/mikrotik/walled-garden.md).
+  Rationale + threat model: docs/SECURITY_2b_session-continuity.md (control C1).
 -->
 <html>
 <head>
-	<meta http-equiv="refresh" content="0; url=http://10.0.0.147:5173/?mac=$(mac)&ip=$(ip)&link-login-only=$(link-login-only)&link-orig=$(link-orig)&ssid=$(ssid)" />
+	<meta http-equiv="refresh" content="0; url=http://10.210.0.9:5173/?mac=$(mac)&ip=$(ip)&link-login-only=$(link-login-only)&link-orig=$(link-orig)&ssid=$(ssid)" />
 	<title>Connecting…</title>
 </head>
 <body>
 	<p>Redirecting to the WiFi portal…</p>
-	<p>If nothing happens, <a href="http://10.0.0.147:5173/?mac=$(mac)&link-orig=$(link-orig)">tap here</a>.</p>
+	<p>If nothing happens, <a href="http://10.210.0.9:5173/?mac=$(mac)&link-orig=$(link-orig)">tap here</a>.</p>
 </body>
 </html>

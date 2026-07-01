@@ -1,9 +1,10 @@
 import { redirect, fail } from '@sveltejs/kit';
-import { and, eq } from 'drizzle-orm';
-import { packages } from '@veent/db';
-import { getAccount } from '@veent/core';
+import { and, eq, asc } from 'drizzle-orm';
+import { packages, paymentCheckouts } from '@veent/db';
+import { getAccount, getLatestLedgerId } from '@veent/core';
 import { db } from '$lib/server/db';
 import { payments } from '$lib/server/payments';
+import { resolveCheckoutNetworkId, resolveMacForUser } from '$lib/server/network-location';
 import type { Actions, PageServerLoad } from './$types';
 
 /**
@@ -19,9 +20,17 @@ export const load: PageServerLoad = async (event) => {
 	const bundles = await db
 		.select()
 		.from(packages)
-		.where(and(eq(packages.type, 'bundle'), eq(packages.isActive, true)));
+		.where(and(eq(packages.type, 'bundle'), eq(packages.isActive, true)))
+		.orderBy(asc(packages.fiatCost));
 
-	return { user, balance: account?.balance ?? 0, bundles };
+	// Keep the device MAC on the "Dashboard" link so it survives back into the dashboard even
+	// when the captive/system-browser cookie jar dropped it. resolveMacForUser adds the
+	// last-known-device fallback so this still works behind a NAT'ing hotspot (where IP→MAC
+	// can't see the device) and after the cookie is gone.
+	const mac = await resolveMacForUser(event, user.id);
+	const portalQuery = mac ? `?mac=${encodeURIComponent(mac)}` : '';
+
+	return { user, balance: account?.balance ?? 0, bundles, portalQuery };
 };
 
 export const actions: Actions = {
@@ -37,21 +46,59 @@ export const actions: Actions = {
 		if (!pkg || !pkg.isActive) return fail(404, { error: 'Bundle not found' });
 
 		const origin = event.url.origin;
+		// Thread the device MAC through the gateway round-trip. Maya bounces the buyer to
+		// the system browser (not the captive CNA popup), which has a DIFFERENT cookie jar —
+		// so the `veent_portal` cookie holding the MAC is GONE on return, and the dashboard
+		// can't detect the device ("can't detect device" warning) even on a cancel. Carrying
+		// the MAC in the return URLs lets `capturePortalContext` (hooks) re-stash it in
+		// whichever browser the buyer lands back in, success or cancel. resolveMacForUser adds
+		// the last-known-device fallback so the round-trip carries a MAC even when the cookie is
+		// already gone and IP→MAC can't help (NAT'ing hotspot).
+		const mac = await resolveMacForUser(event, user.id);
+		const macQuery = mac ? `&mac=${encodeURIComponent(mac)}` : '';
+		const cancelMacQuery = mac ? `?mac=${encodeURIComponent(mac)}` : '';
+		// Watermark the ledger now; the processing page polls for a topup row above
+		// this id to know THIS payment's credit landed (gateway txn id is unknown here).
+		const since = await getLatestLedgerId(db, user.id);
+		// Short per-attempt token as the gateway reference (Maya caps requestReferenceNumber
+		// at 36 chars — a 32-char user id leaves no room to also embed ids/a nonce). The
+		// buyer is resolved from the payment_checkouts row we store below, not from the
+		// reference string. Unique per checkout → the claim maps to exactly one row.
+		const referenceId = crypto.randomUUID().replace(/-/g, ''); // 32 hex chars
+		// Attribute this payment to the AP the buyer is on now, while we still have the
+		// captive-portal context / live session — the webhook (server-to-server, no device)
+		// can't, and a failed payment never reaches a grant. Best-effort: null is fine.
+		const networkId = await resolveCheckoutNetworkId(event, user.id);
 		let redirectUrl: string;
 		try {
 			const checkout = await payments.createCheckout({
-				// Webhook splits this back into userId + packageId.
-				referenceId: `${user.id}:${pkg.id}`,
+				referenceId,
 				amountMinor: Math.round((pkg.fiatCost ?? 0) * 100),
 				currency: 'PHP',
 				description: pkg.name,
-				successUrl: `${origin}/top-up/processing`,
-				cancelUrl: `${origin}/top-up`,
+				successUrl: `${origin}/top-up/processing?since=${since}&pkg=${pkg.id}&attempt=${referenceId}${macQuery}`,
+				cancelUrl: `${origin}/top-up${cancelMacQuery}`,
 				buyer: { name: user.name, email: user.email }
 			});
 			redirectUrl = checkout.redirectUrl;
+
+			// Record the pending checkout — the safety net. If the webhook never lands, the
+			// reconcile cron / on-return poll uses this row to ask Maya the truth and credit.
+			// Best-effort: a bookkeeping hiccup must not block a checkout the gateway accepted.
+			try {
+				await db.insert(paymentCheckouts).values({
+					id: checkout.checkoutId,
+					userId: user.id,
+					packageId: pkg.id,
+					referenceId,
+					amount: String(pkg.fiatCost ?? 0),
+					networkId
+				});
+			} catch (e) {
+				console.warn('[topup] failed to record pending checkout:', (e as Error).message);
+			}
 		} catch (e) {
-			// Maya is stubbed — surface a clear message until it's wired.
+			// Gateway call failed (network, bad keys, Maya 4xx/5xx) — surface it.
 			return fail(503, { error: `Checkout unavailable: ${(e as Error).message}` });
 		}
 		// Outside the try: redirect() throws, and we must not catch that throw.

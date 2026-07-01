@@ -1,0 +1,1 @@
+ALTER TABLE "network_health" ADD COLUMN IF NOT EXISTS "range_meters" integer;

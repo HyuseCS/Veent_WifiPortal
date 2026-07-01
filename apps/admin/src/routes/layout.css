@@ -1,43 +1,51 @@
 @import 'tailwindcss';
 
 /*
- * Veent admin design tokens. Every color/type decision references these — see
+ * RADIUS admin design tokens. Every color/type decision references these — see
  * docs/DESIGN_GUIDELINES.md. Tailwind v4 turns each `--color-*` into a utility
  * (`bg-brand`, `text-ink`, `bg-online/15`, …). @theme is the LIGHT base; the
  * `:root[data-theme='dark']` block below overrides the surface/text/status vars,
  * so every utility re-resolves live when `data-theme` flips. Components never
  * need `dark:` variants — they read these semantic tokens.
  *
- * Identity: one red accent (brand/cta) + a constant-black sidebar. Danger uses a
- * distinct oxblood red (--color-blocked) so it never reads as the accent.
+ * Identity: Parafiber royal-blue accent (brand/cta) + a deep-navy sidebar, with
+ * gold (--color-highlight) as a sparing highlight. Danger keeps a distinct oxblood
+ * red (--color-blocked) — now the only red, so it never reads as the accent.
  */
 @theme {
-	/* Accent — single red. cta is an alias of brand (kept so the ~16 files that
-	 * use bg-cta/text-cta don't need editing). */
+	/* Accent — Parafiber royal blue. cta is an alias of brand (kept so the ~16 files
+	 * that use bg-cta/text-cta don't need editing). */
 	/* ponytail: cta == brand; collapse to one token only if a 2nd accent appears. */
-	--color-brand: oklch(0.52 0.21 25);
-	--color-brand-hover: oklch(0.46 0.21 25);
-	--color-cta: oklch(0.52 0.21 25);
-	--color-cta-hover: oklch(0.46 0.21 25);
+	--color-brand: oklch(0.54 0.22 262);
+	--color-brand-hover: oklch(0.48 0.22 262);
+	--color-cta: oklch(0.54 0.22 262);
+	--color-cta-hover: oklch(0.48 0.22 262);
 
-	/* Surfaces — light */
+	/* Highlight — bright Parafiber yellow. Used sparingly (e.g. the OWNER badge), never
+	 * as a status. Distinct hue from --color-warning amber so the two don't blur. */
+	--color-highlight: oklch(0.86 0.18 98);
+
+	/* Surfaces — light. `bg` is the raised card/panel; `canvas` is the recessed page
+	 * background behind cards (so white cards lift off a light-gray gutter); `surface`
+	 * is the in-card tint (table headers, hover, pills). */
 	--color-bg: oklch(1 0 0);
-	--color-surface: oklch(0.975 0.006 25);
-	--color-border: oklch(0.91 0.006 25);
+	--color-canvas: oklch(0.972 0.007 264);
+	--color-surface: oklch(0.975 0.006 264);
+	--color-border: oklch(0.91 0.006 264);
 
 	/* Text — light */
-	--color-ink: oklch(0.16 0.01 25);
-	--color-muted: oklch(0.5 0.01 25);
+	--color-ink: oklch(0.16 0.01 264);
+	--color-muted: oklch(0.5 0.01 264);
 
-	/* Status — semantic. blocked = oxblood danger, distinct from accent red. */
+	/* Status — semantic. blocked = oxblood danger, distinct from the blue accent. */
 	--color-online: oklch(0.52 0.15 150);
 	--color-warning: oklch(0.62 0.15 75);
 	--color-blocked: oklch(0.42 0.15 18);
 
-	/* Admin sidebar — constant black in both modes */
-	--color-sidebar: oklch(0.13 0.006 25);
-	--color-sidebar-text: oklch(0.78 0.008 25);
-	--color-sidebar-muted: oklch(0.5 0.008 25);
+	/* Admin sidebar — deep saturated Parafiber navy (the brand header) in both modes. */
+	--color-sidebar: oklch(0.24 0.11 266);
+	--color-sidebar-text: oklch(0.86 0.05 264);
+	--color-sidebar-muted: oklch(0.67 0.06 264);
 
 	/* Type */
 	--font-sans: system-ui, -apple-system, 'Segoe UI', sans-serif;
@@ -50,30 +58,116 @@
 }
 
 /*
- * Dark mode — overrides only what changes. Accent + status reds are lifted for
- * AA on dark surfaces; hues stay put so the accent/danger distinction holds. The
- * sidebar drops below the content bg so it still separates against dark content.
+ * Dark mode — overrides only what changes. The blue accent, gold highlight, and
+ * status reds are lifted for AA on dark surfaces; hues stay put so the accent /
+ * highlight / danger distinctions hold. The navy sidebar deepens a touch so it
+ * still separates against the dark content bg.
  */
 :root[data-theme='dark'] {
 	color-scheme: dark;
 
-	--color-brand: oklch(0.6 0.21 25);
-	--color-brand-hover: oklch(0.66 0.21 25);
-	--color-cta: oklch(0.6 0.21 25);
-	--color-cta-hover: oklch(0.66 0.21 25);
+	--color-brand: oklch(0.64 0.2 262);
+	--color-brand-hover: oklch(0.7 0.19 262);
+	--color-cta: oklch(0.64 0.2 262);
+	--color-cta-hover: oklch(0.7 0.19 262);
 
-	--color-bg: oklch(0.17 0.006 25);
-	--color-surface: oklch(0.21 0.008 25);
-	--color-border: oklch(0.3 0.008 25);
+	--color-highlight: oklch(0.87 0.18 98);
 
-	--color-ink: oklch(0.95 0.005 25);
-	--color-muted: oklch(0.68 0.01 25);
+	/* Content canvas is a real dark navy (not near-black): enough blue chroma to read
+	 * blue, kept darker than the sidebar so the sidebar still frames it. `canvas` is the
+	 * recessed page background behind cards — darker than `bg` so white-equivalent cards
+	 * still lift off it (mirrors the light-mode canvas/bg relationship). Without this dark
+	 * override it would stay light-gray and glare on every page in dark mode. */
+	--color-bg: oklch(0.18 0.055 264);
+	--color-canvas: oklch(0.14 0.05 264);
+	--color-surface: oklch(0.23 0.055 264);
+	--color-border: oklch(0.33 0.045 264);
+
+	--color-ink: oklch(0.95 0.005 264);
+	--color-muted: oklch(0.68 0.01 264);
 
 	--color-online: oklch(0.68 0.15 150);
 	--color-warning: oklch(0.74 0.14 75);
 	--color-blocked: oklch(0.6 0.16 18);
 
-	--color-sidebar: oklch(0.11 0.006 25);
+	/* Deep saturated brand navy, lifted above the content bg so it reads blue, not black. */
+	--color-sidebar: oklch(0.23 0.11 266);
+}
+
+/*
+ * Motion primitives — entrance + emphasis animations, CSS-only (no JS deps). Each one
+ * resolves to its FINAL (visible) state, so the prefers-reduced-motion block below — which
+ * collapses every duration to ~0 — simply lands them instantly rather than hiding anything.
+ * Durations: micro-interactions live in Tailwind utilities (120–220ms); entrance animations
+ * here run a touch longer but only once, on mount.
+ */
+@keyframes fade-in {
+	from {
+		opacity: 0;
+	}
+	to {
+		opacity: 1;
+	}
+}
+@keyframes fade-in-up {
+	from {
+		opacity: 0;
+		transform: translateY(6px);
+	}
+	to {
+		opacity: 1;
+		transform: none;
+	}
+}
+@keyframes draw-line {
+	from {
+		stroke-dashoffset: 1;
+	}
+	to {
+		stroke-dashoffset: 0;
+	}
+}
+/* Slow, low-contrast breathe for degraded/offline status dots — emphasis without alarm. */
+@keyframes status-pulse {
+	0%,
+	100% {
+		opacity: 1;
+	}
+	50% {
+		opacity: 0.4;
+	}
+}
+
+.animate-fade-in {
+	animation: fade-in 200ms ease-out both;
+}
+.animate-fade-in-up {
+	animation: fade-in-up 200ms ease-out both;
+}
+
+/* Revenue/line chart entrance: the path "draws" on (length-normalized via pathLength="1"),
+ * then the area fill, data dots, and peak callout settle in just behind it. Runs once on
+ * mount — Svelte updates the path `d` in place on live data pushes, so it never re-fires. */
+.chart-line {
+	stroke-dasharray: 1;
+	animation: draw-line 650ms ease-out both;
+}
+.chart-area {
+	animation: fade-in 600ms ease-out both;
+}
+.chart-dot {
+	animation: fade-in 280ms ease-out 380ms both;
+	transition: r 150ms ease-out;
+}
+.chart-dot:hover {
+	r: 5;
+}
+.chart-callout {
+	animation: fade-in 280ms ease-out 480ms both;
+}
+
+.status-pulse {
+	animation: status-pulse 2.4s ease-in-out infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -83,4 +177,155 @@
 		animation-duration: 0.01ms !important;
 		transition-duration: 0.01ms !important;
 	}
+}
+
+/* ── Responsive table → cards (opt-in via <Table cards />) ───────────────────
+ * Below md only, a real <table> carrying `.table-cards` flips to a stack of
+ * cards: each <tr> is a card, each <td> a label/value row (label pulled from the
+ * cell's `data-label`). Desktop is untouched — every rule lives inside this
+ * mobile media query, and the class is only added when the `cards` prop is set.
+ * Per-cell opt-outs: `.tc-full` drops the label and spans the card (actions,
+ * identity); an empty spacer cell (`<td></td>`) is hidden; `.tc-detail` rows
+ * tuck under the card above (the Users device-expand sub-row).
+ * -------------------------------------------------------------------------- */
+@media (width < 48rem) {
+	.table-cards {
+		padding: 0.75rem;
+	}
+	.table-cards table,
+	.table-cards tbody,
+	.table-cards tr,
+	.table-cards td {
+		display: block;
+		width: auto;
+	}
+	.table-cards thead {
+		display: none;
+	}
+	.table-cards tbody tr {
+		position: relative; /* anchor for .tc-corner (e.g. the Users select checkbox) */
+		border: 1px solid var(--color-border);
+		border-radius: 0.5rem;
+		background: var(--color-bg);
+		margin-bottom: 0.75rem;
+		padding: 0.25rem 0.25rem 0.5rem;
+	}
+	.table-cards td {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 1rem;
+		padding: 0.5rem 0.75rem;
+		text-align: right;
+	}
+	.table-cards td::before {
+		content: attr(data-label);
+		text-align: left;
+		font-size: 0.6875rem;
+		font-weight: 600;
+		letter-spacing: 0.05em;
+		text-transform: uppercase;
+		color: var(--color-muted);
+		white-space: nowrap;
+	}
+	.table-cards td.tc-full {
+		display: block;
+		text-align: left;
+		padding: 0.5rem 0.75rem;
+	}
+	.table-cards td.tc-full::before {
+		content: none;
+	}
+	.table-cards td:empty {
+		display: none;
+	}
+	/* Pin a cell to the card's top-right corner (no label), e.g. the row's select checkbox. */
+	.table-cards td.tc-corner {
+		position: absolute;
+		top: 0.375rem;
+		right: 0.375rem;
+		padding: 0.25rem;
+	}
+	.table-cards td.tc-corner::before {
+		content: none;
+	}
+	/* Drop a cell from the card entirely on mobile — used for "—" placeholder values whose
+	   LABEL ···· — row would just be noise (desktop keeps the cell for column alignment). */
+	.table-cards td.tc-skip {
+		display: none;
+	}
+	.table-cards tbody tr.tc-detail {
+		border: 0;
+		background: transparent;
+		margin-top: -0.75rem;
+		padding: 0 0.25rem;
+	}
+}
+
+/* ── Leaflet shared styles ──────────────────────────────────────────────────
+ * Placed here so they're available on every page that mounts a map, regardless
+ * of which map component (CoverageMap / NetworkMap / MapPicker) is rendered.
+ * Components must not redefine these — add page-specific Leaflet overrides
+ * in the component's own :global block.
+ * -------------------------------------------------------------------------- */
+
+/* Ensure map containers use the admin font stack and canvas background. */
+.leaflet-container {
+	font-family: var(--font-sans);
+	background: var(--color-surface);
+}
+
+.leaflet-control-zoom a {
+	border-radius: 7px !important;
+}
+
+/* Teardrop status pin — shared by CoverageMap (read-only) and NetworkMap (editor).
+ * Color is driven by the --c inline custom property so the caller controls tone. */
+.vpin {
+	width: 22px;
+	height: 22px;
+	border-radius: 50% 50% 50% 0;
+	transform: rotate(-45deg);
+	background: var(--c, var(--color-online));
+	border: 2.5px solid #fff;
+	box-shadow: 0 2px 7px rgba(10, 21, 80, 0.45);
+	position: relative;
+	transition: transform 0.15s ease;
+}
+.vpin span {
+	position: absolute;
+	inset: 0;
+	margin: auto;
+	width: 7px;
+	height: 7px;
+	background: #fff;
+	border-radius: 50%;
+	transform: rotate(45deg);
+}
+.vpin.sel {
+	transform: rotate(-45deg) scale(1.7);
+	z-index: 1000 !important;
+	box-shadow: 0 5px 18px rgba(10, 21, 80, 0.6);
+}
+
+/* Teardrop brand-colored picker pin — used by MapPicker inside card edit forms. */
+.vpick {
+	width: 22px;
+	height: 22px;
+	border-radius: 50% 50% 50% 0;
+	transform: rotate(-45deg);
+	background: var(--color-brand);
+	border: 2.5px solid #fff;
+	box-shadow: 0 2px 7px rgba(10, 21, 80, 0.45);
+	position: relative;
+}
+.vpick span {
+	position: absolute;
+	inset: 0;
+	margin: auto;
+	width: 7px;
+	height: 7px;
+	background: #fff;
+	border-radius: 50%;
+	transform: rotate(45deg);
 }

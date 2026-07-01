@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX IF NOT EXISTS "payment_transactions_reference_no_key" ON "payment_transactions" USING btree ("reference_no") WHERE "payment_transactions"."reference_no" IS NOT NULL;

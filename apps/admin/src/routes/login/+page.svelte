@@ -16,8 +16,9 @@
 	<div class="w-full max-w-sm space-y-6">
 		<div class="text-center">
 			<span class="text-xl font-semibold tracking-tight text-ink">
-				Veent <span class="text-muted">Admin</span>
+				RADIUS <span class="text-muted">Admin</span>
 			</span>
+			<p class="text-xs text-muted">by Parafiber</p>
 			<p class="mt-1 text-sm text-muted">Staff sign in</p>
 		</div>
 
@@ -60,11 +61,6 @@
 
 		<p class="text-center text-xs text-muted">
 			Staff accounts are created by invitation. Contact the owner for access.
-		</p>
-
-		<!-- TEMP: remove with /register -->
-		<p class="text-center text-xs text-muted">
-			<a href="/register" class="font-medium text-brand hover:underline">Create an account</a>
 		</p>
 	</div>
 </main>

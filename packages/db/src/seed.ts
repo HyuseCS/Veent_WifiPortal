@@ -9,10 +9,17 @@
  */
 import { eq } from 'drizzle-orm';
 import { createDb } from './client';
-import { packages, networkHealth } from './schema';
+import { packages, networkHealth, routerModel } from './schema';
 
 type SeedPackage = typeof packages.$inferInsert;
 type SeedAp = typeof networkHealth.$inferInsert;
+type SeedRouterModel = typeof routerModel.$inferInsert;
+
+// Router/AP catalog. The lowest sortOrder is the default model (new pins + the
+// fallback range for an AP with a null/unknown model). Operator-editable from /networks.
+const seedRouterModels: SeedRouterModel[] = [
+	{ id: 'suncomm-ap3000g', name: 'Suncomm AP3000G', rangeMeters: 200, sortOrder: 0 }
+];
 
 // Three package "types":
 //   free   — the 15-min free window (no fiat, no credit cost)
@@ -21,19 +28,21 @@ type SeedAp = typeof networkHealth.$inferInsert;
 const seedPackages: SeedPackage[] = [
 	{ name: 'Free Time', type: 'free', durationMinutes: 15, creditCost: 0, isActive: true },
 
-	{ name: '₱20 — 50 Credits', type: 'bundle', fiatCost: 20, creditsProvided: 50, isActive: true },
-	{ name: '₱50 — 150 Credits', type: 'bundle', fiatCost: 50, creditsProvided: 150, isActive: true },
+	// Bundles: 1 PHP -> 1 credit.
+	{ name: '₱20 — 20 Credits', type: 'bundle', fiatCost: 20, creditsProvided: 20, isActive: true },
+	{ name: '₱50 — 50 Credits', type: 'bundle', fiatCost: 50, creditsProvided: 50, isActive: true },
 	{
-		name: '₱100 — 350 Credits',
+		name: '₱100 — 100 Credits',
 		type: 'bundle',
 		fiatCost: 100,
-		creditsProvided: 350,
+		creditsProvided: 100,
 		isActive: true
 	},
 
-	{ name: '1 Hour', type: 'tier', creditCost: 20, durationMinutes: 60, isActive: true },
-	{ name: '3 Hours', type: 'tier', creditCost: 50, durationMinutes: 180, isActive: true },
-	{ name: '1 Day', type: 'tier', creditCost: 150, durationMinutes: 1440, isActive: true }
+	// Tiers: spend credits for access time.
+	{ name: '5 Minutes', type: 'tier', creditCost: 1, durationMinutes: 5, isActive: true },
+	{ name: '30 Minutes', type: 'tier', creditCost: 5, durationMinutes: 30, isActive: true },
+	{ name: '1 Hour', type: 'tier', creditCost: 10, durationMinutes: 60, isActive: true }
 ];
 
 // SAMPLE per-AP health for the Networks page. Synthetic until a real router /
@@ -71,6 +80,27 @@ async function seed() {
 	}
 
 	console.log(`\nPackages: ${inserted} inserted, ${seedPackages.length - inserted} skipped.`);
+
+	// Router model catalog — idempotent by id.
+	let modelsInserted = 0;
+	for (const m of seedRouterModels) {
+		const existing = await db
+			.select({ id: routerModel.id })
+			.from(routerModel)
+			.where(eq(routerModel.id, m.id))
+			.limit(1);
+
+		if (existing.length === 0) {
+			await db.insert(routerModel).values(m);
+			modelsInserted++;
+			console.log(`+ ${m.name}`);
+		} else {
+			console.log(`= ${m.name} (exists, skipped)`);
+		}
+	}
+	console.log(
+		`Router models: ${modelsInserted} inserted, ${seedRouterModels.length - modelsInserted} skipped.`
+	);
 
 	// Network health — idempotent by AP name.
 	let apsInserted = 0;

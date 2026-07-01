@@ -29,9 +29,13 @@ export interface PendingVerification {
 }
 
 function secret(): string {
-	// BETTER_AUTH_SECRET is set in every environment; the fallback only keeps a
-	// misconfigured dev box from crashing.
-	return env.BETTER_AUTH_SECRET || 'veent-portal-dev-secret';
+	const configured = env.BETTER_AUTH_SECRET;
+	if (configured) return configured;
+	// In prod, a missing secret means cookies/OTP would be signed with a public
+	// default — every signature forgeable. Fail loudly instead of doing that.
+	if (!dev) throw new Error('BETTER_AUTH_SECRET is required in production');
+	// Dev-only convenience: keep a misconfigured dev box from crashing.
+	return 'veent-portal-dev-secret';
 }
 
 function sign(data: string): string {
@@ -86,26 +90,66 @@ export function maskPhone(phone: string): string {
 }
 
 /**
- * Deliver the code. THE SINGLE SMS INTEGRATION POINT — wired into the
- * phoneNumber plugin's `sendOTP`. The phone is already E.164. Example:
+ * Deliver the OTP via iTexMo (https://itexmo.com), the PH SMS gateway, Broadcast-OTP API.
+ * THE SINGLE SMS INTEGRATION POINT — wired into the phoneNumber plugin's `sendOTP`.
+ * The phone arrives E.164 (+639171234567); iTexMo wants the LOCAL form (09171234567),
+ * so we convert.
  *
- *   const res = await fetch('https://api.semaphore.co/api/v4/messages', {
- *     method: 'POST',
- *     headers: { 'Content-Type': 'application/json' },
- *     body: JSON.stringify({
- *       apikey: env.SEMAPHORE_API_KEY,
- *       number: phone,
- *       message: `Your Veent code is ${code}. It expires in 5 minutes.`
- *     })
- *   });
- *   if (!res.ok) throw new Error(`SMS send failed: ${res.status}`);
+ * Config (customer env — first three required to send, from the iTexMo dashboard):
+ *   ITEXMO_API_CODE
+ *   ITEXMO_EMAIL
+ *   ITEXMO_PASSWORD
+ *   ITEXMO_SENDER_ID  (optional) — an approved sender id; on a TRIAL account this MUST
+ *                      be "ITM.TEST3". Omit to use the account default.
+ *
+ * Not configured → dev prints the code to the server console (so you can still log
+ * in); production treats missing config as a hard error (an OTP MUST be delivered —
+ * never silently swallow it, that would let anyone "log in" with no code).
  */
 export async function sendOtp(phone: string, code: string): Promise<void> {
-	if (dev) {
-		// No gateway in dev — read the code from the server console.
-		console.info(`[otp] verification code for ${phone}: ${code}`);
-		return;
+	const apiCode = env.ITEXMO_API_CODE;
+	const email = env.ITEXMO_EMAIL;
+	const password = env.ITEXMO_PASSWORD;
+
+	if (!apiCode || !email || !password) {
+		if (dev) {
+			console.info(`[otp] iTexMo not configured — code for ${phone}: ${code}`);
+			return;
+		}
+		throw new Error('iTexMo not configured: set ITEXMO_API_CODE / ITEXMO_EMAIL / ITEXMO_PASSWORD');
 	}
-	// TODO(SMS): integrate the provider here before production.
-	console.warn(`[otp] sendOtp not configured — code for ${phone} was not delivered`);
+
+	// iTexMo expects the local PH format (09xxxxxxxxx), not E.164.
+	const recipient = phone.replace(/^\+?63/, '0');
+
+	const payload: Record<string, unknown> = {
+		ApiCode: apiCode,
+		Email: email,
+		Password: password,
+		Recipients: [recipient],
+		Message: `Your Veent code is ${code}. It expires in 5 minutes.`
+	};
+	const senderId = env.ITEXMO_SENDER_ID;
+	if (senderId) payload.SenderId = senderId;
+
+	const res = await fetch('https://api.itexmo.com/api/broadcast-otp', {
+		method: 'POST',
+		headers: { 'content-type': 'application/json' },
+		body: JSON.stringify(payload)
+	});
+
+	// Transport-level failure.
+	if (!res.ok) {
+		const detail = await res.text().catch(() => '');
+		throw new Error(`iTexMo SMS send failed (${res.status}): ${detail}`);
+	}
+	// API-level result: { Error, Accepted, Failed, ReferenceId, Message? }. Treat a
+	// gateway error OR a recipient that wasn't accepted as a failure — a 200 with
+	// Accepted: 0 means the code never went out.
+	const body = (await res.json().catch(() => null)) as
+		| { Error?: boolean; Accepted?: number; Message?: string }
+		| null;
+	if (!body || body.Error || (body.Accepted ?? 0) < 1) {
+		throw new Error(`iTexMo SMS rejected: ${body?.Message ?? 'no recipient accepted'}`);
+	}
 }

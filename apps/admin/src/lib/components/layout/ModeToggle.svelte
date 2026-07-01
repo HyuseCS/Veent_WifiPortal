@@ -14,7 +14,7 @@
 		current = id;
 		document.documentElement.dataset.theme = id;
 		try {
-			localStorage.setItem('veent-admin-theme', id);
+			localStorage.setItem('radius-admin-theme', id);
 		} catch {
 			// localStorage unavailable (private mode) — mode still applies for the session.
 		}
@@ -30,10 +30,10 @@
 				type="button"
 				onclick={() => select(mode.id)}
 				aria-pressed={current === mode.id}
-				class="flex min-h-[44px] cursor-pointer items-center justify-center gap-2 rounded-md px-2.5 text-xs font-medium transition-colors {current ===
+				class="flex min-h-[44px] cursor-pointer items-center justify-center gap-2 rounded-md px-2.5 text-xs font-medium outline-none transition-all duration-200 focus-visible:ring-2 focus-visible:ring-cta/60 active:scale-95 {current ===
 				mode.id
 					? 'bg-white/10 text-sidebar-text ring-1 ring-cta ring-inset'
-					: 'text-sidebar-muted hover:bg-white/5'}"
+					: 'text-sidebar-muted hover:bg-white/5 hover:text-sidebar-text'}"
 			>
 				<Icon class="h-4 w-4" aria-hidden="true" />
 				{mode.label}

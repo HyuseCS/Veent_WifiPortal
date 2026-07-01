@@ -16,8 +16,23 @@
  * left in place, so re-running after an ORIGIN change just adds the new hole.
  *
  * Requires NETWORK_CONTROLLER=mikrotik and reachable RouterOS API credentials.
+ *
+ * SERVER MIGRATION — lock the router API to THIS server's IP (run once the new server
+ * can reach the router; it detects its own source IP and restricts api-ssl to it):
+ *
+ *   bun run --filter radius-admin setup:router --restrict-api               # lock api-ssl to this IP + pin lease
+ *   bun run --filter radius-admin setup:router --restrict-api --disable-plain-api  # also turn off cleartext api (needs MIKROTIK_TLS=true)
+ *   bun run --filter radius-admin setup:router --restrict-api --dry-run     # show what it would do
+ *
+ * The api-ssl cert + service must already exist on the router (see docs/DEPLOYMENT.md §7a).
  */
-import { provisionWalledGarden, type MikrotikConfig } from '@veent/core';
+import { Socket } from 'node:net';
+import { provisionWalledGarden, restrictApiService, type MikrotikConfig } from '@veent/core';
+
+const argv = new Set(process.argv.slice(2));
+const DRY_RUN = argv.has('--dry-run');
+const RESTRICT_API = argv.has('--restrict-api');
+const DISABLE_PLAIN_API = argv.has('--disable-plain-api');
 
 const {
 	NETWORK_CONTROLLER,
@@ -65,7 +80,56 @@ const splitList = (raw: string | undefined): string[] =>
 
 const isIp = (h: string): boolean => /^[0-9.]+(\/\d{1,2})?$/.test(h) || h.includes(':');
 
-const hosts = new Set(splitList(ADMIN_WG_HOSTS));
+/**
+ * Payment-gateway domains that MUST be reachable before a device authenticates
+ * (Core Business Rule #2). Without these, the Maya checkout redirect
+ * (payments-web*.maya.ph) is blocked by the hotspot and the browser shows a
+ * closed connection. Wildcards cover sandbox + prod, checkout page + API host.
+ *
+ * NOTE: card 3-D Secure step-up redirects to the issuing bank's ACS domain,
+ * which can't be predicted here — e-wallet/Maya-wallet checkout is fully covered;
+ * card payments may still need the bank's domain added per deployment.
+ *
+ * The Maya checkout page renders a Google reCAPTCHA, which loads from SEPARATE
+ * domains (NOT under *.maya.ph, so the payment wildcards don't cover them). Without
+ * them the captcha never appears on a device behind the portal, the page looks
+ * broken, and the phone may flip to cellular ("no internet"), which then breaks our
+ * IP→MAC device detection. Symptom: "captcha doesn't show on phone but works on a
+ * device with full internet".
+ *
+ * This list mirrors EXACTLY what is live on the router's walled garden — re-running
+ * is a no-op (idempotency matches on `dst-host`, so a mismatched host here would add
+ * a redundant entry). The captcha hosts are whitelisted as wildcards to match the
+ * router:
+ *   - `*.gstatic.com`   — static asset CDN (reCAPTCHA JS/images); serves no browsable
+ *     services, so opening it leaks no real internet.
+ *   - `*.recaptcha.net` — Google's dedicated reCAPTCHA host; serves nothing else.
+ *   - `*.google.com`    — REQUIRED: Maya's checkout embeds the google.com variant of
+ *     reCAPTCHA. The walled garden can only match the TLS SNI (host), not the path, so
+ *     this also exposes Google search to UNAUTHENTICATED devices. That's an accepted,
+ *     bounded trade-off: without it the captcha can't render and mobile Maya payments
+ *     dead-end. Pre-auth devices reach google.com only — other domains stay blocked,
+ *     so it isn't open internet.
+ */
+const PAYMENT_HOSTS = [
+	'maya.ph',
+	'*.maya.ph',
+	'paymaya.com',
+	'*.paymaya.com',
+	// GCash e-wallet checkout — Maya/PayMongo redirect the buyer to GCash to authorize the payment
+	// (payments.gcash.com). Wildcard covers the auth/redirect subdomains.
+	'gcash.com',
+	'*.gcash.com',
+	// Google reCAPTCHA (Maya checkout). *.google.com is required + a deliberate leak — see note above.
+	'*.google.com',
+	'*.gstatic.com',
+	'*.recaptcha.net',
+	// Other gateways named in Rule #2; harmless if unused.
+	'*.paymongo.com',
+	'*.xendit.co'
+];
+
+const hosts = new Set([...splitList(ADMIN_WG_HOSTS), ...PAYMENT_HOSTS]);
 const ips = new Set(splitList(ADMIN_WG_IPS));
 
 // Derive the admin host from ORIGIN and slot it into the right layer.
@@ -107,4 +171,81 @@ try {
 } catch (err) {
 	console.error('\nFailed to provision walled garden:', err instanceof Error ? err.message : err);
 	process.exit(1);
+}
+
+/**
+ * The LAN IP this machine uses to reach the router — i.e. the source IP the router sees, the
+ * exact value its api-ssl *Available From* must allow. A TCP connect to the API port resolves
+ * it without sending data; we never complete a RouterOS session here.
+ */
+function detectSourceIp(host: string, port: number): Promise<string> {
+	return new Promise((resolve, reject) => {
+		const sock = new Socket();
+		const finish = (fn: () => void) => {
+			sock.removeAllListeners();
+			sock.destroy();
+			fn();
+		};
+		sock.setTimeout(4000);
+		sock.once('timeout', () => finish(() => reject(new Error('timed out connecting to the router'))));
+		sock.once('error', (e) => finish(() => reject(e)));
+		sock.connect(port, host, () => {
+			const ip = sock.localAddress?.replace(/^::ffff:/, '');
+			finish(() => (ip ? resolve(ip) : reject(new Error('could not read local address'))));
+		});
+	});
+}
+
+// Optional migration step: lock the RouterOS API to THIS server's IP.
+if (RESTRICT_API) {
+	const apiPort = config.port ?? (config.tls ? 8729 : 8728);
+	if (DISABLE_PLAIN_API && !config.tls) {
+		console.error(
+			'\nRefusing --disable-plain-api while connected over cleartext api — you would cut your own\n' +
+				'connection. Switch this server to api-ssl first (MIKROTIK_TLS="true", MIKROTIK_PORT="8729").'
+		);
+		process.exit(1);
+	}
+
+	let sourceIp: string;
+	try {
+		sourceIp = await detectSourceIp(config.host, apiPort);
+	} catch (err) {
+		console.error(
+			`\nCould not detect this server's IP to the router (${config.host}:${apiPort}): ` +
+				(err instanceof Error ? err.message : err) +
+				'\nThe router may already restrict api-ssl to a different IP. Temporarily widen its\n' +
+				'Available From (or open it) so this server can connect, then re-run.'
+		);
+		process.exit(1);
+	}
+
+	console.log(`\nLocking RouterOS API to this server: ${sourceIp}/32 (api-ssl Available From)`);
+	if (DISABLE_PLAIN_API) console.log('  + disabling cleartext api (8728)');
+	if (DRY_RUN) {
+		console.log('  [dry-run] no changes made.');
+	} else {
+		try {
+			const r = await restrictApiService(config, {
+				sourceIp,
+				disablePlainApi: DISABLE_PLAIN_API,
+				pinLease: true
+			});
+			console.log(`  api-ssl Available From → ${r.apiSslAddress}`);
+			console.log(`  cleartext api: ${r.plainApiDisabled ? 'disabled' : 'left as-is'}`);
+			console.log(
+				`  DHCP lease: ${
+					r.leasePinned === 'no-lease'
+						? 'no lease found (static IP?) — skipped'
+						: r.leasePinned
+							? 'static (pinned)'
+							: 'skipped'
+				}`
+			);
+			console.log('\nRouter API is now restricted to this server.');
+		} catch (err) {
+			console.error('\nFailed to restrict the API:', err instanceof Error ? err.message : err);
+			process.exit(1);
+		}
+	}
 }

@@ -1,4 +1,4 @@
-import { eq, notInArray } from 'drizzle-orm';
+import { and, eq, isNull, notInArray } from 'drizzle-orm';
 import { type DB, networkHealth } from '@veent/db';
 import type { NetworkController } from '../integrations/network';
 
@@ -27,25 +27,68 @@ export async function refreshNetworkHealth(
 			users: s.users,
 			throughputMbps: s.throughputMbps,
 			uptimePct: s.online ? '100.00' : '0.00',
-			latencyMs: null,
+			latencyMs: s.latencyMs ?? null,
 			lastSampleAt: now
 		};
-		const [existing] = await db
-			.select({ id: networkHealth.id })
-			.from(networkHealth)
-			.where(eq(networkHealth.name, s.name))
-			.limit(1);
-		if (existing) {
-			await db.update(networkHealth).set(vals).where(eq(networkHealth.id, existing.id));
-		} else {
-			await db.insert(networkHealth).values({ name: s.name, ...vals });
-		}
+		// Upsert on the unique `name`: one round-trip, and two concurrent sweeps can't create
+		// duplicate rows for the same AP (the select-then-insert this replaced could).
+		await db
+			.insert(networkHealth)
+			.values({ name: s.name, ...vals })
+			.onConflictDoUpdate({ target: networkHealth.name, set: vals });
 	}
 
-	// Drop anything the router didn't report this round (e.g. the seeded sample APs).
+	// Drop auto-discovered rows the router didn't report this round (e.g. the seeded
+	// sample APs). Operator-placed pins (those with coordinates) are kept regardless —
+	// they're manually curated map locations, not live router interfaces, so the
+	// interface sweep must never delete them.
 	const names = samples.map((s) => s.name);
 	if (names.length > 0) {
-		await db.delete(networkHealth).where(notInArray(networkHealth.name, names));
+		await db
+			.delete(networkHealth)
+			.where(and(notInArray(networkHealth.name, names), isNull(networkHealth.latitude)));
 	}
 	return samples.length;
+}
+
+/**
+ * Resolve an AP name — a router interface name (what `resolveApForMac` returns) OR a display
+ * name — to its `network_health` id. Prefers the operator-set `interface_name` binding so a
+ * named map pin can track a specific interface, then falls back to the display `name`.
+ * Returns null when nothing matches; AP attribution is always best-effort.
+ */
+export async function resolveNetworkIdByApName(db: DB, apName: string): Promise<number | null> {
+	if (!apName) return null;
+	const [byIface] = await db
+		.select({ id: networkHealth.id })
+		.from(networkHealth)
+		.where(eq(networkHealth.interfaceName, apName))
+		.limit(1);
+	if (byIface) return byIface.id;
+	const [byName] = await db
+		.select({ id: networkHealth.id })
+		.from(networkHealth)
+		.where(eq(networkHealth.name, apName))
+		.limit(1);
+	return byName?.id ?? null;
+}
+
+/**
+ * Resolve the AP a device MAC is currently on to a `network_health` id, via the controller's
+ * MAC→AP lookup. Never throws — returns null when the controller can't map it (wired client,
+ * dev stub, no `resolveApForMac`) or no AP row matches.
+ */
+export async function resolveNetworkIdForMac(
+	db: DB,
+	network: NetworkController,
+	macAddress: string
+): Promise<number | null> {
+	if (!network.resolveApForMac) return null;
+	try {
+		const apName = await network.resolveApForMac(macAddress);
+		if (!apName) return null;
+		return await resolveNetworkIdByApName(db, apName);
+	} catch {
+		return null;
+	}
 }

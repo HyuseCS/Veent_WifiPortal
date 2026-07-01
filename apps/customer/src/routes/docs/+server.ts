@@ -96,7 +96,7 @@ const spec = {
 				tags: ['Customer · Payments'],
 				summary: 'Payment gateway webhook (source of truth for credits)',
 				description:
-					'Raw body verified via the provider (Maya). On a paid event, credits the buyer EXACTLY ONCE (idempotent on the gateway txn id). referenceId = `${userId}:${packageId}`. Server: :5173. NOTE: Maya is stubbed — verifyWebhook throws (400) until wired.',
+					'Raw body verified via the provider (Maya). On a paid event, credits the buyer EXACTLY ONCE (idempotent on the gateway txn id). referenceId = `${userId}:${packageId}`. Server: :5173. NOTE: Maya verifyWebhook is wired (HMAC-verified); an invalid/missing signature is rejected (400). Only outbound createCheckout is still a stub.',
 				requestBody: {
 					required: true,
 					content: {
@@ -122,53 +122,6 @@ const spec = {
 					},
 					'400': { description: 'Verification failed / malformed referenceId' },
 					'404': { description: 'Package not found' }
-				}
-			}
-		},
-		'/api/auth/sign-up/email': {
-			post: {
-				tags: ['Auth'],
-				summary: 'Register (better-auth)',
-				description:
-					'Creates a user and signs in (sets the session cookie). Customer :5173 → customer_* tables; admin :5174 → admin_* tables.',
-				requestBody: {
-					required: true,
-					content: {
-						'application/json': {
-							schema: {
-								type: 'object',
-								required: ['email', 'password', 'name'],
-								properties: {
-									name: { type: 'string' },
-									email: { type: 'string' },
-									password: { type: 'string', minLength: 8 }
-								}
-							}
-						}
-					}
-				},
-				responses: { '200': { description: 'Signed up; Set-Cookie session token' } }
-			}
-		},
-		'/api/auth/sign-in/email': {
-			post: {
-				tags: ['Auth'],
-				summary: 'Log in (better-auth)',
-				requestBody: {
-					required: true,
-					content: {
-						'application/json': {
-							schema: {
-								type: 'object',
-								required: ['email', 'password'],
-								properties: { email: { type: 'string' }, password: { type: 'string' } }
-							}
-						}
-					}
-				},
-				responses: {
-					'200': { description: 'Signed in; Set-Cookie session token' },
-					'401': { description: 'Invalid credentials' }
 				}
 			}
 		},

@@ -5,47 +5,78 @@
 @import 'tailwindcss';
 
 /*
- * Veent locator design tokens — shared with the customer portal.
+ * Veent locator design tokens — SYNCED with the admin dashboard (apps/admin/src/routes/layout.css).
  *
- * NOTE: as of the Customer Portal overhaul the portal NO LONGER shares the admin
- * app's unified teal/coral theme. Per the imported Claude Design ("Veent Customer
- * Portal.dc.html", see docs/design/), guests get a dedicated navy + blue identity
- * with JetBrains Mono for numeric data. This is an intentional, customer-only
- * divergence — do NOT "re-sync" these tokens with apps/admin/src/routes/layout.css.
- * Guests have no theme selector, so there is a single palette and no presets.
+ * The locator is the public, read-only cousin of the operator map, so it now shares admin's
+ * Parafiber royal-blue (hue 262) + blue-tinted neutrals (hue 264) identity — a deliberate
+ * re-sync (this app previously diverged with the customer portal's navy palette). Only the
+ * colors are shared; the locator keeps Plus Jakarta Sans / JetBrains Mono (a friendlier,
+ * consumer-facing type voice than admin's system-ui), and stays at consumer altitude
+ * (generous spacing, no operator data-density).
  *
- * Tailwind v4 turns each `--color-*` into a utility (`bg-brand`, `text-ink`,
- * `bg-online/15`, `bg-brand-tint-2`, …) and `--font-mono` into `font-mono`.
+ * Dark mode: like admin, a `data-theme` attribute on <html> drives it (set pre-paint in app.html
+ * and flipped by the sidebar Sun/Dark toggle). Default follows the visitor's OS — the pre-paint
+ * script seeds `data-theme` from localStorage ?? prefers-color-scheme — but the toggle can override
+ * it, persisted to localStorage('radius-locator-theme').
+ *
+ * Tailwind v4 turns each `--color-*` into a utility (`bg-brand`, `text-ink`, `bg-online/15`, …)
+ * and `--font-mono` into `font-mono`. @theme is the LIGHT base; `:root[data-theme='dark']`
+ * overrides only the surface/text/status vars, so every utility re-resolves live on toggle.
  */
 @theme {
-	/* Palette — navy brand + blue CTA */
-	--color-brand: rgb(0, 18, 107);
-	--color-brand-hover: rgb(0, 12, 78);
-	--color-cta: rgb(10, 98, 169);
-	--color-cta-hover: rgb(7, 75, 135);
+	/* Accent — Parafiber royal blue. cta is an alias of brand. */
+	--color-brand: oklch(0.54 0.22 262);
+	--color-brand-hover: oklch(0.48 0.22 262);
+	--color-cta: oklch(0.54 0.22 262);
+	--color-cta-hover: oklch(0.48 0.22 262);
 
-	/* Light brand-family tints — card / highlight backgrounds */
-	--color-brand-tint: color-mix(in srgb, rgb(135, 201, 254), white 52%);
-	--color-brand-tint-2: color-mix(in srgb, rgb(175, 219, 255), white 58%);
-	--color-cta-tint: color-mix(in srgb, rgb(10, 98, 169), white 86%);
-
-	/* Surfaces */
+	/* Surfaces — light. `bg` is the raised panel; `surface` is the in-panel tint (hover, pills). */
 	--color-bg: oklch(1 0 0);
-	--color-surface: rgb(244, 249, 255);
-	--color-border: rgb(223, 234, 247);
+	--color-surface: oklch(0.975 0.006 264);
+	--color-border: oklch(0.91 0.006 264);
 
-	/* Text */
-	--color-ink: rgb(12, 34, 58);
-	--color-muted: rgb(92, 112, 138);
+	/* Text — light */
+	--color-ink: oklch(0.16 0.01 264);
+	--color-muted: oklch(0.5 0.01 264);
 
-	/* Status — semantic */
-	--color-online: oklch(0.5 0.15 155);
-	--color-warning: oklch(0.65 0.15 72);
-	--color-blocked: oklch(0.55 0.18 22);
+	/* Status — semantic. blocked = oxblood danger, distinct from the blue accent. */
+	--color-online: oklch(0.52 0.15 150);
+	--color-warning: oklch(0.62 0.15 75);
+	--color-blocked: oklch(0.42 0.15 18);
 
 	/* Type — Plus Jakarta Sans for UI, JetBrains Mono for data fields */
 	--font-sans: 'Plus Jakarta Sans', system-ui, sans-serif;
 	--font-mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', monospace;
+}
+
+/* Light is the base mode for native controls/scrollbars; dark overrides below. */
+:root {
+	color-scheme: light;
+}
+
+/*
+ * Dark mode — driven by `data-theme="dark"` on <html> (toggle + pre-paint script). Overrides only
+ * what changes; the blue accent + status colors are lifted for AA on dark surfaces, hues stay put.
+ * Mirrors admin's `:root[data-theme='dark']` values exactly.
+ */
+:root[data-theme='dark'] {
+	color-scheme: dark;
+
+	--color-brand: oklch(0.64 0.2 262);
+	--color-brand-hover: oklch(0.7 0.19 262);
+	--color-cta: oklch(0.64 0.2 262);
+	--color-cta-hover: oklch(0.7 0.19 262);
+
+	--color-bg: oklch(0.18 0.055 264);
+	--color-surface: oklch(0.23 0.055 264);
+	--color-border: oklch(0.33 0.045 264);
+
+	--color-ink: oklch(0.95 0.005 264);
+	--color-muted: oklch(0.68 0.01 264);
+
+	--color-online: oklch(0.68 0.15 150);
+	--color-warning: oklch(0.74 0.14 75);
+	--color-blocked: oklch(0.6 0.16 18);
 }
 
 @layer base {

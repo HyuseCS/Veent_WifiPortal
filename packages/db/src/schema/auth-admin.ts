@@ -1,7 +1,13 @@
+import { boolean } from 'drizzle-orm/pg-core';
 import { authTables } from './_auth-factory';
+import { adminTwoFactor } from './admin-two-factor';
 
 // Auth tables for staff/admin users (the management dashboard). Prefixed `admin_*`.
-const t = authTables('admin');
+// The admin instance enforces TOTP (better-auth two-factor plugin), so its user
+// table carries `two_factor_enabled` — the customer instance must NOT get it.
+const t = authTables('admin', {
+	twoFactorEnabled: boolean('two_factor_enabled').default(false)
+});
 
 export const adminUser = t.user;
 export const adminSession = t.session;
@@ -13,5 +19,6 @@ export const adminAuthSchema = {
 	user: adminUser,
 	session: adminSession,
 	account: adminAccount,
-	verification: adminVerification
+	verification: adminVerification,
+	twoFactor: adminTwoFactor
 };

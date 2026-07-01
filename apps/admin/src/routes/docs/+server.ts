@@ -15,7 +15,7 @@ import type { RequestHandler } from './$types';
 const spec = {
 	openapi: '3.1.0',
 	info: {
-		title: 'Veent WiFi Portal API',
+		title: 'RADIUS WiFi Portal API',
 		version: '0.1.0',
 		description:
 			'REST endpoints for the captive portal (customer, :5173) and admin dashboard (:5174). Auth via better-auth session cookies. Non-REST surfaces (customer dashboard/top-up form actions, admin block/kick actions, page loaders) are described in docs/API.md.'
@@ -111,7 +111,7 @@ const spec = {
 				tags: ['Customer · Payments'],
 				summary: 'Payment gateway webhook (source of truth for credits)',
 				description:
-					'Raw body verified via the provider (Maya). On a paid event, credits the buyer EXACTLY ONCE (idempotent on the gateway txn id). referenceId = `${userId}:${packageId}`. Server: :5173. NOTE: Maya is stubbed — verifyWebhook throws (400) until wired.',
+					'Raw body verified via the provider (Maya). On a paid event, credits the buyer EXACTLY ONCE (idempotent on the gateway txn id). referenceId = `${userId}:${packageId}`. Server: :5173. NOTE: Maya verifyWebhook is wired (HMAC-verified); an invalid/missing signature is rejected (400). Only outbound createCheckout is still a stub.',
 				requestBody: {
 					required: true,
 					content: {
@@ -227,7 +227,7 @@ const html = `<!doctype html>
 	<head>
 		<meta charset="utf-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
-		<title>Veent WiFi Portal — API Reference</title>
+		<title>RADIUS WiFi Portal — API Reference</title>
 	</head>
 	<body>
 		<script id="api-reference" type="application/json" data-configuration='{"proxyUrl":""}'>${JSON.stringify(

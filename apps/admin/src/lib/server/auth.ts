@@ -2,6 +2,7 @@ import { env } from '$env/dynamic/private';
 import { betterAuth } from 'better-auth/minimal';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 import { sveltekitCookies } from 'better-auth/svelte-kit';
+import { twoFactor } from 'better-auth/plugins/two-factor';
 import { getRequestEvent } from '$app/server';
 import { adminAuthSchema } from '@veent/db';
 import { activateStaff } from '@veent/core';
@@ -29,9 +30,16 @@ export const auth = betterAuth({
 	database: drizzleAdapter(db, { provider: 'pg', schema: adminAuthSchema }),
 	emailAndPassword: {
 		enabled: true,
+		// No public self-signup. Staff are created ONLY via the owner-only /staff invite flow
+		// (internalAdapter.createUser) — never the better-auth POST /api/auth/sign-up/email route,
+		// which is mounted by the handler and would otherwise let anyone create an admin_user row
+		// (email-squatting an invitee's address / DB pollution). This keeps the "no browser
+		// owner-signup" guarantee true for the auth API surface, not just the page routes.
+		disableSignUp: true,
 		// Staff invites reuse the password-reset token machinery: the owner invites a
 		// member, we issue a reset token, and the member sets their password on the
-		// /activate page. Until SMTP lands, "sending" the email just logs the link.
+		// /activate page. The token URL is emailed via the Resend mailer (stub-logs
+		// subject + recipient locally when RESEND_API_KEY is unset).
 		resetPasswordTokenExpiresIn: 60 * 60 * 24, // 24h, generous for an invite
 		sendResetPassword: async ({ user, token }) => {
 			const url = `${env.ORIGIN}/activate?token=${token}`;
@@ -44,6 +52,8 @@ export const auth = betterAuth({
 				await mailer.send({ to: user.email, subject, html, text });
 				inviteSendFailures.delete(user.email);
 			} catch (err) {
+				// Observability: email-delivery failure signal (no address/token logged).
+				console.warn('[email] invite send failed:', (err as Error)?.message);
 				inviteSendFailures.set(user.email, err);
 			}
 		},
@@ -53,8 +63,11 @@ export const auth = betterAuth({
 			await activateStaff(db, user.id);
 		}
 	},
-	advanced: { cookiePrefix: 'veent-admin' },
+	advanced: { cookiePrefix: 'radius-admin' },
 	plugins: [
+		// Mandatory TOTP second factor for staff (enrollment gate in (app)/+layout.server.ts).
+		// secret + backupCodes are stored encrypted (BETTER_AUTH_SECRET) in admin_two_factor.
+		twoFactor({ issuer: 'RADIUS Admin' }),
 		sveltekitCookies(getRequestEvent) // make sure this is the last plugin in the array
 	]
 });

@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { fade } from 'svelte/transition';
-	import { toasts } from '$lib/toast.svelte';
+	import { toasts } from '$lib/toasts.svelte';
 </script>
 
 <div class="pointer-events-none fixed inset-x-0 top-4 z-50 flex flex-col items-center gap-2 px-4">

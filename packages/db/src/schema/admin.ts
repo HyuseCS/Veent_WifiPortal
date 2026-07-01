@@ -10,7 +10,18 @@
  * a real router/controller telemetry feed exists it is seeded with sample rows;
  * the shape matches what a future feed would write.
  */
-import { pgTable, serial, integer, text, boolean, numeric, timestamp } from 'drizzle-orm/pg-core';
+import {
+	pgTable,
+	serial,
+	integer,
+	text,
+	boolean,
+	numeric,
+	timestamp,
+	uniqueIndex,
+	check
+} from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
 import { adminUser } from './auth-admin';
 
 /**
@@ -52,6 +63,31 @@ export const adminProfile = pgTable('admin_profile', {
 });
 
 /**
+ * Catalog of router/AP models — the operator-editable source of truth for a model's
+ * advertised coverage range. `network_health.model` stores `id` (a slug key), not the
+ * range, so editing `range_meters` here re-sizes every AP on that model automatically.
+ *
+ *   id          — slug key stored on network_health.model (e.g. 'suncomm-ap3000g').
+ *   name        — human display name ('Suncomm AP3000G').
+ *   rangeMeters — advertised/illustrative outdoor range in metres (not survey-grade).
+ *   sortOrder   — display order; the lowest is the *default* model (new pins + the
+ *                 fallback range for an AP with a null/unknown model). No is_default
+ *                 flag: deleting the default simply promotes the next, never orphans.
+ */
+export const routerModel = pgTable(
+	'router_model',
+	{
+		id: text('id').primaryKey(),
+		name: text('name').notNull(),
+		rangeMeters: integer('range_meters').notNull(),
+		sortOrder: integer('sort_order').notNull().default(0)
+	},
+	// DB-level backstop: range is metres, so a zero/negative is always corrupt. The admin action
+	// already enforces 10–5000, this guards direct inserts and future migrations.
+	(t) => [check('router_model_range_meters_positive', sql`${t.rangeMeters} > 0`)]
+);
+
+/**
  * Per-access-point health snapshot (ERD has none yet — admin-owned). Raw metrics
  * only; the app derives display tone/labels (like the other admin view mappers).
  *
@@ -70,5 +106,27 @@ export const networkHealth = pgTable('network_health', {
 	lastSampleAt: timestamp('last_sample_at').notNull().defaultNow(),
 	latitude: numeric('latitude', { precision: 9, scale: 6 }),
 	longitude: numeric('longitude', { precision: 9, scale: 6 }),
-	address: text('address')
-});
+	address: text('address'),
+	// Operator-set binding: the router AP/interface name whose connected clients
+	// count toward this pin (network_sessions attribution). Lets a map pin be named
+	// anything while still tracking a specific interface. Null = no binding.
+	interfaceName: text('interface_name'),
+	// Router/AP model id — a slug key into the `router_model` catalog. Drives the
+	// simulated coverage radius on the map. Loose ref (no FK): an unknown/null model
+	// falls back to the default model's range, so deleting a catalog row is safe.
+	model: text('model'),
+	// Operator-calibrated coverage radius in metres, overriding the model's advertised
+	// range to match real-world reach (walls, height, interference). Null = fall back to
+	// the model's catalog range.
+	rangeMeters: integer('range_meters'),
+	// Operator label for the overlap cluster this AP belongs to. Clusters are computed live
+	// from coverage overlap (no stable id), so the name rides on the members: renaming a
+	// cluster mirrors this value across all its current members. Null = unnamed (shown as
+	// "Cluster N" in the UI).
+	clusterName: text('cluster_name')
+}, (t) => [
+	// `name` is the natural key the health sweep upserts on (one row per router interface /
+	// map pin). Unique so concurrent sweeps can't race two rows for the same AP, and so the
+	// service can use onConflictDoUpdate instead of select-then-insert.
+	uniqueIndex('network_health_name_key').on(t.name)
+]);

@@ -5,6 +5,23 @@
 		<link rel="icon" href="%sveltekit.assets%/favicon.svg" />
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
 		<meta name="text-scale" content="scale" />
+		<script>
+			// Pre-hydration progressive enhancement. Before the app bundle loads, a native form
+			// submit has no in-page feedback — on slow mobile / captive-portal browsers there's a
+			// window after the HTML paints but before hydration. Any form marked [data-pending-form]
+			// gets data-pending="" the moment it's submitted, so CSS can swap its button label for a
+			// spinner immediately. After hydration Svelte owns data-pending, so this only bridges
+			// that window. Capture phase + delegation so it works for forms parsed after this runs.
+			addEventListener(
+				'submit',
+				(e) => {
+					const f = e.target;
+					if (f instanceof HTMLFormElement && f.hasAttribute('data-pending-form'))
+						f.setAttribute('data-pending', '');
+				},
+				true
+			);
+		</script>
 		%sveltekit.head%
 	</head>
 	<body data-sveltekit-preload-data="hover">

@@ -17,9 +17,12 @@ export interface WipeCodeEmailInput {
 	code: string;
 	/** Owner's display name (untrusted — escaped before embedding). */
 	name: string;
+	/** Noun phrase for what's being wiped — "customer database" (default) or
+	 *  "network database". Trusted (caller-supplied constant), not user input. */
+	target?: string;
 }
 
-export function wipeCodeEmail({ code, name }: WipeCodeEmailInput): {
+export function wipeCodeEmail({ code, name, target = 'customer database' }: WipeCodeEmailInput): {
 	subject: string;
 	html: string;
 	text: string;
@@ -28,7 +31,7 @@ export function wipeCodeEmail({ code, name }: WipeCodeEmailInput): {
 	const safeCode = escapeHtml(code);
 	const danger = '#c41f2c'; // red accent — matches the destructive action
 
-	const subject = 'Your Veent Admin wipe-confirmation code';
+	const subject = 'Your RADIUS Admin wipe-confirmation code';
 
 	const html = `<!doctype html>
 <html>
@@ -39,13 +42,13 @@ export function wipeCodeEmail({ code, name }: WipeCodeEmailInput): {
           <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:440px;background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;padding:32px;">
             <tr>
               <td style="font-size:18px;font-weight:600;color:#0f172a;padding-bottom:8px;">
-                Veent <span style="color:#64748b;font-weight:500;">Admin</span>
+                RADIUS <span style="color:#64748b;font-weight:500;">Admin</span>
               </td>
             </tr>
             <tr>
               <td style="font-size:14px;line-height:22px;color:#334155;padding:8px 0 24px;">
-                Hi ${safeName}, use this code to confirm <strong>wiping the entire customer database</strong>.
-                This permanently deletes every customer and all their data.
+                Hi ${safeName}, use this code to confirm <strong>wiping the entire ${escapeHtml(target)}</strong>.
+                This is permanent and cannot be undone.
               </td>
             </tr>
             <tr>
@@ -69,7 +72,7 @@ export function wipeCodeEmail({ code, name }: WipeCodeEmailInput): {
 
 	const text = `Hi ${name.trim() || 'there'},
 
-Use this code to confirm wiping the entire customer database. This permanently deletes every customer and all their data:
+Use this code to confirm wiping the entire ${target}. This is permanent and cannot be undone:
 
 ${code}
 

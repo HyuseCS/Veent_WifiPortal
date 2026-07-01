@@ -30,12 +30,34 @@ export interface NetworkApSample {
 	users: number;
 	/** Current rx+tx throughput in Mbps (from a one-shot monitor-traffic sample). */
 	throughputMbps: number;
+	/** Internet round-trip latency in ms (router ping to a public host). Null when
+	 * the controller can't measure it (stub/dev, no internet, ping unavailable). */
+	latencyMs?: number | null;
+}
+
+/** Input for proactively transitioning a granted device into an *active* hotspot session. */
+export interface ActivateSessionInput {
+	macAddress: string;
+	/** Current LAN IP of the device, when known — the RouterOS hotspot login needs MAC + IP. When
+	 * omitted, the controller resolves it from the router's own host/lease/ARP tables. */
+	ipAddress?: string;
 }
 
 export interface NetworkController {
 	readonly name: string;
 	/** Drop the firewall for a device (allow internet). Idempotent. */
 	grant(input: GrantInput): Promise<void>;
+	/**
+	 * Proactively place an already-granted device into an *active* hotspot session so the OS
+	 * captive probe clears immediately (Issue 2 — "post-auth captive-state delay"). `grant`
+	 * only adds an `ip-binding type=bypassed`, which lets traffic through but does NOT put the
+	 * device in `/ip/hotspot/active`, so the OS can linger on "Sign in to network". The MikroTik
+	 * controller drives `/ip/hotspot/active/login` over the **binary API** (RouterOS v6 has no
+	 * REST). Activation is a UX layer ON TOP of the durable `grant` binding, so a failure here
+	 * must never revoke access. Idempotent. Optional: stub/dev and controllers without a hotspot
+	 * login path omit it, and callers treat it as best-effort.
+	 */
+	activateSession?(input: ActivateSessionInput): Promise<void>;
 	/** Re-block a device. Idempotent — revoking an already-blocked MAC is a no-op. */
 	revoke(macAddress: string): Promise<void>;
 	/** Live per-interface health (link/users/throughput) for the Networks page.
@@ -48,4 +70,31 @@ export interface NetworkController {
 	 * when unknown or unsupported (stub/dev). Optional: not every controller can.
 	 */
 	resolveMacByIp?(ipAddress: string): Promise<string | null>;
+	/**
+	 * Best-effort: which AP/interface the device (by MAC) is currently associated
+	 * with, for per-AP user attribution. Returns the interface/AP name as the router
+	 * knows it (match against `network_health.name`), or null when unknown. Optional:
+	 * controllers that can't tell (stub/dev) omit it.
+	 */
+	resolveApForMac?(macAddress: string): Promise<string | null>;
+	/**
+	 * Lists the *guest* bypass bindings this controller created (by our tag), so a
+	 * reconcile pass can drop ones that no longer map to an active session. Excludes
+	 * admin bypasses and any manually-added bindings. Optional: stub/dev omit it.
+	 */
+	listGuestBindings?(): Promise<{ macAddress: string }[]>;
+	/**
+	 * Recent entries from the router's own system log (newest first), for a live
+	 * admin view. Optional: stub/dev omit it.
+	 */
+	listRouterLog?(opts?: { limit?: number }): Promise<RouterLogEntry[]>;
+}
+
+/** One line of the router's system log (`/log` in MikroTik). */
+export interface RouterLogEntry {
+	/** Router-formatted time, e.g. `12:59:48` or `jun/19 12:59:48`. */
+	time: string;
+	/** Comma-joined topics, e.g. `hotspot,info,account`. */
+	topics: string;
+	message: string;
 }

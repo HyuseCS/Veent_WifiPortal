@@ -6,8 +6,9 @@
 	"workspaces": ["apps/*", "packages/*"],
 	"scripts": {
 		"dev:customer": "bun run --filter veent-customer dev",
-		"dev:admin": "bun run --filter veent-admin dev",
+		"dev:admin": "bun run --filter radius-admin dev",
 		"dev:locator": "bun run --filter veent-locator dev",
+		"dev:cron": "bun scripts/dev-cron.ts",
 		"build": "bun run --filter './apps/*' build",
 		"check": "bun run --filter './apps/*' check",
 		"lint": "prettier --check . && eslint .",
@@ -16,9 +17,11 @@
 		"db:start": "docker compose up",
 		"db:push": "bun run --filter @veent/db db:push",
 		"db:generate": "bun run --filter @veent/db db:generate",
+		"db:idempotent": "bun scripts/idempotent-migrations.ts",
 		"db:migrate": "bun run --filter @veent/db db:migrate",
 		"db:studio": "bun run --filter @veent/db db:studio",
-		"db:seed": "bun run --filter @veent/db db:seed"
+		"db:seed": "bun run --filter @veent/db db:seed",
+		"setup:prod": "bun scripts/setup-prod.ts"
 	},
 	"devDependencies": {
 		"@eslint/js": "^10.0.1",

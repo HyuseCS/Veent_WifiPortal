@@ -30,6 +30,10 @@ export interface RevenuePoint {
 
 /** A currently-connected device/session shown on the dashboard. */
 export interface ActiveSession {
+	/** Session row id — the stable, unique key for list rendering. MAC is NOT unique
+	 * (multiple grants can share a MAC, e.g. the dev placeholder), so keying a Svelte
+	 * each on it throws a duplicate-key error and crashes the dashboard. */
+	id: number;
 	mac: string;
 	package: string;
 	/** Remaining time, pre-formatted "MM:SS" or "H:MM" — the server's snapshot at
@@ -38,6 +42,9 @@ export interface ActiveSession {
 	timeLeft: string;
 	tone: StatusTone;
 	status: string;
+	/** AP/network the session is bound to (network_health.name), or null when the
+	 * controller couldn't resolve an AP (stub/dev, wired client). */
+	network: string | null;
 	/** Session expiry as an ISO string, so the client can tick the countdown every
 	 * second instead of waiting on the 5s SSE snapshot. Null if no expiry recorded. */
 	expiresAt: string | null;
@@ -50,6 +57,9 @@ export interface DashboardSnapshot {
 	revenue: RevenuePoint[];
 	activeSessions: ActiveSession[];
 	networks: NetworkAp[];
+	/** Full user-management table, so the Users page can read the same live stream
+	 * (online status, balances, block state) instead of a reload. */
+	users: AdminUserRow[];
 }
 
 /** Health snapshot for one access point. */
@@ -67,24 +77,61 @@ export interface NetworkAp {
 	latitude: string | null;
 	longitude: string | null;
 	address: string | null;
+	/** Router AP/interface this pin's user count is bound to; null = unbound. */
+	interfaceName: string | null;
+	/** Router/AP model id (catalog key in `$lib/router-models`); drives the simulated
+	 * coverage radius. Null = use the default model's range. */
+	model: string | null;
+	/** Operator-calibrated coverage radius in metres, overriding the model's advertised
+	 * range. Null = fall back to the model's catalog range. */
+	rangeMeters: number | null;
+	/** Operator label for the overlap cluster this AP belongs to (mirrored across the
+	 * cluster's members on rename). Null = unnamed; the UI shows "Cluster N". */
+	clusterName: string | null;
+	/** Recent connections attributed to this AP (newest first), for the card's log. */
+	logs: ConnectionLog[];
+}
+
+/** One device's connection through an AP — a row in the per-network log. */
+export interface ConnectionLog {
+	/** Short "x ago" label for when it started. */
+	at: string;
+	mac: string;
+	/** Tier name (e.g. "3 Hours") or "Free Time". */
+	package: string;
+	/** Display status: "Online" | "Expired" | "Revoked". */
+	status: string;
+	tone: StatusTone;
 }
 
 /** A row in the user-management table. */
 export interface AdminUserRow {
 	id: string;
-	name: string;
-	email: string;
+	/** The guest's phone number in E.164 (e.g. "+639176544521") — customers register by
+	 * phone only (no name/email), so this is the identity shown in the table. */
+	phone: string;
 	/** Credit balance in pesos. */
 	balance: number;
 	/** Lifetime/period usage, pre-formatted (e.g. "4.2 GB"). */
 	usage: string;
 	tone: StatusTone;
 	status: string;
-	/** Currently has an active, unexpired network session (live connectivity). */
+	/** Account has a live access window (online across any of its devices). */
 	online: boolean;
 	/** Most recent device MAC seen for this user, for the dev "Allow WiFi" grant.
 	 * Null if we've never recorded a session MAC for them. */
 	lastMac: string | null;
+	/** Number of devices currently bound under the account's access window. */
+	deviceCount: number;
+	/** The bound devices (account-owned access): MAC + last-seen time. */
+	devices: { mac: string | null; lastSeenAt: string | null }[];
+	/** Account access time remaining, pre-formatted (e.g. "1:23:45"); null if offline. */
+	timeLeft: string | null;
+	/** Raw remaining access time in ms (for chronological Time-Left sort); null if offline. */
+	timeLeftMs: number | null;
+	/** Network(s) the user's live device(s) are on (network_health.name, distinct,
+	 * comma-joined). Null if offline or no AP resolved (stub/dev, wired client). */
+	location: string | null;
 }
 
 /**
@@ -114,4 +161,85 @@ export interface StaffMember {
 	status: StaffStatus;
 	/** Last-active label, pre-formatted (e.g. "2h ago", "—"). */
 	lastActive: string;
+	/** Raw last-active time (epoch ms) for sorting; null if never active. */
+	lastActiveAt: number | null;
+}
+
+/** One slice of the Finance "revenue by payment method" donut. */
+export interface PaymentMethodSlice {
+	/** Raw fund source key, e.g. 'card' | 'gcash' | 'maya-wallet' | 'unknown'. */
+	type: string;
+	/** Display name (e.g. "GCash"). */
+	label: string;
+	/** Settled peso amount for this method. */
+	amount: number;
+	count: number;
+	/** Share of total settled amount, 0–100. */
+	pct: number;
+}
+
+/**
+ * One slice of the Finance "revenue by access point" donut. Same shape as
+ * PaymentMethodSlice so it renders through the shared <DonutChart>.
+ */
+export interface ApRevenueSlice {
+	/** Stable key: the network_health id as a string, or 'unattributed'. */
+	type: string;
+	/** AP display name, "AP #<id>" for a pruned AP, or "Unattributed". */
+	label: string;
+	/** Settled peso amount attributed to this AP. */
+	amount: number;
+	count: number;
+	/** Share of total settled amount, 0–100. */
+	pct: number;
+}
+
+/** A row in the Finance transactions table. */
+export interface TransactionRow {
+	id: string;
+	/** Raw gateway status (e.g. "PAYMENT_SUCCESS"). */
+	status: string;
+	/** Badge tone derived from status. */
+	statusTone: StatusTone;
+	/** Pre-formatted peso amount (e.g. "₱1,200"). */
+	amount: string;
+	fundSourceType: string;
+	fundSourceMasked: string | null;
+	receiptNo: string | null;
+	buyerName: string;
+	buyerEmail: string | null;
+	packageName: string | null;
+	/** AP the payment came from — name, "AP #<id>" if pruned, or null if unattributed. */
+	apName: string | null;
+	/** ISO timestamp. */
+	createdAt: string;
+}
+
+/** A pending owner demotion/removal request awaiting unanimous owner approval.
+ *  Mirrors the server's `OpenOwnerChange` ($lib/server/owner-change). */
+export interface OwnerChangeRequest {
+	id: string;
+	targetId: string;
+	targetName: string;
+	action: 'demote' | 'remove';
+	initiatedById: string;
+	initiatedByName: string;
+	/** Current owners whose approval is required (all owners except the target). */
+	requiredOwnerIds: string[];
+	/** Of the required owners, those who have approved. */
+	approvedOwnerIds: string[];
+	expiresAt: number;
+	expired: boolean;
+}
+
+/** The Finance page in one frame (KPIs + chart + breakdown + first page of rows). */
+export interface FinanceSnapshot {
+	kpis: Kpi[];
+	revenue: RevenuePoint[];
+	breakdown: PaymentMethodSlice[];
+	/** Settled revenue grouped by access point. */
+	apRevenue: ApRevenueSlice[];
+	transactions: TransactionRow[];
+	/** Total rows matching the filter, for pagination. */
+	total: number;
 }

@@ -1,4 +1,5 @@
 export * from './freeTime';
+export * from './settings';
 export * from './credits';
 export * from './sessions';
 export * from './rateLimit';
@@ -6,3 +7,4 @@ export * from './accounts';
 export * from './staff';
 export * from './adminAccess';
 export * from './networkHealth';
+export * from './reconcilePayments';
