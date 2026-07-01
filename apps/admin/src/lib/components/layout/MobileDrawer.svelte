@@ -26,9 +26,10 @@
 			.join('')
 	);
 
-	// Owner-only external Sentry dashboard link — mirrors Sidebar.svelte (fail-open on the env URL).
+	// External Sentry dashboard link — mirrors Sidebar.svelte (fail-open on the env URL). Shown to
+	// any signed-in staff member; org membership on Sentry's side still gates actual access.
 	const sentryUrl = env.PUBLIC_SENTRY_DASHBOARD_URL;
-	const showSentry = $derived(!!sentryUrl && user?.role === 'owner');
+	const showSentry = $derived(!!sentryUrl);
 
 	let closeBtn = $state<HTMLButtonElement>();
 

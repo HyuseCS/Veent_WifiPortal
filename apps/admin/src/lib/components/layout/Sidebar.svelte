@@ -17,10 +17,12 @@
 	const items = $derived(nav.filter((item) => !item.ownerOnly || user?.role === 'owner'));
 
 	// External link to the Sentry project dashboard. Renders ONLY when the URL is set
-	// (fail-open — no env, no link) and only for the owner. Kept out of `nav` because that
-	// array is for internal routes with active-state matching; this opens Sentry in a new tab.
+	// (fail-open — no env, no link), for any signed-in staff member. Kept out of `nav` because
+	// that array is for internal routes with active-state matching; this opens Sentry in a new tab.
+	// NB: showing the link doesn't grant Sentry access — each admin still needs to be a member of
+	// the Sentry org to actually view it (invite them there).
 	const sentryUrl = env.PUBLIC_SENTRY_DASHBOARD_URL;
-	const showSentry = $derived(!!sentryUrl && user?.role === 'owner');
+	const showSentry = $derived(!!sentryUrl);
 	const initials = $derived(
 		(user?.name ?? user?.email ?? '?')
 			.trim()
