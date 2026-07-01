@@ -31,10 +31,10 @@ Activation is **opt-in via `MIKROTIK_HOTSPOT_USER`**. When it's set, the control
 `activateSession`; when blank, activation is simply unavailable (grant/revoke still work — the OS
 captive banner just clears a little slower).
 
-| Env | Required? | Meaning |
-|---|---|---|
-| `MIKROTIK_HOTSPOT_USER` | optional | The hotspot user to log the device in as. **Must be a real user on the guest hotspot profile.** Setting it enables activation. |
-| `MIKROTIK_HOTSPOT_PASSWORD` | optional | That user's password. |
+| Env                         | Required? | Meaning                                                                                                                        |
+| --------------------------- | --------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `MIKROTIK_HOTSPOT_USER`     | optional  | The hotspot user to log the device in as. **Must be a real user on the guest hotspot profile.** Setting it enables activation. |
+| `MIKROTIK_HOTSPOT_PASSWORD` | optional  | That user's password.                                                                                                          |
 
 There is **no** `MIKROTIK_REST_URL`. Activation reuses the existing
 `MIKROTIK_HOST`/`MIKROTIK_USER`/`MIKROTIK_PASSWORD`/`MIKROTIK_PORT`/`MIKROTIK_TLS` binary-API
@@ -99,6 +99,7 @@ App-side, a failed activation logs (and is swallowed) in the customer app's term
 ```
 
 Common reasons:
+
 - **`invalid user name or password`** → `MIKROTIK_HOTSPOT_USER`/`PASSWORD` don't match a hotspot
   user on the profile.
 - **no log line at all, device not in active** → activation isn't firing: `MIKROTIK_HOTSPOT_USER`

@@ -14,30 +14,30 @@
 
 ## Status at a glance
 
-| # | Risk | Severity | Status | Owner |
-|---|------|----------|--------|-------|
-| R1 | OTP send had no rate limit (SMS-bomb / credit drain) | High | ✅ Resolved | — |
-| R2 | `rate_limits` table built but never wired in | High | ✅ Resolved | — |
-| R3 | `emailAndPassword` enabled on a phone-only portal + guessable temp email | Medium | ✅ Resolved | — |
-| R4 | `/api/network/grant` spend→grant is not transactional | Medium | ✅ Resolved | — |
-| R5 | Maya webhook signature scheme is an unconfirmed assumption | Medium | ✅ Resolved (moot by design) | — |
-| R6 | `/register` admin hole mints an active owner per submit | High (dev-only) | ✅ Resolved (deleted) | — |
-| R7 | No rate limit on login/register, webhook, cron, SSE, Finance export | Low–Med | ✅ Resolved | — |
-| R8 | No config fail-fast for `CRON_SECRET` / payment keys / `DATABASE_URL` | Low | ✅ Resolved | — |
-| R9 | Router management plane (Winbox/Dude/API) reachable from the internet | High | 🟡 Mitigated | — |
-| R10 | Portal↔router API runs in cleartext (port 8728, no TLS) | Medium | ✅ Resolved | — |
-| R11 | node-routeros connection timeout crashes the whole app server | Medium | ✅ Resolved | — |
-| R12 | Client-supplied device MAC trusted on grant paths (free internet for arbitrary devices / cross-user revoke DoS) | High | 🔴 Accepted (deferred) | — |
-| R13 | Admin bulk customer-delete not owner-gated (bypasses the owner-only verified wipe) | High | ✅ Resolved | — |
-| R14 | `consumeRateLimit` TOCTOU race + no unique constraint (burst-bypassable throttles) | High | ✅ Resolved | — |
-| R15 | Admin `/api/auth/sign-up/email` open (no `disableSignUp`) | Medium | ✅ Resolved | — |
-| R16 | Mandatory admin 2FA gate missing on `/api/connected` + `/api/router-log` | Medium | ✅ Resolved | — |
-| R17 | CSV formula injection in Finance export | Medium | ✅ Resolved | — |
-| R18 | `payment_transactions` double-count (webhook vs poll record under divergent ids) | Medium | ✅ Resolved | — |
-| R19 | OTP-send throttle bypassable via direct `/api/auth/phone-number/send-otp` | High | ✅ Resolved | — |
-| R20 | Low-severity hardening: no security headers, webhook error reflection, MAC case-drift, proxy-IP trust undocumented | Low | ✅ Resolved | — |
+| #   | Risk                                                                                                               | Severity        | Status                       | Owner |
+| --- | ------------------------------------------------------------------------------------------------------------------ | --------------- | ---------------------------- | ----- |
+| R1  | OTP send had no rate limit (SMS-bomb / credit drain)                                                               | High            | ✅ Resolved                  | —     |
+| R2  | `rate_limits` table built but never wired in                                                                       | High            | ✅ Resolved                  | —     |
+| R3  | `emailAndPassword` enabled on a phone-only portal + guessable temp email                                           | Medium          | ✅ Resolved                  | —     |
+| R4  | `/api/network/grant` spend→grant is not transactional                                                              | Medium          | ✅ Resolved                  | —     |
+| R5  | Maya webhook signature scheme is an unconfirmed assumption                                                         | Medium          | ✅ Resolved (moot by design) | —     |
+| R6  | `/register` admin hole mints an active owner per submit                                                            | High (dev-only) | ✅ Resolved (deleted)        | —     |
+| R7  | No rate limit on login/register, webhook, cron, SSE, Finance export                                                | Low–Med         | ✅ Resolved                  | —     |
+| R8  | No config fail-fast for `CRON_SECRET` / payment keys / `DATABASE_URL`                                              | Low             | ✅ Resolved                  | —     |
+| R9  | Router management plane (Winbox/Dude/API) reachable from the internet                                              | High            | 🟡 Mitigated                 | —     |
+| R10 | Portal↔router API runs in cleartext (port 8728, no TLS)                                                            | Medium          | ✅ Resolved                  | —     |
+| R11 | node-routeros connection timeout crashes the whole app server                                                      | Medium          | ✅ Resolved                  | —     |
+| R12 | Client-supplied device MAC trusted on grant paths (free internet for arbitrary devices / cross-user revoke DoS)    | High            | 🔴 Accepted (deferred)       | —     |
+| R13 | Admin bulk customer-delete not owner-gated (bypasses the owner-only verified wipe)                                 | High            | ✅ Resolved                  | —     |
+| R14 | `consumeRateLimit` TOCTOU race + no unique constraint (burst-bypassable throttles)                                 | High            | ✅ Resolved                  | —     |
+| R15 | Admin `/api/auth/sign-up/email` open (no `disableSignUp`)                                                          | Medium          | ✅ Resolved                  | —     |
+| R16 | Mandatory admin 2FA gate missing on `/api/connected` + `/api/router-log`                                           | Medium          | ✅ Resolved                  | —     |
+| R17 | CSV formula injection in Finance export                                                                            | Medium          | ✅ Resolved                  | —     |
+| R18 | `payment_transactions` double-count (webhook vs poll record under divergent ids)                                   | Medium          | ✅ Resolved                  | —     |
+| R19 | OTP-send throttle bypassable via direct `/api/auth/phone-number/send-otp`                                          | High            | ✅ Resolved                  | —     |
+| R20 | Low-severity hardening: no security headers, webhook error reflection, MAC case-drift, proxy-IP trust undocumented | Low             | ✅ Resolved                  | —     |
 
-Severity = impact × likelihood for *this* app at its current scale, not generic CVSS.
+Severity = impact × likelihood for _this_ app at its current scale, not generic CVSS.
 
 ---
 
@@ -50,20 +50,21 @@ POST the login form thousands of times → thousands of billed texts to a victim
 number (each iTexMo send bills one credit — `TotalCreditUsed`).
 
 **Fix:** `apps/customer/src/lib/server/otpRateLimit.ts` composes the existing core
-limiter over **both** the phone number and the device MAC and is enforced *before*
+limiter over **both** the phone number and the device MAC and is enforced _before_
 the SMS gateway in:
+
 - `apps/customer/src/routes/login/+page.server.ts`
 - `apps/customer/src/routes/auth/verify/+page.server.ts` (`resend`)
 
 Over budget → `fail(429)` with a "try again in ~N minutes" message; no SMS is sent.
 
 **Policy:** 5 sends per identifier per rolling hour. Window is measured from the
-last send; a *refused* attempt doesn't extend the penalty.
+last send; a _refused_ attempt doesn't extend the penalty.
 
 **Smoke test before relying on it:** hit the login form 6× with the same number —
 the 6th returns 429 and sends no text.
 
-**Note (verify-side):** OTP *verification* attempts are owned by better-auth's
+**Note (verify-side):** OTP _verification_ attempts are owned by better-auth's
 `phoneNumber` plugin (`allowedAttempts: 3`, `auth.ts`). Confirmed configured.
 
 ---
@@ -124,7 +125,8 @@ with /register -->` link in `login/+page.svelte`. Owners are now created only vi
 A shared `rateLimit(scope, identifier, max, windowMs)` helper
 (`apps/{customer,admin}/src/lib/server/rateLimit.ts`, over the `rate_limits` table with
 additive `scope`/`identifier` columns — migration `0014`) was wired into:
-- **Admin login** — per IP (10 / 15 min). *(Customer auth is OTP — teammate-owned.)*
+
+- **Admin login** — per IP (10 / 15 min). _(Customer auth is OTP — teammate-owned.)_
 - **`/api/network/grant`** — per user (20 / hr).
 - **Finance CSV export** — per admin (20 / hr).
 - **Payment webhook** — per-IP flood cap (120 / min).
@@ -149,14 +151,13 @@ first request.
 
 ## R9 — Router management plane exposed to the internet 🟡 Mitigated
 
-**Mitigated 2026-06-24:** the RouterOS API service's *Available From* is now
+**Mitigated 2026-06-24:** the RouterOS API service's _Available From_ is now
 restricted to the admin server, and management services are no longer open to the
 WAN scanners. Remaining surface-reduction items (firewall input chain, MAC-server
 lockdown, disabling unused services) are tracked in the checklist below as
 ongoing. The cleartext-API concern was split out into **R10**.
 
 <details><summary>Original finding + full hardening checklist</summary>
-
 
 The MikroTik router logs a constant stream of denied probes to its management
 services from foreign internet scanners:
@@ -168,7 +169,7 @@ warning denied winbox/dude connect from 146.88.240.23
 ```
 
 These are **automated bots** sweeping the internet for exposed MikroTik routers,
-not targeted attacks. The router is *currently* denying them, but the fact that
+not targeted attacks. The router is _currently_ denying them, but the fact that
 they reach far enough to be logged means the management ports are reachable from
 the WAN. MikroTik is a high-value target because of mass-exploited bugs
 (CVE-2018-14847 Winbox auth bypass → VPNFilter / Mēris botnets).
@@ -181,7 +182,7 @@ the portal's entire access-control plane is owned **and** the guest LAN is
 exposed. This is the access-control trust boundary, so it ranks High.
 
 > ⚠️ **Do NOT disable the `api`/`api-ssl` service** — that's the channel the admin
-> app uses. Restrict *who* can reach it instead (Available From = the admin
+> app uses. Restrict _who_ can reach it instead (Available From = the admin
 > server's IP, ideally over a VPN), and prefer api-ssl (TLS) so the API
 > credentials aren't sent in cleartext.
 
@@ -227,8 +228,9 @@ avoid locking yourself out):**
 **Resolved 2026-06-24.** The portal↔router API now runs over **api-ssl (TLS, 8729)**.
 
 Setup that landed:
+
 - Router: signed a self-signed cert (`api-cert-radius`, `key-usage=tls-server,key-cert-sign`)
-  and enabled `api-ssl` on 8729 with *Available From* restricted to the apps' host
+  and enabled `api-ssl` on 8729 with _Available From_ restricted to the apps' host
   `10.0.0.147/32`.
 - Apps: both `apps/customer/.env` and `apps/admin/.env` set to `MIKROTIK_PORT=8729`,
   `MIKROTIK_TLS=true`, `MIKROTIK_TLS_INSECURE=true` (self-signed cert).
@@ -277,27 +279,28 @@ server down.
 > (the path that previously crashed on `SOCKTMOUT`) now loads without taking the
 > server down. The fix held over the slower TLS link — which is what unblocked R10.
 
-
 **Both** the customer app (guest grant/revoke) and the admin app (management) reach
-the router over the **plain RouterOS API** (`MIKROTIK_HOST=10.0.0.1`,
+the router over the **plain RouterOS API** (`MIKROTIK_HOST=10.210.0.1`,
 `MIKROTIK_PORT=8728`, `MIKROTIK_TLS=false`, user `veent-portal`), so that API user's
 password crosses the wire **unencrypted**. Because guests are on the **same
-`10.0.0.0/24`** as the router (per DHCP leases), a guest on that L2 segment could
+`10.210.0.0/18`** as the router (per DHCP leases), a guest on that L2 segment could
 sniff/MITM the API credentials.
 
-Both apps run on the same host (`10.0.0.147`), so the API *Available From*
-restriction is a single `10.0.0.147/32` — but that host is DHCP-assigned, so pin it
-to a static lease or the restriction will eventually break both apps' grants.
+Both apps run on the same host (the app server's `10.210.x.x` lease), so the API
+_Available From_ restriction is a single `<app-server-IP>/32` — but that host is
+DHCP-assigned, so pin it to a static lease or the restriction will eventually break
+both apps' grants.
 
 **Status:** deferred by decision on 2026-06-24 — not urgent because API access is
-already restricted via *Available From* (R9), but it should be closed before
+already restricted via _Available From_ (R9), but it should be closed before
 production / before guests and management share a segment long-term.
 
 **TODO — switch the API link to api-ssl (TLS):**
+
 1. On the router, create a self-signed cert (the `key-cert-sign` usage is required
    so it can self-sign — a `tls-server`-only cert fails with "CA not found"):
    ```
-   /certificate add name=api-cert-radius common-name=10.0.0.1 \
+   /certificate add name=api-cert-radius common-name=10.210.0.1 \
      key-usage=tls-server,key-cert-sign days-valid=3650
    /certificate sign api-cert-radius          # async — confirm with: /certificate print detail
    /ip service set api-ssl certificate=api-cert-radius address=<ADMIN_SERVER_LAN_IP>/32 disabled=no
@@ -322,7 +325,8 @@ risk** — recorded here rather than silently dropped.
 ## R12 — Client-supplied device MAC trusted on grant paths 🔴 Accepted (deferred)
 
 **Risk (High):** the grant paths take the device MAC from the request and only validate its
-*shape*, never that it belongs to the caller's device:
+_shape_, never that it belongs to the caller's device:
+
 - `apps/customer/src/routes/api/network/grant/+server.ts:39` — `isValidMac(body.macAddress)`
   is a format check only; the value flows straight into bind+grant.
 - `apps/customer/src/routes/dashboard/+page.server.ts:107,131,172` — the actions **prefer the
@@ -331,7 +335,7 @@ risk** — recorded here rather than silently dropped.
 Two attacks: **(1) free internet for arbitrary devices** — an authenticated user binds any MAC
 they choose (e.g. a sniffed nearby device) under their own free-time/paid window; **(2)
 cross-user DoS** — bind a paying victim's MAC under the attacker's account, then `unbindDevice`
-revokes the *shared* router bypass and flaps the victim offline. Bounded: attack 1 spends the
+revokes the _shared_ router bypass and flaps the victim offline. Bounded: attack 1 spends the
 attacker's own credits/free-time and is capped by the device limit + phone-OTP-gated signup;
 attack 2 self-heals on the ~60s dashboard auto-rebind.
 
@@ -341,8 +345,8 @@ redirect carries `?mac=` precisely because server-side IP→MAC resolution (`res
 stub/dev). A correct fix must enforce a match **only** when the router IP→MAC lookup gives a
 high-confidence result and fall back to the client value otherwise, applied consistently across
 the grant endpoint + 3 dashboard actions — so it's its own careful pass, and its strength is
-bounded by detection reliability anyway. The **remove-device** control does *not* mitigate this
-(the rogue binding lives under the *attacker's* account, invisible to the victim).
+bounded by detection reliability anyway. The **remove-device** control does _not_ mitigate this
+(the rogue binding lives under the _attacker's_ account, invisible to the victim).
 
 **Deferred fix:** shared resolve-and-compare helper, gated strictly on `resolveDeviceMac`
 (router IP→MAC), `403` on mismatch, null/dev paths unchanged. See the audit discussion.
@@ -384,7 +388,7 @@ counter row).
 ## R16 — Mandatory admin 2FA gate missing on API endpoints ✅ Resolved
 
 **Was:** the 2FA-enrollment gate lived only in `(app)/+layout.server.ts`; `hooks.server.ts`
-exposes `locals.user` to any *active* staff regardless of `twoFactorEnabled` (so `/enroll-2fa`
+exposes `locals.user` to any _active_ staff regardless of `twoFactorEnabled` (so `/enroll-2fa`
 can run). The non-`(app)` API routes `/api/connected` (live dashboard SSE) and `/api/router-log`
 checked only `locals.user`, so an un-enrolled session (or an attacker with just the password of
 a not-yet-enrolled invitee) could `curl` them.
@@ -423,7 +427,7 @@ plus confirming the Maya field stays a follow-up.
 better-auth handler) skipped it — re-opening the SMS-bomb / credit-drain R1 was meant to close.
 
 **Fix:** enforcement moved to the `sendOTP` callback in `apps/customer/src/lib/server/auth.ts` —
-the one seam every send (form *and* direct endpoint) passes through. The form actions keep their
+the one seam every send (form _and_ direct endpoint) passes through. The form actions keep their
 pre-check (for the friendly retry message + MAC dimension) and set `locals.otpLimitEnforced` so
 the callback doesn't double-count a legitimate send; a direct call (no portal context) falls back
 to a phone-only cap. `otpRateLimit.ts` itself (teammate-owned) was not modified — only called.
@@ -457,5 +461,5 @@ to a phone-only cap. `otpRateLimit.ts` itself (teammate-owned) was not modified 
 
 - Touching auth, payments, the router grant, or any new endpoint? Skim this first.
 - Fixed something? Flip its status to ✅, add the date, and link the PR/commit.
-- Found a new risk? Add a row + a short section. Keep severity honest for *this*
+- Found a new risk? Add a row + a short section. Keep severity honest for _this_
   app's scale.
