@@ -183,3 +183,17 @@ router-side. **No application code is outstanding.**
 3. *(optional)* Fix the Winbox LAN allowlist to cover the new subnet (`10.210.0.0/18`; the old
    entry was a no-op `10.0.0.0/32`, see Problem #1 box).
 4. *(optional, enables #2)* set `MIKROTIK_HOTSPOT_USER`/`MIKROTIK_HOTSPOT_PASSWORD` in both `.env`.
+
+---
+
+## Related (application-side, not router/ops)
+
+- **[Second account's MAC not captured](second-account-mac-not-captured.md)** — after logout, buying
+  time on a *second* account doesn't grant the device internet because MAC resolution is
+  browser-scoped (`veent_portal` cookie) or per-user (`last_known_mac`), and both miss for a fresh
+  account. Distinct from the blockers above: this one is a customer-app logic bug, open for a later fix.
+- **[CNA "Connected" flap on free time](captive-connected-flap-on-free-time.md)** — intermittent
+  false "Connected" → back to "Sign in to network." Likely the walled-garden `*.google.com` /
+  `*.gstatic.com` allows (needed for reCAPTCHA) also whitelisting Android's connectivity probe
+  hosts, so the OS gets a real 204 pre-auth. Walled-garden/config + probe-endpoint issue, open for
+  a later fix.
