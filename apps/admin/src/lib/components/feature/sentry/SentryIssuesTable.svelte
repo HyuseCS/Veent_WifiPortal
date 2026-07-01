@@ -107,13 +107,25 @@
 	}
 </script>
 
-<Table cards class="md:max-h-[70vh]">
+<Table cards class="md:max-h-[75vh]">
 	{#snippet toolbar()}
 		<div class="flex items-center gap-3 px-4 py-3">
 			<h2 class="text-base font-semibold text-ink">Unresolved issues</h2>
-			<span class="ml-auto text-xs text-muted">
-				{sortKey ? 'click a column to re-sort' : 'most frequent first'}
+			{#if sortKey}
+				<span class="ml-auto text-xs text-muted">click a column to re-sort</span>
+			{/if}
+		</div>
+	{/snippet}
+
+	{#snippet footer()}
+		<div class="flex items-center gap-3 px-4 py-2 text-xs text-muted">
+			<span>
+				{issues.length >= 25 ? '25+' : issues.length}
+				{issues.length === 1 ? 'unresolved issue' : 'unresolved issues'}
 			</span>
+			{#if issues.length}
+				<span class="ml-auto">Click a row for full error detail</span>
+			{/if}
 		</div>
 	{/snippet}
 
@@ -121,7 +133,7 @@
 		<tr class="border-b border-border bg-surface">
 			{#each columns as col (col.label)}
 				<th
-					class="px-4 py-2.5 text-left text-[11px] font-semibold tracking-wider text-muted uppercase"
+					class="bg-surface px-4 py-1.5 text-left text-[11px] font-semibold tracking-wider text-muted uppercase"
 					aria-sort={col.key && sortKey === col.key
 						? sortDir === 'asc'
 							? 'ascending'
