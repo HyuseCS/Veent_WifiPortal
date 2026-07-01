@@ -3,7 +3,7 @@ import { eq } from 'drizzle-orm';
 import { createHmac } from 'node:crypto';
 import { env } from '$env/dynamic/private';
 import { customerUser, packages, paymentCheckouts } from '@veent/db';
-import { creditCheckoutIfUnsettled, recordPaymentTransaction } from '@veent/core';
+import { creditCheckoutIfUnsettled, recordPaymentTransaction, captureHandled } from '@veent/core';
 import { db } from '$lib/server/db';
 import { payments } from '$lib/server/payments';
 import { rateLimit, clientIp } from '$lib/server/rateLimit';
@@ -53,6 +53,9 @@ export const POST: RequestHandler = async (event) => {
 		// Observability: surface verification failures (spoofed/garbled events, gateway lookup
 		// errors) — a spike here is a signal worth alerting on.
 		console.warn('[webhook] verification failed:', (e as Error).message);
+		// Money-path failure (spoofed/garbled event OR a real gateway-lookup outage) → capture as
+		// error so it's alertable. scrubEvent masks any buyer PII in the error before send.
+		captureHandled(e, { level: 'error', tags: { area: 'payment', scope: 'webhook' } });
 		// Keep the detail in the server log only — don't reflect internal/gateway error text to an
 		// unauthenticated caller (info disclosure / payment-id probing aid).
 		error(400, 'Webhook verification failed');

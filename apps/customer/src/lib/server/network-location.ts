@@ -67,7 +67,7 @@ export async function lastKnownMac(userId: string): Promise<string | null> {
  * the system browser have separate cookie jars — so it's absent after the Maya hop, or whenever
  * the buyer isn't in the browser that hit the `?mac=` redirect), AND the IP→MAC lookup can't
  * help because the hotspot NATs client traffic to its OWN address (we then see the router's IP,
- * e.g. 10.0.0.1, not the device). A fresh portal entry (new `?mac=` cookie) always wins, so the
+ * e.g. 10.210.0.1, not the device). A fresh portal entry (new `?mac=` cookie) always wins, so the
  * fallback only fills the gap; a user who genuinely switched devices reconnects through the
  * portal to refresh it.
  */

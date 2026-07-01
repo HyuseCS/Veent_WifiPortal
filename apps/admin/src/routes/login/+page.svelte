@@ -1,12 +1,15 @@
 <script lang="ts">
 	import { page } from '$app/state';
 	import { enhance } from '$app/forms';
+	import { resolve } from '$app/paths';
 	import { Button, Field } from '$lib/components/ui';
 	import type { ActionData } from './$types';
 
 	let { form }: { form: ActionData } = $props();
 	// Shown after a successful account activation (redirect from /activate).
 	const justActivated = $derived(page.url.searchParams.get('activated') === '1');
+	// Shown after a successful password reset (redirect from /reset-password).
+	const justReset = $derived(page.url.searchParams.get('reset') === '1');
 
 	// Disable the submit button while the request is in flight (blocks double-submits).
 	let submitting = $state(false);
@@ -28,6 +31,15 @@
 				role="status"
 			>
 				Your account is active. Sign in below.
+			</p>
+		{/if}
+
+		{#if justReset}
+			<p
+				class="rounded-lg border border-border bg-bg px-4 py-3 text-center text-sm text-online"
+				role="status"
+			>
+				Your password has been reset. Sign in below.
 			</p>
 		{/if}
 
@@ -55,6 +67,15 @@
 			{#if form?.message}
 				<p class="text-xs text-blocked" role="alert">{form.message}</p>
 			{/if}
+
+			<div class="flex justify-end">
+				<a
+					href={resolve('/forgot-password')}
+					class="inline-flex min-h-[44px] items-center text-xs text-muted underline hover:text-ink"
+				>
+					Forgot password?
+				</a>
+			</div>
 
 			<Button type="submit" loading={submitting} class="w-full py-2.5">Sign In</Button>
 		</form>

@@ -3,6 +3,9 @@ import { getStaffStatus, STAFF_STATUS, grantAdminAccess, resolveDeviceMac } from
 import { auth } from '$lib/server/auth';
 import { db } from '$lib/server/db';
 import { network } from '$lib/server/network';
+import { logger } from '$lib/server/logger';
+
+const log = logger('sign-in');
 
 /**
  * Post-authentication staff gate, shared by both sign-in paths: the direct
@@ -41,7 +44,7 @@ export async function finishStaffSignIn(
 		const mac = await resolveDeviceMac(network, event.getClientAddress());
 		if (mac) await grantAdminAccess(network, mac);
 	} catch (err) {
-		console.error('[admin] device internet grant on sign-in failed:', err);
+		log.error('device internet grant on sign-in failed:', err);
 	}
 
 	return null;

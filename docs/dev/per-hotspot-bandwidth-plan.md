@@ -1,9 +1,21 @@
 # Per-Antenna/Hotspot Bandwidth Limiting
 
-> Status: **PLAN — not yet implemented.** Feasibility investigated 2026-07-01.
+> Status: **IMPLEMENTED on `dev/admin` (2026-07-01).** DB + admin UI + MikroTik driver all
+> landed; migration `0031` applied and verified on the dev DB; helpers unit-tested. The one
+> part unverifiable in dev is the live `/queue/simple` calls (needs the on-site RouterOS v6
+> box) — same situation as `activateSession`. Decisions taken at build time: full live
+> enforcement now, UI on the `/networks` per-AP card, subnet-target with interface fallback,
+> Mbps in the UI / Kbps in storage. Feasibility investigated 2026-07-01.
+>
 > Scope: admin-configurable aggregate up/down speed cap **per AP/hotspot interface**,
 > enforced on the MikroTik router. This is deliberately *not* per-user or per-plan
 > (see "Why per-hotspot" below).
+>
+> **What shipped vs. this plan:** implemented as written, with one refinement — the caps and
+> the interface binding are set together in a single owner-only `setApConfig` action on the
+> `/networks` card (the plan had left the binding UI open). Enforcement targets
+> `interfaceName ?? network_health.name`. The reconcile/re-apply sweep (open question 4) and
+> the global `app_settings` default were left out of v1 as planned.
 
 ## Goal
 

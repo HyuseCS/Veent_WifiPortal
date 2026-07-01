@@ -1,0 +1,4 @@
+ALTER TABLE "network_health" ADD COLUMN IF NOT EXISTS "max_down_kbps" integer;--> statement-breakpoint
+ALTER TABLE "network_health" ADD COLUMN IF NOT EXISTS "max_up_kbps" integer;--> statement-breakpoint
+DO $$ BEGIN ALTER TABLE "network_health" ADD CONSTRAINT "network_health_max_down_kbps_positive" CHECK ("network_health"."max_down_kbps" IS NULL OR "network_health"."max_down_kbps" > 0); EXCEPTION WHEN duplicate_object OR duplicate_table THEN null; END $$;--> statement-breakpoint
+DO $$ BEGIN ALTER TABLE "network_health" ADD CONSTRAINT "network_health_max_up_kbps_positive" CHECK ("network_health"."max_up_kbps" IS NULL OR "network_health"."max_up_kbps" > 0); EXCEPTION WHEN duplicate_object OR duplicate_table THEN null; END $$;

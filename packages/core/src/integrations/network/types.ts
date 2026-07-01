@@ -35,6 +35,20 @@ export interface NetworkApSample {
 	latencyMs?: number | null;
 }
 
+/** Input for applying (or clearing) an aggregate per-AP bandwidth cap on the router. */
+export interface InterfaceLimitInput {
+	/** Stable AP identity (`network_health.name`) — names/comments the queue so it can be
+	 * found, updated, and removed idempotently, and is traceable back to the row. */
+	apName: string;
+	/** Router interface the AP maps to (`network_health.interfaceName ?? name`). The
+	 * controller resolves this interface's client subnet as the queue target. */
+	interfaceName: string;
+	/** Aggregate download cap toward clients, in Kbps. Null = no download cap. */
+	downKbps: number | null;
+	/** Aggregate upload cap from clients, in Kbps. Null = no upload cap. */
+	upKbps: number | null;
+}
+
 /** Input for proactively transitioning a granted device into an *active* hotspot session. */
 export interface ActivateSessionInput {
 	macAddress: string;
@@ -60,6 +74,15 @@ export interface NetworkController {
 	activateSession?(input: ActivateSessionInput): Promise<void>;
 	/** Re-block a device. Idempotent — revoking an already-blocked MAC is a no-op. */
 	revoke(macAddress: string): Promise<void>;
+	/**
+	 * Apply an aggregate up/down bandwidth cap to one AP by installing a `/queue/simple`
+	 * on the hotspot's client subnet (falling back to the interface). Idempotent: updates
+	 * the existing queue if present, adds it if not, and removes it when both caps are null.
+	 * Enforcement is independent of the `bypassed` ip-bindings `grant` uses, so it limits
+	 * all guest traffic on the AP. Best-effort — a failure must not break the admin save.
+	 * Optional: stub/dev and controllers without queue support omit it.
+	 */
+	applyInterfaceLimit?(input: InterfaceLimitInput): Promise<void>;
 	/** Live per-interface health (link/users/throughput) for the Networks page.
 	 * Optional: only controllers with telemetry implement it (the stub doesn't). */
 	sampleHealth?(): Promise<NetworkApSample[]>;

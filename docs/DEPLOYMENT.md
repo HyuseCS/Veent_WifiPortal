@@ -35,7 +35,7 @@ toward the router — correct even on a multi-homed box) and writes `http://<ip>
 into the customer/admin/locator `ORIGIN`s, plus `deploy/login.html` pointed at the customer
 portal. Re-running on a new box (or after a lease change) refreshes a stale LAN-IP `ORIGIN`
 automatically; a real `https://` domain you set for a TLS deploy is left untouched. Override
-detection with `--ip=10.0.0.50` or `PROD_LAN_IP=10.0.0.50` (e.g. a static IP the box will
+detection with `--ip=10.210.0.50` or `PROD_LAN_IP=10.210.0.50` (e.g. a static IP the box will
 move to). The router api-ssl _Available From_ is **not** repointed automatically — that stays
 the explicit `setup:router --restrict-api` step (**§7a**).
 
@@ -52,7 +52,7 @@ every step the script performs, for when you want to understand or override it.
 - **PostgreSQL** — on the device, or a central DB reachable from it (for a multi-site
   setup see `docs/mikrotik/adding-a-remote-router.md` and the Tailscale + central-DB
   recipe in the README history).
-- Network access to the **MikroTik router** API (default `10.210.0.1:8728`).
+- Network access to the **MikroTik router** API (gateway `10.210.0.1`, LAN `10.210.0.0/18`; API `:8728` plain / `:8729` api-ssl).
 
 ## 1. Get the code and install
 

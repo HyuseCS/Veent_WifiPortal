@@ -88,6 +88,10 @@ export interface NetworkAp {
 	/** Operator label for the overlap cluster this AP belongs to (mirrored across the
 	 * cluster's members on rename). Null = unnamed; the UI shows "Cluster N". */
 	clusterName: string | null;
+	/** Aggregate download/upload caps enforced on the router for this AP, in Kbps.
+	 * Null = uncapped. The card presents these as Mbps. */
+	maxDownKbps: number | null;
+	maxUpKbps: number | null;
 	/** Recent connections attributed to this AP (newest first), for the card's log. */
 	logs: ConnectionLog[];
 }
