@@ -1,0 +1,34 @@
+<script lang="ts">
+	import Activity from 'lucide-svelte/icons/activity';
+	import type { Component } from 'svelte';
+	import { EmptyState } from '$lib/components/ui';
+	import {
+		SentryHeader,
+		SentryKpis,
+		SentryVolumeChart,
+		SentryIssuesTable
+	} from '$lib/components/feature/sentry';
+	import type { PageData } from './$types';
+
+	// Composition only — all data shaping happens server-side in the facade. When Sentry's API
+	// isn't configured (no token/org/project) the load returns { configured: false } and we show
+	// a designed empty state instead of a broken dashboard.
+	let { data }: { data: PageData } = $props();
+</script>
+
+{#if !data.configured}
+	<EmptyState
+		icon={Activity as unknown as Component}
+		title="Sentry API not configured"
+		description="Set SENTRY_AUTH_TOKEN, SENTRY_ORG_SLUG and SENTRY_PROJECT_ID to load issues and event volume here."
+	/>
+{:else}
+	<div class="flex flex-col gap-6 md:h-full">
+		<SentryHeader dashboardUrl={data.dashboardUrl} />
+		<SentryKpis kpis={data.kpis} />
+		<SentryVolumeChart points={data.volume} degraded={data.degraded.volume} />
+		<div class="flex min-h-0 flex-1 flex-col">
+			<SentryIssuesTable issues={data.issues} degraded={data.degraded.issues} />
+		</div>
+	</div>
+{/if}

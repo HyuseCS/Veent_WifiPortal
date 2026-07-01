@@ -7,6 +7,7 @@ import UserCog from 'lucide-svelte/icons/user-cog';
 import Users from 'lucide-svelte/icons/users';
 import TrendingUp from 'lucide-svelte/icons/trending-up';
 import FileCog from 'lucide-svelte/icons/file-cog';
+import Activity from 'lucide-svelte/icons/activity';
 
 /** A sidebar navigation entry. */
 export interface NavItem {
@@ -30,5 +31,6 @@ export const nav: NavItem[] = [
 		icon: FileCog as unknown as Component,
 		ownerOnly: true
 	},
-	{ href: '/staff', label: 'Staff', icon: UserCog as unknown as Component, ownerOnly: true }
+	{ href: '/staff', label: 'Staff', icon: UserCog as unknown as Component, ownerOnly: true },
+	{ href: '/sentry', label: 'Sentry', icon: Activity as unknown as Component, ownerOnly: true }
 ];

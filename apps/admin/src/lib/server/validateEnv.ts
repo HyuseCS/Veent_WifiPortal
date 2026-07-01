@@ -42,4 +42,16 @@ export function validateEnv(): void {
 	if (!dev && !pub.PUBLIC_SENTRY_DSN) {
 		log.warn('PUBLIC_SENTRY_DSN unset — error tracking & performance tracing are disabled.');
 	}
+
+	// The in-app /sentry dashboard needs an API token + org/project on top of the DSN. Missing →
+	// the page shows an empty state (never a crash), so warn rather than fail. Only nag when the
+	// DSN is set (i.e. Sentry is meant to be on).
+	if (!dev && pub.PUBLIC_SENTRY_DSN) {
+		const missingApi = (['SENTRY_AUTH_TOKEN', 'SENTRY_ORG_SLUG', 'SENTRY_PROJECT_ID'] as const).filter(
+			(k) => !env[k]
+		);
+		if (missingApi.length > 0) {
+			log.warn(`${missingApi.join(', ')} unset — the /sentry dashboard page will be empty.`);
+		}
+	}
 }
