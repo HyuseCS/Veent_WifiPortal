@@ -1,5 +1,5 @@
 import type { Kpi } from '$lib/types';
-import type { SentryIssue, SentryVolumePoint } from './types';
+import type { SentryEventDetail, SentryIssue, SentryVolumePoint } from './types';
 
 /**
  * Pure raw-JSON → view-model functions. No fetch, no env, no I/O — so this is the one place
@@ -33,6 +33,56 @@ export function mapIssue(raw: unknown): SentryIssue {
 		lastSeen: str(r.lastSeen),
 		status: str(r.status),
 		permalink: str(r.permalink)
+	};
+}
+
+interface RawFrame {
+	filename?: string;
+	function?: string;
+	lineNo?: number | null;
+	inApp?: boolean;
+}
+interface RawException {
+	type?: string;
+	value?: string;
+	stacktrace?: { frames?: RawFrame[] };
+}
+interface RawEvent {
+	id?: string;
+	culprit?: string;
+	dateCreated?: string;
+	entries?: { type?: string; data?: { values?: RawException[] } }[];
+	tags?: { key?: string; value?: string }[];
+	metadata?: { type?: string; value?: string };
+}
+
+/**
+ * Narrow the raw "latest event" payload to the detail view model. Sentry nests the exception under
+ * entries[type=exception].data.values — the last value is the raised exception (earlier ones are
+ * its causes). Frames keep Sentry's native order (most recent call last). Missing pieces degrade to
+ * empty; metadata is the fallback for type/value when the exception entry is absent.
+ */
+export function mapEventDetail(raw: unknown): SentryEventDetail {
+	const r = (raw ?? {}) as RawEvent;
+	const values = r.entries?.find((e) => e.type === 'exception')?.data?.values ?? [];
+	const exc = values[values.length - 1] ?? {};
+	const frames = (exc.stacktrace?.frames ?? []).map((f) => ({
+		filename: str(f.filename),
+		function: str(f.function),
+		lineNo: typeof f.lineNo === 'number' ? f.lineNo : null,
+		inApp: Boolean(f.inApp)
+	}));
+	const tags = (r.tags ?? [])
+		.map((t) => ({ key: str(t.key), value: str(t.value) }))
+		.filter((t) => t.key);
+	return {
+		id: str(r.id),
+		type: str(exc.type) || str(r.metadata?.type),
+		value: str(exc.value) || str(r.metadata?.value),
+		culprit: str(r.culprit),
+		frames,
+		tags,
+		dateCreated: str(r.dateCreated)
 	};
 }
 

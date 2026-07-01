@@ -12,6 +12,7 @@
 	import { EmptyState, IconButton, StatusBadge, Table } from '$lib/components/ui';
 	import type { StatusTone } from '$lib/types';
 	import type { SentryIssue } from '$lib/server/sentry/types';
+	import SentryIssueDialog from './SentryIssueDialog.svelte';
 
 	// Issues list. Row actions post to the page's ?/resolve and ?/ignore form actions (the route
 	// re-checks active-staff auth and rate-limits); this component is presentation only.
@@ -82,6 +83,28 @@
 		const h = Math.floor(m / 60);
 		return h < 24 ? `${h}h ago` : `${Math.floor(h / 24)}d ago`;
 	}
+
+	// Row → detail modal. A click anywhere on the row opens it, EXCEPT on the row's own action
+	// controls (resolve/ignore/open) — those keep their own behaviour. Keyboard: Enter/Space on the
+	// focused row only (not when focus is on a child control).
+	let selected = $state<SentryIssue | null>(null);
+	let dialogOpen = $state(false);
+
+	function openIssue(issue: SentryIssue) {
+		selected = issue;
+		dialogOpen = true;
+	}
+	function onRowClick(issue: SentryIssue, e: MouseEvent) {
+		if ((e.target as HTMLElement).closest('a, button')) return;
+		openIssue(issue);
+	}
+	function onRowKey(issue: SentryIssue, e: KeyboardEvent) {
+		if (e.target !== e.currentTarget) return;
+		if (e.key === 'Enter' || e.key === ' ') {
+			e.preventDefault();
+			openIssue(issue);
+		}
+	}
 </script>
 
 <Table cards class="md:max-h-[70vh]">
@@ -139,7 +162,14 @@
 	{/snippet}
 
 	{#each sorted as issue (issue.id)}
-		<tr class="hover:bg-surface">
+		<tr
+			class="cursor-pointer hover:bg-surface focus-visible:bg-surface focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand"
+			role="button"
+			tabindex={0}
+			aria-label="View details for {issue.shortId || issue.title}"
+			onclick={(e) => onRowClick(issue, e)}
+			onkeydown={(e) => onRowKey(issue, e)}
+		>
 			<td class="tc-full px-4 py-3 md:w-full md:max-w-0">
 				<div class="min-w-0">
 					<div class="truncate font-medium text-ink">{issue.title}</div>
@@ -219,3 +249,5 @@
 		</tr>
 	{/if}
 </Table>
+
+<SentryIssueDialog issue={selected} bind:open={dialogOpen} {levelTone} {seenAgo} />

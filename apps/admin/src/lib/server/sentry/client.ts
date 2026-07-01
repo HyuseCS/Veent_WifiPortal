@@ -97,6 +97,13 @@ export function fetchIssuesRaw(): Promise<unknown> {
 	);
 }
 
+/** The most recent event for an issue — carries the exception + stacktrace the list omits. */
+export function fetchLatestEventRaw(id: string): Promise<unknown> {
+	return cached(`event:${id}`, () =>
+		sentryGet(`/organizations/${org()}/issues/${encodeURIComponent(id)}/events/latest/`, {})
+	);
+}
+
 /** Daily accepted-error event counts for the project over the last 14 days (trend chart). */
 export function fetchStatsRaw(): Promise<unknown> {
 	return cached('stats', () =>

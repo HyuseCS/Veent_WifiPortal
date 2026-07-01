@@ -32,6 +32,37 @@ export interface SentryVolumePoint {
 	count: number;
 }
 
+/** One stack frame of the latest event's exception. */
+export interface SentryStackFrame {
+	/** Source file the frame points at, e.g. "app/routes/users/+page.server.ts". */
+	filename: string;
+	/** Enclosing function/scope, when Sentry has it. */
+	function: string;
+	/** 1-based source line, or null when the frame carries none. */
+	lineNo: number | null;
+	/** True for frames Sentry marks as our own code (vs. framework/node_modules). */
+	inApp: boolean;
+}
+
+/**
+ * The latest event of an issue, narrowed to what the detail modal renders — the "which file /
+ * which line / how & why" the summary list omits. Fetched on demand when a row is opened.
+ */
+export interface SentryEventDetail {
+	id: string;
+	/** Exception class, e.g. "TypeError" (the "how"). */
+	type: string;
+	/** Exception message / value (the "why"). */
+	value: string;
+	culprit: string;
+	/** Stack frames in Sentry's native order — most recent call LAST. */
+	frames: SentryStackFrame[];
+	/** Selected event tags (environment, release, server_name, …). */
+	tags: { key: string; value: string }[];
+	/** ISO timestamp of when this event occurred. */
+	dateCreated: string;
+}
+
 /** The mutable statuses an owner can set from the admin page. */
 export type IssueStatus = 'resolved' | 'ignored';
 

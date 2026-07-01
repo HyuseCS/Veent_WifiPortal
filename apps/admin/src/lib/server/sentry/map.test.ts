@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { mapIssue, mapVolume, deriveKpis } from './map';
+import { mapEventDetail, mapIssue, mapVolume, deriveKpis } from './map';
 
 // The mappers are the seam that absorbs Sentry's payload quirks — if they regress, the dashboard
 // silently mis-reports. Assert the coercions and the accepted-series selection that matter.
@@ -52,6 +52,51 @@ describe('mapVolume', () => {
 	it('degrades to zeros when the accepted group is absent', () => {
 		const points = mapVolume({ intervals: ['2026-07-01T00:00:00Z'], groups: [] });
 		expect(points).toEqual([{ label: 'Jul 1', count: 0 }]);
+	});
+});
+
+describe('mapEventDetail', () => {
+	it('reads the last exception value + narrows frames and tags', () => {
+		const detail = mapEventDetail({
+			id: 'evt1',
+			culprit: 'load(users)',
+			dateCreated: '2026-07-01T00:00:00Z',
+			entries: [
+				{
+					type: 'exception',
+					data: {
+						values: [
+							{ type: 'CauseError', value: 'root cause' },
+							{
+								type: 'TypeError',
+								value: "cannot read 'id' of null",
+								stacktrace: {
+									frames: [
+										{ filename: 'lib/db.ts', function: 'query', lineNo: 11, inApp: true },
+										{ filename: 'node:internal', function: 'x', lineNo: null, inApp: false }
+									]
+								}
+							}
+						]
+					}
+				}
+			],
+			tags: [{ key: 'environment', value: 'production' }, { key: '', value: 'dropped' }]
+		});
+		expect(detail.type).toBe('TypeError'); // last value, not the cause
+		expect(detail.value).toBe("cannot read 'id' of null");
+		expect(detail.frames).toHaveLength(2);
+		expect(detail.frames[0]).toEqual({ filename: 'lib/db.ts', function: 'query', lineNo: 11, inApp: true });
+		expect(detail.frames[1].lineNo).toBeNull();
+		expect(detail.tags).toEqual([{ key: 'environment', value: 'production' }]); // keyless tag dropped
+	});
+
+	it('falls back to metadata and degrades to empty without throwing', () => {
+		const detail = mapEventDetail({ metadata: { type: 'ValueError', value: 'bad' } });
+		expect(detail.type).toBe('ValueError');
+		expect(detail.value).toBe('bad');
+		expect(detail.frames).toEqual([]);
+		expect(mapEventDetail(null).id).toBe('');
 	});
 });
 

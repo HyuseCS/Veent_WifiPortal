@@ -2,13 +2,20 @@ import { env as pub } from '$env/dynamic/public';
 import { logger } from '$lib/server/logger';
 import {
 	fetchIssuesRaw,
+	fetchLatestEventRaw,
 	fetchStatsRaw,
 	invalidate,
 	isSentryConfigured,
 	putIssueStatus
 } from './client';
-import { deriveKpis, mapIssue, mapVolume } from './map';
-import type { IssueStatus, SentryDashboard, SentryIssue, SentryVolumePoint } from './types';
+import { deriveKpis, mapEventDetail, mapIssue, mapVolume } from './map';
+import type {
+	IssueStatus,
+	SentryDashboard,
+	SentryEventDetail,
+	SentryIssue,
+	SentryVolumePoint
+} from './types';
 
 /**
  * Facade over the Sentry transport + mappers — the ONLY Sentry module the route imports. It
@@ -18,7 +25,7 @@ import type { IssueStatus, SentryDashboard, SentryIssue, SentryVolumePoint } fro
  */
 
 export { isSentryConfigured };
-export type { SentryDashboard, SentryIssue } from './types';
+export type { SentryDashboard, SentryEventDetail, SentryIssue } from './types';
 
 const log = logger('sentry');
 
@@ -53,6 +60,11 @@ async function loadVolume(): Promise<{ data: SentryVolumePoint[]; degraded: bool
 		log.error('stats fetch failed', err);
 		return { data: [], degraded: true };
 	}
+}
+
+/** The latest event's detail for one issue — exception + stacktrace for the row-open modal. */
+export async function getIssueEvent(id: string): Promise<SentryEventDetail> {
+	return mapEventDetail(await fetchLatestEventRaw(id));
 }
 
 export const resolveIssue = (id: string) => setStatus(id, 'resolved');
