@@ -84,7 +84,7 @@
 	}
 </script>
 
-<Table cards>
+<Table cards class="md:max-h-[70vh]">
 	{#snippet toolbar()}
 		<div class="flex items-center gap-3 px-4 py-3">
 			<h2 class="text-base font-semibold text-ink">Unresolved issues</h2>

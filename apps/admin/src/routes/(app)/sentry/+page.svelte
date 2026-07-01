@@ -3,7 +3,6 @@
 	import type { Component } from 'svelte';
 	import { EmptyState } from '$lib/components/ui';
 	import {
-		SentryHeader,
 		SentryKpis,
 		SentryVolumeChart,
 		SentryIssuesTable
@@ -24,7 +23,6 @@
 	/>
 {:else}
 	<div class="flex flex-col gap-6">
-		<SentryHeader dashboardUrl={data.dashboardUrl} />
 		<SentryKpis kpis={data.kpis} />
 		<SentryVolumeChart points={data.volume} degraded={data.degraded.volume} />
 		<SentryIssuesTable issues={data.issues} degraded={data.degraded.issues} />
