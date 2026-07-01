@@ -16,6 +16,7 @@
 	import Trash2 from 'lucide-svelte/icons/trash-2';
 	import type { NetworkAp, StatusTone } from '$lib/types';
 	import { live, connectLive } from '$lib/live.svelte';
+	import { editLock } from '$lib/edit-lock.svelte';
 	import type { PageData, ActionData } from './$types';
 
 	// lucide types don't match Svelte's `Component` structurally; cast as dashboard/nav do.
@@ -48,7 +49,15 @@
 			cancelled = true;
 		};
 	});
-	const networks = $derived(live.snapshot?.networks ?? streamedNetworks);
+	const liveNetworks = $derived(live.snapshot?.networks ?? streamedNetworks);
+	// Freeze the AP list while an inline editor is open (editLock): a live SSE frame landing
+	// mid-edit would reflow the grid and reset the fields the user is typing into. We keep the
+	// last idle snapshot until they close the editor, then resume following live.
+	let frozenNetworks = $state<NetworkAp[]>([]);
+	$effect(() => {
+		if (!editLock.active) frozenNetworks = liveNetworks;
+	});
+	const networks = $derived(editLock.active ? frozenNetworks : liveNetworks);
 	// Skeleton until data arrives from EITHER source (live frame or the streamed seed).
 	const ready = $derived(streamResolved || live.snapshot != null);
 
@@ -343,6 +352,7 @@
 					{ap}
 					selected={ap.id === selectedId}
 					canDelete={data.isOwner}
+					canConfigure={data.isOwner}
 					onfocus={focusAp}
 				/>
 			{/each}

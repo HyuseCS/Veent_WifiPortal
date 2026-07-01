@@ -3,7 +3,8 @@ import type {
 	GrantInput,
 	NetworkApSample,
 	RouterLogEntry,
-	ActivateSessionInput
+	ActivateSessionInput,
+	InterfaceLimitInput
 } from './types';
 
 export interface MikrotikConfig {
@@ -53,6 +54,38 @@ export interface MikrotikConfig {
 const LATENCY_PROBE_HOST = '1.1.1.1';
 /** Hard ceiling for the latency ping so a hung ping stream can't stall a health refresh. */
 const PING_TIMEOUT_MS = 5000;
+/** Comment/name prefix on the per-AP bandwidth queues we create, so ours are identifiable
+ * and a re-apply updates rather than duplicates: `veent-hotspot-limit:<apName>`. */
+const LIMIT_TAG = 'veent-hotspot-limit';
+
+/**
+ * Render a Kbps cap as a RouterOS queue rate token. RouterOS `k` is decimal (×1000), so
+ * `<kbps>k` is exactly the kilobit rate. Null → `0`, which RouterOS reads as *unlimited* —
+ * used for the side of an asymmetric cap (only up or only down set). Exported for tests.
+ */
+export function formatQueueRate(kbps: number | null): string {
+	return kbps == null ? '0' : `${Math.round(kbps)}k`;
+}
+
+/**
+ * Network address for an IPv4 `address/prefix` (e.g. `10.210.0.1/18` → `10.210.0.0/18`),
+ * so a simple queue can target the AP's whole client subnet. Returns null on a malformed or
+ * non-IPv4 input (caller falls back to interface-target). Exported for tests.
+ */
+export function ipv4NetworkOf(cidr: string): string | null {
+	const [ip, prefixStr] = cidr.split('/');
+	const prefix = Number(prefixStr);
+	if (!ip || !Number.isInteger(prefix) || prefix < 0 || prefix > 32) return null;
+	const octets = ip.split('.').map(Number);
+	if (octets.length !== 4 || octets.some((o) => !Number.isInteger(o) || o < 0 || o > 255)) {
+		return null;
+	}
+	const ipInt = ((octets[0] << 24) | (octets[1] << 16) | (octets[2] << 8) | octets[3]) >>> 0;
+	const mask = prefix === 0 ? 0 : (0xffffffff << (32 - prefix)) >>> 0;
+	const netInt = (ipInt & mask) >>> 0;
+	const net = [(netInt >>> 24) & 255, (netInt >>> 16) & 255, (netInt >>> 8) & 255, netInt & 255];
+	return `${net.join('.')}/${prefix}`;
+}
 
 /** Reject if `p` doesn't settle within `ms` — bounds a single router call's wall time. */
 function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
@@ -220,6 +253,25 @@ export function createMikrotikController(config: MikrotikConfig): NetworkControl
 		}
 	}
 
+	/**
+	 * Resolve the queue target for an AP interface: prefer the interface's own IP network
+	 * (the client subnet), so a simple queue's upload/download read as from-client/to-client.
+	 * Falls back to the interface name itself when no address is found (up/down then read
+	 * relative to the interface).
+	 */
+	async function resolveQueueTarget(conn: RosConn, ifaceName: string): Promise<string> {
+		try {
+			const addrs = await conn.write('/ip/address/print', [`?interface=${ifaceName}`]);
+			for (const a of addrs) {
+				const net = typeof a.address === 'string' ? ipv4NetworkOf(a.address) : null;
+				if (net) return net;
+			}
+		} catch {
+			// /ip/address unavailable or query error — fall back to interface-target.
+		}
+		return ifaceName;
+	}
+
 	const controller: NetworkController = {
 		name: 'mikrotik',
 
@@ -268,6 +320,42 @@ export function createMikrotikController(config: MikrotikConfig): NetworkControl
 				// until they age out (a revoked device must lose internet now, not in minutes).
 				await cutConnectionsForMac(conn, m);
 				await flushHotspotHost(conn, m);
+			});
+		},
+
+		async applyInterfaceLimit(input: InterfaceLimitInput): Promise<void> {
+			const comment = `${LIMIT_TAG}:${input.apName}`;
+			await withConn(async (conn) => {
+				// Our queue is found by comment, so a re-apply updates the same row (idempotent),
+				// mirroring provisionWalledGarden's find-by-comment.
+				const existing = await conn.write('/queue/simple/print', [`?comment=${comment}`]);
+				const id = existing[0]?.['.id'];
+
+				// Both caps cleared → tear our queue down (if any). Uncapped = no queue at all.
+				if (input.downKbps == null && input.upKbps == null) {
+					if (id) await conn.write('/queue/simple/remove', [`=.id=${id}`]);
+					return;
+				}
+
+				const target = await resolveQueueTarget(conn, input.interfaceName);
+				// RouterOS max-limit is <upload>/<download> relative to the target. With the client
+				// subnet as target: upload = from clients, download = to clients.
+				const maxLimit = `${formatQueueRate(input.upKbps)}/${formatQueueRate(input.downKbps)}`;
+				if (id) {
+					await conn.write('/queue/simple/set', [
+						`=.id=${id}`,
+						`=target=${target}`,
+						`=max-limit=${maxLimit}`,
+						'=disabled=no'
+					]);
+				} else {
+					await conn.write('/queue/simple/add', [
+						`=name=${comment}`,
+						`=target=${target}`,
+						`=max-limit=${maxLimit}`,
+						`=comment=${comment}`
+					]);
+				}
 			});
 		},
 
