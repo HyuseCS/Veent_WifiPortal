@@ -1,8 +1,9 @@
 import { redirect, fail } from '@sveltejs/kit';
 import { and, eq, asc } from 'drizzle-orm';
 import { packages, paymentCheckouts, customerProfile } from '@veent/db';
-import { getAccount, getLatestLedgerId, captureHandled } from '@veent/core';
+import { getAccount, getLatestLedgerId, captureHandled, openCheckoutAccess } from '@veent/core';
 import { db } from '$lib/server/db';
+import { network } from '$lib/server/network';
 import { payments } from '$lib/server/payments';
 import { resolveCheckoutNetworkId, resolveMacForUser } from '$lib/server/network-location';
 import type { Actions, PageServerLoad } from './$types';
@@ -116,6 +117,20 @@ export const actions: Actions = {
 		const mac = await resolveMacForUser(event, user.id);
 		const macQuery = mac ? `&mac=${encodeURIComponent(mac)}` : '';
 		const cancelMacQuery = mac ? `?mac=${encodeURIComponent(mac)}` : '';
+
+		// Open Maya's reCAPTCHA hosts (google.com/gstatic.com) for THIS device only, scoped to
+		// its LAN IP, so the captcha renders on the gateway page WITHOUT a global walled-garden
+		// allow — the global allow is what let Android's /generate_204 probe pass pre-auth and
+		// made every connecting guest flash "connected" then fall back to "Sign in to network".
+		// Best-effort: never block a checkout the buyer initiated; swept on a TTL by the revoke
+		// cron. No-ops on the stub controller and when the router can't resolve the device IP.
+		if (mac) {
+			try {
+				await openCheckoutAccess(network, { macAddress: mac });
+			} catch (e) {
+				console.warn('[topup] openCheckoutAccess failed', (e as Error).message);
+			}
+		}
 		// Watermark the ledger now; the processing page polls for a topup row above
 		// this id to know THIS payment's credit landed (gateway txn id is unknown here).
 		const since = await getLatestLedgerId(db, user.id);

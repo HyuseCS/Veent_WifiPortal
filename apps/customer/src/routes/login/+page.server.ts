@@ -2,10 +2,14 @@ import { fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { auth } from '$lib/server/auth';
 import { normalizePhone } from '$lib/phone';
-import { PENDING_COOKIE, PENDING_MAX_AGE, serializePending } from '$lib/server/otp';
+import {
+	PENDING_COOKIE,
+	PENDING_COOKIE_SECURE,
+	PENDING_MAX_AGE,
+	serializePending
+} from '$lib/server/otp';
 import { enforceOtpSendLimit, RateLimitError, retryAfterMessage } from '$lib/server/otpRateLimit';
 import { getDeviceMac, getPortalContext } from '$lib/server/portal';
-import { dev } from '$app/environment';
 
 export const load: PageServerLoad = (event) => {
 	if (event.locals.user) {
@@ -55,7 +59,7 @@ export const actions: Actions = {
 			path: '/',
 			httpOnly: true,
 			sameSite: 'lax',
-			secure: !dev,
+			secure: PENDING_COOKIE_SECURE,
 			maxAge: PENDING_MAX_AGE
 		});
 

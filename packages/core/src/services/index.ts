@@ -8,3 +8,4 @@ export * from './staff';
 export * from './adminAccess';
 export * from './networkHealth';
 export * from './reconcilePayments';
+export * from './checkoutAccess';
