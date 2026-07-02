@@ -1,4 +1,4 @@
-import { and, eq, gt, isNull, lte, or } from 'drizzle-orm';
+import { and, eq, gt, inArray, isNull, lte, or } from 'drizzle-orm';
 import { type DB, paymentCheckouts, paymentTransactions, packages } from '@veent/db';
 import { LEDGER_TYPE } from '../config';
 import type { PaymentEvent, PaymentProvider } from '../integrations/payments';
@@ -94,7 +94,11 @@ export async function recordPaymentTransaction(
 		// reference_no index (the id-conflict clause above only catches same-id resends). Collapse
 		// onto the existing row instead of writing a divergent duplicate. All callers pass `db`
 		// (never a tx), so the failed INSERT doesn't poison a surrounding transaction.
-		if (row.referenceNo && (e as { code?: string }).code === '23505') {
+		// drizzle-orm wraps driver errors in DrizzleQueryError, so the SQLSTATE lives on the
+		// cause chain — walk it (bounded), keeping the bare .code shape for driver-direct errors.
+		const err = e as { code?: string; cause?: { code?: string; cause?: { code?: string } } };
+		const pgCode = err.code ?? err.cause?.code ?? err.cause?.cause?.code;
+		if (row.referenceNo && pgCode === '23505') {
 			await db
 				.update(paymentTransactions)
 				.set(detail)
@@ -108,7 +112,7 @@ export async function recordPaymentTransaction(
 /**
  * Payment reconciliation — the SAFETY NET behind the webhook.
  *
- * Crediting is gated by an ATOMIC claim on payment_checkouts.status (pending→settled):
+ * Crediting is gated by an ATOMIC claim on payment_checkouts.status ({pending,expired}→settled):
  * whichever path wins the claim credits, the other no-ops. So the webhook and these
  * reconcile paths can race freely without ever double-crediting (addCredits idempotency
  * on external_transaction_id is the second line of defence). The claim AND the credit run
@@ -135,7 +139,7 @@ interface CreditArgs {
 }
 
 /**
- * Claim the matching pending checkout and credit the buyer exactly once.
+ * Claim the matching unsettled checkout and credit the buyer exactly once.
  *
  * Crediting now REQUIRES a matching payment_checkouts row whose recorded amount equals the
  * amount the gateway charged. A reference with no checkout row is NOT credited (the per-attempt
@@ -151,13 +155,16 @@ export async function creditCheckoutIfUnsettled(
 		: eq(paymentCheckouts.referenceId, args.referenceId ?? '');
 
 	return db.transaction(async (tx) => {
-		// Atomic claim: flip pending→settled, returning the checkout's recorded amount so we
-		// can assert the gateway charged what we asked. Postgres serializes the UPDATE, so under
-		// a webhook/reconcile race exactly one caller gets a row back — only it credits.
+		// Atomic claim: flip {pending,expired}→settled, returning the checkout's recorded amount
+		// so we can assert the gateway charged what we asked. Postgres serializes the UPDATE, so
+		// under a webhook/reconcile race exactly one caller gets a row back — only it credits.
+		// 'expired' is claimable because the cron blind-expires aged pendings without asking the
+		// gateway — it's an administrative stop-polling state, not a money state. A late paid
+		// event carries the same gateway-verified proof as pending→settled and must still credit.
 		const [claimed] = await tx
 			.update(paymentCheckouts)
 			.set({ status: 'settled', settledAt: new Date(), externalTransactionId: args.externalTransactionId })
-			.where(and(match, eq(paymentCheckouts.status, 'pending')))
+			.where(and(match, inArray(paymentCheckouts.status, ['pending', 'expired'])))
 			.returning({ id: paymentCheckouts.id, amount: paymentCheckouts.amount });
 
 		if (!claimed) {
