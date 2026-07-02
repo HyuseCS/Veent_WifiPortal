@@ -4,13 +4,13 @@ import { APIError } from 'better-auth/api';
 import { auth } from '$lib/server/auth';
 import {
 	PENDING_COOKIE,
+	PENDING_COOKIE_SECURE,
 	PENDING_MAX_AGE,
 	maskPhone,
 	parsePending,
 	serializePending
 } from '$lib/server/otp';
 import { enforceOtpSendLimit, RateLimitError, retryAfterMessage } from '$lib/server/otpRateLimit';
-import { dev } from '$app/environment';
 
 export const load: PageServerLoad = (event) => {
 	if (event.locals.user) {
@@ -84,7 +84,7 @@ export const actions: Actions = {
 				path: '/',
 				httpOnly: true,
 				sameSite: 'lax',
-				secure: !dev,
+				secure: PENDING_COOKIE_SECURE,
 				maxAge: PENDING_MAX_AGE
 			}
 		);

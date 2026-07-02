@@ -117,6 +117,57 @@
 					{/each}
 				</fieldset>
 
+				<!-- Buyer details required by the payment provider (Maya's Kount fraud protection needs
+				a name + email on every checkout). Pre-filled from saved details; Maya's page then uses
+				these to pre-fill its own form, so the buyer only enters card details there. -->
+				<fieldset class="mb-6 flex flex-col gap-2.5" disabled={pending}>
+					<legend class="mb-0.5 text-[15px] font-semibold text-ink">Your details</legend>
+					<p class="-mt-1 mb-1.5 text-[11.5px] font-medium text-muted">
+						Required by our payment provider to process your payment.
+					</p>
+					<!-- `defaultValue`/`defaultChecked` (Svelte 5.6+) render as the value/checked attribute
+					in SSR so the prefill shows, but on hydration set the element DEFAULT rather than the
+					live value — so anything the user typed BEFORE hydration isn't wiped. -->
+					<div class="flex gap-2.5">
+						<input
+							name="firstName"
+							type="text"
+							autocomplete="given-name"
+							placeholder="First name"
+							required
+							defaultValue={form?.values?.firstName ?? data.buyer.firstName}
+							class="h-[48px] w-full rounded-xl border-[1.5px] border-border bg-bg px-4 text-[15px] text-ink transition-colors placeholder:text-muted focus:border-brand focus:outline-none"
+						/>
+						<input
+							name="lastName"
+							type="text"
+							autocomplete="family-name"
+							placeholder="Last name"
+							required
+							defaultValue={form?.values?.lastName ?? data.buyer.lastName}
+							class="h-[48px] w-full rounded-xl border-[1.5px] border-border bg-bg px-4 text-[15px] text-ink transition-colors placeholder:text-muted focus:border-brand focus:outline-none"
+						/>
+					</div>
+					<input
+						name="email"
+						type="email"
+						autocomplete="email"
+						placeholder="Email address"
+						required
+						defaultValue={form?.values?.email ?? data.buyer.email}
+						class="h-[48px] w-full rounded-xl border-[1.5px] border-border bg-bg px-4 text-[15px] text-ink transition-colors placeholder:text-muted focus:border-brand focus:outline-none"
+					/>
+					<label class="mt-0.5 flex min-h-[44px] cursor-pointer items-center gap-2.5 text-[13px] text-ink">
+						<input
+							type="checkbox"
+							name="saveDetails"
+							defaultChecked={form?.values?.saveDetails ?? data.savedDetails}
+							class="h-[18px] w-[18px] shrink-0 rounded border-[1.5px] border-border text-brand accent-brand focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+						/>
+						Save my details for next time
+					</label>
+				</fieldset>
+
 				<!-- `selectedId` defaults to the cheapest bundle, so the button is enabled and
 				submittable on first paint (pre-hydration). Both the busy and idle labels are always
 				rendered; the form's `group-data-[pending]` state shows exactly one — so a native

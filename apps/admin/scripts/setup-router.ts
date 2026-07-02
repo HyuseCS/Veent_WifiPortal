@@ -90,26 +90,19 @@ const isIp = (h: string): boolean => /^[0-9.]+(\/\d{1,2})?$/.test(h) || h.includ
  * which can't be predicted here — e-wallet/Maya-wallet checkout is fully covered;
  * card payments may still need the bank's domain added per deployment.
  *
- * The Maya checkout page renders a Google reCAPTCHA, which loads from SEPARATE
- * domains (NOT under *.maya.ph, so the payment wildcards don't cover them). Without
- * them the captcha never appears on a device behind the portal, the page looks
- * broken, and the phone may flip to cellular ("no internet"), which then breaks our
- * IP→MAC device detection. Symptom: "captcha doesn't show on phone but works on a
- * device with full internet".
+ * The Maya checkout page also renders a Google reCAPTCHA served from google.com/gstatic.com.
+ * Those are DELIBERATELY NOT global here anymore. A global `*.google.com` / `*.gstatic.com`
+ * allow lets Android's captive-portal probe (`.../generate_204`) return a real 204 pre-auth,
+ * so every connecting guest briefly flashes "connected" then reverts to "Sign in to network"
+ * (MikroTik can't path-filter HTTPS, so the probe can't be blocked while google.com is open).
+ * Instead they're opened PER-DEVICE, scoped to the paying device's IP, at checkout time — see
+ * `openCheckoutAccess` (packages/core services/checkoutAccess.ts), swept on a TTL by the
+ * customer app's revoke cron. Keep them OUT of this global list.
  *
- * This list mirrors EXACTLY what is live on the router's walled garden — re-running
+ * This list mirrors EXACTLY what is live on the router's global walled garden — re-running
  * is a no-op (idempotency matches on `dst-host`, so a mismatched host here would add
- * a redundant entry). The captcha hosts are whitelisted as wildcards to match the
- * router:
- *   - `*.gstatic.com`   — static asset CDN (reCAPTCHA JS/images); serves no browsable
- *     services, so opening it leaks no real internet.
- *   - `*.recaptcha.net` — Google's dedicated reCAPTCHA host; serves nothing else.
- *   - `*.google.com`    — REQUIRED: Maya's checkout embeds the google.com variant of
- *     reCAPTCHA. The walled garden can only match the TLS SNI (host), not the path, so
- *     this also exposes Google search to UNAUTHENTICATED devices. That's an accepted,
- *     bounded trade-off: without it the captcha can't render and mobile Maya payments
- *     dead-end. Pre-auth devices reach google.com only — other domains stay blocked,
- *     so it isn't open internet.
+ * a redundant entry). These are payment-gateway hosts only; none is a captive-portal probe
+ * host, so opening them globally doesn't trigger the flash.
  */
 const PAYMENT_HOSTS = [
 	'maya.ph',
@@ -120,10 +113,6 @@ const PAYMENT_HOSTS = [
 	// (payments.gcash.com). Wildcard covers the auth/redirect subdomains.
 	'gcash.com',
 	'*.gcash.com',
-	// Google reCAPTCHA (Maya checkout). *.google.com is required + a deliberate leak — see note above.
-	'*.google.com',
-	'*.gstatic.com',
-	'*.recaptcha.net',
 	// Other gateways named in Rule #2; harmless if unused.
 	'*.paymongo.com',
 	'*.xendit.co'

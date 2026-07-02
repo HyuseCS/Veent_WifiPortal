@@ -4,7 +4,8 @@ import type {
 	NetworkApSample,
 	RouterLogEntry,
 	ActivateSessionInput,
-	InterfaceLimitInput
+	InterfaceLimitInput,
+	DeviceHostAccessInput
 } from './types';
 
 export interface MikrotikConfig {
@@ -57,6 +58,11 @@ const PING_TIMEOUT_MS = 5000;
 /** Comment/name prefix on the per-AP bandwidth queues we create, so ours are identifiable
  * and a re-apply updates rather than duplicates: `veent-hotspot-limit:<apName>`. */
 const LIMIT_TAG = 'veent-hotspot-limit';
+
+/** Comment prefix on the per-device, src-scoped walled-garden entries `openHostAccessForDevice`
+ * creates. The creation time is appended (`veent-checkout:<epochMs>`) so `sweepHostAccess` can
+ * expire them with no external state — the router row is self-describing. */
+const CHECKOUT_TAG = 'veent-checkout';
 
 /**
  * Render a Kbps cap as a RouterOS queue rate token. RouterOS `k` is decimal (×1000), so
@@ -220,6 +226,26 @@ export function createMikrotikController(config: MikrotikConfig): NetworkControl
 	}
 
 	/**
+	 * The device's IP as a CURRENTLY-CONNECTED hotspot client — read from the hotspot host table
+	 * ONLY, deliberately not the DHCP-lease/ARP union `ipsForMac` returns. For opening pre-auth
+	 * access scoped to a device (`openHostAccessForDevice`) we must be certain the IP still belongs
+	 * to THIS device right now: a stale lease/ARP row for a MAC whose device has left could name an
+	 * IP DHCP has since handed to another guest, and opening a captive-probe host (google.com) for
+	 * that IP would reintroduce the connectivity-flash for the wrong guest. The hotspot host table
+	 * only lists clients the router currently sees, so a miss (device gone) correctly yields null →
+	 * no entry is opened. A real buyer sitting on the captive portal is always a current host.
+	 */
+	async function currentHotspotIpForMac(conn: RosConn, mac: string): Promise<string | null> {
+		try {
+			const hosts = await conn.write('/ip/hotspot/host/print', [`?mac-address=${mac}`]);
+			return hosts.find((h) => h.address)?.address ?? null;
+		} catch {
+			// Hotspot host table unavailable — treat as "device not currently seen".
+			return null;
+		}
+	}
+
+	/**
 	 * Drop the device's live connection-tracking entries so a revoke takes effect
 	 * IMMEDIATELY. Removing the ip-binding only stops NEW flows from being bypassed — the
 	 * firewall's established/related accept rule keeps forwarding the device's ALREADY-OPEN
@@ -378,6 +404,67 @@ export function createMikrotikController(config: MikrotikConfig): NetworkControl
 				const arp = await conn.write('/ip/arp/print', [`?address=${ip}`]);
 				const fromArp = arp.find((r) => r['mac-address'])?.['mac-address'];
 				return fromArp ? fromArp.toUpperCase() : null;
+			});
+		},
+
+		async openHostAccessForDevice(
+			input: DeviceHostAccessInput
+		): Promise<{ ipAddress: string | null }> {
+			const mac = input.macAddress.toUpperCase();
+			return withConn(async (conn) => {
+				// The walled garden matches the device's own hotspot-side src IP (before the router's
+				// own NAT), so scope by the IP the router currently sees for this MAC. Use the hotspot
+				// host table ONLY (not the lease/ARP union) so a stale MAC can't scope access to an IP
+				// now belonging to another guest — see currentHotspotIpForMac.
+				const ip = await currentHotspotIpForMac(conn, mac);
+				if (!ip) return { ipAddress: null };
+				const comment = `${CHECKOUT_TAG}:${Date.now()}`;
+				for (const host of input.hosts) {
+					// Refresh rather than stack: drop any prior scoped entry for this (host, src)
+					// so a re-checkout renews the timestamp instead of accumulating duplicates.
+					const existing = await conn.write('/ip/hotspot/walled-garden/print', [
+						`?dst-host=${host}`
+					]);
+					for (const e of existing) {
+						const srcIp = (e['src-address'] ?? '').split('/')[0];
+						if (srcIp !== ip || !e['.id']) continue;
+						try {
+							await conn.write('/ip/hotspot/walled-garden/remove', [`=.id=${e['.id']}`]);
+						} catch {
+							// Already gone between print and remove — ignore.
+						}
+					}
+					await conn.write('/ip/hotspot/walled-garden/add', [
+						'=action=allow',
+						`=dst-host=${host}`,
+						`=src-address=${ip}`,
+						`=comment=${comment}`
+					]);
+				}
+				return { ipAddress: ip };
+			});
+		},
+
+		async sweepHostAccess(input?: { maxAgeMs?: number }): Promise<number> {
+			const maxAgeMs = input?.maxAgeMs ?? 15 * 60_000;
+			const now = Date.now();
+			return withConn(async (conn) => {
+				const rows = await conn.write('/ip/hotspot/walled-garden/print', []);
+				let removed = 0;
+				for (const r of rows) {
+					const comment = r.comment ?? '';
+					if (!comment.startsWith(`${CHECKOUT_TAG}:`)) continue;
+					const ts = Number(comment.slice(CHECKOUT_TAG.length + 1));
+					if (!Number.isFinite(ts) || now - ts < maxAgeMs) continue;
+					if (!r['.id']) continue;
+					try {
+						await conn.write('/ip/hotspot/walled-garden/remove', [`=.id=${r['.id']}`]);
+						removed++;
+					} catch {
+						// Raced with another sweep / manual removal — ignore.
+					}
+				}
+				return removed;
 			});
 		},
 

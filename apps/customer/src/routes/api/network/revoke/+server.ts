@@ -1,5 +1,5 @@
 import { json } from '@sveltejs/kit';
-import { expireDueAccounts, reconcileGuestBindings } from '@veent/core';
+import { expireDueAccounts, reconcileGuestBindings, sweepCheckoutAccess } from '@veent/core';
 import { db } from '$lib/server/db';
 import { network } from '$lib/server/network';
 import { requireCron } from '$lib/server/cron';
@@ -19,5 +19,9 @@ export const POST: RequestHandler = async (event) => {
 	const revoked = await expireDueAccounts(db, network);
 	// Then sweep router bindings the DB no longer backs (wipe/cascade/crash orphans).
 	const reconciled = await reconcileGuestBindings(db, network);
-	return json({ ok: true, revoked, reconciled });
+	// Reclaim expired per-device checkout walled-garden allows (the reCAPTCHA scoping) so an
+	// abandoned checkout can't leave google.com open on an IP that DHCP later hands to another
+	// device. Self-describing on the router (comment-stamped), so no DB state to reconcile.
+	const sweptCheckoutAccess = await sweepCheckoutAccess(network);
+	return json({ ok: true, revoked, reconciled, sweptCheckoutAccess });
 };

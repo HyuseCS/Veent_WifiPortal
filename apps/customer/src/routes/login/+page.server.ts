@@ -2,10 +2,14 @@ import { fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { auth } from '$lib/server/auth';
 import { normalizePhone } from '$lib/phone';
-import { PENDING_COOKIE, PENDING_MAX_AGE, serializePending } from '$lib/server/otp';
+import {
+	PENDING_COOKIE,
+	PENDING_COOKIE_SECURE,
+	PENDING_MAX_AGE,
+	serializePending
+} from '$lib/server/otp';
 import { enforceOtpSendLimit, RateLimitError, retryAfterMessage } from '$lib/server/otpRateLimit';
-import { getPortalContext } from '$lib/server/portal';
-import { dev } from '$app/environment';
+import { getDeviceMac, getPortalContext } from '$lib/server/portal';
 
 export const load: PageServerLoad = (event) => {
 	if (event.locals.user) {
@@ -32,8 +36,10 @@ export const actions: Actions = {
 		}
 
 		// Throttle sends per phone + device MAC BEFORE hitting the SMS gateway, so a
-		// number can't be spammed and operator credits can't be drained.
-		const mac = getPortalContext(event)?.mac;
+		// number can't be spammed and operator credits can't be drained. Fall back to the
+		// device cookie so a second account (whose portal cookie is gone) still carries the
+		// MAC into the pending cookie → the grant after verify can target this device.
+		const mac = getPortalContext(event)?.mac ?? getDeviceMac(event) ?? undefined;
 		try {
 			await enforceOtpSendLimit(phone, mac);
 		} catch (error) {
@@ -53,7 +59,7 @@ export const actions: Actions = {
 			path: '/',
 			httpOnly: true,
 			sameSite: 'lax',
-			secure: !dev,
+			secure: PENDING_COOKIE_SECURE,
 			maxAge: PENDING_MAX_AGE
 		});
 

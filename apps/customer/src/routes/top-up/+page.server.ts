@@ -1,8 +1,9 @@
 import { redirect, fail } from '@sveltejs/kit';
 import { and, eq, asc } from 'drizzle-orm';
-import { packages, paymentCheckouts } from '@veent/db';
-import { getAccount, getLatestLedgerId, captureHandled } from '@veent/core';
+import { packages, paymentCheckouts, customerProfile } from '@veent/db';
+import { getAccount, getLatestLedgerId, captureHandled, openCheckoutAccess } from '@veent/core';
 import { db } from '$lib/server/db';
+import { network } from '$lib/server/network';
 import { payments } from '$lib/server/payments';
 import { resolveCheckoutNetworkId, resolveMacForUser } from '$lib/server/network-location';
 import type { Actions, PageServerLoad } from './$types';
@@ -30,8 +31,36 @@ export const load: PageServerLoad = async (event) => {
 	const mac = await resolveMacForUser(event, user.id);
 	const portalQuery = mac ? `?mac=${encodeURIComponent(mac)}` : '';
 
-	return { user, balance: account?.balance ?? 0, bundles, portalQuery };
+	// Prefill the buyer form (Maya/Kount requires name + email) from the details the buyer chose
+	// to save last time. A saved row (firstName present) also pre-checks "save my details".
+	const [profile] = await db
+		.select({
+			firstName: customerProfile.firstName,
+			lastName: customerProfile.lastName,
+			contactEmail: customerProfile.contactEmail
+		})
+		.from(customerProfile)
+		.where(eq(customerProfile.userId, user.id))
+		.limit(1);
+	const buyer = {
+		firstName: profile?.firstName ?? '',
+		lastName: profile?.lastName ?? '',
+		email: profile?.contactEmail ?? ''
+	};
+
+	return {
+		user,
+		balance: account?.balance ?? 0,
+		bundles,
+		portalQuery,
+		buyer,
+		savedDetails: !!profile?.firstName
+	};
 };
+
+/** A permissive email check — the buyer email Maya/Kount requires. Not RFC-exhaustive; just
+ * rejects obviously-invalid input before we hand it to the gateway. */
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export const actions: Actions = {
 	checkout: async (event) => {
@@ -40,10 +69,41 @@ export const actions: Actions = {
 
 		const form = await event.request.formData();
 		const packageId = Number(form.get('packageId'));
-		if (!Number.isFinite(packageId)) return fail(400, { error: 'Missing package' });
+
+		// Buyer details for Maya's Kount fraud protection — required on every checkout. Echo them
+		// back (with the save toggle) on any validation failure so the form doesn't lose input.
+		const firstName = String(form.get('firstName') ?? '').trim();
+		const lastName = String(form.get('lastName') ?? '').trim();
+		const email = String(form.get('email') ?? '').trim();
+		const saveDetails = form.get('saveDetails') === 'on';
+		const values = { firstName, lastName, email, saveDetails };
+
+		if (!Number.isFinite(packageId)) return fail(400, { error: 'Missing package', values });
 
 		const [pkg] = await db.select().from(packages).where(eq(packages.id, packageId)).limit(1);
-		if (!pkg || !pkg.isActive) return fail(404, { error: 'Bundle not found' });
+		if (!pkg || !pkg.isActive) return fail(404, { error: 'Bundle not found', values });
+
+		if (!firstName || !lastName) {
+			return fail(400, { error: 'Enter your first and last name.', values });
+		}
+		if (!EMAIL_RE.test(email)) {
+			return fail(400, { error: 'Enter a valid email address.', values });
+		}
+
+		// Honour the save toggle: persist the details when ticked, clear them when not (so a buyer
+		// can withdraw consent). Best-effort — a storage hiccup must not block a checkout.
+		try {
+			await db
+				.update(customerProfile)
+				.set(
+					saveDetails
+						? { firstName, lastName, contactEmail: email }
+						: { firstName: null, lastName: null, contactEmail: null }
+				)
+				.where(eq(customerProfile.userId, user.id));
+		} catch (e) {
+			console.warn('[topup] failed to persist buyer details:', (e as Error).message);
+		}
 
 		const origin = event.url.origin;
 		// Thread the device MAC through the gateway round-trip. Maya bounces the buyer to
@@ -57,6 +117,20 @@ export const actions: Actions = {
 		const mac = await resolveMacForUser(event, user.id);
 		const macQuery = mac ? `&mac=${encodeURIComponent(mac)}` : '';
 		const cancelMacQuery = mac ? `?mac=${encodeURIComponent(mac)}` : '';
+
+		// Open Maya's reCAPTCHA hosts (google.com/gstatic.com) for THIS device only, scoped to
+		// its LAN IP, so the captcha renders on the gateway page WITHOUT a global walled-garden
+		// allow — the global allow is what let Android's /generate_204 probe pass pre-auth and
+		// made every connecting guest flash "connected" then fall back to "Sign in to network".
+		// Best-effort: never block a checkout the buyer initiated; swept on a TTL by the revoke
+		// cron. No-ops on the stub controller and when the router can't resolve the device IP.
+		if (mac) {
+			try {
+				await openCheckoutAccess(network, { macAddress: mac });
+			} catch (e) {
+				console.warn('[topup] openCheckoutAccess failed', (e as Error).message);
+			}
+		}
 		// Watermark the ledger now; the processing page polls for a topup row above
 		// this id to know THIS payment's credit landed (gateway txn id is unknown here).
 		const since = await getLatestLedgerId(db, user.id);
@@ -78,7 +152,14 @@ export const actions: Actions = {
 				description: pkg.name,
 				successUrl: `${origin}/top-up/processing?since=${since}&pkg=${pkg.id}&attempt=${referenceId}${macQuery}`,
 				cancelUrl: `${origin}/top-up${cancelMacQuery}`,
-				buyer: { name: user.name, email: user.email }
+				// Real buyer details from the form — Maya's Kount fraud protection requires
+				// firstName + lastName + email. Phone comes from the verified account.
+				buyer: {
+					firstName,
+					lastName,
+					email,
+					phone: (user as { phoneNumber?: string | null }).phoneNumber ?? undefined
+				}
 			});
 			redirectUrl = checkout.redirectUrl;
 
@@ -103,7 +184,7 @@ export const actions: Actions = {
 		} catch (e) {
 			// Gateway call failed (network, bad keys, Maya 4xx/5xx) — surface it.
 			captureHandled(e, { level: 'error', tags: { area: 'payment', scope: 'createCheckout' } });
-			return fail(503, { error: `Checkout unavailable: ${(e as Error).message}` });
+			return fail(503, { error: `Checkout unavailable: ${(e as Error).message}`, values });
 		}
 		// Outside the try: redirect() throws, and we must not catch that throw.
 		return redirect(303, redirectUrl);

@@ -6,7 +6,7 @@ import { customerProfile, networkHealth, networkSessions } from '@veent/db';
 import { SESSION_STATUS, resolveDeviceMac, resolveNetworkIdByApName } from '@veent/core';
 import { db } from '$lib/server/db';
 import { network } from '$lib/server/network';
-import { getPortalContext, persistResolvedMac } from '$lib/server/portal';
+import { getDeviceMac, getPortalContext, persistResolvedMac } from '$lib/server/portal';
 
 /**
  * Resolve the device MAC. The captive-portal redirect (`?mac=`) is preferred, but the OS
@@ -80,9 +80,18 @@ export async function resolveMacForUser(event: RequestEvent, userId: string): Pr
 		await rememberAccountMac(userId, live);
 		return live;
 	}
-	// Live detection missed (no portal cookie + IP→MAC defeated by the hotspot NAT). Fall back to
-	// the durable account MAC first — it covers a buyer who was seen earlier but has no session row
-	// yet (e.g. topped up before ever binding a device) — then the most-recent session's MAC.
+	// Live detection missed (no portal cookie + IP→MAC defeated by the hotspot NAT). Try the
+	// device-scoped cookie next: it's account-independent and survives sign-out, so a SECOND account
+	// logging in on the same browser recovers this device's MAC even though its per-user fallbacks
+	// are empty (docs/problems/second-account-mac-not-captured.md). Seed it onto the new account so
+	// subsequent cross-browser hops (e.g. the Maya return) have the durable per-user signal too.
+	const device = getDeviceMac(event);
+	if (device) {
+		await rememberAccountMac(userId, device);
+		return device;
+	}
+	// Last resort: the durable account MAC — covers a buyer seen earlier but with no session row yet
+	// (e.g. topped up before ever binding a device) — then the most-recent session's MAC.
 	return (await accountMac(userId)) ?? (await lastKnownMac(userId));
 }
 
