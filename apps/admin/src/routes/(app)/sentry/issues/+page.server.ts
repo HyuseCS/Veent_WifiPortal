@@ -1,0 +1,12 @@
+// Mobile "Unresolved issues" page. Shares the dashboard's resolve/ignore actions (the row forms
+// post to ?/resolve on THIS route), but loads issues only — it never renders the volume chart, so
+// there's no reason to make getDashboard()'s extra stats fetch.
+import { getIssues, isSentryConfigured } from '$lib/server/sentry';
+import type { PageServerLoad } from './$types';
+
+export { actions } from '../+page.server';
+
+export const load: PageServerLoad = async () => {
+	if (!isSentryConfigured()) return { configured: false as const };
+	return getIssues();
+};

@@ -11,6 +11,7 @@ export { default as UsersTable } from './UsersTable.svelte';
 export { default as TransactionsTable } from './TransactionsTable.svelte';
 export { default as FinanceHeaderControls } from './FinanceHeaderControls.svelte';
 export { default as NetworkHeaderControls } from './NetworkHeaderControls.svelte';
+export { default as SentryHeaderControls } from './SentryHeaderControls.svelte';
 export { default as AddStaffForm } from './AddStaffForm.svelte';
 export { default as StaffTable } from './StaffTable.svelte';
 export { default as NetworkMap } from './NetworkMap.svelte';

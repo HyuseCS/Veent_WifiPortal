@@ -4,10 +4,7 @@
 	import LogOut from 'lucide-svelte/icons/log-out';
 	import PanelLeftClose from 'lucide-svelte/icons/panel-left-close';
 	import PanelLeftOpen from 'lucide-svelte/icons/panel-left-open';
-	import Activity from 'lucide-svelte/icons/activity';
-	import ExternalLink from 'lucide-svelte/icons/external-link';
 	import ChevronsUpDown from 'lucide-svelte/icons/chevrons-up-down';
-	import { env } from '$env/dynamic/public';
 	import { nav } from '$lib/nav';
 	import ModeToggle from './ModeToggle.svelte';
 
@@ -16,13 +13,6 @@
 	let { user }: { user?: { name?: string; email?: string; role?: string | null } } = $props();
 	const items = $derived(nav.filter((item) => !item.ownerOnly || user?.role === 'owner'));
 
-	// External link to the Sentry project dashboard. Renders ONLY when the URL is set
-	// (fail-open — no env, no link), for any signed-in staff member. Kept out of `nav` because
-	// that array is for internal routes with active-state matching; this opens Sentry in a new tab.
-	// NB: showing the link doesn't grant Sentry access — each admin still needs to be a member of
-	// the Sentry org to actually view it (invite them there).
-	const sentryUrl = env.PUBLIC_SENTRY_DASHBOARD_URL;
-	const showSentry = $derived(!!sentryUrl);
 	const initials = $derived(
 		(user?.name ?? user?.email ?? '?')
 			.trim()
@@ -163,27 +153,6 @@
 					{#if !collapsed}{item.label}{/if}
 				</a>
 			{/each}
-
-			{#if showSentry}
-				<a
-					href={sentryUrl}
-					target="_blank"
-					rel="noopener noreferrer"
-					title={collapsed ? 'Sentry dashboard' : undefined}
-					class="group relative flex min-h-[44px] items-center gap-3 rounded-md text-sm font-medium text-sidebar-text transition-all duration-150 outline-none hover:bg-white/5 hover:text-white focus-visible:ring-2 focus-visible:ring-cta/60 {collapsed
-						? 'justify-center px-0'
-						: 'px-3'}"
-				>
-					<Activity
-						class="h-5 w-5 shrink-0 text-sidebar-muted transition-colors duration-150 group-hover:text-white"
-						aria-hidden="true"
-					/>
-					{#if !collapsed}
-						<span class="flex-1">Sentry</span>
-						<ExternalLink class="h-3.5 w-3.5 shrink-0 text-sidebar-muted" aria-hidden="true" />
-					{/if}
-				</a>
-			{/if}
 		</div>
 	</nav>
 

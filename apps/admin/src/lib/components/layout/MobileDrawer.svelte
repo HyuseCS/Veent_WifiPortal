@@ -3,10 +3,7 @@
 	import { afterNavigate } from '$app/navigation';
 	import X from 'lucide-svelte/icons/x';
 	import LogOut from 'lucide-svelte/icons/log-out';
-	import Activity from 'lucide-svelte/icons/activity';
-	import ExternalLink from 'lucide-svelte/icons/external-link';
 	import ChevronsUpDown from 'lucide-svelte/icons/chevrons-up-down';
-	import { env } from '$env/dynamic/public';
 	import { nav } from '$lib/nav';
 	import { mobileNav } from '$lib/uiState.svelte';
 	import ModeToggle from './ModeToggle.svelte';
@@ -25,11 +22,6 @@
 			.map((w) => w[0]?.toUpperCase() ?? '')
 			.join('')
 	);
-
-	// External Sentry dashboard link — mirrors Sidebar.svelte (fail-open on the env URL). Shown to
-	// any signed-in staff member; org membership on Sentry's side still gates actual access.
-	const sentryUrl = env.PUBLIC_SENTRY_DASHBOARD_URL;
-	const showSentry = $derived(!!sentryUrl);
 
 	let closeBtn = $state<HTMLButtonElement>();
 
@@ -172,22 +164,6 @@
 					{item.label}
 				</a>
 			{/each}
-
-			{#if showSentry}
-				<a
-					href={sentryUrl}
-					target="_blank"
-					rel="noopener noreferrer"
-					class="group relative flex min-h-[44px] items-center gap-3 rounded-md px-3 text-sm font-medium text-sidebar-text transition-all duration-150 outline-none hover:bg-white/5 hover:text-white focus-visible:ring-2 focus-visible:ring-cta/60"
-				>
-					<Activity
-						class="h-5 w-5 shrink-0 text-sidebar-muted transition-colors duration-150 group-hover:text-white"
-						aria-hidden="true"
-					/>
-					<span class="flex-1">Sentry</span>
-					<ExternalLink class="h-3.5 w-3.5 shrink-0 text-sidebar-muted" aria-hidden="true" />
-				</a>
-			{/if}
 		</div>
 	</nav>
 

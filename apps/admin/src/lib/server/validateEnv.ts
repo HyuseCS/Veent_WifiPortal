@@ -2,6 +2,7 @@ import { dev, building } from '$app/environment';
 import { env } from '$env/dynamic/private';
 import { env as pub } from '$env/dynamic/public';
 import { logger } from '$lib/server/logger';
+import { SENTRY_CREDENTIAL_KEYS } from '$lib/server/sentry';
 
 const log = logger('env');
 
@@ -41,5 +42,15 @@ export function validateEnv(): void {
 	// Observability degrades to off, so warn (don't fail) when the Sentry DSN is unset in prod.
 	if (!dev && !pub.PUBLIC_SENTRY_DSN) {
 		log.warn('PUBLIC_SENTRY_DSN unset — error tracking & performance tracing are disabled.');
+	}
+
+	// The in-app /sentry dashboard needs an API token + org/project on top of the DSN. Missing →
+	// the page shows an empty state (never a crash), so warn rather than fail. Only nag when the
+	// DSN is set (i.e. Sentry is meant to be on).
+	if (!dev && pub.PUBLIC_SENTRY_DSN) {
+		const missingApi = SENTRY_CREDENTIAL_KEYS.filter((k) => !env[k]);
+		if (missingApi.length > 0) {
+			log.warn(`${missingApi.join(', ')} unset — the /sentry dashboard page will be empty.`);
+		}
 	}
 }
