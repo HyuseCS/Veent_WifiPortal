@@ -3,7 +3,7 @@ import { dev } from '$app/environment';
 import { env } from '$env/dynamic/private';
 import { and, asc, desc, eq, isNotNull, isNull, ne, or } from 'drizzle-orm';
 import { customerProfile, networkHealth, networkSessions } from '@veent/db';
-import { SESSION_STATUS, resolveDeviceMac, resolveNetworkIdByApName } from '@veent/core';
+import { SESSION_STATUS, resolveDeviceMac, resolveNetworkIdByApName, captureHandled } from '@veent/core';
 import { db } from '$lib/server/db';
 import { network } from '$lib/server/network';
 import { getDeviceMac, getPortalContext, persistResolvedMac } from '$lib/server/portal';
@@ -40,6 +40,9 @@ export async function resolveMac(event: RequestEvent): Promise<string | null> {
 		return mac;
 	} catch (e) {
 		console.warn('[mac] IP→MAC lookup threw', { msg: (e as Error).message });
+		// Warning, not error: resolution degrades gracefully (returns null → last-resort fallbacks).
+		// Actionable at VOLUME only — a router that starts throwing on every lookup shows as a spike.
+		captureHandled(e, { level: 'warning', tags: { area: 'network', scope: 'ip-mac-lookup' } });
 		return null;
 	}
 }
@@ -123,6 +126,8 @@ async function rememberAccountMac(userId: string, mac: string): Promise<void> {
 			);
 	} catch (e) {
 		console.warn('[mac] failed to persist account MAC', { msg: (e as Error).message });
+		// Low-priority: best-effort write, self-heals on the next resolution. Watch the rate, not the event.
+		captureHandled(e, { level: 'warning', tags: { area: 'network', scope: 'mac-persist' } });
 	}
 }
 
@@ -209,5 +214,12 @@ export async function resolveCheckoutNetworkId(
 	}
 
 	console.warn('[topup] AP unresolved — payment will be unattributed by location', { userId });
+	// Warning, not error: expected for foreign devices. The COUNT is the signal — a sustained spike
+	// means location attribution is broken (Finance-by-location goes blind), not any single miss.
+	captureHandled('checkout AP unresolved — payment unattributed by location', {
+		level: 'warning',
+		tags: { area: 'payment', scope: 'attribution-miss' },
+		extra: { userId }
+	});
 	return null;
 }

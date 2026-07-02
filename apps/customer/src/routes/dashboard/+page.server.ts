@@ -96,7 +96,9 @@ export const load: PageServerLoad = async (event) => {
 		const r = await auth.api.generateOneTimeToken({ headers: event.request.headers });
 		if (r?.token) handoffUrl = `${event.url.origin}/auth/handoff?token=${encodeURIComponent(r.token)}`;
 	} catch (err) {
-		console.warn('[handoff] token generation failed:', (err as Error).message);
+		// Low-priority: the link is simply omitted; the dashboard still renders. log.error routes
+		// through the seam → Sentry at warning level, so it's the rate that matters, not one miss.
+		log.error('[handoff] token generation failed:', err);
 	}
 
 	return {
