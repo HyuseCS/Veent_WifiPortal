@@ -129,6 +129,32 @@ const PAYMENT_HOSTS = [
 	'*.xendit.co'
 ];
 
+/**
+ * OS connectivity-check probe hosts to explicitly DENY pre-auth. The broad reCAPTCHA allows above
+ * (`*.google.com` / `*.gstatic.com`) would otherwise let Android's captive probe through to a real
+ * HTTP 204, so the phone flashes "Connected" and then reverts to "Sign in to network" while still
+ * un-granted (docs/problems/captive-connected-flap-on-free-time.md). These denies sit ABOVE the
+ * allows (walled-garden is first-match top-to-bottom) so the probe is intercepted again — while
+ * reCAPTCHA, which lives on different hosts/paths (`www.gstatic.com/recaptcha`,
+ * `www.google.com/recaptcha`), keeps loading. Each host below is NOT a reCAPTCHA resource:
+ *   - connectivitycheck.gstatic.com — Android probe host; reCAPTCHA never uses this subdomain.
+ *   - clients1..4.google.com        — Android/Chrome connectivity + client hosts; not reCAPTCHA
+ *                                     resources. Matches the set already present on the live router.
+ *   - connectivitycheck.android.com — Android's fallback probe (already not in the allowlist; the
+ *                                     explicit deny documents intent and covers a manual allow).
+ *   - www.google.com PATH /generate_204 — www.google.com IS needed by reCAPTCHA, so deny only the
+ *                                     probe PATH (HTTP-only match; reCAPTCHA uses /recaptcha, not this).
+ */
+const PROBE_DENIES = [
+	{ host: 'connectivitycheck.gstatic.com' },
+	{ host: 'clients1.google.com' },
+	{ host: 'clients2.google.com' },
+	{ host: 'clients3.google.com' },
+	{ host: 'clients4.google.com' },
+	{ host: 'connectivitycheck.android.com' },
+	{ host: 'www.google.com', path: '/generate_204' }
+];
+
 const hosts = new Set([...splitList(ADMIN_WG_HOSTS), ...PAYMENT_HOSTS]);
 const ips = new Set(splitList(ADMIN_WG_IPS));
 
@@ -159,12 +185,17 @@ if (hosts.size === 0 && ips.size === 0) {
 console.log(`Provisioning walled garden on ${config.host}:${config.port ?? (config.tls ? 8729 : 8728)}`);
 if (hosts.size) console.log(`  hosts: ${[...hosts].join(', ')}`);
 if (ips.size) console.log(`  ips:   ${[...ips].join(', ')}`);
+if (PROBE_DENIES.length)
+	console.log(`  denies: ${PROBE_DENIES.map((d) => d.host + (d.path ?? '')).join(', ')}`);
 
 try {
 	const result = await provisionWalledGarden(config, {
 		hosts: [...hosts],
-		ips: [...ips]
+		ips: [...ips],
+		denies: PROBE_DENIES
 	});
+	for (const d of result.denies)
+		console.log(`  deny ${d.value}: ${d.created ? 'added' : 'already present'}`);
 	for (const h of result.hosts) console.log(`  host ${h.value}: ${h.created ? 'added' : 'already present'}`);
 	for (const i of result.ips) console.log(`  ip   ${i.value}: ${i.created ? 'added' : 'already present'}`);
 	console.log('\nDone. Guest devices can now reach the admin dashboard before authenticating.');
