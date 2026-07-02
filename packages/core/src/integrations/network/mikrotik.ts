@@ -4,7 +4,8 @@ import type {
 	NetworkApSample,
 	RouterLogEntry,
 	ActivateSessionInput,
-	InterfaceLimitInput
+	InterfaceLimitInput,
+	DeviceHostAccessInput
 } from './types';
 
 export interface MikrotikConfig {
@@ -57,6 +58,11 @@ const PING_TIMEOUT_MS = 5000;
 /** Comment/name prefix on the per-AP bandwidth queues we create, so ours are identifiable
  * and a re-apply updates rather than duplicates: `veent-hotspot-limit:<apName>`. */
 const LIMIT_TAG = 'veent-hotspot-limit';
+
+/** Comment prefix on the per-device, src-scoped walled-garden entries `openHostAccessForDevice`
+ * creates. The creation time is appended (`veent-checkout:<epochMs>`) so `sweepHostAccess` can
+ * expire them with no external state — the router row is self-describing. */
+const CHECKOUT_TAG = 'veent-checkout';
 
 /**
  * Render a Kbps cap as a RouterOS queue rate token. RouterOS `k` is decimal (×1000), so
@@ -378,6 +384,66 @@ export function createMikrotikController(config: MikrotikConfig): NetworkControl
 				const arp = await conn.write('/ip/arp/print', [`?address=${ip}`]);
 				const fromArp = arp.find((r) => r['mac-address'])?.['mac-address'];
 				return fromArp ? fromArp.toUpperCase() : null;
+			});
+		},
+
+		async openHostAccessForDevice(
+			input: DeviceHostAccessInput
+		): Promise<{ ipAddress: string | null }> {
+			const mac = input.macAddress.toUpperCase();
+			return withConn(async (conn) => {
+				// The walled garden matches the device's own hotspot-side src IP (before the
+				// router's own NAT), so scope by the DHCP/host/ARP IP the router has for this MAC.
+				const ips = await ipsForMac(conn, mac);
+				const ip = ips[0];
+				if (!ip) return { ipAddress: null };
+				const comment = `${CHECKOUT_TAG}:${Date.now()}`;
+				for (const host of input.hosts) {
+					// Refresh rather than stack: drop any prior scoped entry for this (host, src)
+					// so a re-checkout renews the timestamp instead of accumulating duplicates.
+					const existing = await conn.write('/ip/hotspot/walled-garden/print', [
+						`?dst-host=${host}`
+					]);
+					for (const e of existing) {
+						const srcIp = (e['src-address'] ?? '').split('/')[0];
+						if (srcIp !== ip || !e['.id']) continue;
+						try {
+							await conn.write('/ip/hotspot/walled-garden/remove', [`=.id=${e['.id']}`]);
+						} catch {
+							// Already gone between print and remove — ignore.
+						}
+					}
+					await conn.write('/ip/hotspot/walled-garden/add', [
+						'=action=allow',
+						`=dst-host=${host}`,
+						`=src-address=${ip}`,
+						`=comment=${comment}`
+					]);
+				}
+				return { ipAddress: ip };
+			});
+		},
+
+		async sweepHostAccess(input?: { maxAgeMs?: number }): Promise<number> {
+			const maxAgeMs = input?.maxAgeMs ?? 15 * 60_000;
+			const now = Date.now();
+			return withConn(async (conn) => {
+				const rows = await conn.write('/ip/hotspot/walled-garden/print', []);
+				let removed = 0;
+				for (const r of rows) {
+					const comment = r.comment ?? '';
+					if (!comment.startsWith(`${CHECKOUT_TAG}:`)) continue;
+					const ts = Number(comment.slice(CHECKOUT_TAG.length + 1));
+					if (!Number.isFinite(ts) || now - ts < maxAgeMs) continue;
+					if (!r['.id']) continue;
+					try {
+						await conn.write('/ip/hotspot/walled-garden/remove', [`=.id=${r['.id']}`]);
+						removed++;
+					} catch {
+						// Raced with another sweep / manual removal — ignore.
+					}
+				}
+				return removed;
 			});
 		},
 

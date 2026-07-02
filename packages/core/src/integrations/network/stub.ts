@@ -1,4 +1,9 @@
-import type { NetworkController, GrantInput, InterfaceLimitInput } from './types';
+import type {
+	NetworkController,
+	GrantInput,
+	InterfaceLimitInput,
+	DeviceHostAccessInput
+} from './types';
 
 /**
  * No-op network controller for local dev / until the real integration strategy
@@ -33,6 +38,14 @@ export function createStubNetworkController(
 			// No router to query in dev — the admin-grant path no-ops gracefully.
 			log(`[network:stub] RESOLVE-MAC ${ipAddress} → null`);
 			return null;
+		},
+		async openHostAccessForDevice(input: DeviceHostAccessInput): Promise<{ ipAddress: string | null }> {
+			// No router / no device IP in dev — log intent so the checkout flow is traceable.
+			log(`[network:stub] OPEN-HOST-ACCESS ${input.macAddress} → ${input.hosts.join(', ')}`);
+			return { ipAddress: null };
+		},
+		async sweepHostAccess(): Promise<number> {
+			return 0;
 		}
 	};
 }
