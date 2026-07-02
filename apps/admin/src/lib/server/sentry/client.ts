@@ -21,9 +21,12 @@ const org = () => env.SENTRY_ORG_SLUG;
 const project = () => env.SENTRY_PROJECT_ID;
 const apiBase = () => (env.SENTRY_API_BASE || DEFAULT_API_BASE).replace(/\/+$/, '');
 
+/** The private env vars that must ALL be set for the /sentry dashboard to reach Sentry. */
+export const SENTRY_CREDENTIAL_KEYS = ['SENTRY_AUTH_TOKEN', 'SENTRY_ORG_SLUG', 'SENTRY_PROJECT_ID'] as const;
+
 /** All three server credentials present → the dashboard can call Sentry. */
 export function isSentryConfigured(): boolean {
-	return Boolean(token() && org() && project());
+	return SENTRY_CREDENTIAL_KEYS.every((k) => env[k]);
 }
 
 /** A single fetch bounded by a timeout — a slow Sentry API can't hold the request open forever. */

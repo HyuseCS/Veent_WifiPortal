@@ -1,8 +1,5 @@
 <script lang="ts">
-	import Activity from 'lucide-svelte/icons/activity';
-	import type { Component } from 'svelte';
-	import { EmptyState } from '$lib/components/ui';
-	import { SentryIssuesTable } from '$lib/components/feature/sentry';
+	import { SentryIssuesTable, SentryUnconfiguredState } from '$lib/components/feature/sentry';
 	import type { PageData } from './$types';
 
 	// Dedicated issues screen — reached by tapping the "Open issues" KPI on mobile. Desktop keeps
@@ -13,9 +10,7 @@
 {#if !data.configured}
 	<!-- Route drops the main padding for the full-bleed table, so pad this fallback itself. -->
 	<div class="p-4 sm:p-6">
-		<EmptyState
-			icon={Activity as unknown as Component}
-			title="Sentry API not configured"
+		<SentryUnconfiguredState
 			description="Set SENTRY_AUTH_TOKEN, SENTRY_ORG_SLUG and SENTRY_PROJECT_ID to load issues here."
 		/>
 	</div>

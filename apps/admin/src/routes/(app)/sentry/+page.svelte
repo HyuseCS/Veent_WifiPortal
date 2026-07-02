@@ -1,11 +1,9 @@
 <script lang="ts">
-	import Activity from 'lucide-svelte/icons/activity';
-	import type { Component } from 'svelte';
-	import { EmptyState } from '$lib/components/ui';
 	import {
 		SentryKpis,
 		SentryVolumeChart,
-		SentryIssuesTable
+		SentryIssuesTable,
+		SentryUnconfiguredState
 	} from '$lib/components/feature/sentry';
 	import type { PageData } from './$types';
 
@@ -16,9 +14,7 @@
 </script>
 
 {#if !data.configured}
-	<EmptyState
-		icon={Activity as unknown as Component}
-		title="Sentry API not configured"
+	<SentryUnconfiguredState
 		description="Set SENTRY_AUTH_TOKEN, SENTRY_ORG_SLUG and SENTRY_PROJECT_ID to load issues and event volume here."
 	/>
 {:else}

@@ -6,7 +6,8 @@ import {
 	fetchStatsRaw,
 	invalidate,
 	isSentryConfigured,
-	putIssueStatus
+	putIssueStatus,
+	SENTRY_CREDENTIAL_KEYS
 } from './client';
 import { deriveKpis, mapEventDetail, mapIssue, mapVolume } from './map';
 import type {
@@ -24,7 +25,7 @@ import type {
  * client or mapper directly.
  */
 
-export { isSentryConfigured };
+export { isSentryConfigured, SENTRY_CREDENTIAL_KEYS };
 export type { SentryDashboard, SentryEventDetail, SentryIssue } from './types';
 
 const log = logger('sentry');
@@ -40,6 +41,16 @@ export async function getDashboard(): Promise<SentryDashboard> {
 		dashboardUrl: pub.PUBLIC_SENTRY_DASHBOARD_URL || null,
 		degraded: { issues: issues.degraded, volume: volume.degraded }
 	};
+}
+
+/** Issues only — for the mobile /sentry/issues page, which never renders the volume chart. */
+export async function getIssues(): Promise<{
+	configured: true;
+	issues: SentryIssue[];
+	degraded: { issues: boolean };
+}> {
+	const { data, degraded } = await loadIssues();
+	return { configured: true, issues: data, degraded: { issues: degraded } };
 }
 
 async function loadIssues(): Promise<{ data: SentryIssue[]; degraded: boolean }> {

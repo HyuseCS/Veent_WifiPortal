@@ -18,6 +18,7 @@ async function mutate(event: RequestEvent, action: string, run: (id: string) => 
 	// locals.user for ACTIVE staff (loads don't run on POST, so we re-check here), so its presence
 	// IS the authorization — a disabled or unauthenticated request has no user and is refused.
 	if (!event.locals.user?.id) return fail(401, { action, error: 'Not signed in.' });
+	if (!isSentryConfigured()) return fail(503, { action, error: 'Sentry API not configured.' });
 
 	const rl = await rateLimit('admin_sentry_mutate', clientIp(event), 30, 15 * 60 * 1000);
 	if (!rl.allowed) return fail(429, { action, error: 'Too many attempts. Please wait a few minutes.' });

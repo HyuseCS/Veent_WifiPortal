@@ -140,20 +140,20 @@
 		</div>
 
 		<div class="mt-5 flex items-center justify-end gap-2 border-t border-border pt-4">
-			<form method="post" action="?/resolve" use:enhance={() => async ({ update }) => { open = false; await update(); }}>
+			<form method="post" action="?/resolve" use:enhance={() => async ({ result, update }) => { if (result.type === 'success') open = false; await update(); }}>
 				<input type="hidden" name="id" value={issue.id} />
 				<button
 					type="submit"
-					class="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-border bg-bg px-3 text-sm font-medium text-ink transition-colors hover:border-brand/40 hover:bg-surface focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:outline-none"
+					class="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-border bg-bg px-3 text-sm font-medium text-ink transition-colors hover:border-brand/40 hover:bg-surface focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:outline-none"
 				>
 					<Check class="h-4 w-4" aria-hidden="true" /> Resolve
 				</button>
 			</form>
-			<form method="post" action="?/ignore" use:enhance={() => async ({ update }) => { open = false; await update(); }}>
+			<form method="post" action="?/ignore" use:enhance={() => async ({ result, update }) => { if (result.type === 'success') open = false; await update(); }}>
 				<input type="hidden" name="id" value={issue.id} />
 				<button
 					type="submit"
-					class="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-border bg-bg px-3 text-sm font-medium text-ink transition-colors hover:border-brand/40 hover:bg-surface focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:outline-none"
+					class="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-border bg-bg px-3 text-sm font-medium text-ink transition-colors hover:border-brand/40 hover:bg-surface focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:outline-none"
 				>
 					<BellOff class="h-4 w-4" aria-hidden="true" /> Ignore
 				</button>
@@ -165,7 +165,7 @@
 					href={issue.permalink}
 					target="_blank"
 					rel="noopener noreferrer"
-					class="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-border bg-bg px-3 text-sm font-medium text-ink transition-colors hover:border-brand/40 hover:bg-surface focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:outline-none"
+					class="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-border bg-bg px-3 text-sm font-medium text-ink transition-colors hover:border-brand/40 hover:bg-surface focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:outline-none"
 				>
 					Open in Sentry <ExternalLink class="h-4 w-4 text-muted" aria-hidden="true" />
 				</a>

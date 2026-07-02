@@ -246,7 +246,7 @@
 							rel="noopener noreferrer"
 							title="Open in Sentry"
 							aria-label="Open {issue.shortId || issue.title} in Sentry"
-							class="flex min-h-[36px] min-w-[36px] items-center justify-center rounded-lg text-muted transition-colors hover:bg-surface hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+							class="flex h-11 w-11 items-center justify-center rounded-lg text-muted transition-colors hover:bg-surface hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
 						>
 							<ExternalLink class="h-4 w-4" aria-hidden="true" />
 						</a>

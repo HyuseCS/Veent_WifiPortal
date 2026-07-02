@@ -23,7 +23,8 @@ export const GET: RequestHandler = async (event: RequestEvent) => {
 	if (!id) throw error(400, 'Missing issue id.');
 
 	try {
-		return json(await getIssueEvent(id));
+		// Stack traces / event metadata are sensitive — keep them out of any shared/proxy cache.
+		return json(await getIssueEvent(id), { headers: { 'cache-control': 'no-store' } });
 	} catch (err) {
 		log.error('event fetch failed', err);
 		throw error(502, 'Sentry request failed.');

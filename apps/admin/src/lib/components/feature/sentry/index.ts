@@ -6,3 +6,4 @@
 export { default as SentryKpis } from './SentryKpis.svelte';
 export { default as SentryVolumeChart } from './SentryVolumeChart.svelte';
 export { default as SentryIssuesTable } from './SentryIssuesTable.svelte';
+export { default as SentryUnconfiguredState } from './SentryUnconfiguredState.svelte';

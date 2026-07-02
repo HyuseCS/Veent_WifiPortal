@@ -42,6 +42,20 @@
 	// so the snap + hidden scrollbar apply only on that route, not the whole admin.
 	const onNetworks = $derived(page.url.pathname.startsWith('/networks'));
 	const onSentryIssues = $derived(page.url.pathname === '/sentry/issues');
+
+	// Base scroll container, minus the default padding on the full-bleed Sentry-issues table, plus
+	// the Networks-only scroll-snap (suspended while an edit lock is held).
+	const mainClass = $derived(
+		[
+			'flex-1 overflow-y-auto bg-canvas',
+			onSentryIssues ? '' : 'p-4 sm:p-6',
+			onNetworks
+				? `[scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${editLock.active ? '' : 'md:snap-y md:snap-proximity'}`
+				: ''
+		]
+			.filter(Boolean)
+			.join(' ')
+	);
 </script>
 
 <div class="flex h-dvh overflow-hidden bg-bg">
@@ -57,13 +71,7 @@
 			{#if onSentryIssues}<SentryHeaderControls />{/if}
 			{/snippet}
 		</Topbar>
-		<main
-			class="flex-1 overflow-y-auto bg-canvas {onSentryIssues
-				? ''
-				: 'p-4 sm:p-6'} {onNetworks
-				? `[scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${editLock.active ? '' : 'md:snap-y md:snap-proximity'}`
-				: ''}"
-		>
+		<main class={mainClass}>
 			{@render children()}
 		</main>
 	</div>
