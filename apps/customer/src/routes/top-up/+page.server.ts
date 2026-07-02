@@ -104,6 +104,8 @@ export const actions: Actions = {
 				.where(eq(customerProfile.userId, user.id));
 		} catch (e) {
 			console.warn('[topup] failed to persist buyer details:', (e as Error).message);
+			// Low-priority: buyer can re-enter; the checkout proceeds. Rate matters, not the single event.
+			captureHandled(e, { level: 'warning', tags: { area: 'payment', scope: 'buyer-persist' } });
 		}
 
 		// The site's public tunnel origin (its ngrok URL), for the SERVER-TO-SERVER webhook: the
@@ -145,6 +147,8 @@ export const actions: Actions = {
 				await openCheckoutAccess(network, { macAddress: mac });
 			} catch (e) {
 				console.warn('[topup] openCheckoutAccess failed', (e as Error).message);
+				// Low-priority: best-effort captcha pre-auth (already a failed router span). Watch the volume.
+				captureHandled(e, { level: 'warning', tags: { area: 'network', scope: 'checkout-access' } });
 			}
 		}
 		// Watermark the ledger now; the processing page polls for a topup row above
