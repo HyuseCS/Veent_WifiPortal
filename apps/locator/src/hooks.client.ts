@@ -5,7 +5,7 @@ import * as Sentry from '@sentry/sveltekit';
 // server-only integrations (maya/mikrotik/postgres) which reference Node globals like `Buffer`.
 import { sentryOptions } from '@veent/core/observability';
 
-// Sentry (browser). Fail-open: no PUBLIC_SENTRY_DSN → no init → app runs normally. Captures
+// Sentry (browser). Fail-open: no PUBLIC_SENTRY_DSN → no init → the locator runs normally. Captures
 // client-side errors + browser performance (page loads, navigations). Same PII scrubbing as the
 // server via sentryOptions. Only PUBLIC_ env is readable here — the DSN is public by design.
 const dsn = env.PUBLIC_SENTRY_DSN;
@@ -16,7 +16,7 @@ if (dsn) {
 	Sentry.init({
 		...sentryOptions({
 			dsn,
-			app: 'admin',
+			app: 'locator',
 			environment: env.PUBLIC_SENTRY_ENVIRONMENT ?? (dev ? 'development' : 'production'),
 			release: env.PUBLIC_SENTRY_RELEASE,
 			tracesSampleRate: dev ? 1.0 : Number.isFinite(rate) ? rate : 0.2

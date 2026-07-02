@@ -138,6 +138,22 @@ bun run --filter radius-admin bootstrap:owner    # create the first owner (uses 
 bun run build        # builds all apps → apps/*/build/index.js
 ```
 
+### Sentry source maps (optional)
+
+Client stack traces in Sentry are minified unless source maps are uploaded at build time.
+This is **opt-in**: the upload plugin (admin + customer `vite.config.ts`) only activates when
+**all three** of `SENTRY_AUTH_TOKEN`, `SENTRY_ORG_SLUG`, and `SENTRY_PROJECT_ID` are present in the
+**build** environment. Without them the build is unchanged — no source maps are generated, so none
+can ever be served to browsers. When configured, maps are uploaded and then deleted from the build
+output (`filesToDeleteAfterUpload`), so they still never ship to clients.
+
+> ⚠️ The build-time `SENTRY_AUTH_TOKEN` is a **different credential** from the runtime dashboard
+> token, even though they share the env var name. The build token needs the **`project:releases`**
+> scope; the runtime `/sentry` dashboard token (admin app) needs `event:read` + `event:write` +
+> `org:read`. Provide the build token only to the build/CI step — never commit it, never put it in
+> the systemd `EnvironmentFile` that runs the servers. Set `PUBLIC_SENTRY_RELEASE` and
+> `SENTRY_RELEASE` to the same value (e.g. the git SHA) so uploaded maps match the running release.
+
 ## 5. Run the servers (systemd)
 
 `node build` does **not** auto-load `.env` — inject it via systemd `EnvironmentFile`.

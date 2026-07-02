@@ -1,4 +1,5 @@
 import { json } from '@sveltejs/kit';
+import * as Sentry from '@sentry/sveltekit';
 import {
 	sweepOutagePauses,
 	expireDueAccounts,
@@ -21,17 +22,31 @@ import type { RequestHandler } from './$types';
 export const POST: RequestHandler = async (event) => {
 	requireCron(event);
 
-	// Outage auto-pause FIRST: freeze the paid window of guests on a down AP before the expiry
-	// sweep runs, so an account whose AP is down isn't expired out from under them — it's held
-	// (expireDueAccounts skips paused accounts) and resumed when the AP recovers.
-	const outage = await sweepOutagePauses(db, network);
+	// Sentry cron check-in: makes a DEAD scheduler detectable ("the cron never ran"), which the
+	// endpoint's own error coverage can't see. No-op passthrough when Sentry isn't initialised; a
+	// throw still fails the check-in AND bubbles to handleError (deliberately no swallowing catch).
+	return Sentry.withMonitor(
+		'customer-network-revoke',
+		async () => {
+			// Outage auto-pause FIRST: freeze the paid window of guests on a down AP before the expiry
+			// sweep runs, so an account whose AP is down isn't expired out from under them — it's held
+			// (expireDueAccounts skips paused accounts) and resumed when the AP recovers.
+			const outage = await sweepOutagePauses(db, network);
 
-	const revoked = await expireDueAccounts(db, network);
-	// Then sweep router bindings the DB no longer backs (wipe/cascade/crash orphans).
-	const reconciled = await reconcileGuestBindings(db, network);
-	// Reclaim expired per-device checkout walled-garden allows (the reCAPTCHA scoping) so an
-	// abandoned checkout can't leave google.com open on an IP that DHCP later hands to another
-	// device. Self-describing on the router (comment-stamped), so no DB state to reconcile.
-	const sweptCheckoutAccess = await sweepCheckoutAccess(network);
-	return json({ ok: true, outage, revoked, reconciled, sweptCheckoutAccess });
+			const revoked = await expireDueAccounts(db, network);
+			// Then sweep router bindings the DB no longer backs (wipe/cascade/crash orphans).
+			const reconciled = await reconcileGuestBindings(db, network);
+			// Reclaim expired per-device checkout walled-garden allows (the reCAPTCHA scoping) so an
+			// abandoned checkout can't leave google.com open on an IP that DHCP later hands to another
+			// device. Self-describing on the router (comment-stamped), so no DB state to reconcile.
+			const sweptCheckoutAccess = await sweepCheckoutAccess(network);
+			return json({ ok: true, outage, revoked, reconciled, sweptCheckoutAccess });
+		},
+		{
+			schedule: { type: 'crontab', value: '* * * * *' },
+			checkinMargin: 5,
+			maxRuntime: 5,
+			timezone: 'UTC'
+		}
+	);
 };

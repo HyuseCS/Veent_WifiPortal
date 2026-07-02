@@ -125,7 +125,7 @@ export const actions: Actions = {
 					upKbps: up.kbps
 				});
 			} catch (err) {
-				console.error('[admin] applyInterfaceLimit failed:', err);
+				log.error('applyInterfaceLimit failed:', err);
 				warning =
 					'Caps saved, but the router did not accept them — check the interface binding, then re-save to retry.';
 			}

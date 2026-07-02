@@ -26,7 +26,9 @@ const DROP_KEY_RE =
 	/pass(word)?|secret|token|otp|^code$|authorization|cookie|api[-_]?key|session[-_]?id|totp/i;
 
 const EMAIL_RE = /([\w.+-])[\w.+-]*(@[\w.-]+)/g;
-const MAC_RE = /\b([0-9A-Fa-f]{2}:){2}([0-9A-Fa-f]{2}:){3}[0-9A-Fa-f]{2}\b/g;
+// Matches a 6-octet MAC with a CONSISTENT separator (colon OR hyphen — the \1 backreference
+// rejects mixed forms) as well as the bare 12-hex form. Router log lines carry all three.
+const MAC_RE = /\b(?:[0-9A-Fa-f]{2}([:-])(?:[0-9A-Fa-f]{2}\1){4}[0-9A-Fa-f]{2}|[0-9A-Fa-f]{12})\b/g;
 // PH phone shapes: +63XXXXXXXXXX or 09XXXXXXXXX (and generic 8+ digit runs with separators).
 const PHONE_RE = /\+?\d[\d ()-]{7,}\d/g;
 
@@ -34,7 +36,7 @@ const PHONE_RE = /\+?\d[\d ()-]{7,}\d/g;
 function maskString(s: string): string {
 	return s
 		.replace(EMAIL_RE, '$1•••$2')
-		.replace(MAC_RE, (m) => `${m.slice(0, 8)}•••`)
+		.replace(MAC_RE, (m) => `${m.slice(0, m.includes(':') || m.includes('-') ? 8 : 6)}•••`)
 		.replace(PHONE_RE, (m) => {
 			const digits = m.replace(/\D/g, '');
 			if (digits.length < 9) return m; // too short to be a phone — leave (avoids nuking amounts/ids)
@@ -164,7 +166,7 @@ export interface SentryInitInput {
 	/** Git SHA or app version (optional). */
 	release?: string;
 	/** Which app this is, attached as the `app` tag on every event. */
-	app: 'admin' | 'customer';
+	app: 'admin' | 'customer' | 'locator';
 	/** 0–1. Fraction of requests traced for performance. */
 	tracesSampleRate: number;
 }
