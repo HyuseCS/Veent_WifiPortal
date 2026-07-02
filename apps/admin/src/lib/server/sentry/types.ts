@@ -24,12 +24,11 @@ export interface SentryIssue {
 	status: string;
 	/** Deep-link into sentry.io for this single issue. */
 	permalink: string;
-}
-
-/** One bucket of the error-volume trend (one interval of the stats series). */
-export interface SentryVolumePoint {
-	label: string;
-	count: number;
+	/** Per-issue event-count sparkline, newest bucket last. Daily buckets over 14 days. */
+	trend14d: number[];
+	/** Same, hourly buckets over the last 24h. Empty when the issue had no recent events
+	 * (absent from the 24h top-list) — a correct flat line, not a failure. */
+	trend24h: number[];
 }
 
 /** One stack frame of the latest event's exception. */
@@ -71,9 +70,8 @@ export interface SentryDashboard {
 	configured: true;
 	kpis: Kpi[];
 	issues: SentryIssue[];
-	volume: SentryVolumePoint[];
 	/** The public "Open in Sentry" project URL (PUBLIC_SENTRY_DASHBOARD_URL), or null. */
 	dashboardUrl: string | null;
 	/** True per section when its fetch failed and it was degraded to empty. */
-	degraded: { issues: boolean; volume: boolean };
+	degraded: { issues: boolean };
 }

@@ -1,7 +1,7 @@
 <script lang="ts">
 	import {
 		SentryKpis,
-		SentryVolumeChart,
+		SentryTopIssues,
 		SentryIssuesTable,
 		SentryUnconfiguredState
 	} from '$lib/components/feature/sentry';
@@ -15,17 +15,18 @@
 
 {#if !data.configured}
 	<SentryUnconfiguredState
-		description="Set SENTRY_AUTH_TOKEN, SENTRY_ORG_SLUG and SENTRY_PROJECT_ID to load issues and event volume here."
+		description="Set SENTRY_AUTH_TOKEN, SENTRY_ORG_SLUG and SENTRY_PROJECT_ID to load issues here."
 	/>
 {:else}
-	<!-- min-h-full so the chart (last visible item on mobile — the table is desktop-only) can
-	     flex-1 down to the bottom of the page instead of leaving dead space. -->
-	<div class="flex min-h-full flex-col gap-6">
+	<div class="flex flex-col gap-6">
 		<SentryKpis kpis={data.kpis} dashboardUrl={data.dashboardUrl} />
-		<SentryVolumeChart points={data.volume} degraded={data.degraded.volume} />
-		<!-- Table is inline on desktop; on mobile it's its own page reached via the "Open issues" KPI. -->
+		<!-- Desktop: the full issues table (with per-row trend sparklines) sits inline. -->
 		<div class="hidden md:block">
 			<SentryIssuesTable issues={data.issues} degraded={data.degraded.issues} />
+		</div>
+		<!-- Mobile: the table lives on its own page, so peek at the issues worth attention here. -->
+		<div class="md:hidden">
+			<SentryTopIssues issues={data.issues} />
 		</div>
 	</div>
 {/if}
