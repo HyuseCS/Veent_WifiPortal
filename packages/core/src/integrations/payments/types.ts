@@ -14,8 +14,20 @@ export interface CreateCheckoutInput {
 	/** Where the gateway sends the user after paying / cancelling. */
 	successUrl: string;
 	cancelUrl: string;
-	/** Optional contact info to prefill the checkout. */
-	buyer?: { name?: string; email?: string; phone?: string };
+	/**
+	 * Buyer info for the checkout / fraud scoring. Maya's Kount fraud protection requires
+	 * firstName + lastName + email — collected on the top-up form. Split into firstName/lastName
+	 * because Kount validates them separately. All optional at this layer so non-Kount providers
+	 * can ignore them; the Maya checkout path is responsible for ensuring they're present.
+	 */
+	buyer?: {
+		firstName?: string;
+		lastName?: string;
+		email?: string;
+		phone?: string;
+		/** ISO 3166 two-letter country code for the billing address (e.g. 'PH'). */
+		billingAddressCountryCode?: string;
+	};
 }
 
 export interface CreateCheckoutResult {

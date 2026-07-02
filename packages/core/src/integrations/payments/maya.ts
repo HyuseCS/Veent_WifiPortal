@@ -71,7 +71,7 @@ async function fetchWithRetry(
 		} catch (e) {
 			if (attempt < retries) continue;
 			if (e instanceof Error && e.name === 'AbortError') {
-				throw new Error(`maya: request timed out after ${timeoutMs}ms`);
+				throw new Error(`maya: request timed out after ${timeoutMs}ms`, { cause: e });
 			}
 			throw e instanceof Error ? e : new Error(String(e));
 		}
@@ -88,14 +88,6 @@ function toMinor(amount: string | number | undefined | null): number {
 	return Math.round(Number(amount) * 100);
 }
 
-/** Split a display name into Maya's firstName/lastName fields. */
-function splitName(name?: string): { firstName?: string; lastName?: string } {
-	const trimmed = name?.trim();
-	if (!trimmed) return {};
-	const parts = trimmed.split(/\s+/);
-	if (parts.length === 1) return { firstName: parts[0] };
-	return { firstName: parts.slice(0, -1).join(' '), lastName: parts[parts.length - 1] };
-}
 
 /** Shape of the fields we read off a Maya payment object (GET /payments/v1/payments/{id}). */
 interface MayaPayment {
@@ -183,15 +175,15 @@ export function createMayaProvider(config: MayaConfig): PaymentProvider {
 		async createCheckout(input: CreateCheckoutInput): Promise<CreateCheckoutResult> {
 			if (!config.publicKey) throw new Error('maya: publicKey not configured');
 
-			const { firstName, lastName } = splitName(input.buyer?.name);
-			const buyer =
-				firstName || input.buyer?.email || input.buyer?.phone
-					? {
-							firstName,
-							lastName,
-							contact: { phone: input.buyer?.phone, email: input.buyer?.email }
-						}
-					: undefined;
+			// Maya's Kount fraud protection requires firstName + lastName + contact.email on every
+			// checkout. These are the REAL buyer details collected on the top-up form (passed via
+			// input.buyer); countryCode defaults to PH, this portal's only market.
+			const buyer = {
+				firstName: input.buyer?.firstName,
+				lastName: input.buyer?.lastName,
+				contact: { phone: input.buyer?.phone, email: input.buyer?.email },
+				billingAddress: { countryCode: input.buyer?.billingAddressCountryCode ?? 'PH' }
+			};
 
 			const res = await fetch(`${base}/checkout/v1/checkouts`, {
 				method: 'POST',
