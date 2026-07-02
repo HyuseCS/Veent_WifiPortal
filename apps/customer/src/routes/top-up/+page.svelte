@@ -125,6 +125,9 @@
 					<p class="-mt-1 mb-1.5 text-[11.5px] font-medium text-muted">
 						Required by our payment provider to process your payment.
 					</p>
+					<!-- `defaultValue`/`defaultChecked` (Svelte 5.6+) render as the value/checked attribute
+					in SSR so the prefill shows, but on hydration set the element DEFAULT rather than the
+					live value — so anything the user typed BEFORE hydration isn't wiped. -->
 					<div class="flex gap-2.5">
 						<input
 							name="firstName"
@@ -132,7 +135,7 @@
 							autocomplete="given-name"
 							placeholder="First name"
 							required
-							value={form?.values?.firstName ?? data.buyer.firstName}
+							defaultValue={form?.values?.firstName ?? data.buyer.firstName}
 							class="h-[48px] w-full rounded-xl border-[1.5px] border-border bg-bg px-4 text-[15px] text-ink transition-colors placeholder:text-muted focus:border-brand focus:outline-none"
 						/>
 						<input
@@ -141,7 +144,7 @@
 							autocomplete="family-name"
 							placeholder="Last name"
 							required
-							value={form?.values?.lastName ?? data.buyer.lastName}
+							defaultValue={form?.values?.lastName ?? data.buyer.lastName}
 							class="h-[48px] w-full rounded-xl border-[1.5px] border-border bg-bg px-4 text-[15px] text-ink transition-colors placeholder:text-muted focus:border-brand focus:outline-none"
 						/>
 					</div>
@@ -151,14 +154,14 @@
 						autocomplete="email"
 						placeholder="Email address"
 						required
-						value={form?.values?.email ?? data.buyer.email}
+						defaultValue={form?.values?.email ?? data.buyer.email}
 						class="h-[48px] w-full rounded-xl border-[1.5px] border-border bg-bg px-4 text-[15px] text-ink transition-colors placeholder:text-muted focus:border-brand focus:outline-none"
 					/>
 					<label class="mt-0.5 flex min-h-[44px] cursor-pointer items-center gap-2.5 text-[13px] text-ink">
 						<input
 							type="checkbox"
 							name="saveDetails"
-							checked={form?.values?.saveDetails ?? data.savedDetails}
+							defaultChecked={form?.values?.saveDetails ?? data.savedDetails}
 							class="h-[18px] w-[18px] shrink-0 rounded border-[1.5px] border-border text-brand accent-brand focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
 						/>
 						Save my details for next time
