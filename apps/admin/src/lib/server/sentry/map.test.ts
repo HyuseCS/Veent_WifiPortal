@@ -25,7 +25,18 @@ describe('mapIssue', () => {
 		expect(issue.level).toBe('warning');
 		expect(issue.trend14d).toEqual([3, 5]); // counts pulled from [ts, count] tuples
 		expect(issue.trend24h).toEqual([]); // period absent from this payload
+		expect(issue.permalink).toBe('https://sentry.io/issues/42/'); // real https passes through
 		expect(issue).not.toHaveProperty('extra');
+	});
+
+	it('only passes through absolute https permalinks (blocks script/other schemes)', () => {
+		// The permalink is rendered as an href on an admin page — a poisoned API response must
+		// not be able to smuggle a javascript:/http: URL through. Anything non-https → ''.
+		expect(mapIssue({ permalink: 'javascript:alert(1)' }).permalink).toBe('');
+		expect(mapIssue({ permalink: 'http://evil.example/x' }).permalink).toBe('');
+		expect(mapIssue({ permalink: '//evil.example' }).permalink).toBe('');
+		expect(mapIssue({ permalink: 42 }).permalink).toBe(''); // non-string coerced then rejected
+		expect(mapIssue({}).permalink).toBe(''); // missing → ''
 	});
 
 	it('degrades garbage to empty/0 without throwing', () => {

@@ -86,6 +86,8 @@
       "name": "veent-locator",
       "version": "0.0.1",
       "dependencies": {
+        "@sentry/sveltekit": "^10.62.0",
+        "@veent/core": "workspace:*",
         "@veent/db": "workspace:*",
         "drizzle-orm": "^0.45.2",
         "leaflet": "^1.9.4",

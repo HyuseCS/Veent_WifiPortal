@@ -1,4 +1,5 @@
 import { json } from '@sveltejs/kit';
+import * as Sentry from '@sentry/sveltekit';
 import { reconcilePendingPayments } from '@veent/core';
 import { db } from '$lib/server/db';
 import { payments } from '$lib/server/payments';
@@ -20,6 +21,20 @@ import type { RequestHandler } from './$types';
 export const POST: RequestHandler = async (event) => {
 	requireCron(event);
 
-	const result = await reconcilePendingPayments(db, payments);
-	return json({ ok: true, ...result });
+	// Sentry cron check-in: makes a DEAD scheduler detectable ("the cron never ran"), which the
+	// endpoint's own error coverage can't see. No-op passthrough when Sentry isn't initialised; a
+	// throw still fails the check-in AND bubbles to handleError (deliberately no swallowing catch).
+	return Sentry.withMonitor(
+		'customer-payments-reconcile',
+		async () => {
+			const result = await reconcilePendingPayments(db, payments);
+			return json({ ok: true, ...result });
+		},
+		{
+			schedule: { type: 'crontab', value: '* * * * *' },
+			checkinMargin: 5,
+			maxRuntime: 5,
+			timezone: 'UTC'
+		}
+	);
 };

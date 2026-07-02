@@ -15,6 +15,20 @@ describe('scrubEvent', () => {
 		expect(e.message).toContain('•••');
 	});
 
+	it('masks all three MAC forms (colon, hyphen, bare 12-hex), keeping the vendor prefix', () => {
+		// Router log lines carry MACs in any of these shapes — all must be redacted.
+		expect(scrubEvent({ message: 'dev AA:BB:CC:DD:EE:FF' } as ErrorEvent).message).toBe('dev AA:BB:CC•••');
+		expect(scrubEvent({ message: 'dev AA-BB-CC-DD-EE-FF' } as ErrorEvent).message).toBe('dev AA-BB-CC•••');
+		expect(scrubEvent({ message: 'dev AABBCCDDEEFF' } as ErrorEvent).message).toBe('dev AABBCC•••');
+	});
+
+	it('leaves non-MAC hex runs and mixed separators untouched', () => {
+		// 11- and 13-hex are not MACs; a mixed-separator run is not a real MAC either.
+		expect(scrubEvent({ message: 'id AABBCCDDEEF' } as ErrorEvent).message).toBe('id AABBCCDDEEF');
+		expect(scrubEvent({ message: 'id AABBCCDDEEFFA' } as ErrorEvent).message).toBe('id AABBCCDDEEFFA');
+		expect(scrubEvent({ message: 'id AA:BB-CC:DD-EE:FF' } as ErrorEvent).message).toBe('id AA:BB-CC:DD-EE:FF');
+	});
+
 	it('drops secret-keyed values in extra/contexts', () => {
 		const e = scrubEvent({
 			extra: { password: 'hunter2', authorization: 'Bearer x', otp: '123456', keep: 'ok' }
