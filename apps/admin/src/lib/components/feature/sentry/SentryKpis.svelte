@@ -17,7 +17,7 @@
 	const icon = (c: unknown) => c as Component;
 	const chrome: Record<string, { icon: Component; helper: string }> = {
 		'Open issues': { icon: icon(AlertTriangle), helper: 'unresolved · last 14 days' },
-		'Events (14d)': { icon: icon(Activity), helper: 'accepted errors' },
+		'Events (14d)': { icon: icon(Activity), helper: 'across open issues' },
 		'Users affected': { icon: icon(Users), helper: 'across open issues' }
 	};
 </script>

@@ -87,13 +87,20 @@ export function invalidate(): void {
 
 // --- Endpoints (raw JSON out) ----------------------------------------------
 
-/** Unresolved issues for the project, most-frequent first, over the last 14 days. */
-export function fetchIssuesRaw(): Promise<unknown> {
-	return cached('issues', () =>
+/**
+ * Unresolved issues for the project, most-frequent first, over the last 14 days. `trendPeriod`
+ * picks the per-issue `stats` sparkline granularity (14d → daily, 24h → hourly): the org endpoint
+ * controls that via `groupStatsPeriod`, SEPARATELY from `statsPeriod` (which is the query window —
+ * `statsPeriod` alone always yields a 24h sparkline). The window stays 14d for both periods so the
+ * 24h call returns the same issue set, letting the facade merge each issue's 24h trend in by id.
+ */
+export function fetchIssuesRaw(trendPeriod: '24h' | '14d' = '14d'): Promise<unknown> {
+	return cached(`issues:${trendPeriod}`, () =>
 		sentryGet(`/organizations/${org()}/issues/`, {
 			project: project() as string,
 			query: 'is:unresolved',
 			statsPeriod: '14d',
+			groupStatsPeriod: trendPeriod,
 			sort: 'freq',
 			limit: '25'
 		})
@@ -104,20 +111,6 @@ export function fetchIssuesRaw(): Promise<unknown> {
 export function fetchLatestEventRaw(id: string): Promise<unknown> {
 	return cached(`event:${id}`, () =>
 		sentryGet(`/organizations/${org()}/issues/${encodeURIComponent(id)}/events/latest/`, {})
-	);
-}
-
-/** Daily accepted-error event counts for the project over the last 14 days (trend chart). */
-export function fetchStatsRaw(): Promise<unknown> {
-	return cached('stats', () =>
-		sentryGet(`/organizations/${org()}/stats_v2/`, {
-			project: project() as string,
-			field: 'sum(times_seen)',
-			category: 'error',
-			groupBy: 'outcome',
-			statsPeriod: '14d',
-			interval: '1d'
-		})
 	);
 }
 

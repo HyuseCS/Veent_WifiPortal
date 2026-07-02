@@ -9,7 +9,7 @@
 	import TriangleAlert from 'lucide-svelte/icons/triangle-alert';
 	import type { Component } from 'svelte';
 	import { enhance } from '$app/forms';
-	import { EmptyState, IconButton, StatusBadge, Table } from '$lib/components/ui';
+	import { EmptyState, FilterTabs, IconButton, Sparkline, StatusBadge, Table } from '$lib/components/ui';
 	import type { StatusTone } from '$lib/types';
 	import type { SentryIssue } from '$lib/server/sentry/types';
 	import TableSortControl from '../TableSortControl.svelte';
@@ -30,10 +30,21 @@
 		{ label: 'Issue', key: 'title' },
 		{ label: 'Level', key: 'level' },
 		{ label: 'Events', key: 'count' },
+		{ label: 'Trend' },
 		{ label: 'Users', key: 'userCount' },
 		{ label: 'Last seen', key: 'lastSeen' },
 		{ label: 'Actions', srOnly: true }
 	];
+
+	// Which sparkline window the rows show. Both series are loaded server-side, so the toggle is
+	// instant client state — no reload. Affects the trend shape only; the Events count stays 14d.
+	let trendWindow = $state<'14d' | '24h'>('14d');
+	const trendTabs = [
+		{ key: '14d' as const, label: '14d' },
+		{ key: '24h' as const, label: '24h' }
+	];
+	const trendOf = (i: SentryIssue) => (trendWindow === '24h' ? i.trend24h : i.trend14d);
+	const trendLabel = $derived(trendWindow === '24h' ? '24 hours' : '14 days');
 
 	// Client-side sort over the already-loaded rows (Sentry ships them frequency-desc). A header
 	// click sorts by that column; clicking the same header again flips direction. Text sorts A→Z
@@ -118,11 +129,22 @@
 	{#snippet toolbar()}
 		<div class="flex items-center gap-3 px-4 py-3">
 			<h2 class="text-base font-semibold text-ink">Unresolved issues</h2>
+			<!-- Trend-window toggle: switches every row's sparkline between the 14d and 24h series
+			     (both preloaded). Pushed right; sort hint / mobile sort follow it. -->
+			<div class="ml-auto flex items-center gap-2">
+				<span class="hidden text-xs text-muted sm:inline" id="sentry-trend-label">Trend</span>
+				<FilterTabs
+					tabs={trendTabs}
+					active={trendWindow}
+					onselect={(k) => (trendWindow = k)}
+					class="p-0.5"
+				/>
+			</div>
 			{#if sortKey}
-				<span class="ml-auto hidden text-xs text-muted md:inline">click a column to re-sort</span>
+				<span class="hidden text-xs text-muted md:inline">click a column to re-sort</span>
 			{/if}
 			<!-- Mobile sort: the sortable <thead> is hidden in card mode, so expose the same keys here. -->
-			<div class="ml-auto md:hidden">
+			<div class="md:hidden">
 				<TableSortControl
 					id="sentry-issues-sort"
 					label="Sort issues by"
@@ -213,6 +235,9 @@
 			</td>
 			<td data-label="Events" class="px-4 py-3 font-mono text-ink">
 				{issue.count.toLocaleString('en-US')}
+			</td>
+			<td data-label="Trend" class="px-4 py-3">
+				<Sparkline values={trendOf(issue)} label={issue.shortId || issue.title} window={trendLabel} />
 			</td>
 			<td data-label="Users" class="px-4 py-3 font-mono text-muted">
 				{issue.userCount.toLocaleString('en-US')}

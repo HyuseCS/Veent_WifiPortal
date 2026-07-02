@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { mapEventDetail, mapIssue, mapVolume, deriveKpis } from './map';
+import { mapEventDetail, mapIssue, mapTrend, deriveKpis } from './map';
 
 // The mappers are the seam that absorbs Sentry's payload quirks — if they regress, the dashboard
 // silently mis-reports. Assert the coercions and the accepted-series selection that matter.
@@ -17,11 +17,14 @@ describe('mapIssue', () => {
 			lastSeen: '2026-07-01T00:00:00Z',
 			status: 'unresolved',
 			permalink: 'https://sentry.io/issues/42/',
+			stats: { '14d': [[1719792000, '3'], [1719878400, 5]] },
 			extra: 'ignored'
 		});
 		expect(issue.count).toBe(1234);
 		expect(issue.userCount).toBe(7);
 		expect(issue.level).toBe('warning');
+		expect(issue.trend14d).toEqual([3, 5]); // counts pulled from [ts, count] tuples
+		expect(issue.trend24h).toEqual([]); // period absent from this payload
 		expect(issue).not.toHaveProperty('extra');
 	});
 
@@ -30,28 +33,20 @@ describe('mapIssue', () => {
 		expect(issue.count).toBe(0);
 		expect(issue.title).toBe('');
 		expect(issue.level).toBe('error'); // default
+		expect(issue.trend14d).toEqual([]); // no stats → flat, not a throw
 	});
 });
 
-describe('mapVolume', () => {
-	const raw = {
-		intervals: ['2026-06-30T00:00:00Z', '2026-07-01T00:00:00Z'],
-		groups: [
-			{ by: { outcome: 'rate_limited' }, series: { 'sum(times_seen)': [99, 99] } },
-			{ by: { outcome: 'accepted' }, series: { 'sum(times_seen)': [3, 5] } }
-		]
-	};
-
-	it('picks the accepted group and aligns counts to intervals', () => {
-		const points = mapVolume(raw);
-		expect(points).toHaveLength(2);
-		expect(points.map((p) => p.count)).toEqual([3, 5]); // accepted, NOT rate_limited
-		expect(points[1].label).toBe('Jul 1'); // TZ-stable (UTC)
+describe('mapTrend', () => {
+	it('keeps only the count of each [timestamp, count] bucket, coercing strings', () => {
+		expect(mapTrend({ '24h': [[1, '10'], [2, 20]] }, '24h')).toEqual([10, 20]);
 	});
 
-	it('degrades to zeros when the accepted group is absent', () => {
-		const points = mapVolume({ intervals: ['2026-07-01T00:00:00Z'], groups: [] });
-		expect(points).toEqual([{ label: 'Jul 1', count: 0 }]);
+	it('degrades a missing period or ragged payload to [] without throwing', () => {
+		expect(mapTrend({ '14d': [[1, 5]] }, '24h')).toEqual([]); // wrong period
+		expect(mapTrend(null, '14d')).toEqual([]);
+		expect(mapTrend({ '14d': 'nope' }, '14d')).toEqual([]);
+		expect(mapTrend({ '14d': [42, [3, 9]] }, '14d')).toEqual([0, 9]); // non-tuple bucket → 0
 	});
 });
 
@@ -101,15 +96,14 @@ describe('mapEventDetail', () => {
 });
 
 describe('deriveKpis', () => {
-	it('sums events + users and caps open issues at "25+"', () => {
-		const issues = Array.from({ length: 25 }, (_, i) => mapIssue({ id: String(i), userCount: 2 }));
-		const volume = [
-			{ label: 'a', count: 10 },
-			{ label: 'b', count: 5 }
-		];
-		const kpis = deriveKpis(issues, volume);
+	it('sums 14d sparkline events + users and caps open issues at "25+"', () => {
+		// Each issue contributes 3 events (1+2) over 14d and 2 users → 75 events, 50 users.
+		const issues = Array.from({ length: 25 }, (_, i) =>
+			mapIssue({ id: String(i), userCount: 2, stats: { '14d': [[1, 1], [2, 2]] } })
+		);
+		const kpis = deriveKpis(issues);
 		expect(kpis.find((k) => k.label === 'Open issues')?.value).toBe('25+');
-		expect(kpis.find((k) => k.label === 'Events (14d)')?.value).toBe('15');
+		expect(kpis.find((k) => k.label === 'Events (14d)')?.value).toBe('75');
 		expect(kpis.find((k) => k.label === 'Users affected')?.value).toBe('50');
 	});
 });
