@@ -1,8 +1,42 @@
 # Bug: buying time on a *second* account (after logout) doesn't grant the device internet
 
-> Status: **open, to be fixed later.** Flagged 2026-07-01 for the next dev testing the portal.
-> This is an application-logic bug in the customer app's MAC-resolution chain — not a router/ops
-> blocker (contrast `captive-portal-router-issues.md`, which is router-side).
+> Status: **FIXED 2026-07-02** (Options 1 + 2 below). Was flagged 2026-07-01 as an
+> application-logic bug in the customer app's MAC-resolution chain — not a router/ops blocker
+> (contrast `captive-portal-router-issues.md`, which is router-side). Verify against a live router
+> before closing: the fix is unit-clean (`svelte-check` passes) but the NAT/CNA behaviour it works
+> around can only be confirmed on real hardware.
+
+## Fix (implemented)
+
+Added an **account-independent, device-scoped MAC memory** so resolution no longer depends on the
+logged-in account, plus a logout→login re-thread. Concretely:
+
+- **Option 2 — `veent_device` cookie** (`apps/customer/src/lib/server/portal.ts`): a long-lived
+  (180-day), httpOnly cookie holding the last MAC seen in *this browser*, written at both points
+  the MAC becomes known — `capturePortalContext` (`?mac=` capture) and `persistResolvedMac`
+  (IP→MAC). It is **not** cleared on sign-out. `resolveMacForUser`
+  (`network-location.ts`) now reads it **after** live detection but **before** the per-user
+  fallbacks, and seeds the recovered MAC onto the new account (`rememberAccountMac`) so later
+  cross-browser hops (the Maya return) also have the durable per-user signal. This fixes the
+  common same-browser second-account case: account B recovers the device MAC even though its own
+  per-user history is empty.
+- **Option 1 — re-thread on sign-out** (`dashboard/+page.server.ts` `signOut`): resolves the MAC
+  *before* destroying the session and redirects to `/login?mac=<mac>`, so hooks re-capture it into
+  the short-lived `veent_portal` cookie for the incoming account, and `login/+page.server.ts`
+  falls back to `getDeviceMac()` so the pending-OTP cookie / rate-limit key still carry the MAC.
+
+**Security note:** no new attack surface. The `veent_device` MAC is client-assertable in the same
+way `?mac=` already is (captive-portal MAC is inherently client-supplied), and the grant remains
+MAC-only. Setting the cookie to a victim's MAC would only bind (and grant, at the attacker's own
+credit cost) the *victim's* device — not the attacker's — so there is no hijack incentive.
+
+**Not implemented:** true cross-*browser* second-account logins (device cookie lives in one
+browser's jar) still rely on IP→MAC, which the hotspot NAT defeats — same residual gap the doc
+notes for Options 1+2. Option 3 (seed from live IP→MAC) needs IP→MAC to work at all.
+
+---
+
+## Original analysis (retained)
 
 ## Reproduction
 
