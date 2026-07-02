@@ -284,7 +284,14 @@ export const actions: Actions = {
 	},
 
 	signOut: async (event) => {
+		// Re-thread this device's MAC across the logout→login boundary so the NEXT account's login
+		// re-captures it (into veent_portal + the pending cookie) even in the same browser. The
+		// device cookie already survives sign-out and covers this, but the explicit ?mac= also
+		// refreshes the short-lived portal cookie for the incoming account. Resolve BEFORE signing
+		// out (needs the user id for the per-user fallbacks); cheap and best-effort.
+		const user = event.locals.user;
+		const mac = user ? await resolveMacForUser(event, user.id) : null;
 		await auth.api.signOut({ headers: event.request.headers });
-		return redirect(302, '/login');
+		return redirect(302, mac ? `/login?mac=${encodeURIComponent(mac)}` : '/login');
 	}
 };

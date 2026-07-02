@@ -57,6 +57,15 @@ export interface ActivateSessionInput {
 	ipAddress?: string;
 }
 
+/** Input for opening pre-auth host access for ONE device (the reCAPTCHA-during-checkout case). */
+export interface DeviceHostAccessInput {
+	/** Device MAC — the controller resolves its current LAN IP to scope the walled-garden entry
+	 * (the hotspot NATs client traffic, so the app can't observe the device IP directly). */
+	macAddress: string;
+	/** Hostnames to allow for THIS device only (src-address scoped), pre-auth. */
+	hosts: string[];
+}
+
 export interface NetworkController {
 	readonly name: string;
 	/** Drop the firewall for a device (allow internet). Idempotent. */
@@ -93,6 +102,26 @@ export interface NetworkController {
 	 * when unknown or unsupported (stub/dev). Optional: not every controller can.
 	 */
 	resolveMacByIp?(ipAddress: string): Promise<string | null>;
+	/**
+	 * Open `hosts` in the hotspot walled garden for ONE device only, scoped to its current
+	 * LAN IP (`src-address`). Used to render Maya's checkout reCAPTCHA (served from
+	 * google.com/gstatic.com) WITHOUT a *global* allow — a global allow of those hosts lets
+	 * Android's connectivity probe (`.../generate_204`) succeed pre-auth, so every connecting
+	 * guest briefly shows "connected" then flips back to "Sign in to network". Scoping the
+	 * allow to the paying device keeps the sign-in screen clean for everyone else. Entries are
+	 * comment-stamped with a creation time so `sweepHostAccess` can expire them. Resolves the
+	 * device IP from the MAC via the hotspot host table (currently-connected clients only, so a
+	 * stale MAC can't scope access to a reused IP); returns the IP it scoped to, or null when the
+	 * device isn't a current hotspot client (nothing added). Best-effort; optional (stub omits).
+	 */
+	openHostAccessForDevice?(input: DeviceHostAccessInput): Promise<{ ipAddress: string | null }>;
+	/**
+	 * Remove per-device host-access entries (added by `openHostAccessForDevice`) older than
+	 * `maxAgeMs`. Self-describing on the router — the creation time is encoded in each entry's
+	 * comment, so this needs no external state and survives an app restart. Returns the count
+	 * removed. Optional (stub omits).
+	 */
+	sweepHostAccess?(input?: { maxAgeMs?: number }): Promise<number>;
 	/**
 	 * Best-effort: which AP/interface the device (by MAC) is currently associated
 	 * with, for per-AP user attribution. Returns the interface/AP name as the router

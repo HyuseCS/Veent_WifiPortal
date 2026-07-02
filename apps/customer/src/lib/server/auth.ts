@@ -80,6 +80,7 @@ export const auth = betterAuth({
 				// better-auth's user table needs a unique email; the portal never reads it (phone
 				// logins match on phone_number, not email). Use a RANDOM, unguessable address so it
 				// can't be derived from the phone and pre-registered — runs once, at account creation.
+				// The Maya/Kount buyer email is the REAL one collected on the top-up form, not this.
 				getTempEmail: () => `${randomUUID()}@phone.veent.local`,
 				getTempName: (phone) => phone
 			},

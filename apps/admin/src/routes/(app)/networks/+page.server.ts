@@ -63,9 +63,15 @@ export const load: PageServerLoad = async (event) => {
 };
 
 export const actions: Actions = {
-	/** Bind this pin to a router AP/interface (or clear it) for user attribution. */
-	setInterface: async ({ request }) => {
-		const form = await request.formData();
+	/** Bind this pin to a router AP/interface (or clear it) for user attribution.
+	 *  Owner-only, like every other network-config mutation — the `(app)` layout guards only
+	 *  auth + 2FA, not role, so this must assert `requireOwner` itself. (Superseded in the UI by
+	 *  `setApConfig`; the gate closes the leftover direct-POST path.) */
+	setInterface: async (event) => {
+		const denied = await requireOwner(event.locals.user?.id);
+		if (denied) return denied;
+
+		const form = await event.request.formData();
 		const id = Number(form.get('id'));
 		if (!Number.isInteger(id)) return fail(400, { error: 'Invalid access point.' });
 

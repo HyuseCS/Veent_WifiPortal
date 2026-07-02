@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { startPaidAccessAndBindDevice } from '@veent/core';
+import { startPaidAccessAndBindDevice, startFreeAccessAndBindDevice } from '@veent/core';
 
 /**
  * Atomicity guard for the paid-grant flow (business rule #1): spend + account-window extend +
@@ -87,6 +87,67 @@ describe('startPaidAccessAndBindDevice atomicity', () => {
 		const res = await startPaidAccessAndBindDevice(db, network, input);
 		expect(res.ok).toBe(false);
 		expect(res.reason).toBe('insufficient_balance');
+		expect((network as { grant: ReturnType<typeof vi.fn> }).grant).not.toHaveBeenCalled();
+	});
+});
+
+/**
+ * Same atomicity guard for the FREE path: the cooldown claim (`last_free_session_at`), the bind,
+ * and the router grant must roll back together. Before this, the claim committed in its own
+ * transaction before a separate grant, so a router blip burned the user's free-time eligibility
+ * for the full cooldown while giving them no access. These verify the grant failure now
+ * propagates OUT of `db.transaction` (so Drizzle rolls the claim back), mirroring the paid tests.
+ */
+const freeInput = { userId: 'u1', macAddress: 'AA:BB:CC:DD:EE:FF' };
+
+// Awaited statements, in order, for a successful FREE bind of a NEW device:
+//   claim: cooldown UPDATE…returning→[{userId}] (won the claim)
+//   bind:  profile FOR UPDATE→[{accessExpiresAt}], window update→[], existing-binding select→[],
+//          active-rows select→[] (none to evict), insert binding→[{id}], mirror update→[]
+//   then network.grant() runs (not a tx statement).
+const freeBindAwaits = (id: number) => [
+	[{ userId: 'u1' }],
+	[{ accessExpiresAt: null }],
+	[],
+	[],
+	[],
+	[{ id }],
+	[]
+];
+
+describe('startFreeAccessAndBindDevice atomicity', () => {
+	it('rolls back (rejects) when the router grant fails — the cooldown claim never commits alone', async () => {
+		const db = fakeDb(freeBindAwaits(1));
+		const network = {
+			grant: vi.fn().mockRejectedValue(new Error('router unreachable')),
+			revoke: vi.fn()
+		} as never;
+
+		await expect(startFreeAccessAndBindDevice(db, network, freeInput)).rejects.toThrow(
+			'router unreachable'
+		);
+		// The grant was attempted inside the same transaction as the claim.
+		expect((network as { grant: ReturnType<typeof vi.fn> }).grant).toHaveBeenCalledOnce();
+	});
+
+	it('returns ok with the new window when the claim + grant both succeed', async () => {
+		const db = fakeDb(freeBindAwaits(4));
+		const network = { grant: vi.fn().mockResolvedValue(undefined), revoke: vi.fn() } as never;
+
+		const res = await startFreeAccessAndBindDevice(db, network, freeInput);
+		expect(res.ok).toBe(true);
+		expect(res.accessExpiresAt).toBeInstanceOf(Date);
+		expect((network as { grant: ReturnType<typeof vi.fn> }).grant).toHaveBeenCalledOnce();
+	});
+
+	it('returns ok:false not_eligible on an active cooldown and never attempts the grant', async () => {
+		// cooldown claim matches no row→[] (still in cooldown), then the re-read select→[{lastFreeSessionAt}].
+		const db = fakeDb([[], [{ lastFreeSessionAt: new Date() }]]);
+		const network = { grant: vi.fn(), revoke: vi.fn() } as never;
+
+		const res = await startFreeAccessAndBindDevice(db, network, freeInput);
+		expect(res.ok).toBe(false);
+		expect(res.reason).toBe('not_eligible');
 		expect((network as { grant: ReturnType<typeof vi.fn> }).grant).not.toHaveBeenCalled();
 	});
 });

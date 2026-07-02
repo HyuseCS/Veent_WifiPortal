@@ -32,6 +32,14 @@ export const customerProfile = pgTable('customer_profile', {
 		.primaryKey()
 		.references(() => customerUser.id, { onDelete: 'cascade' }),
 	role: text('role').notNull().default('user'),
+	// Buyer details collected on the top-up form for Maya's Kount fraud protection (which
+	// requires firstName + lastName + email on every checkout). Stored ONLY when the buyer ticks
+	// "save my details" — null means not stored, and the form is shown/re-asked next time. Kept
+	// here (not on customer_user) because that table's email is a unique better-auth placeholder,
+	// while a real contact email is non-unique (buyers can share one) and portal-domain data.
+	firstName: text('first_name'),
+	lastName: text('last_name'),
+	contactEmail: text('contact_email'),
 	// Phone lives on customer_user (better-auth phoneNumber plugin); no duplicate here.
 	creditBalance: numeric('credit_balance', { precision: 12, scale: 2 }).notNull().default('0'),
 	lastFreeSessionAt: timestamp('last_free_session_at'),
