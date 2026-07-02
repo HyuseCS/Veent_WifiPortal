@@ -110,8 +110,9 @@ export interface NetworkController {
 	 * guest briefly shows "connected" then flips back to "Sign in to network". Scoping the
 	 * allow to the paying device keeps the sign-in screen clean for everyone else. Entries are
 	 * comment-stamped with a creation time so `sweepHostAccess` can expire them. Resolves the
-	 * device IP from the MAC (host/lease/ARP); returns the IP it scoped to, or null when the
-	 * router doesn't know the device yet (nothing added). Best-effort; optional (stub omits).
+	 * device IP from the MAC via the hotspot host table (currently-connected clients only, so a
+	 * stale MAC can't scope access to a reused IP); returns the IP it scoped to, or null when the
+	 * device isn't a current hotspot client (nothing added). Best-effort; optional (stub omits).
 	 */
 	openHostAccessForDevice?(input: DeviceHostAccessInput): Promise<{ ipAddress: string | null }>;
 	/**

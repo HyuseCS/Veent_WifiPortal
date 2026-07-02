@@ -18,6 +18,15 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 export const PENDING_COOKIE = 'veent-portal-verify';
 export const PENDING_MAX_AGE = 5 * 60; // seconds; matches the OTP expiry
 
+/**
+ * Whether the pending-verification cookie is set `Secure`. Pinned to the ORIGIN protocol
+ * (NOT `!dev`/NODE_ENV) to match the better-auth session cookies (`auth.ts` `useSecureCookies`).
+ * A LAN-appliance deploy legitimately serves the portal over http:// (allowed by `validateEnv`);
+ * a `Secure` cookie is dropped by the browser over http, which would leave the login → /auth/verify
+ * handoff unable to read the pending cookie and bounce the guest back to /login forever.
+ */
+export const PENDING_COOKIE_SECURE = (env.ORIGIN ?? '').startsWith('https://');
+
 export type OtpIntent = 'login' | 'register';
 
 export interface PendingVerification {

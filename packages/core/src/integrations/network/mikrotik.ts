@@ -226,6 +226,26 @@ export function createMikrotikController(config: MikrotikConfig): NetworkControl
 	}
 
 	/**
+	 * The device's IP as a CURRENTLY-CONNECTED hotspot client — read from the hotspot host table
+	 * ONLY, deliberately not the DHCP-lease/ARP union `ipsForMac` returns. For opening pre-auth
+	 * access scoped to a device (`openHostAccessForDevice`) we must be certain the IP still belongs
+	 * to THIS device right now: a stale lease/ARP row for a MAC whose device has left could name an
+	 * IP DHCP has since handed to another guest, and opening a captive-probe host (google.com) for
+	 * that IP would reintroduce the connectivity-flash for the wrong guest. The hotspot host table
+	 * only lists clients the router currently sees, so a miss (device gone) correctly yields null →
+	 * no entry is opened. A real buyer sitting on the captive portal is always a current host.
+	 */
+	async function currentHotspotIpForMac(conn: RosConn, mac: string): Promise<string | null> {
+		try {
+			const hosts = await conn.write('/ip/hotspot/host/print', [`?mac-address=${mac}`]);
+			return hosts.find((h) => h.address)?.address ?? null;
+		} catch {
+			// Hotspot host table unavailable — treat as "device not currently seen".
+			return null;
+		}
+	}
+
+	/**
 	 * Drop the device's live connection-tracking entries so a revoke takes effect
 	 * IMMEDIATELY. Removing the ip-binding only stops NEW flows from being bypassed — the
 	 * firewall's established/related accept rule keeps forwarding the device's ALREADY-OPEN
@@ -392,10 +412,11 @@ export function createMikrotikController(config: MikrotikConfig): NetworkControl
 		): Promise<{ ipAddress: string | null }> {
 			const mac = input.macAddress.toUpperCase();
 			return withConn(async (conn) => {
-				// The walled garden matches the device's own hotspot-side src IP (before the
-				// router's own NAT), so scope by the DHCP/host/ARP IP the router has for this MAC.
-				const ips = await ipsForMac(conn, mac);
-				const ip = ips[0];
+				// The walled garden matches the device's own hotspot-side src IP (before the router's
+				// own NAT), so scope by the IP the router currently sees for this MAC. Use the hotspot
+				// host table ONLY (not the lease/ARP union) so a stale MAC can't scope access to an IP
+				// now belonging to another guest — see currentHotspotIpForMac.
+				const ip = await currentHotspotIpForMac(conn, mac);
 				if (!ip) return { ipAddress: null };
 				const comment = `${CHECKOUT_TAG}:${Date.now()}`;
 				for (const host of input.hosts) {
