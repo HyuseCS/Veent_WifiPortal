@@ -24,9 +24,23 @@ function fakeTx(results: unknown[]) {
 }
 
 // Fake db whose transaction(fn) runs the callback against the fake tx and — crucially —
-// propagates a thrown error (a real tx would roll back on that throw).
+// propagates a thrown error (a real tx would roll back on that throw). `state.inTransaction`
+// is true only while the callback executes, so a grant mock can record whether it ran INSIDE
+// the transaction boundary — the exact regression these specs exist to catch: asserting only
+// "grant was called" would stay green if the grant moved back outside db.transaction.
 function fakeDb(results: unknown[]) {
-	return { transaction: (fn: (tx: unknown) => unknown) => fn(fakeTx(results)) } as never;
+	const state = { inTransaction: false };
+	const db = {
+		transaction: async (fn: (tx: unknown) => unknown) => {
+			state.inTransaction = true;
+			try {
+				return await fn(fakeTx(results));
+			} finally {
+				state.inTransaction = false;
+			}
+		}
+	} as never;
+	return { db, state };
 }
 
 const input = {
@@ -55,9 +69,13 @@ const bindAwaits = (balance: number, id: number) => [
 
 describe('startPaidAccessAndBindDevice atomicity', () => {
 	it('rolls back (rejects) when the router grant fails — spend never commits alone', async () => {
-		const db = fakeDb(bindAwaits(80, 1));
+		const { db, state } = fakeDb(bindAwaits(80, 1));
+		let grantInTx: boolean | null = null;
 		const network = {
-			grant: vi.fn().mockRejectedValue(new Error('router unreachable')),
+			grant: vi.fn().mockImplementation(() => {
+				grantInTx = state.inTransaction;
+				return Promise.reject(new Error('router unreachable'));
+			}),
 			revoke: vi.fn()
 		} as never;
 
@@ -66,22 +84,31 @@ describe('startPaidAccessAndBindDevice atomicity', () => {
 		);
 		// The grant was attempted (so the spend ran first, inside the same transaction).
 		expect((network as { grant: ReturnType<typeof vi.fn> }).grant).toHaveBeenCalledOnce();
+		expect(grantInTx).toBe(true); // inside db.transaction — a failure can still roll the spend back
 	});
 
 	it('returns ok with the new window when spend + grant both succeed', async () => {
-		const db = fakeDb(bindAwaits(60, 9));
-		const network = { grant: vi.fn().mockResolvedValue(undefined), revoke: vi.fn() } as never;
+		const { db, state } = fakeDb(bindAwaits(60, 9));
+		let grantInTx: boolean | null = null;
+		const network = {
+			grant: vi.fn().mockImplementation(() => {
+				grantInTx = state.inTransaction;
+				return Promise.resolve(undefined);
+			}),
+			revoke: vi.fn()
+		} as never;
 
 		const res = await startPaidAccessAndBindDevice(db, network, input);
 		expect(res.ok).toBe(true);
 		expect(res.balance).toBe(60);
 		expect(res.accessExpiresAt).toBeInstanceOf(Date);
 		expect((network as { grant: ReturnType<typeof vi.fn> }).grant).toHaveBeenCalledOnce();
+		expect(grantInTx).toBe(true);
 	});
 
 	it('returns ok:false on insufficient balance and never attempts the grant', async () => {
 		// spend update matches no row→[] (insufficient), then balanceInTx select→[{balance}].
-		const db = fakeDb([[], [{ balance: 5 }]]);
+		const { db } = fakeDb([[], [{ balance: 5 }]]);
 		const network = { grant: vi.fn(), revoke: vi.fn() } as never;
 
 		const res = await startPaidAccessAndBindDevice(db, network, input);
@@ -117,9 +144,13 @@ const freeBindAwaits = (id: number) => [
 
 describe('startFreeAccessAndBindDevice atomicity', () => {
 	it('rolls back (rejects) when the router grant fails — the cooldown claim never commits alone', async () => {
-		const db = fakeDb(freeBindAwaits(1));
+		const { db, state } = fakeDb(freeBindAwaits(1));
+		let grantInTx: boolean | null = null;
 		const network = {
-			grant: vi.fn().mockRejectedValue(new Error('router unreachable')),
+			grant: vi.fn().mockImplementation(() => {
+				grantInTx = state.inTransaction;
+				return Promise.reject(new Error('router unreachable'));
+			}),
 			revoke: vi.fn()
 		} as never;
 
@@ -128,21 +159,30 @@ describe('startFreeAccessAndBindDevice atomicity', () => {
 		);
 		// The grant was attempted inside the same transaction as the claim.
 		expect((network as { grant: ReturnType<typeof vi.fn> }).grant).toHaveBeenCalledOnce();
+		expect(grantInTx).toBe(true); // inside db.transaction — a failure can still roll the claim back
 	});
 
 	it('returns ok with the new window when the claim + grant both succeed', async () => {
-		const db = fakeDb(freeBindAwaits(4));
-		const network = { grant: vi.fn().mockResolvedValue(undefined), revoke: vi.fn() } as never;
+		const { db, state } = fakeDb(freeBindAwaits(4));
+		let grantInTx: boolean | null = null;
+		const network = {
+			grant: vi.fn().mockImplementation(() => {
+				grantInTx = state.inTransaction;
+				return Promise.resolve(undefined);
+			}),
+			revoke: vi.fn()
+		} as never;
 
 		const res = await startFreeAccessAndBindDevice(db, network, freeInput);
 		expect(res.ok).toBe(true);
 		expect(res.accessExpiresAt).toBeInstanceOf(Date);
 		expect((network as { grant: ReturnType<typeof vi.fn> }).grant).toHaveBeenCalledOnce();
+		expect(grantInTx).toBe(true);
 	});
 
 	it('returns ok:false not_eligible on an active cooldown and never attempts the grant', async () => {
 		// cooldown claim matches no row→[] (still in cooldown), then the re-read select→[{lastFreeSessionAt}].
-		const db = fakeDb([[], [{ lastFreeSessionAt: new Date() }]]);
+		const { db } = fakeDb([[], [{ lastFreeSessionAt: new Date() }]]);
 		const network = { grant: vi.fn(), revoke: vi.fn() } as never;
 
 		const res = await startFreeAccessAndBindDevice(db, network, freeInput);
