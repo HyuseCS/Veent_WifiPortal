@@ -12,6 +12,34 @@ errors happen but never reach Sentry.
 
 ---
 
+## Implementation status — all findings addressed (2026-07-02)
+
+Every finding below was acted on and shipped on branch `dev/sentry` (not yet committed).
+See `docs/dev/plan.md` for step-by-step detail and verification (svelte-check clean on all
+three apps; 108 unit tests + 7 core tests green; all apps build with no Sentry env, 0 leaked
+source maps).
+
+| Finding | Disposition |
+|---------|-------------|
+| S1 — permalink could carry a `javascript:` URL | ✅ fixed — `httpsUrl()` guard in `map.ts` (https-only) + tests |
+| S2 — unbounded read-cache `Map` | ✅ fixed — folded into I1: 100-entry cap with eviction in `client.ts` |
+| S3 — any active staff can resolve/ignore | ⛔ closed — confirmed intended (owner-only gate deliberately NOT added) |
+| I1 — no failure caching / no in-flight dedup | ✅ fixed — in-flight promise cache + 10s failure TTL in `client.ts` |
+| I2 — client trace sampling hardcoded | ✅ fixed — `PUBLIC_SENTRY_TRACES_SAMPLE_RATE` + customer env mirror |
+| I3 — no `release` on client inits | ✅ fixed — `PUBLIC_SENTRY_RELEASE` on both client inits |
+| I4 — MAC scrub regex colon-only | ✅ fixed — colon/hyphen/bare-12-hex in `observability.ts` + tests |
+| E1 — grant/bind `console.error` never reach Sentry | ✅ fixed — 7 customer + 1 admin catch sites now `log.error` |
+| E2 — locator app has zero telemetry | ✅ done — locator client+server hooks, dep, `app: 'locator'` |
+| E3 — no cron/scheduler liveness | ✅ done — `Sentry.withMonitor` check-ins on revoke/reconcile/health-refresh |
+| E4 — DB query tracing (deferred) | ✅ resolved — already emitted by the default `postgresJsIntegration` (no code) |
+| E5 — source-maps upload (deferred) | ✅ done — gated `sentrySvelteKit` upload in both apps' `vite.config.ts` |
+
+**Correction to §3 / E1 below:** the customer dashboard had **7** raw `console.error`
+catch sites (the "8" figure counted `buyTier`, which already used `log.error`). All 7 were
+migrated, plus the 1 admin `networks` site.
+
+---
+
 ## 1. Security review — strong, three nits
 
 ### Already right (verified)

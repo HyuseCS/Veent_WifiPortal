@@ -10,12 +10,16 @@ import { sentryOptions } from '@veent/core/observability';
 // server via sentryOptions. Only PUBLIC_ env is readable here — the DSN is public by design.
 const dsn = env.PUBLIC_SENTRY_DSN;
 if (dsn) {
+	// Browser trace sampling is env-tunable so prod sampling can change without a rebuild; a
+	// missing/garbage value degrades to the previous hardcoded 0.2 rather than breaking tracing.
+	const rate = Number(env.PUBLIC_SENTRY_TRACES_SAMPLE_RATE ?? '0.2');
 	Sentry.init({
 		...sentryOptions({
 			dsn,
 			app: 'customer',
-			environment: dev ? 'development' : 'production',
-			tracesSampleRate: dev ? 1.0 : 0.2
+			environment: env.PUBLIC_SENTRY_ENVIRONMENT ?? (dev ? 'development' : 'production'),
+			release: env.PUBLIC_SENTRY_RELEASE,
+			tracesSampleRate: dev ? 1.0 : Number.isFinite(rate) ? rate : 0.2
 		}),
 		integrations: [Sentry.browserTracingIntegration()]
 	});

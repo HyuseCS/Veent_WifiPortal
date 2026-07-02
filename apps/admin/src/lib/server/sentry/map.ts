@@ -11,6 +11,16 @@ function str(v: unknown): string {
 	return typeof v === 'string' ? v : v == null ? '' : String(v);
 }
 
+/**
+ * Coerce to string, but only pass through absolute https URLs — anything else becomes ''.
+ * The permalink is rendered as an `href` on an admin page; the source is trusted (the Sentry
+ * API), but a poisoned/compromised response must not be able to inject a `javascript:` URL.
+ */
+function httpsUrl(v: unknown): string {
+	const s = str(v);
+	return s.startsWith('https://') ? s : '';
+}
+
 /** Sentry returns count/userCount as either a number or a numeric string — coerce, never NaN. */
 function num(v: unknown): number {
 	const n = typeof v === 'number' ? v : typeof v === 'string' ? Number(v) : NaN;
@@ -42,7 +52,7 @@ export function mapIssue(raw: unknown): SentryIssue {
 		userCount: num(r.userCount),
 		lastSeen: str(r.lastSeen),
 		status: str(r.status),
-		permalink: str(r.permalink),
+		permalink: httpsUrl(r.permalink),
 		// Populated per-fetch: the 14d list fills trend14d, the 24h list fills trend24h. The
 		// facade merges the 24h series onto the primary (14d) issues by id.
 		trend14d: mapTrend(r.stats, '14d'),

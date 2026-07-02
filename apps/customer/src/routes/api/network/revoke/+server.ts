@@ -1,4 +1,5 @@
 import { json } from '@sveltejs/kit';
+import * as Sentry from '@sentry/sveltekit';
 import { expireDueAccounts, reconcileGuestBindings } from '@veent/core';
 import { db } from '$lib/server/db';
 import { network } from '$lib/server/network';
@@ -16,8 +17,22 @@ import type { RequestHandler } from './$types';
 export const POST: RequestHandler = async (event) => {
 	requireCron(event);
 
-	const revoked = await expireDueAccounts(db, network);
-	// Then sweep router bindings the DB no longer backs (wipe/cascade/crash orphans).
-	const reconciled = await reconcileGuestBindings(db, network);
-	return json({ ok: true, revoked, reconciled });
+	// Sentry cron check-in: makes a DEAD scheduler detectable ("the cron never ran"), which the
+	// endpoint's own error coverage can't see. No-op passthrough when Sentry isn't initialised; a
+	// throw still fails the check-in AND bubbles to handleError (deliberately no swallowing catch).
+	return Sentry.withMonitor(
+		'customer-network-revoke',
+		async () => {
+			const revoked = await expireDueAccounts(db, network);
+			// Then sweep router bindings the DB no longer backs (wipe/cascade/crash orphans).
+			const reconciled = await reconcileGuestBindings(db, network);
+			return json({ ok: true, revoked, reconciled });
+		},
+		{
+			schedule: { type: 'crontab', value: '* * * * *' },
+			checkinMargin: 5,
+			maxRuntime: 5,
+			timezone: 'UTC'
+		}
+	);
 };
