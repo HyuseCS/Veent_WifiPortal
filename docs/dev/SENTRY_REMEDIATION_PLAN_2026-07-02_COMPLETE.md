@@ -1,6 +1,6 @@
 # Sentry Remediation & Extension Plan
 
-Source: `docs/dev/SENTRY_AUDIT_2026-07-02.md` (findings S1–S3, I1–I4, E1–E5).
+Source audit: `docs/dev/SENTRY_AUDIT_2026-07-02_COMPLETE.md` (findings S1–S3, I1–I4, E1–E5).
 Written 2026-07-02. Every step below was verified against the current code — file
 paths, line numbers, and quoted snippets reflect the tree as of branch `dev/sentry`
 (HEAD `59d2c54`).

@@ -15,7 +15,7 @@ errors happen but never reach Sentry.
 ## Implementation status — all findings addressed (2026-07-02)
 
 Every finding below was acted on and shipped on branch `dev/sentry` (not yet committed).
-See `docs/dev/plan.md` for step-by-step detail and verification (svelte-check clean on all
+See `docs/dev/SENTRY_REMEDIATION_PLAN_2026-07-02_COMPLETE.md` for step-by-step detail and verification (svelte-check clean on all
 three apps; 108 unit tests + 7 core tests green; all apps build with no Sentry env, 0 leaked
 source maps).
 
