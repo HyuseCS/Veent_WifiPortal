@@ -47,6 +47,9 @@ export async function revokeAdminAccess(
  * error we fall back to the last-known MAC for that IP rather than "can't detect".
  */
 const MAC_CACHE_TTL_MS = 60_000;
+// ponytail: 5-min ceiling on the error-path fallback — tolerates a router blip without
+// surviving a DHCP lease reassignment (a stale IP→MAC would then point at the wrong device).
+const MAC_CACHE_STALE_MAX_MS = 5 * 60_000;
 const RESOLVE_TIMEOUT_MS = 5_000;
 const macByIpCache = new Map<string, { mac: string; at: number }>();
 
@@ -86,7 +89,10 @@ export async function resolveDeviceMac(
 		// Clean "not found" (device genuinely absent) — don't resurrect a stale entry.
 		return null;
 	} catch {
-		// Router timed out / errored — last-known beats a false "can't detect device".
-		return cached?.mac ?? null;
+		// Router timed out / errored — last-known beats a false "can't detect device",
+		// but only within a bounded window: past MAC_CACHE_STALE_MAX_MS the DHCP lease may
+		// have moved this IP to a different device, so a stale MAC is worse than null.
+		if (cached && now - cached.at < MAC_CACHE_STALE_MAX_MS) return cached.mac;
+		return null;
 	}
 }

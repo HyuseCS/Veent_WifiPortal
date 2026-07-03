@@ -142,9 +142,11 @@ drizzle-orm 0.45.x wraps driver errors in `DrizzleQueryError`; the SQLSTATE live
 
 ---
 
-## ⏸ STOP — work paused here (owner decision, 2026-07-02)
+## ⏸ STOP → ▶ PARTIAL RESUME (owner decision, 2026-07-03)
 
-Do **not** start Phase 3 without an explicit go-ahead. It talks to the physical router (highest blast radius), needs bench-MikroTik time, and B3.2 requires its design mini-checkpoint first. Also pending at resume: B2.2 after the `dev/system-sentry` merge + rebase of this branch (§2 / Phase 4.1).
+**2026-07-02:** paused before Phase 3. **2026-07-03:** after re-anchoring, owner gave the go-ahead for the **router-free, rebase-free subset only** — **B3.3, B3.4, B3.5**, plus the code portion of **B3.1** (DB-first reorder; its `captureHandled` line stays deferred). These are unit-testable without hardware.
+
+Still gated (NOT started): **B3.2** (needs the design mini-checkpoint + bench-MikroTik confirmation that RouterOS holds multiple bindings per MAC) and **B3.6** (target code only on `dev/system-sentry`). Also pending: **B2.2** after the `dev/system-sentry` merge + rebase (§2 / Phase 4.1). The real-router verification matrix + human handoff (Checkpoint 3) remains a **merge gate** for every code-present B3 task before it ships.
 
 ---
 
@@ -152,7 +154,10 @@ Do **not** start Phase 3 without an explicit go-ahead. It talks to the physical 
 
 Highest-blast-radius phase: these paths talk to the physical router. Every task here gets verified against a real MikroTik (via `apps/admin/scripts/setup-router.ts` + `docs/mikrotik/` runbooks) before merge, plus a human verification handoff.
 
-#### B3.1 — Stop `pauseAccountAccess` stranding live bypasses (`packages/core/src/services/sessions.ts:548, 908-930`)
+> **RE-ANCHORED 2026-07-03** against the current `dev/audit-fixes` tree (line refs below were written against newer `dev/system-sentry` code and had drifted). Verdicts: **B3.1, B3.3, B3.4, B3.5 confirmed present** and implementable now (no hardware/rebase). **B3.2 is partially fixed** — `GrantInput.tag` plumbing already exists; only the grant find-or-create + tag-filtered revoke remain. **B3.6's target code does not exist on this branch** — it lives only on `dev/system-sentry`, so it defers to the Phase 4.1 rebase.
+
+#### B3.1 — Stop `pauseAccountAccess` stranding live bypasses (`packages/core/src/services/sessions.ts:855-877`, call site `:548`)
+*(re-anchored: function body was `908-930`, now `855-877`, loop `867-876`; `afterBind` pattern to match is at `:192-198`. The B3.1.1 `captureHandled` line is deferred — it's not on this branch yet; mirror `afterBind`'s bare swallow+comment now and add capture at the rebase, same as B2.2.)*
 - [ ] B3.1.1 Make `unbindAllDevices` DB-first and resilient, matching the architecture's "DB is truth, sweeper reconciles router drift" pattern used by `afterBind` (sessions.ts:192-197): mark each row `revoked` first, then attempt `network.revoke(mac)` in a per-device `try/catch` with `captureHandled(err, { level: 'warning', tags: { area: 'network', scope: 'unbind' } })` — continue on failure instead of throwing out of the loop.
 - [ ] B3.1.2 Verify (and pin with a unit test) that the sweeper actually drops a router binding whose session row is `revoked` — this is what makes the existing "reconcileGuestBindings sweeps any miss" comment true.
 - [ ] B3.1.3 Unit test: stub controller whose `revoke` throws — pause still completes, all rows end `revoked`, capture called, no unhandled rejection. Callers of `unbindAllDevices` ("disconnect all devices", pause) reviewed for return-value expectations (it returns a count — semantics unchanged).
@@ -160,8 +165,8 @@ Highest-blast-radius phase: these paths talk to the physical router. Every task 
 *Why this can't mess anything up:* the failure ordering flips from "router-first, DB stranded on throw" (free internet forever) to "DB-first, router swept later" (worst case: a device keeps access until the next sweeper cron — bounded minutes, and the state self-describes). The happy path is byte-equivalent: rows revoked, router revoked, same count returned.
 *Rollback:* revert; pause returns to strand-on-throw.
 
-#### B3.2 — Tag-aware grant/revoke so guest and admin bypasses coexist (`packages/core/src/integrations/network/mikrotik.ts:304-343, 176-179`)
-Two coupled defects: `grant()` re-comments *any* existing binding for the MAC (`rows[0]`, line 310-323), consuming a standing `veent-admin` bypass; and `revoke()`/`findBindingIds` removes **all** bindings for the MAC regardless of tag — so fixing grant alone is not enough. The branch's own `docs/mikrotik/hotspot-activation.md` documents the `rows[0]` variant as a known bug.
+#### B3.2 — Tag-aware grant/revoke so guest and admin bypasses coexist (`packages/core/src/integrations/network/mikrotik.ts` — `grant()` `226-258`, `revoke()` `260-272`, `findBindingIds()` `137-140`)
+**⚠ PARTIALLY IMPLEMENTED (re-anchored 2026-07-03).** Already present: `GrantInput.tag` plumbing (`types.ts:19`), `grantAdminAccess` passes `tag: 'veent-admin'` (`adminAccess.ts:27`), guest grants default `veent-portal` (`sessions.ts:238,357`), a same-tag no-op guard (`grant():240`), and a tag-scoped **listing** `listGuestBindings` (`:314-325`). **Still broken (the coexistence core):** `grant()` prints by MAC only (`:232`), takes `rows[0]` (`:233`), and on a tag mismatch `/set`-re-comments that binding to the incoming tag (`:241-245`) instead of find-or-creating per tag → a guest grant overwrites a standing `veent-admin` bypass. And `revoke(mac)` has **no tag argument** (`types.ts:62`); `findBindingIds` returns every binding for the MAC → revoke removes **all** tags. So the remaining work is exactly option (a) below; the `docs/mikrotik/hotspot-activation.md` `rows[0]` note still applies.
 
 - [ ] B3.2.1 **Design mini-checkpoint before code** (decide with reviewer): (a) fully tag-scoped — grant matches/creates the binding for *its own* comment tag (RouterOS allows multiple bindings per MAC), and revoke takes an optional tag filter so guest lifecycle only ever touches `veent-portal` bindings while admin sign-out revokes `veent-admin`; or (b) precedence rule — guest grant no-ops when a `veent-admin` binding exists (admin bypass already grants access). Recommendation: **(a)** — it's symmetric, needs no precedence reasoning, and revoke-by-tag is one filter on the existing print.
 - [ ] B3.2.2 Implement per the decision; audit **every** `grant`/`revoke` caller (`sessions.ts` guest paths, `adminAccess.ts`, sweeper, crons) for which tag they must pass; the sweeper must remain scoped to guest-tagged bindings only.
@@ -171,6 +176,7 @@ Two coupled defects: `grant()` re-comments *any* existing binding for the MAC (`
 *Rollback:* revert to tag-blind behavior (today's known bug, no new failure modes).
 
 #### B3.3 — Age-bound the stale IP→MAC fallback (`packages/core/src/services/adminAccess.ts:88-91`)
+*(re-anchored: lines unchanged; function is `resolveDeviceMac` at `:69`. Happy-path TTL check is `:76`; the unbounded fallback is the `catch` at `:88-91` returning `cached?.mac ?? null`. Callers: customer `resolveMac` `apps/customer/.../network-location.ts:28`, admin `postLogin.ts:41`.)*
 - [ ] B3.3.1 On the error path, only return `cached.mac` if the entry is younger than a stale ceiling (`MAC_CACHE_STALE_MAX_MS = 5 * 60_000`); otherwise return `null`. Comment the ceiling: 5 min tolerates a router blip without surviving a DHCP lease reassignment.
 - [ ] B3.3.2 Unit test: fresh-cache outage → served; >5 min stale + outage → `null`.
 
@@ -187,6 +193,7 @@ Two coupled defects: `grant()` re-comments *any* existing binding for the MAC (`
 *Rollback:* revert; 0 becomes purchasable again.
 
 #### B3.5 — Un-freeze network health via read-side staleness (`packages/core/src/services/networkHealth.ts:16-52` + consumers)
+*(re-anchored: write-path lines unchanged, prune-guard `names.length > 0` at `:46`. Consumers with NO staleness derivation today: admin `listNetworkHealth` `apps/admin/src/lib/server/queries.ts:313`, locator `listPublicLocations` `apps/locator/src/lib/server/locations.ts:22`. Shared `lastSampleAt` column at `packages/db/src/schema/admin.ts:106`. No fixed refresh-interval constant exists — admin refreshes on-view `networks/+page.server.ts:39`.)*
 `sampleHealth` legitimately returns `[]` (no hotspot-bound interfaces), and `refreshNetworkHealth` then neither upserts nor prunes — so the Networks page and public locator show last-known state forever.
 
 - [ ] B3.5.1 Fix on the **read side**, not the write side: locate `listNetworkHealth` (admin queries) and the locator's equivalent, and derive `online: false` (or an explicit `stale: true` chip) when `lastSampleAt` is older than N× the refresh interval (propose N=3). The write path — including the deliberate `names.length > 0` prune guard that protects rows from a transient empty sample — stays untouched.
@@ -195,8 +202,10 @@ Two coupled defects: `grant()` re-comments *any* existing binding for the MAC (`
 *Why this can't mess anything up:* zero writes change, so no data can be lost or wrongly pruned; a freeze caused by *any* reason (empty samples, router unreachable, cron dead) now degrades to visibly-stale/offline instead of confidently-wrong "Healthy". Worst case of a mis-tuned N: an AP briefly shows stale during slow sample cycles — cosmetic, tunable.
 *Rollback:* revert the read-side derivation; display returns to frozen last-known.
 
-#### B3.6 — Tag-guard the checkout walled-garden refresh (`packages/core/src/integrations/network/mikrotik.ts:428-436`)
-External-review nitpick, verified real: `openHostAccessForDevice`'s refresh loop removes walled-garden rows matching `(dst-host, src-address)` **without** checking the `CHECKOUT_TAG` comment — an operator-added rule for the same payment host scoped to that device's IP would be silently deleted on re-checkout. `sweepHostAccess` (line 456) already has the guard.
+#### B3.6 — Tag-guard the checkout walled-garden refresh (`checkoutAccess.ts` / `mikrotik.ts` — **on `dev/system-sentry` only**)
+**⛔ DEFERRED to the Phase 4.1 rebase (re-anchored 2026-07-03).** The target code — `openHostAccessForDevice`, `CHECKOUT_TAG`, `sweepHostAccess`, `checkoutAccess.ts` — **does not exist on `dev/audit-fixes`** (zero grep hits); it lives only on `dev/system-sentry` (this branch is 50 commits behind it). `provisionWalledGarden` (`mikrotik.ts:529`) is a *different* static admin-whitelist helper (idempotent print-then-add, no destructive loop) — not the equivalent. So B3.6 is **not actionable here**; apply the one-line guard after the checkout-access feature lands via the rebase, or directly on `dev/system-sentry`.
+
+The original finding (still valid *on that branch*): `openHostAccessForDevice`'s refresh loop removes walled-garden rows matching `(dst-host, src-address)` **without** checking the `CHECKOUT_TAG` comment — an operator-added rule for the same payment host scoped to that device's IP would be silently deleted on re-checkout. `sweepHostAccess` already has the guard.
 
 - [ ] B3.6.1 One line before the remove: `if (!(e.comment ?? '').startsWith(`${CHECKOUT_TAG}:`)) continue;` — mirrors the sweep's existing check.
 - [ ] B3.6.2 Covered by the Phase 3 router verification pass: re-checkout still refreshes its own row (no duplicate accumulation).

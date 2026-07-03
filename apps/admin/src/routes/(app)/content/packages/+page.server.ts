@@ -65,6 +65,12 @@ function parsePackage(form: FormData): { input: PackageInput } | { error: string
 	if (type === 'free' && durationMinutes == null) {
 		return { error: 'Free Time needs a duration (minutes).' };
 	}
+	// B3.4: a zero-length window is never a real package. `< 1` also catches fractional entries
+	// (e.g. 0.5) that would truncate to 0 minutes below. num() already accepts >= 0, so 0 slips
+	// past the null checks above without this.
+	if ((type === 'tier' || type === 'free') && durationMinutes != null && durationMinutes < 1) {
+		return { error: 'Duration must be at least 1 minute.' };
+	}
 
 	const int = (v: number | null) => (v == null ? null : Math.trunc(v));
 	return {

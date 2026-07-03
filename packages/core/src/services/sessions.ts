@@ -331,6 +331,15 @@ export async function startPaidAccessAndBindDevice(
 		bandwidthMbps?: number;
 	}
 ): Promise<StartPaidAccessResult> {
+	// B3.4 defense-in-depth at the money seam: a zero/negative-minute package must never reach
+	// the spend — it would charge credits for a zero-length window. Form validation rejects these
+	// at creation; this guards the seam if a bad row ever gets here. Throw BEFORE any deduction
+	// (rule #1) — both callers catch this and report "credits were not charged".
+	if (input.durationMinutes <= 0) {
+		throw new Error(
+			`startPaidAccessAndBindDevice: refusing non-positive durationMinutes (${input.durationMinutes})`
+		);
+	}
 	const now = new Date();
 	const { maxDevicesPerAccount } = await getSessionLimits(db);
 
