@@ -2,6 +2,7 @@ import { and, asc, desc, eq, inArray, isNotNull, isNull, lte, or } from 'drizzle
 import { type DB, customerProfile, networkSessions, packages } from '@veent/db';
 import type { NetworkController } from '../integrations/network';
 import { SESSION_STATUS } from '../config';
+import { captureHandled } from '../observability';
 import { getFreeTimeStatus } from './freeTime';
 import { getSessionLimits } from './settings';
 import { spendCreditsTx, type Tx } from './credits';
@@ -940,11 +941,11 @@ export async function unbindAllDevices(
 		if (s.macAddress) {
 			try {
 				await network.revoke(s.macAddress);
-			} catch {
+			} catch (err) {
 				// Swallow + continue: the row is already revoked, and reconcileGuestBindings drops
-				// the orphaned router binding on the next cron. (captureHandled(err, { level:
-				// 'warning', tags: { area: 'network', scope: 'unbind' } }) lands here after the
-				// dev/system-sentry rebase — that seam doesn't exist on this branch yet. B3.1.)
+				// the orphaned router binding on the next cron. Capture so a spike in stranded
+				// unbinds is visible — the device keeps access until that sweep (bounded minutes). B3.1.
+				captureHandled(err, { level: 'warning', tags: { area: 'network', scope: 'unbind' } });
 			}
 		}
 	}

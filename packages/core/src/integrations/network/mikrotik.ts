@@ -428,6 +428,10 @@ export function createMikrotikController(config: MikrotikConfig): NetworkControl
 					for (const e of existing) {
 						const srcIp = (e['src-address'] ?? '').split('/')[0];
 						if (srcIp !== ip || !e['.id']) continue;
+						// B3.6: only refresh OUR own checkout-tagged rows. Without this, a re-checkout would
+						// silently delete an operator-added walled-garden rule for the same (host, device-IP)
+						// — the same CHECKOUT_TAG guard sweepHostAccess applies before it reaps.
+						if (!(e.comment ?? '').startsWith(`${CHECKOUT_TAG}:`)) continue;
 						try {
 							await conn.write('/ip/hotspot/walled-garden/remove', [`=.id=${e['.id']}`]);
 						} catch {
