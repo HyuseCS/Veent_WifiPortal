@@ -147,6 +147,18 @@ export async function creditCheckoutIfUnsettled(
 	db: DB,
 	args: CreditArgs
 ): Promise<{ credited: boolean; balance?: number; reason?: CreditSkipReason }> {
+	// A non-finite gateway amount means we couldn't determine what was charged (a parse/transient
+	// issue — e.g. Maya returned no amount), NOT a real underpayment. Refuse to touch the checkout
+	// at all: do NOT claim/settle it, so it stays `pending` and a later reconcile pass or the
+	// webhook can retry with a good amount — instead of trapping it settled-but-uncredited (which
+	// would make the recovered webhook return `already_settled` and lose the credit forever). Throw
+	// so the caller retries: reconcile catches + leaves pending; the webhook 500s → Maya re-delivers.
+	if (!Number.isFinite(args.amountMinor)) {
+		throw new Error(
+			`credit: refusing to settle checkout with a non-finite gateway amount (ref=${args.referenceId ?? args.checkoutId ?? 'unknown'})`
+		);
+	}
+
 	const match = args.checkoutId
 		? eq(paymentCheckouts.id, args.checkoutId)
 		: eq(paymentCheckouts.referenceId, args.referenceId ?? '');
@@ -174,10 +186,11 @@ export async function creditCheckoutIfUnsettled(
 		}
 
 		// Amount integrity (currency is PHP-only and not stored per-checkout, so amount is the
-		// authoritative check). A mismatch keeps the claim (settled) to stop retries, but does
+		// authoritative check). A GENUINE finite-but-different mismatch keeps the claim (settled) to stop retries, but does
+			// not credit (a non-finite/unparseable amount is rejected BEFORE the claim, so it stays pending),
 		// not credit — surfaced so a spike is alertable.
 		const expectedMinor = Math.round(Number(claimed.amount) * 100);
-		if (!Number.isFinite(args.amountMinor) || args.amountMinor !== expectedMinor) {
+		if (args.amountMinor !== expectedMinor) {
 			console.warn('[credit] amount mismatch — refusing to credit', {
 				checkoutId: claimed.id,
 				externalTransactionId: args.externalTransactionId,

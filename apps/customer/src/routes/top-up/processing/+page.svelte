@@ -116,11 +116,12 @@
 					<Icon name="alert-circle" size={36} strokeWidth={2.4} class="text-blocked" />
 				</div>
 				<h1 class="mb-2 text-[22px] leading-tight font-bold tracking-tight text-ink">
-					We couldn't confirm your payment
+					Still confirming your payment
 				</h1>
 				<p class="mb-6 max-w-[280px] text-sm leading-relaxed text-muted">
-					No credits were added. If any amount was deducted, Maya refunds it automatically within a
-					few minutes.
+					This is taking longer than usual — no need to pay again. If your payment went through, your
+					credits are added automatically once it clears; just check your balance in a few minutes. If
+					you were charged and nothing appears, Maya refunds it automatically.
 				</p>
 				<div
 					class="mb-7 flex w-full items-center gap-2.5 rounded-xl border border-blocked/20 bg-blocked/[0.06] px-4 py-3 text-left"

@@ -158,6 +158,48 @@ function mapStatus(raw: string | undefined, isPaid: boolean): PaymentEvent['stat
 }
 
 /**
+ * Fetch Maya's authoritative PAYMENT resource (GET /payments/v1/payments/{id}) and normalize it
+ * to a PaymentEvent. This is the single source of truth for a payment's status, used by BOTH the
+ * webhook (verifyWebhook) and the reconcile safety nets (getCheckoutStatus) — so a payment
+ * confirmed without a webhook is checked against the EXACT endpoint the webhook trusts, not the
+ * checkout resource (which Maya doesn't reliably flip to paid). Bounded by a timeout + small retry
+ * so a slow Maya API can't pin the caller.
+ */
+async function fetchPaymentEvent(base: string, secretKey: string, paymentId: string): Promise<PaymentEvent> {
+	const res = await fetchWithRetry(`${base}/payments/v1/payments/${encodeURIComponent(paymentId)}`, {
+		headers: { authorization: basicAuth(secretKey) }
+	});
+	if (!res.ok) {
+		const detail = await res.text().catch(() => '');
+		throw new Error(`maya: payment lookup failed (${res.status}): ${detail}`);
+	}
+	const payment = (await res.json()) as MayaPayment;
+	const status = mapStatus(payment.paymentStatus ?? payment.status, payment.isPaid === true);
+	if (!payment.requestReferenceNumber) {
+		throw new Error('maya: payment missing requestReferenceNumber');
+	}
+	const amountMinor = toMinor(payment.amount);
+	// A paid payment MUST carry a parseable amount — the credit path asserts it against the recorded
+	// checkout amount. If Maya ever returns 'paid' without a usable amount, surface the raw shape so
+	// the field name can be corrected, rather than silently recording amount 0 / refusing the credit.
+	if (status === 'paid' && !Number.isFinite(amountMinor)) {
+		console.warn('[maya] paid payment has an unparseable amount', {
+			paymentId: payment.id,
+			rawAmount: payment.amount ?? null
+		});
+	}
+	return {
+		externalTransactionId: payment.id,
+		referenceId: payment.requestReferenceNumber,
+		status,
+		amountMinor,
+		currency: payment.currency ?? 'PHP',
+		referenceNo: payment.requestReferenceNumber,
+		...mapDetail(payment)
+	};
+}
+
+/**
  * Maya (PayMaya) payment provider.
  *
  *  - Checkout: POST {base}/checkout/v1/checkouts with Basic auth (publicKey).
@@ -210,7 +252,12 @@ export function createMayaProvider(config: MayaConfig): PaymentProvider {
 						failure: input.cancelUrl,
 						cancel: input.cancelUrl
 					},
-					requestReferenceNumber: input.referenceId
+					requestReferenceNumber: input.referenceId,
+					// Carry this site's origin in Maya's metadata so the central Veent DO relay can route
+					// the webhook back to THIS NAT'd server: Maya echoes metadata on the event, the DO
+					// reads metadata.originUrl and forwards to `${originUrl}/api/webhooks/maya/payment-status`.
+					// Omitted when unset (direct-webhook / non-relay deployments) so we never send null.
+					...(input.originUrl ? { metadata: { originUrl: input.originUrl } } : {})
 				})
 			});
 
@@ -240,39 +287,20 @@ export function createMayaProvider(config: MayaConfig): PaymentProvider {
 			const paymentId = payload.id ?? payload.paymentId;
 			if (!paymentId) throw new Error('maya: webhook payload missing payment id');
 
-			// Authoritative re-fetch — this is what makes an unsigned webhook trustworthy.
-			// Bounded by a timeout + small retry so a slow Maya API can't pin this request.
-			const res = await fetchWithRetry(`${base}/payments/v1/payments/${encodeURIComponent(paymentId)}`, {
-				headers: { authorization: basicAuth(config.secretKey) }
-			});
-			if (!res.ok) {
-				const detail = await res.text().catch(() => '');
-				throw new Error(`maya: payment lookup failed (${res.status}): ${detail}`);
-			}
-
-			const payment = (await res.json()) as MayaPayment;
-
-			const status = mapStatus(payment.paymentStatus ?? payment.status, payment.isPaid === true);
-			if (!payment.requestReferenceNumber) {
-				throw new Error('maya: payment missing requestReferenceNumber');
-			}
-
-			return {
-				externalTransactionId: payment.id,
-				referenceId: payment.requestReferenceNumber,
-				status,
-				amountMinor: toMinor(payment.amount),
-				currency: payment.currency ?? 'PHP',
-				referenceNo: payment.requestReferenceNumber,
-				...mapDetail(payment)
-			};
+			// Authoritative re-fetch of the PAYMENT resource — this is what makes an unsigned
+			// (or DO-relayed) webhook trustworthy: a spoofed body can't fabricate a real paid payment.
+			return fetchPaymentEvent(base, config.secretKey, paymentId);
 		},
 
 		async getCheckoutStatus(checkoutId: string): Promise<PaymentEvent | null> {
 			if (!config.secretKey) throw new Error('maya: secretKey not configured');
 
-			// Outbound read of the checkout's current state — the reconcile safety net.
-			// Same timeout + retry bound as the webhook re-fetch.
+			// Reconcile safety net (cron + on-return page). Read the checkout to find its payment,
+			// then verify that PAYMENT authoritatively. Maya has no reliable "checkout status" — its
+			// checkout resource can lag / not surface a trustworthy paid flag — so status must come
+			// from the payments endpoint, the SAME source the webhook trusts. Without this, a paid
+			// payment whose webhook was missed (DO/tunnel down) reads back as `pending` here forever
+			// and never credits. Same timeout + retry bound as the webhook re-fetch.
 			const res = await fetchWithRetry(`${base}/checkout/v1/checkouts/${encodeURIComponent(checkoutId)}`, {
 				headers: { authorization: basicAuth(config.secretKey) }
 			});
@@ -289,19 +317,38 @@ export function createMayaProvider(config: MayaConfig): PaymentProvider {
 				isPaid?: boolean;
 				totalAmount?: { value?: string | number } | string | number;
 				requestReferenceNumber?: string;
-				// ponytail: a paid checkout exposes its payment id; field name confirmed in
-				// the Maya dashboard. Falls back to the checkout id — only used for tracing,
-				// not for credit idempotency (the payment_checkouts claim guards that).
+				// A checkout that has produced a payment exposes its payment id here (field confirmed
+				// in the Maya dashboard). We verify THAT payment for the authoritative status.
 				payments?: { id?: string }[];
 			};
 
-			const status = mapStatus(c.paymentStatus ?? c.status, c.isPaid === true);
-			const amount = typeof c.totalAmount === 'object' ? c.totalAmount?.value : c.totalAmount;
+			// Authoritative path: the checkout has a payment → verify it at the payments endpoint
+			// (which carries the charged amount the credit path asserts against).
+			const paymentId = c.payments?.[0]?.id;
+			if (paymentId) return fetchPaymentEvent(base, config.secretKey, paymentId);
+
+			// No payment resource yet. We must NOT synthesize a `paid` from the checkout body: it
+			// carries no trustworthy charged amount, so crediting off it would fail the amount check
+			// AND (worse) settle the checkout uncredited — trapping the payment so the real webhook
+			// later reads `already_settled` and the credit is lost. So recognize only terminal
+			// FAILURES here (no amount needed); a checkout that merely *claims* paid but has not
+			// surfaced a payment is treated as still pending, and the next pass retries once Maya
+			// attaches the payment id. amountMinor is intentionally NaN — only the `paid` path (above,
+			// via the payment resource) carries an amount, and no non-paid branch reads it.
+			const raw = c.paymentStatus ?? c.status;
+			const status: PaymentEvent['status'] =
+				raw === 'PAYMENT_FAILED'
+					? 'failed'
+					: raw === 'PAYMENT_CANCELLED'
+						? 'cancelled'
+						: raw === 'PAYMENT_EXPIRED'
+							? 'expired'
+							: 'pending';
 			return {
-				externalTransactionId: c.payments?.[0]?.id ?? c.id ?? checkoutId,
+				externalTransactionId: c.id ?? checkoutId,
 				referenceId: c.requestReferenceNumber ?? '',
 				status,
-				amountMinor: toMinor(amount),
+				amountMinor: NaN,
 				currency: 'PHP',
 				referenceNo: c.requestReferenceNumber ?? undefined
 			};
