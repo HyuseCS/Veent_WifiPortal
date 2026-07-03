@@ -228,6 +228,9 @@
 						<TriangleAlert class="h-3.5 w-3.5 text-warning" aria-label="Low balance" />
 					{/if}
 				</span>
+				<span class="mt-0.5 block font-mono text-xs text-muted" title="Loyalty points">
+					{user.points} pts
+				</span>
 			</td>
 			<td
 				data-label="Time Left"

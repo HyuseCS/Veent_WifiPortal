@@ -51,16 +51,21 @@ function parsePackage(form: FormData): { input: PackageInput } | { error: string
 	const fiatCost = num('fiatCost');
 	const creditsProvided = num('creditsProvided');
 	const creditCost = num('creditCost');
+	const pointsCost = num('pointsCost');
 	const durationMinutes = num('durationMinutes');
-	if ([fiatCost, creditsProvided, creditCost, durationMinutes].some((v) => Number.isNaN(v))) {
+	if (
+		[fiatCost, creditsProvided, creditCost, pointsCost, durationMinutes].some((v) =>
+			Number.isNaN(v)
+		)
+	) {
 		return { error: 'Numeric fields must be non-negative numbers.' };
 	}
 
 	if (type === 'bundle' && (fiatCost == null || creditsProvided == null)) {
 		return { error: 'A bundle needs a peso price and the credits it provides.' };
 	}
-	if (type === 'tier' && (creditCost == null || durationMinutes == null)) {
-		return { error: 'A tier needs a credit cost and a duration (minutes).' };
+	if (type === 'tier' && (creditCost == null || pointsCost == null || durationMinutes == null)) {
+		return { error: 'A tier needs a credit cost, a points cost, and a duration (minutes).' };
 	}
 	if (type === 'free' && durationMinutes == null) {
 		return { error: 'Free Time needs a duration (minutes).' };
@@ -74,6 +79,7 @@ function parsePackage(form: FormData): { input: PackageInput } | { error: string
 			fiatCost,
 			creditsProvided: int(creditsProvided),
 			creditCost: int(creditCost),
+			pointsCost: int(pointsCost),
 			durationMinutes: int(durationMinutes),
 			isActive: form.get('isActive') === 'on' || form.get('isActive') === 'true'
 		}
