@@ -49,8 +49,12 @@ All three are required to send.
   must never be treated as "sent" — silently swallowing it would let anyone past the
   login with no code. Failing loudly forces the deployment to be configured first.
 
-Failures are surfaced two ways: a non-OK HTTP status throws with the response body,
-and an API-level rejection (`{ "Error": true, "Message": … }`) throws with the message.
+Failures are surfaced three ways: a non-OK HTTP status throws with the response body,
+an API-level rejection (`{ "Error": true, "Message": … }`) throws with the message, and a
+timeout / connection failure throws too — the send is bounded by a 10s `AbortSignal.timeout`
+so a slow or unreachable gateway can't hang the login request. (The login action catches all of
+these and re-renders the form with an inline "try again" instead of a 500 — see
+`apps/customer/src/routes/login/+page.server.ts`.)
 
 > ⚠️ `ponytail:` the success/failure response shape is taken as `{ Error: boolean,
 > Message?: string }`. Confirm the exact field in the iTexMo dashboard/docs before

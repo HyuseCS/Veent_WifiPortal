@@ -1,7 +1,0 @@
-.claude/skills/vc-agent-browser/references/.gitkeep
-.claude/skills/vc-chrome-devtools/scripts/.gitignore
-.claude/skills/vc-docs-seeker/.env.example
-.claude/skills/vc-mcp-management/scripts/.env.example
-.claude/skills/vc-mcp-management/scripts/.gitignore
-.claude/skills/vc-sequential-thinking/.env.example
-.claude/skills/vc-sequential-thinking/.gitignore

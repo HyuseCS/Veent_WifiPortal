@@ -1,7 +1,7 @@
 # DESIGN.md — Veent WiFi Portal (admin)
 
 Design context for the operator **admin dashboard**. Derived from the source of truth,
-`apps/admin/src/routes/layout.css` (`@theme` tokens), and `docs/DESIGN_GUIDELINES.md`.
+`apps/admin/src/routes/layout.css` (`@theme` tokens), and `docs/design/DESIGN_GUIDELINES.md`.
 Components never hardcode colors — they read the semantic `--color-*` tokens, which
 Tailwind v4 exposes as utilities (`bg-brand`, `text-ink`, `bg-online/15`, …).
 

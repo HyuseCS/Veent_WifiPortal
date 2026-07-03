@@ -95,7 +95,17 @@ so denying them does not affect payments.
 /ip hotspot walled-garden add action=deny dst-host=connectivitycheck.android.com comment=veent-admin place-before=0
 # www.google.com is needed by reCAPTCHA, so deny ONLY the probe path (HTTP-only match):
 /ip hotspot walled-garden add action=deny dst-host=www.google.com path=/generate_204 comment=veent-admin place-before=0
+# Apple (iOS/macOS), Windows and Firefox probes too, so the OS "Sign in to network" popup fires on
+# every platform — not just Android. Unlike the Google set these aren't behind any allow (so they're
+# already intercepted by default); the explicit deny makes the popup robust and documents intent.
+/ip hotspot walled-garden add action=deny dst-host=captive.apple.com        comment=veent-admin place-before=0
+/ip hotspot walled-garden add action=deny dst-host=www.msftconnecttest.com  comment=veent-admin place-before=0
+/ip hotspot walled-garden add action=deny dst-host=www.msftncsi.com         comment=veent-admin place-before=0
+/ip hotspot walled-garden add action=deny dst-host=detectportal.firefox.com comment=veent-admin place-before=0
 ```
+
+The full deny set lives in `PROBE_DENIES` (`apps/admin/scripts/setup-router.ts`); `bun run setup:router`
+applies it idempotently, so prefer that over adding rows by hand.
 
 **Verify the fix on an un-granted device** (before relying on it):
 
