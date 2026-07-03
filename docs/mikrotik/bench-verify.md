@@ -42,6 +42,22 @@ a binding's timestamp to an old epoch (`1000000000000` = Sept 2001, always "expi
 
 ## B3.2 — admin-bypass expiry + mutual exclusion
 
+> **Expected latency — the admin bypass is NOT instant, unlike a guest `?mac=` purchase.** Two
+> lags, both normal (don't read them as "broken"):
+> 1. **The binding shows in Winbox only once the grant fires.** The admin path has no captive
+>    `?mac=`; it resolves the MAC with a *live* router lookup (`resolveMacByIp`, up to a ~5s ceiling
+>    on a cold cache). If the device isn't yet in the router's host/lease/ARP tables at the moment of
+>    login, that first lookup returns null and NO binding is written — the next dashboard load (the
+>    sliding refresh) writes it once the device is visible. Tail `journalctl -u radius-admin -f` and
+>    watch for `admin bypass granted: ip=… mac=…` vs `skipped — no MAC for client ip=…`.
+> 2. **The device actually gets internet up to ~1 min later.** Grant adds the bypass and flushes the
+>    hotspot host, but does **not** cut the device's already-open connections (only *revoke* does).
+>    The OS flips to "connected" when it next re-probes the captive check (~30–60 s on Android/iOS)
+>    and opens a fresh, now-bypassed connection. Hotspot-login *activation* — which would clear the
+>    OS banner at once — is disabled on this deployment (`MIKROTIK_HOTSPOT_USER` retired), so this
+>    settle time is inherent to the bypass-binding approach here. To make it near-instant you'd cut
+>    conntrack on grant (mirror revoke) and/or re-enable activation — deferred, not wired.
+
 ### Expiry + grandfather (router-only, fast — no device flows needed)
 - [ ] **Grandfather a legacy binding.** Add a *bare* admin binding, then sweep:
   ```
