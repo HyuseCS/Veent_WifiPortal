@@ -386,7 +386,12 @@ export function createMikrotikController(config: MikrotikConfig): NetworkControl
 		},
 
 		async resolveMacByIp(ipAddress: string): Promise<string | null> {
-			const ip = ipAddress.trim();
+			// Strip the IPv4-mapped IPv6 prefix: a dev/prod server on a dual-stack socket reports an
+			// IPv4 client as `::ffff:10.210.x.x`, but the router's `?address=` filter only matches the
+			// plain IPv4 form (verified — the mapped form returns zero rows). The customer path strips
+			// this upstream; the admin-bypass path passes getClientAddress() raw, so do it here to cover
+			// every caller (was silently returning null → no admin-device bypass binding).
+			const ip = ipAddress.trim().replace(/^::ffff:/i, '');
 			if (!ip) return null;
 			return withConn(async (conn) => {
 				// Prefer the hotspot host table (knows currently-seen clients), then
