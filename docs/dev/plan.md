@@ -123,7 +123,7 @@ The cron flips aged `pending` checkouts to `expired` without asking the gateway 
 
 #### B2.2 — Alert on unattributed paid events (`apps/customer/src/routes/api/webhooks/payment/+server.ts:128-146`)
 - [x] B2.2.1 Alongside the existing `console.warn`, added `captureHandled(new Error('unattributed paid event'), { level: 'error', tags: { area: 'payment', scope: 'attribution' }, extra: { txId, amountMinor, hadCheckoutRow, userExists, pkgExists } })` — the non-PII fields already assembled for the warn. The 200-ack **stays** (S2 — deliberate anti-500 design; the money remediation is manual refund/credit, which now gets a loud signal instead of a buried log line). *(Shipped post-merge 2026-07-03.)*
-- [ ] B2.2.2 Note in the Sentry alert-rules doc (`project_sentry-integration` scope): any event in `payment/attribution` pages immediately — count 1, not volume-based. *(Alert-rule config is an ops/dashboard task, not code — tracked for the Phase 4.3 alert-rules pass.)*
+- [x] B2.2.2 Specified in **[`docs/dev/sentry-alert-rules.md`](sentry-alert-rules.md)** (rule A1): any `payment/attribution` event pages immediately — count 1, not volume-based. Full alert taxonomy for all capture areas is there too (Phase 4.3). Dashboard config is the operator's to apply.
 
 *Why this can't mess anything up:* purely additive capture on an existing code path, matching the pattern commit `f9e8bef` used on six other paths; `scrubEvent` runs on send. No control flow changes.
 *Rollback:* delete the capture call.
@@ -151,7 +151,7 @@ drizzle-orm 0.45.x wraps driver errors in `DrizzleQueryError`; the SQLSTATE live
 | Remaining | Blocked on | Kind |
 |-----------|-----------|------|
 | **B3.2 bench verification** + **B3.1 / B3.6 real-router legs**, **Checkpoint 3** | bench MikroTik + human sign-off | hardware verification (ship gate before prod) |
-| **B2.2.2 + Phase 4.3** (Sentry alert rules) | Sentry dashboard access | ops config, not code |
+| **B2.2.2 + Phase 4.3** (Sentry alert rules) | ✅ spec'd in `docs/dev/sentry-alert-rules.md`; operator applies + tunes in the dashboard | ops config, not code |
 | **Phase 4.2 / 4.4** (staging soak, prod post-deploy MAC check) | a staging/prod deploy | rollout |
 | **Phase 4.5** (mark findings mitigated, rename `*_COMPLETE`) | everything above landing | doc bookkeeping |
 
@@ -230,7 +230,7 @@ The finding: `openHostAccessForDevice`'s refresh loop removed walled-garden rows
 ### Phase 4 — Integration verification & rollout
 - [ ] 4.1 Merge order: `dev/system-sentry` (with Phase 1) first, then rebase + merge `dev/audit-fixes`; re-run the full suite after each merge.
 - [ ] 4.2 Staging soak: deploy staging, run the loadtest grant-spike (`apps/customer/loadtest/`) and a Maya sandbox payment loop; watch the new Sentry areas (`payment/attribution`, `network/unbind`, `reconcile/*`) for unexpected volume.
-- [ ] 4.3 Sentry alert rules per the integration plan: page-on-first-event for `payment/attribution`; volume thresholds for the warning-level areas.
+- [x] 4.3 Sentry alert rules **specified** in [`docs/dev/sentry-alert-rules.md`](sentry-alert-rules.md): A1 pages on the first `payment/attribution` event, A2 spike-pages money-path errors, A3 notifies on warning volume (+ `network/unbind` carve-out), A4 covers the three cron monitors' missed/failed check-ins, A5 the uncaught-crash catch-all. → **operator applies the rules in the Sentry dashboard**, then tunes thresholds after the 4.2 soak.
 - [ ] 4.4 Post-deploy checks in production Sentry: confirm transaction events carry **no** MAC (raw or encoded) in spans — the A1 acceptance test against real traffic.
 - [ ] 4.5 Update `docs/SECURITY_RISKS.md` / `docs/BUG_AUDIT.md` to mark findings mitigated; rename this file `*_COMPLETE` per convention.
 
