@@ -147,6 +147,18 @@ export async function creditCheckoutIfUnsettled(
 	db: DB,
 	args: CreditArgs
 ): Promise<{ credited: boolean; balance?: number; reason?: CreditSkipReason }> {
+	// A non-finite gateway amount means we couldn't determine what was charged (a parse/transient
+	// issue — e.g. Maya returned no amount), NOT a real underpayment. Refuse to touch the checkout
+	// at all: do NOT claim/settle it, so it stays `pending` and a later reconcile pass or the
+	// webhook can retry with a good amount — instead of trapping it settled-but-uncredited (which
+	// would make the recovered webhook return `already_settled` and lose the credit forever). Throw
+	// so the caller retries: reconcile catches + leaves pending; the webhook 500s → Maya re-delivers.
+	if (!Number.isFinite(args.amountMinor)) {
+		throw new Error(
+			`credit: refusing to settle checkout with a non-finite gateway amount (ref=${args.referenceId ?? args.checkoutId ?? 'unknown'})`
+		);
+	}
+
 	const match = args.checkoutId
 		? eq(paymentCheckouts.id, args.checkoutId)
 		: eq(paymentCheckouts.referenceId, args.referenceId ?? '');
@@ -174,10 +186,11 @@ export async function creditCheckoutIfUnsettled(
 		}
 
 		// Amount integrity (currency is PHP-only and not stored per-checkout, so amount is the
-		// authoritative check). A mismatch keeps the claim (settled) to stop retries, but does
+		// authoritative check). A GENUINE finite-but-different mismatch keeps the claim (settled) to stop retries, but does
+			// not credit (a non-finite/unparseable amount is rejected BEFORE the claim, so it stays pending),
 		// not credit — surfaced so a spike is alertable.
 		const expectedMinor = Math.round(Number(claimed.amount) * 100);
-		if (!Number.isFinite(args.amountMinor) || args.amountMinor !== expectedMinor) {
+		if (args.amountMinor !== expectedMinor) {
 			console.warn('[credit] amount mismatch — refusing to credit', {
 				checkoutId: claimed.id,
 				externalTransactionId: args.externalTransactionId,
@@ -220,6 +233,22 @@ async function markUnpaid(db: DB, checkoutId: string, status: 'failed' | 'expire
 }
 
 /**
+ * Resolve a checkout's authoritative gateway status, PREFERRING the by-reference (RRN) lookup: it
+ * resolves the payment from the reference WE set at checkout, needing neither an inbound webhook
+ * nor the gateway's checkout→payment mapping — so it credits even if the relay/tunnel never
+ * recovers. Falls back to the by-checkout-id status for providers that only offer that.
+ */
+function resolvePaymentStatus(
+	payments: PaymentProvider,
+	checkoutId: string,
+	referenceId: string | null | undefined
+): Promise<PaymentEvent | null> {
+	if (payments.getPaymentByReference && referenceId) return payments.getPaymentByReference(referenceId);
+	if (payments.getCheckoutStatus) return payments.getCheckoutStatus(checkoutId);
+	return Promise.resolve(null);
+}
+
+/**
  * Cron pass: poll the gateway for every pending checkout old enough that the webhook
  * has had its chance, and credit any that are actually paid. Catches missed webhooks
  * even when the buyer never returned to the processing page. Bounded both ways: skips
@@ -230,7 +259,7 @@ export async function reconcilePendingPayments(
 	payments: PaymentProvider,
 	opts: { minAgeMs?: number; maxAgeMs?: number } = {}
 ): Promise<{ checked: number; credited: number }> {
-	if (!payments.getCheckoutStatus) return { checked: 0, credited: 0 };
+	if (!payments.getPaymentByReference && !payments.getCheckoutStatus) return { checked: 0, credited: 0 };
 	const now = Date.now();
 	const minAge = new Date(now - (opts.minAgeMs ?? 90_000)); // webhook head start
 	const maxAge = new Date(now - (opts.maxAgeMs ?? 24 * 60 * 60 * 1000)); // stop after a day
@@ -238,6 +267,7 @@ export async function reconcilePendingPayments(
 	const pending = await db
 		.select({
 			id: paymentCheckouts.id,
+			referenceId: paymentCheckouts.referenceId,
 			userId: paymentCheckouts.userId,
 			packageId: paymentCheckouts.packageId,
 			networkId: paymentCheckouts.networkId
@@ -254,7 +284,7 @@ export async function reconcilePendingPayments(
 	let credited = 0;
 	for (const c of pending) {
 		try {
-			const evt = await payments.getCheckoutStatus!(c.id);
+			const evt = await resolvePaymentStatus(payments, c.id, c.referenceId);
 			if (!evt || evt.status === 'pending') continue;
 			// Record into payment_transactions like the webhook does, so a reconcile-settled
 			// payment still shows in Finance (with its checkout-time AP). Idempotent upsert.
@@ -307,7 +337,7 @@ export async function reconcileCheckout(
 	referenceId: string,
 	opts: { throttleMs?: number } = {}
 ): Promise<{ credited: boolean }> {
-	if (!payments.getCheckoutStatus) return { credited: false };
+	if (!payments.getPaymentByReference && !payments.getCheckoutStatus) return { credited: false };
 	const throttleBefore = new Date(Date.now() - (opts.throttleMs ?? 4000));
 
 	const [claimed] = await db
@@ -329,7 +359,7 @@ export async function reconcileCheckout(
 	if (!claimed) return { credited: false }; // settled already, or polled too recently
 
 	try {
-		const evt = await payments.getCheckoutStatus(claimed.id);
+		const evt = await resolvePaymentStatus(payments, claimed.id, referenceId);
 		// Record into payment_transactions like the webhook does, so a payment that settles
 		// via this poll (the usual path in local dev, where Maya can't reach localhost) still
 		// shows in Finance with its checkout-time AP. Idempotent upsert.

@@ -128,12 +128,15 @@
 					<!-- `defaultValue`/`defaultChecked` (Svelte 5.6+) render as the value/checked attribute
 					in SSR so the prefill shows, but on hydration set the element DEFAULT rather than the
 					live value — so anything the user typed BEFORE hydration isn't wiped. -->
+					<!-- Placeholders vanish on input and aren't reliably announced — aria-label gives each
+					field a persistent accessible name without changing the label-less visual design. -->
 					<div class="flex gap-2.5">
 						<input
 							name="firstName"
 							type="text"
 							autocomplete="given-name"
 							placeholder="First name"
+							aria-label="First name"
 							required
 							defaultValue={form?.values?.firstName ?? data.buyer.firstName}
 							class="h-[48px] w-full rounded-xl border-[1.5px] border-border bg-bg px-4 text-[15px] text-ink transition-colors placeholder:text-muted focus:border-brand focus:outline-none"
@@ -143,6 +146,7 @@
 							type="text"
 							autocomplete="family-name"
 							placeholder="Last name"
+							aria-label="Last name"
 							required
 							defaultValue={form?.values?.lastName ?? data.buyer.lastName}
 							class="h-[48px] w-full rounded-xl border-[1.5px] border-border bg-bg px-4 text-[15px] text-ink transition-colors placeholder:text-muted focus:border-brand focus:outline-none"
@@ -153,6 +157,7 @@
 						type="email"
 						autocomplete="email"
 						placeholder="Email address"
+						aria-label="Email address"
 						required
 						defaultValue={form?.values?.email ?? data.buyer.email}
 						class="h-[48px] w-full rounded-xl border-[1.5px] border-border bg-bg px-4 text-[15px] text-ink transition-colors placeholder:text-muted focus:border-brand focus:outline-none"

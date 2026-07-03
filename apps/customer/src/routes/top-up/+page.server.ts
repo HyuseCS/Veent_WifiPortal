@@ -2,6 +2,7 @@ import { redirect, fail } from '@sveltejs/kit';
 import { and, eq, asc } from 'drizzle-orm';
 import { packages, paymentCheckouts, customerProfile } from '@veent/db';
 import { getAccount, getLatestLedgerId, captureHandled, openCheckoutAccess } from '@veent/core';
+import { env } from '$env/dynamic/private';
 import { db } from '$lib/server/db';
 import { network } from '$lib/server/network';
 import { payments } from '$lib/server/payments';
@@ -103,9 +104,26 @@ export const actions: Actions = {
 				.where(eq(customerProfile.userId, user.id));
 		} catch (e) {
 			console.warn('[topup] failed to persist buyer details:', (e as Error).message);
+			// Low-priority: buyer can re-enter; the checkout proceeds. Rate matters, not the single event.
+			captureHandled(e, { level: 'warning', tags: { area: 'payment', scope: 'buyer-persist' } });
 		}
 
-		const origin = event.url.origin;
+		// The site's public tunnel origin (its ngrok URL), for the SERVER-TO-SERVER webhook: the
+		// Veent DO forwards the payment webhook to ${webhookOrigin}/api/webhooks/maya/payment-status.
+		// Bare origin; blank when TUNNEL_ORIGIN is unset — no LAN fallback, so a misconfigured site
+		// fails loudly at Maya / the DO rather than emitting an unreachable URL.
+		const webhookOrigin = (env.TUNNEL_ORIGIN?.trim() || '').replace(/\/$/, '');
+
+		// Where the buyer's BROWSER returns after paying. Prefer the origin they actually started on,
+		// so a localhost dev session returns to localhost (not the tunnel) and a public-domain deploy
+		// returns to that domain. The one case that won't work is a private LAN http origin — the prod
+		// captive portal served on the LAN, which Maya rejects and the browser can't reach publicly on
+		// return — so those fall back to the public tunnel. Independent of the webhook originUrl above.
+		const requestOrigin = event.url.origin.replace(/\/$/, '');
+		const returnHost = new URL(requestOrigin).hostname;
+		const returnReachable =
+			requestOrigin.startsWith('https://') || /^(localhost|127\.0\.0\.1|\[?::1\]?)$/.test(returnHost);
+		const origin = returnReachable ? requestOrigin : webhookOrigin;
 		// Thread the device MAC through the gateway round-trip. Maya bounces the buyer to
 		// the system browser (not the captive CNA popup), which has a DIFFERENT cookie jar —
 		// so the `veent_portal` cookie holding the MAC is GONE on return, and the dashboard
@@ -129,6 +147,8 @@ export const actions: Actions = {
 				await openCheckoutAccess(network, { macAddress: mac });
 			} catch (e) {
 				console.warn('[topup] openCheckoutAccess failed', (e as Error).message);
+				// Low-priority: best-effort captcha pre-auth (already a failed router span). Watch the volume.
+				captureHandled(e, { level: 'warning', tags: { area: 'network', scope: 'checkout-access' } });
 			}
 		}
 		// Watermark the ledger now; the processing page polls for a topup row above
@@ -152,6 +172,10 @@ export const actions: Actions = {
 				description: pkg.name,
 				successUrl: `${origin}/top-up/processing?since=${since}&pkg=${pkg.id}&attempt=${referenceId}${macQuery}`,
 				cancelUrl: `${origin}/top-up${cancelMacQuery}`,
+				// Carried in Maya's metadata so the Veent DO relay forwards the server-to-server
+				// webhook back here (to /api/webhooks/maya/payment-status). Always the public tunnel
+				// origin — independent of where the buyer's browser returns (`origin` above).
+				originUrl: webhookOrigin,
 				// Real buyer details from the form — Maya's Kount fraud protection requires
 				// firstName + lastName + email. Phone comes from the verified account.
 				buyer: {

@@ -68,16 +68,39 @@ async function sentryPut(path: string, body: unknown): Promise<void> {
 }
 
 // --- Read cache -------------------------------------------------------------
-// ponytail: naive whole-response TTL cache keyed by call; swap for per-key/LRU if reads grow.
+// Caches the in-flight PROMISE, not the resolved data: concurrent misses share one fetch
+// (no double-call), and a failed fetch is remembered only briefly (FAIL_TTL) so a Sentry
+// outage costs one timeout per 10s rather than two on every dashboard load. Size-capped so
+// per-issue `event:${id}` keys can't accumulate unbounded.
+// ponytail: Map with insertion-order eviction; swap for a real LRU only if reads ever grow.
 const TTL_MS = 60_000;
-const cache = new Map<string, { at: number; data: unknown }>();
+const FAIL_TTL_MS = 10_000;
+const MAX_ENTRIES = 100;
+const cache = new Map<string, { until: number; promise: Promise<unknown> }>();
 
-async function cached(key: string, fetcher: () => Promise<unknown>): Promise<unknown> {
+// Exported for unit testing (client.test.ts). Carries no credentials — safe to expose.
+export function cached(key: string, fetcher: () => Promise<unknown>): Promise<unknown> {
 	const hit = cache.get(key);
-	if (hit && Date.now() - hit.at < TTL_MS) return hit.data;
-	const data = await fetcher();
-	cache.set(key, { at: Date.now(), data });
-	return data;
+	if (hit && Date.now() < hit.until) return hit.promise;
+	if (cache.size >= MAX_ENTRIES) {
+		const now = Date.now();
+		for (const [k, v] of cache) if (now >= v.until) cache.delete(k); // drop expired first
+		while (cache.size >= MAX_ENTRIES) {
+			const oldest = cache.keys().next().value; // still full → evict oldest-inserted
+			if (oldest === undefined) break;
+			cache.delete(oldest);
+		}
+	}
+	const promise = fetcher();
+	cache.set(key, { until: Date.now() + TTL_MS, promise });
+	// A rejected fetch expires fast (FAIL_TTL) AND this handler prevents an unhandled-rejection
+	// warning if no caller happens to await the cached failure. The identity check avoids a
+	// late-settling old promise clobbering a newer entry (e.g. after invalidate() + re-fetch).
+	promise.catch(() => {
+		const cur = cache.get(key);
+		if (cur?.promise === promise) cache.set(key, { until: Date.now() + FAIL_TTL_MS, promise });
+	});
+	return promise;
 }
 
 /** Drop cached reads so a just-applied mutation shows on the next load instead of 60s later. */

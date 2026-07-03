@@ -26,15 +26,37 @@ const DROP_KEY_RE =
 	/pass(word)?|secret|token|otp|^code$|authorization|cookie|api[-_]?key|session[-_]?id|totp/i;
 
 const EMAIL_RE = /([\w.+-])[\w.+-]*(@[\w.-]+)/g;
-const MAC_RE = /\b([0-9A-Fa-f]{2}:){2}([0-9A-Fa-f]{2}:){3}[0-9A-Fa-f]{2}\b/g;
-// PH phone shapes: +63XXXXXXXXXX or 09XXXXXXXXX (and generic 8+ digit runs with separators).
-const PHONE_RE = /\+?\d[\d ()-]{7,}\d/g;
+// Matches a 6-octet MAC with a CONSISTENT separator (colon OR hyphen — the \1 backreference
+// rejects mixed forms) as well as the bare 12-hex form. Router log lines carry all three.
+// The bare branch requires at least one hex LETTER (the lookahead), so a 12-digit-only run —
+// e.g. the tail of +639171234567 — is left for PHONE_RE to mask with the right shape. A
+// genuinely all-digit MAC (001122334455 — OUI 00:11:22 exists) is caught by PHONE_RE's
+// bare-12-digit catch-all instead, so it still never ships unmasked.
+const MAC_RE =
+	/\b(?:[0-9A-Fa-f]{2}([:-])(?:[0-9A-Fa-f]{2}\1){4}[0-9A-Fa-f]{2}|(?=\d*[A-Fa-f])[0-9A-Fa-f]{12})\b/g;
+// Phone shapes, narrowest first: PH mobile with country code (+63/63), PH domestic (09…),
+// generic +international, then a bare 12-digit catch-all (an all-digit MAC or a country-coded
+// mobile missing its '+' — PII either way). Every branch is anchored (`\b`, or the literal '+',
+// which can't occur inside a digit run) so digits INSIDE a longer run — epoch-ms timestamps,
+// centavo amounts, external ids — no longer match, which the old generic ≥9-digit rule got wrong.
+// ponytail: non-PH domestic formats won't mask — PH-only product (Maya + itexmo).
+const PHONE_RE =
+	/\+?\b63[\s-]?9\d{2}[\s()-]?\d{3}[\s()-]?\d{4}\b|\b09\d{2}[\s()-]?\d{3}[\s()-]?\d{4}\b|\+\d[\d\s()-]{7,13}\d|\b\d{12}\b/g;
+// Percent-encoded twins for PII that reaches span/query strings URL-encoded (the customer app
+// encodes the MAC into query params: AA%3ABB%3A…). Masking runs on the ENCODED text — no
+// decode/re-encode round-trip, which is lossy and makes position-mapping error-prone. Hyphen and
+// dot separators survive encodeURIComponent unchanged (the plain patterns above cover them);
+// only ':' (%3A) needs a twin, plus '@' (%40) for emails in query values.
+const ENC_MAC_RE = /\b[0-9A-Fa-f]{2}(?:%3[Aa][0-9A-Fa-f]{2}){5}\b/g;
+const ENC_EMAIL_RE = /([\w.+-])[\w.+-]*(%40[\w.-]+)/g;
 
 /** Mask PII patterns inside a free-text string (messages, breadcrumbs, stack frames). */
 function maskString(s: string): string {
 	return s
 		.replace(EMAIL_RE, '$1•••$2')
-		.replace(MAC_RE, (m) => `${m.slice(0, 8)}•••`)
+		.replace(ENC_EMAIL_RE, '$1•••$2')
+		.replace(MAC_RE, (m) => `${m.slice(0, m.includes(':') || m.includes('-') ? 8 : 6)}•••`)
+		.replace(ENC_MAC_RE, (m) => `${m.slice(0, 12)}•••`) // 12 chars = AA%3ABB%3ACC, the vendor prefix
 		.replace(PHONE_RE, (m) => {
 			const digits = m.replace(/\D/g, '');
 			if (digits.length < 9) return m; // too short to be a phone — leave (avoids nuking amounts/ids)
@@ -101,6 +123,12 @@ export function scrubEvent<T extends AnyEvent>(event: T): T {
 	scrub(event.exception, new WeakSet());
 	scrub(event.extra, new WeakSet());
 	scrub(event.contexts, new WeakSet());
+	// Transaction events carry their payload in `spans` — the SDK's fetch instrumentation puts the
+	// FULL query string in http.url/http.query span data (`?mac=…` on every __data.json fetch), so
+	// skipping them ships the MAC on every sampled navigation.
+	const tx = event as TransactionEvent;
+	if (tx.spans) scrub(tx.spans, new WeakSet());
+	if (typeof event.transaction === 'string') event.transaction = maskString(event.transaction);
 	if (typeof event.message === 'string') event.message = maskString(event.message);
 	return event;
 }
@@ -164,9 +192,22 @@ export interface SentryInitInput {
 	/** Git SHA or app version (optional). */
 	release?: string;
 	/** Which app this is, attached as the `app` tag on every event. */
-	app: 'admin' | 'customer';
+	app: 'admin' | 'customer' | 'locator';
 	/** 0–1. Fraction of requests traced for performance. */
 	tracesSampleRate: number;
+}
+
+/**
+ * Read an env value treating empty / whitespace-only strings as UNSET. Every app ships the Sentry
+ * vars in `.env.example` as `KEY=""` to document them, so a raw `env.X ?? fallback` resolves the
+ * empty string — shipping a blank `environment`/`release`, or `Number('')` → 0 which silently
+ * disables tracing. Routing every hook's env read through this makes the documented fallbacks
+ * (dev/prod environment, 0.2 sample rate) actually fire. Returns `undefined` for null/blank input.
+ */
+export function nonEmptyEnv(value: string | undefined | null): string | undefined {
+	if (value == null) return undefined;
+	const trimmed = value.trim();
+	return trimmed === '' ? undefined : trimmed;
 }
 
 /**
@@ -177,11 +218,17 @@ export interface SentryInitInput {
  * `sendDefaultPii: false` + `scrubEvent` on both send hooks is the non-negotiable privacy baseline.
  */
 export function sentryOptions(input: SentryInitInput) {
+	// Every hook file feeds an env-derived rate through this seam, so validate ONCE here: the
+	// client hooks only check finiteness (a finite 5 or -1 got through) and the server hooks
+	// pass raw Number(env) (NaN got through, silently disabling tracing). Anything outside
+	// [0, 1] falls back to the documented 0.2 default.
+	const rate = input.tracesSampleRate;
+	const tracesSampleRate = Number.isFinite(rate) && rate >= 0 && rate <= 1 ? rate : 0.2;
 	return {
 		dsn: input.dsn,
 		environment: input.environment,
 		release: input.release,
-		tracesSampleRate: input.tracesSampleRate,
+		tracesSampleRate,
 		sendDefaultPii: false,
 		initialScope: { tags: { app: input.app } },
 		beforeSend: (event: ErrorEvent) => scrubEvent(event),
