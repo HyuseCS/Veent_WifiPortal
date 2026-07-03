@@ -28,7 +28,12 @@
 			secondsLeft -= 1;
 			if (secondsLeft <= 0) {
 				clearInterval(tick);
-				goto(resolve('/dashboard') + data.portalQuery);
+				// Resolve the FULL target (incl. the `?mac=…`/empty portalQuery) so the navigation
+				// passes through resolve() — bare `resolve('/dashboard') + query` trips the
+				// no-navigation-without-resolve lint. portalQuery is a server-built query string that
+				// SvelteKit's PageData widens to `string`, which typed routes can't verify, so assert
+				// the resolvable shape (matches the `{resolve('/dashboard')}{portalQuery}` links below).
+				goto(resolve(`/dashboard${data.portalQuery}` as `/dashboard?${string}`));
 			}
 		}, 1000);
 		return () => clearInterval(tick);

@@ -198,6 +198,19 @@ export interface SentryInitInput {
 }
 
 /**
+ * Read an env value treating empty / whitespace-only strings as UNSET. Every app ships the Sentry
+ * vars in `.env.example` as `KEY=""` to document them, so a raw `env.X ?? fallback` resolves the
+ * empty string — shipping a blank `environment`/`release`, or `Number('')` → 0 which silently
+ * disables tracing. Routing every hook's env read through this makes the documented fallbacks
+ * (dev/prod environment, 0.2 sample rate) actually fire. Returns `undefined` for null/blank input.
+ */
+export function nonEmptyEnv(value: string | undefined | null): string | undefined {
+	if (value == null) return undefined;
+	const trimmed = value.trim();
+	return trimmed === '' ? undefined : trimmed;
+}
+
+/**
  * Build the options object passed to `Sentry.init` — identical shape client & server, both apps,
  * so PII scrubbing and the `app` tag are defined ONCE here. Callers add environment-specific
  * integrations (e.g. `browserTracingIntegration` on the client) by spreading the result.

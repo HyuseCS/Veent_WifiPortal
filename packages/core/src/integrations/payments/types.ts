@@ -4,6 +4,21 @@
  * the call sites.
  */
 
+/**
+ * Thrown by a provider's read paths (webhook verify / reconcile lookups) when the failure is
+ * TRANSIENT — a gateway 5xx/429, a request timeout, or a network error — as opposed to a
+ * malformed/spoofed payload or a permanent 4xx (bad key, unknown payment). The webhook route maps
+ * this to a 5xx so the gateway RETRIES delivery, rather than a 400 that tells it to give up on a
+ * payment that may well be real. `instanceof` survives the `traceMethods` wrapper (it re-throws the
+ * original error unchanged).
+ */
+export class RetryablePaymentError extends Error {
+	constructor(message: string, options?: ErrorOptions) {
+		super(message, options);
+		this.name = 'RetryablePaymentError';
+	}
+}
+
 export interface CreateCheckoutInput {
 	/** Our internal reference (e.g. `${userId}:${packageId}`). Echoed back on the webhook. */
 	referenceId: string;
