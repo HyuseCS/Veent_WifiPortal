@@ -45,12 +45,12 @@
 <head>
 	<meta charset="utf-8" />
 	<meta name="viewport" content="width=device-width, initial-scale=1" />
-	<meta http-equiv="refresh" content="0; url=http://10.210.43.200:5173/?mac=$(mac)&ip=$(ip)&link-login-only=$(link-login-only)&link-orig=$(link-orig)&ssid=$(ssid)" />
+	<meta http-equiv="refresh" content="0; url=http://10.210.63.17:5173/?mac=$(mac)&ip=$(ip)&link-login-only=$(link-login-only)&link-orig=$(link-orig)&ssid=$(ssid)" />
 	<title>Connecting to Veent WiFi…</title>
 	<script>
 		// Forward immediately — fires before the <meta> fallback in most engines. The styled page
 		// below is only seen if this + the meta refresh are both blocked (some locked-down CNAs).
-		location.replace("http://10.210.43.200:5173/?mac=$(mac)&ip=$(ip)&link-login-only=$(link-login-only)&link-orig=$(link-orig)&ssid=$(ssid)");
+		location.replace("http://10.210.63.17:5173/?mac=$(mac)&ip=$(ip)&link-login-only=$(link-login-only)&link-orig=$(link-orig)&ssid=$(ssid)");
 	</script>
 	<!--
 	  Fully self-contained: NO external CSS/fonts/images. A trapped device can only reach
@@ -146,7 +146,7 @@
 		<h1>Connecting to Veent WiFi</h1>
 		<p class="sub">Hang tight — we're taking you to the guest portal to get you online.</p>
 		<div class="status"><span class="spinner" aria-hidden="true"></span> Opening the portal…</div>
-		<a class="btn" href="http://10.210.43.200:5173/?mac=$(mac)&link-orig=$(link-orig)">
+		<a class="btn" href="http://10.210.63.17:5173/?mac=$(mac)&link-orig=$(link-orig)">
 			Continue
 			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
 				<line x1="5" y1="12" x2="19" y2="12" />

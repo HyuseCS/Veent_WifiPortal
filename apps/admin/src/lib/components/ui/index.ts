@@ -9,6 +9,7 @@ export { default as StatusBadge } from './StatusBadge.svelte';
 export { default as FilterTabs } from './FilterTabs.svelte';
 export { default as SearchInput } from './SearchInput.svelte';
 export { default as EmptyState } from './EmptyState.svelte';
+export { default as RouteSkeleton } from './RouteSkeleton.svelte';
 export { default as LiveDot } from './LiveDot.svelte';
 export { default as LiveStatusPill } from './LiveStatusPill.svelte';
 export { default as IconButton } from './IconButton.svelte';

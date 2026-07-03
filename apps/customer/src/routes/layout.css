@@ -1,9 +1,94 @@
-/* Font @import MUST come before `@import 'tailwindcss'`: Tailwind v4 inlines its
- * import into generated rules, which would push any @import after it past the
- * "@import must precede all other statements" CSS rule (postcss errors otherwise). */
-@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+/* `@import 'tailwindcss'` must precede all other CSS statements (the CSS rule that
+ * @import comes first). The self-hosted @font-face rules below are regular at-rules,
+ * not @imports, so they intentionally sit AFTER it — no ordering conflict. */
 @import 'tailwindcss';
 @plugin '@tailwindcss/typography';
+
+/* Self-hosted fonts, served from the portal host itself — a trapped captive-portal device
+ * can't reach fonts.googleapis.com, so a Google Fonts @import hangs the page on loading.
+ * Only the `latin` subset is loaded (the portal is English), and font-display: block holds
+ * text for a beat rather than painting the system fallback first and swapping (that swap is
+ * the FOUT flash). Fonts are local so the block period is a few ms. Files come from
+ * @fontsource (see package.json); url()s are relative to this file → apps/customer/node_modules.
+ * Weights: Plus Jakarta Sans 400–700 (UI), Montserrat 500–800 (headings), JetBrains Mono
+ * 400–600 (numeric data) — see the --font-* tokens below. */
+@font-face {
+	font-family: 'Plus Jakarta Sans';
+	font-style: normal;
+	font-weight: 400;
+	font-display: block;
+	src: url('../../node_modules/@fontsource/plus-jakarta-sans/files/plus-jakarta-sans-latin-400-normal.woff2') format('woff2');
+}
+@font-face {
+	font-family: 'Plus Jakarta Sans';
+	font-style: normal;
+	font-weight: 500;
+	font-display: block;
+	src: url('../../node_modules/@fontsource/plus-jakarta-sans/files/plus-jakarta-sans-latin-500-normal.woff2') format('woff2');
+}
+@font-face {
+	font-family: 'Plus Jakarta Sans';
+	font-style: normal;
+	font-weight: 600;
+	font-display: block;
+	src: url('../../node_modules/@fontsource/plus-jakarta-sans/files/plus-jakarta-sans-latin-600-normal.woff2') format('woff2');
+}
+@font-face {
+	font-family: 'Plus Jakarta Sans';
+	font-style: normal;
+	font-weight: 700;
+	font-display: block;
+	src: url('../../node_modules/@fontsource/plus-jakarta-sans/files/plus-jakarta-sans-latin-700-normal.woff2') format('woff2');
+}
+@font-face {
+	font-family: 'Montserrat';
+	font-style: normal;
+	font-weight: 500;
+	font-display: block;
+	src: url('../../node_modules/@fontsource/montserrat/files/montserrat-latin-500-normal.woff2') format('woff2');
+}
+@font-face {
+	font-family: 'Montserrat';
+	font-style: normal;
+	font-weight: 600;
+	font-display: block;
+	src: url('../../node_modules/@fontsource/montserrat/files/montserrat-latin-600-normal.woff2') format('woff2');
+}
+@font-face {
+	font-family: 'Montserrat';
+	font-style: normal;
+	font-weight: 700;
+	font-display: block;
+	src: url('../../node_modules/@fontsource/montserrat/files/montserrat-latin-700-normal.woff2') format('woff2');
+}
+@font-face {
+	font-family: 'Montserrat';
+	font-style: normal;
+	font-weight: 800;
+	font-display: block;
+	src: url('../../node_modules/@fontsource/montserrat/files/montserrat-latin-800-normal.woff2') format('woff2');
+}
+@font-face {
+	font-family: 'JetBrains Mono';
+	font-style: normal;
+	font-weight: 400;
+	font-display: block;
+	src: url('../../node_modules/@fontsource/jetbrains-mono/files/jetbrains-mono-latin-400-normal.woff2') format('woff2');
+}
+@font-face {
+	font-family: 'JetBrains Mono';
+	font-style: normal;
+	font-weight: 500;
+	font-display: block;
+	src: url('../../node_modules/@fontsource/jetbrains-mono/files/jetbrains-mono-latin-500-normal.woff2') format('woff2');
+}
+@font-face {
+	font-family: 'JetBrains Mono';
+	font-style: normal;
+	font-weight: 600;
+	font-display: block;
+	src: url('../../node_modules/@fontsource/jetbrains-mono/files/jetbrains-mono-latin-600-normal.woff2') format('woff2');
+}
 
 /*
  * Veent customer-portal design tokens.

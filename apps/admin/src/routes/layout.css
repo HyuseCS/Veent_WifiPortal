@@ -145,6 +145,13 @@
 	animation: fade-in-up 200ms ease-out both;
 }
 
+/* Route-change skeleton (RouteSkeleton): a DELAYED fade-in so fast navigations unmount it
+ * before it's ever visible — only genuinely slow loads flash a placeholder. Kept off the
+ * skeleton's inner element, which owns the `animate-pulse` shimmer (one `animation` each). */
+.route-skeleton {
+	animation: fade-in 160ms ease-out 120ms both;
+}
+
 /* Revenue/line chart entrance: the path "draws" on (length-normalized via pathLength="1"),
  * then the area fill, data dots, and peak callout settle in just behind it. Runs once on
  * mount — Svelte updates the path `d` in place on live data pushes, so it never re-fires. */
