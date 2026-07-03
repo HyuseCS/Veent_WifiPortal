@@ -1,6 +1,11 @@
 import { json } from '@sveltejs/kit';
 import * as Sentry from '@sentry/sveltekit';
-import { expireDueAccounts, reconcileGuestBindings, sweepCheckoutAccess } from '@veent/core';
+import {
+	expireDueAccounts,
+	reconcileGuestBindings,
+	sweepCheckoutAccess,
+	sweepAdminAccess
+} from '@veent/core';
 import { db } from '$lib/server/db';
 import { network } from '$lib/server/network';
 import { requireCron } from '$lib/server/cron';
@@ -30,7 +35,11 @@ export const POST: RequestHandler = async (event) => {
 			// abandoned checkout can't leave google.com open on an IP that DHCP later hands to another
 			// device. Self-describing on the router (comment-stamped), so no DB state to reconcile.
 			const sweptCheckoutAccess = await sweepCheckoutAccess(network);
-			return json({ ok: true, revoked, reconciled, sweptCheckoutAccess });
+			// Reap admin-device bypasses past the 4h cap; restores a guest binding for any reaped MAC
+			// that still holds a live window (mutual exclusion across the expiry). Self-describing on
+			// the router (timestamped comment), like the checkout sweep.
+			const sweptAdminAccess = await sweepAdminAccess(db, network);
+			return json({ ok: true, revoked, reconciled, sweptCheckoutAccess, sweptAdminAccess });
 		},
 		{
 			schedule: { type: 'crontab', value: '* * * * *' },

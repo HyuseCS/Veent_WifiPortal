@@ -1,4 +1,6 @@
-import type { NetworkController } from '../integrations/network';
+import type { DB } from '@veent/db';
+import { ADMIN_BYPASS_TAG, type NetworkController } from '../integrations/network';
+import { hasLiveAccessForMac } from './sessions';
 
 /**
  * Admin-device internet access — distinct from guest sessions.
@@ -7,18 +9,27 @@ import type { NetworkController } from '../integrations/network';
  * whitelisted) admin dashboard, we drop the firewall for their device so they
  * have working internet without buying credits or burning their Free Time.
  *
- * Unlike guest grants this writes NO `network_sessions` row and no account window,
- * so the revoke cron (`expireDueAccounts`, which only touches accounts with a lapsed
- * window) never sweeps it — the bypass persists until an explicit sign-out / kick.
- * It also isn't a bound device under any account. The binding carries
- * its own tag so it's identifiable on the router and separable from guest bypasses.
+ * Unlike guest grants this writes NO `network_sessions` row and no account window. Instead the
+ * bypass is SELF-EXPIRING: the binding comment carries a creation stamp (`veent-admin:<epochMs>`)
+ * and `sweepAdminAccess` reaps it past ADMIN_BYPASS_TTL_MINUTES. The window is SLIDING — re-asserted
+ * on admin dashboard activity — so an actively-working admin never drops while an idle/departed
+ * device ages out. Losing the bypass is never a lockout: the dashboard is walled-garden-reachable
+ * without it; only general internet lapses (restored on the next activity/sign-in). The binding's
+ * own tag keeps it separable from — and tag-scoped-revoke-safe against — guest bypasses.
  */
-export const ADMIN_BYPASS_TAG = 'veent-admin';
 
 /**
- * Drops the firewall for an admin device. Idempotent (re-asserts the bypass).
- * `durationMinutes: 0` signals "no time limit" — the MikroTik controller creates
- * a standing ip-binding and the cron leaves untagged-by-session MACs alone.
+ * Fixed cap on an admin-device bypass — 4h ("half a work day"), slid forward on activity. The reap
+ * runs every minute from the customer revoke cron (`sweepAdminAccess`); the router binding is
+ * self-describing (timestamped comment), so no DB row tracks it.
+ */
+export const ADMIN_BYPASS_TTL_MINUTES = 240;
+
+/**
+ * Drops the firewall for an admin device, or slides its window forward on re-assert. Idempotent —
+ * the controller re-stamps the binding WITHOUT re-flushing an already-bypassed device. If the MAC
+ * already carries a guest bypass, this no-ops (the device already has internet; paid time is not
+ * clobbered). `durationMinutes` is unused by the bypass — time lives in the timestamped comment.
  */
 export async function grantAdminAccess(
 	network: NetworkController,
@@ -27,12 +38,40 @@ export async function grantAdminAccess(
 	await network.grant({ macAddress, durationMinutes: 0, tag: ADMIN_BYPASS_TAG });
 }
 
-/** Re-blocks an admin device (sign-out / revoke). Idempotent. */
+/** Re-blocks an admin device (sign-out / revoke). Tag-scoped so it only removes the admin bypass,
+ * never a guest binding sharing the MAC. Idempotent. */
 export async function revokeAdminAccess(
 	network: NetworkController,
 	macAddress: string
 ): Promise<void> {
-	await network.revoke(macAddress);
+	await network.revoke(macAddress, { tag: ADMIN_BYPASS_TAG });
+}
+
+/**
+ * Reap admin bypasses past the 4h cap (called every minute from the customer revoke cron). Mutual
+ * exclusion across the expiry: for each reaped MAC that STILL backs a live guest window (the device
+ * is also a paying/free guest), restore its guest binding so it doesn't go dark — the account window
+ * is the source of truth. Returns the number reaped. Best-effort: a failed restore self-heals via
+ * the next reconcile / dashboard auto-bind.
+ */
+export async function sweepAdminAccess(
+	db: DB,
+	network: NetworkController,
+	ttlMinutes: number = ADMIN_BYPASS_TTL_MINUTES
+): Promise<number> {
+	if (!network.sweepAdminBindings) return 0;
+	const reapedMacs = await network.sweepAdminBindings({ maxAgeMs: ttlMinutes * 60_000 });
+	for (const mac of reapedMacs) {
+		if (await hasLiveAccessForMac(db, mac)) {
+			// No tag → a guest binding; grant precedence guards against a double-bind.
+			try {
+				await network.grant({ macAddress: mac, durationMinutes: 0 });
+			} catch {
+				// Best-effort — reconcile / dashboard auto-bind restores it on the next pass.
+			}
+		}
+	}
+	return reapedMacs.length;
 }
 
 /**

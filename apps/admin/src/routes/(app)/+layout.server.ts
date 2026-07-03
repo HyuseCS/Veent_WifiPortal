@@ -1,6 +1,7 @@
 import { redirect } from '@sveltejs/kit';
 import { getAdminRole } from '@veent/core';
 import { db } from '$lib/server/db';
+import { refreshAdminBypass } from '$lib/server/adminBypass';
 import type { LayoutServerLoad } from './$types';
 
 /** Auth guard for every page in the (app) shell: only signed-in staff get in.
@@ -15,6 +16,10 @@ export const load: LayoutServerLoad = async (event) => {
 	if (!event.locals.user.twoFactorEnabled) {
 		return redirect(302, '/enroll-2fa');
 	}
+	// Slide this staff device's internet bypass forward on activity (fire-and-forget, throttled —
+	// see adminBypass.ts). Never awaited: it must not add latency to or fail a page load.
+	void refreshAdminBypass(event);
+
 	const role = await getAdminRole(db, event.locals.user.id);
 	return {
 		user: { ...event.locals.user, role }

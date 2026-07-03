@@ -1,6 +1,6 @@
-import { and, asc, desc, eq, inArray, isNotNull, isNull, lte, or } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, inArray, isNotNull, isNull, lte, or, sql } from 'drizzle-orm';
 import { type DB, customerProfile, networkSessions, packages } from '@veent/db';
-import type { NetworkController } from '../integrations/network';
+import { GUEST_BYPASS_TAG, type NetworkController } from '../integrations/network';
 import { SESSION_STATUS } from '../config';
 import { captureHandled } from '../observability';
 import { getFreeTimeStatus } from './freeTime';
@@ -192,7 +192,7 @@ async function afterBind(
 ): Promise<void> {
 	for (const mac of evicted) {
 		try {
-			await network.revoke(mac);
+			await network.revoke(mac, { tag: GUEST_BYPASS_TAG });
 		} catch {
 			// reconcileGuestBindings will drop an orphaned binding on the next cron.
 		}
@@ -786,7 +786,7 @@ export async function expireDueAccounts(
 		// reconcileGuestBindings, which drops router bindings no longer backed by an active row.
 		for (const mac of toRevoke) {
 			try {
-				await network.revoke(mac);
+				await network.revoke(mac, { tag: GUEST_BYPASS_TAG });
 			} catch {
 				// reconcileGuestBindings drops the orphaned router binding on the next cron.
 			}
@@ -801,6 +801,29 @@ export async function expireDueAccounts(
  * crashed grants, manual deletes, a failed eviction revoke). Only touches guest-tagged
  * bindings; admin bypasses and operator-added bindings are left alone. Returns the count.
  */
+/**
+ * Whether the given MAC currently backs a live guest window — an ACTIVE `network_sessions` row
+ * whose account still has time on the clock (a paused account's rows are already revoked, so
+ * "active" implies not-paused). Used by `sweepAdminAccess` to decide whether to restore a guest
+ * binding after reaping an admin bypass (mutual exclusion across the expiry). Case-insensitive:
+ * router MACs are upper-case, DB rows may not be.
+ */
+export async function hasLiveAccessForMac(db: DB, macAddress: string): Promise<boolean> {
+	const rows = await db
+		.select({ id: networkSessions.id })
+		.from(networkSessions)
+		.innerJoin(customerProfile, eq(customerProfile.userId, networkSessions.userId))
+		.where(
+			and(
+				sql`lower(${networkSessions.macAddress}) = ${macAddress.toLowerCase()}`,
+				eq(networkSessions.status, SESSION_STATUS.active),
+				gt(customerProfile.accessExpiresAt, new Date())
+			)
+		)
+		.limit(1);
+	return rows.length > 0;
+}
+
 export async function reconcileGuestBindings(
 	db: DB,
 	network: NetworkController
@@ -821,7 +844,7 @@ export async function reconcileGuestBindings(
 	for (const { macAddress } of bindings) {
 		if (!activeMacs.has(macAddress.toUpperCase())) {
 			try {
-				await network.revoke(macAddress);
+				await network.revoke(macAddress, { tag: GUEST_BYPASS_TAG });
 				revoked++;
 			} catch {
 				// One stubborn binding must not abort the sweep — the next pass retries it.
@@ -855,7 +878,7 @@ export async function revokeUserSessions(
 	for (const s of active) {
 		if (s.macAddress) {
 			try {
-				await network.revoke(s.macAddress);
+				await network.revoke(s.macAddress, { all: true });
 			} catch {
 				// reconcileGuestBindings drops the orphaned router binding on the next cron.
 			}
@@ -902,7 +925,7 @@ export async function unbindDevice(
 		.limit(1);
 	if (!row) return { ok: false };
 
-	if (row.macAddress) await network.revoke(row.macAddress);
+	if (row.macAddress) await network.revoke(row.macAddress, { tag: GUEST_BYPASS_TAG });
 	await db
 		.update(networkSessions)
 		.set({ status: SESSION_STATUS.revoked })
@@ -940,7 +963,7 @@ export async function unbindAllDevices(
 		revoked++;
 		if (s.macAddress) {
 			try {
-				await network.revoke(s.macAddress);
+				await network.revoke(s.macAddress, { tag: GUEST_BYPASS_TAG });
 			} catch (err) {
 				// Swallow + continue: the row is already revoked, and reconcileGuestBindings drops
 				// the orphaned router binding on the next cron. Capture so a spike in stranded

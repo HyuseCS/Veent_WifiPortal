@@ -2,7 +2,8 @@ import type {
 	NetworkController,
 	GrantInput,
 	InterfaceLimitInput,
-	DeviceHostAccessInput
+	DeviceHostAccessInput,
+	RevokeScope
 } from './types';
 
 /**
@@ -24,8 +25,8 @@ export function createStubNetworkController(
 					(input.tag ? ` (${input.tag})` : '')
 			);
 		},
-		async revoke(macAddress: string): Promise<void> {
-			log(`[network:stub] REVOKE ${macAddress}`);
+		async revoke(macAddress: string, scope: RevokeScope): Promise<void> {
+			log(`[network:stub] REVOKE ${macAddress} (${'all' in scope ? 'all' : scope.tag})`);
 		},
 		async applyInterfaceLimit(input: InterfaceLimitInput): Promise<void> {
 			const cap = (k: number | null) => (k == null ? '∞' : `${k}kbps`);
@@ -46,6 +47,9 @@ export function createStubNetworkController(
 		},
 		async sweepHostAccess(): Promise<number> {
 			return 0;
+		},
+		async sweepAdminBindings(): Promise<string[]> {
+			return [];
 		}
 	};
 }

@@ -19,6 +19,14 @@ export interface GrantInput {
 	tag?: string;
 }
 
+/**
+ * How much of a MAC's bypass to remove on `revoke`. Required (a compile-time forcing function) so a
+ * caller can never accidentally cross tags: guest-lifecycle callers pass `{ tag: 'veent-portal' }`,
+ * admin sign-out `{ tag: 'veent-admin' }`, and the destructive levers (block / kick / delete) pass
+ * `{ all: true }` to cut the device fully regardless of tag.
+ */
+export type RevokeScope = { tag: string } | { all: true };
+
 /** A light, live health sample for one router interface (the unit the controller
  * can actually report on without per-AP probing). */
 export interface NetworkApSample {
@@ -81,8 +89,11 @@ export interface NetworkController {
 	 * login path omit it, and callers treat it as best-effort.
 	 */
 	activateSession?(input: ActivateSessionInput): Promise<void>;
-	/** Re-block a device. Idempotent — revoking an already-blocked MAC is a no-op. */
-	revoke(macAddress: string): Promise<void>;
+	/**
+	 * Re-block a device by removing its bypass binding(s). Idempotent. `scope` bounds which bindings
+	 * are removed so guest and admin lifecycles can't clobber each other — see {@link RevokeScope}.
+	 */
+	revoke(macAddress: string, scope: RevokeScope): Promise<void>;
 	/**
 	 * Apply an aggregate up/down bandwidth cap to one AP by installing a `/queue/simple`
 	 * on the hotspot's client subnet (falling back to the interface). Idempotent: updates
@@ -122,6 +133,14 @@ export interface NetworkController {
 	 * removed. Optional (stub omits).
 	 */
 	sweepHostAccess?(input?: { maxAgeMs?: number }): Promise<number>;
+	/**
+	 * Remove admin-device bypass bindings (`veent-admin:<epoch>`) older than `maxAgeMs` — the 4h cap.
+	 * Self-describing on the router (the creation time is in each comment), so no external state.
+	 * Only timestamped bindings are eligible; bare/legacy `veent-admin` is grandfathered. Returns the
+	 * MACs it reaped so the caller can restore a guest binding for any that still hold a live window
+	 * (mutual exclusion across the expiry). Optional (stub returns none).
+	 */
+	sweepAdminBindings?(input?: { maxAgeMs?: number }): Promise<string[]>;
 	/**
 	 * Best-effort: which AP/interface the device (by MAC) is currently associated
 	 * with, for per-AP user attribution. Returns the interface/AP name as the router

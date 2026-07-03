@@ -51,7 +51,9 @@ async function revokeActiveMacs(db: DB, network: NetworkController, ids: string[
 	for (const { mac } of active) {
 		if (!mac) continue;
 		try {
-			await network.revoke(mac);
+			// Hard delete: cut the device fully (any tag) — a deleted account must leave no binding,
+			// and a spoofer riding an admin bypass on this MAC shouldn't survive the delete.
+			await network.revoke(mac, { all: true });
 		} catch {
 			// reconcileGuestBindings sweeps the orphaned router binding on the next cron.
 		}

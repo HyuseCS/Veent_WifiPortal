@@ -1,5 +1,10 @@
 import { describe, it, expect, vi } from 'vitest';
-import { unbindAllDevices, reconcileGuestBindings, SESSION_STATUS } from '@veent/core';
+import {
+	unbindAllDevices,
+	reconcileGuestBindings,
+	SESSION_STATUS,
+	GUEST_BYPASS_TAG
+} from '@veent/core';
 
 /**
  * B3.1 — `unbindAllDevices` ("disconnect all devices" / pause) must be DB-first: each row is
@@ -45,8 +50,9 @@ describe('unbindAllDevices DB-first ordering (B3.1)', () => {
 		// Revoke was attempted for BOTH devices — proves it continued past the first failure.
 		const revoke = (network as { revoke: ReturnType<typeof vi.fn> }).revoke;
 		expect(revoke).toHaveBeenCalledTimes(2);
-		expect(revoke).toHaveBeenCalledWith('AA:BB:CC:DD:EE:01');
-		expect(revoke).toHaveBeenCalledWith('AA:BB:CC:DD:EE:02');
+		// Guest-lifecycle revoke is tag-scoped to veent-portal, so it can never strip an admin bypass.
+		expect(revoke).toHaveBeenCalledWith('AA:BB:CC:DD:EE:01', { tag: GUEST_BYPASS_TAG });
+		expect(revoke).toHaveBeenCalledWith('AA:BB:CC:DD:EE:02', { tag: GUEST_BYPASS_TAG });
 		// Every row was marked revoked in the DB (the update ran before each failing revoke).
 		expect(setCalls).toHaveLength(2);
 		expect(setCalls.every((c) => c.status === SESSION_STATUS.revoked)).toBe(true);
@@ -79,6 +85,6 @@ describe('reconcileGuestBindings sweeps orphaned bindings (B3.1.2)', () => {
 
 		expect(swept).toBe(1);
 		expect(revoke).toHaveBeenCalledTimes(1); // ONLY the orphan
-		expect(revoke).toHaveBeenCalledWith('AA:BB:CC:DD:EE:02');
+		expect(revoke).toHaveBeenCalledWith('AA:BB:CC:DD:EE:02', { tag: GUEST_BYPASS_TAG });
 	});
 });
