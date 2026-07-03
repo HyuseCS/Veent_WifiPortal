@@ -15,6 +15,16 @@ export interface CreateCheckoutInput {
 	successUrl: string;
 	cancelUrl: string;
 	/**
+	 * This site's public origin (e.g. `https://<site>.ngrok-free.app`), carried into the
+	 * gateway's metadata so the central Veent DO relay can route the server-to-server webhook
+	 * back to THIS server. One shared Maya account fans out to many NAT'd sites: Maya notifies
+	 * the DO (its single registered webhook URL), the DO reads `metadata.originUrl` off the
+	 * echoed event and forwards it verbatim to `${originUrl}/api/webhooks/maya/payment-status`.
+	 * Bare origin, no path — the DO appends the webhook path. Optional at this layer: providers
+	 * / direct-webhook deployments without a relay simply ignore it.
+	 */
+	originUrl?: string;
+	/**
 	 * Buyer info for the checkout / fraud scoring. Maya's Kount fraud protection requires
 	 * firstName + lastName + email — collected on the top-up form. Split into firstName/lastName
 	 * because Kount validates them separately. All optional at this layer so non-Kount providers
