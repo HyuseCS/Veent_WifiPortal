@@ -1,6 +1,6 @@
 import type { Handle } from '@sveltejs/kit';
 import { building, dev } from '$app/environment';
-import { getStaffStatus, STAFF_STATUS, sentryOptions } from '@veent/core';
+import { getStaffStatus, STAFF_STATUS, sentryOptions, nonEmptyEnv } from '@veent/core';
 import * as Sentry from '@sentry/sveltekit';
 import { sequence } from '@sveltejs/kit/hooks';
 import { env as pub } from '$env/dynamic/public';
@@ -23,9 +23,11 @@ if (SENTRY_DSN && !building) {
 			dsn: SENTRY_DSN,
 			app: 'admin',
 			environment:
-				priv.SENTRY_ENVIRONMENT ?? pub.PUBLIC_SENTRY_ENVIRONMENT ?? (dev ? 'development' : 'production'),
-			release: priv.SENTRY_RELEASE,
-			tracesSampleRate: dev ? 1.0 : Number(priv.SENTRY_TRACES_SAMPLE_RATE ?? '0.2')
+				nonEmptyEnv(priv.SENTRY_ENVIRONMENT) ??
+				nonEmptyEnv(pub.PUBLIC_SENTRY_ENVIRONMENT) ??
+				(dev ? 'development' : 'production'),
+			release: nonEmptyEnv(priv.SENTRY_RELEASE),
+			tracesSampleRate: dev ? 1.0 : Number(nonEmptyEnv(priv.SENTRY_TRACES_SAMPLE_RATE) ?? '0.2')
 		})
 	);
 }

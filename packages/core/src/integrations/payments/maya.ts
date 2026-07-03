@@ -4,6 +4,7 @@ import type {
 	CreateCheckoutResult,
 	PaymentEvent
 } from './types';
+import { RetryablePaymentError } from './types';
 
 export interface MayaConfig {
 	publicKey: string;
@@ -70,10 +71,15 @@ async function fetchWithRetry(
 			return res;
 		} catch (e) {
 			if (attempt < retries) continue;
+			// A timeout or a network-level failure (DNS, connection reset) is transient — the caller
+			// (webhook verify) should ask the gateway to retry rather than reject the event as bad.
 			if (e instanceof Error && e.name === 'AbortError') {
-				throw new Error(`maya: request timed out after ${timeoutMs}ms`, { cause: e });
+				throw new RetryablePaymentError(`maya: request timed out after ${timeoutMs}ms`, { cause: e });
 			}
-			throw e instanceof Error ? e : new Error(String(e));
+			throw new RetryablePaymentError(
+				`maya: network error: ${e instanceof Error ? e.message : String(e)}`,
+				{ cause: e }
+			);
 		}
 	}
 }
@@ -200,7 +206,12 @@ async function fetchPaymentEvent(base: string, secretKey: string, paymentId: str
 	});
 	if (!res.ok) {
 		const detail = await res.text().catch(() => '');
-		throw new Error(`maya: payment lookup failed (${res.status}): ${detail}`);
+		const message = `maya: payment lookup failed (${res.status}): ${detail}`;
+		// A 5xx/429 that survived the retry budget is a gateway-side transient — signal the webhook
+		// route to return a 5xx so Maya retries. A 4xx (401 bad key, 404 unknown payment) is
+		// permanent: retrying re-fetches the same failure, so surface it as a plain error → 400.
+		if (res.status >= 500 || res.status === 429) throw new RetryablePaymentError(message);
+		throw new Error(message);
 	}
 	return toPaymentEvent((await res.json()) as MayaPayment);
 }

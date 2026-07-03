@@ -3,7 +3,12 @@ import { eq } from 'drizzle-orm';
 import { createHmac } from 'node:crypto';
 import { env } from '$env/dynamic/private';
 import { customerUser, packages, paymentCheckouts } from '@veent/db';
-import { creditCheckoutIfUnsettled, recordPaymentTransaction, captureHandled } from '@veent/core';
+import {
+	creditCheckoutIfUnsettled,
+	recordPaymentTransaction,
+	captureHandled,
+	RetryablePaymentError
+} from '@veent/core';
 import { db } from '$lib/server/db';
 import { payments } from '$lib/server/payments';
 import { rateLimit, clientIp } from '$lib/server/rateLimit';
@@ -56,14 +61,26 @@ export async function handlePaymentWebhook(event: RequestEvent): Promise<Respons
 	try {
 		evt = await payments.verifyWebhook(raw, event.request.headers);
 	} catch (e) {
-		// Observability: surface verification failures (spoofed/garbled events, gateway lookup
-		// errors) — a spike here is a signal worth alerting on.
-		console.warn('[webhook] verification failed:', (e as Error).message);
-		// Money-path failure (spoofed/garbled event OR a real gateway-lookup outage) → capture as
-		// error so it's alertable. scrubEvent masks any buyer PII in the error before send.
-		captureHandled(e, { level: 'error', tags: { area: 'payment', scope: 'webhook' } });
+		// Distinguish a TRANSIENT upstream failure (Maya timeout / network error / 5xx re-fetch)
+		// from a PERMANENT bad request (spoofed/garbled body, unknown payment id). Mapping every
+		// failure to 400 wrongly tells the gateway "give up" on a payment that may be real — so a
+		// retryable error returns 5xx (gateway retries delivery) while a malformed body stays 400
+		// (retrying it would fail identically). The reconcile safety net still backs both cases.
+		const retryable = e instanceof RetryablePaymentError;
+		// Observability: surface verification failures — a spike in either is worth alerting on.
+		console.warn(
+			`[webhook] verification failed (${retryable ? 'retryable' : 'permanent'}):`,
+			(e as Error).message
+		);
+		// Money-path failure → capture as error so it's alertable. scrubEvent masks any buyer PII
+		// in the error before send.
+		captureHandled(e, {
+			level: 'error',
+			tags: { area: 'payment', scope: 'webhook', retryable: String(retryable) }
+		});
 		// Keep the detail in the server log only — don't reflect internal/gateway error text to an
 		// unauthenticated caller (info disclosure / payment-id probing aid).
+		if (retryable) error(502, 'Upstream verification unavailable');
 		error(400, 'Webhook verification failed');
 	}
 

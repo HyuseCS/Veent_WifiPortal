@@ -3,7 +3,7 @@ import { env } from '$env/dynamic/public';
 import * as Sentry from '@sentry/sveltekit';
 // Import from the browser-safe subpath, NOT the '@veent/core' barrel — the barrel re-exports the
 // server-only integrations (maya/mikrotik/postgres) which reference Node globals like `Buffer`.
-import { sentryOptions } from '@veent/core/observability';
+import { sentryOptions, nonEmptyEnv } from '@veent/core/observability';
 
 // Sentry (browser). Fail-open: no PUBLIC_SENTRY_DSN → no init → portal runs normally. Same PII
 // scrubbing as the server via sentryOptions. Only PUBLIC_ env is readable here — the DSN is public
@@ -15,11 +15,14 @@ import { sentryOptions } from '@veent/core/observability';
 // those beacons just fail and retry. tracesSampleRate: 0 keeps tracing off entirely.
 const dsn = env.PUBLIC_SENTRY_DSN;
 if (dsn) {
+	// Error capture only — no browserTracingIntegration (rate 0). Keep the env-tunable environment
+	// + release plumbing from the base (helps tie errors to a deploy) but NOT browser perf tracing.
 	Sentry.init(
 		sentryOptions({
 			dsn,
 			app: 'customer',
-			environment: dev ? 'development' : 'production',
+			environment: nonEmptyEnv(env.PUBLIC_SENTRY_ENVIRONMENT) ?? (dev ? 'development' : 'production'),
+			release: nonEmptyEnv(env.PUBLIC_SENTRY_RELEASE),
 			tracesSampleRate: 0
 		})
 	);
