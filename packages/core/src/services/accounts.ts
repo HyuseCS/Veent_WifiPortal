@@ -6,6 +6,8 @@ import { SESSION_STATUS } from '../config';
 export interface Account {
 	userId: string;
 	balance: number;
+	/** Loyalty-points balance (separate wallet from credits). */
+	points: number;
 	blocked: boolean;
 	lastFreeSessionAt: Date | null;
 }
@@ -15,6 +17,7 @@ export async function getAccount(db: DB, userId: string): Promise<Account | null
 	const [row] = await db
 		.select({
 			balance: customerProfile.creditBalance,
+			points: customerProfile.pointsBalance,
 			blocked: customerProfile.blocked,
 			lastFreeSessionAt: customerProfile.lastFreeSessionAt
 		})
@@ -25,6 +28,7 @@ export async function getAccount(db: DB, userId: string): Promise<Account | null
 	return {
 		userId,
 		balance: Number(row.balance),
+		points: Number(row.points),
 		blocked: row.blocked,
 		lastFreeSessionAt: row.lastFreeSessionAt
 	};

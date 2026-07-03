@@ -26,9 +26,13 @@
 	const live = $derived(liveAccount.view);
 
 	const balance = $derived(live?.balance ?? data.balance);
+	const points = $derived(live?.points ?? data.points);
 	const blocked = $derived(live?.blocked ?? data.blocked);
 	const freeTime = $derived(live?.freeTime ?? data.freeTime);
 	const affordable = (t: Tier) => balance >= (t.creditCost ?? 0);
+	// A tier is points-redeemable only if the admin set a pointsCost AND the user can cover it.
+	const pointsPriced = (t: Tier) => t.pointsCost != null;
+	const affordablePoints = (t: Tier) => t.pointsCost != null && points >= t.pointsCost;
 
 	// Confirm-before-spend is a CSS-only disclosure (a hidden radio per tier + `peer-checked`,
 	// see the buy rail below), so the confirm sheet opens the instant "Buy" is tapped — even
@@ -283,6 +287,14 @@
 					<span class="text-xs font-medium text-white/80">Balance</span>
 					<span class="font-mono text-[15px] font-semibold">{balance} credits</span>
 				</span>
+				<!-- desktop points pill -->
+				<span
+					class="hidden items-baseline gap-2 rounded-full bg-white/15 px-[15px] py-2 lg:flex"
+					title="Loyalty points — redeemable for access"
+				>
+					<Icon name="star" size={13} class="text-points self-center" />
+					<span class="font-mono text-[15px] font-semibold">{points} pts</span>
+				</span>
 				<!-- desktop sign out -->
 				<form method="post" action="?/signOut" use:enhance={signOut} class="hidden lg:block">
 					<button
@@ -295,22 +307,26 @@
 			</div>
 		</div>
 
-		<!-- mobile-only large balance block -->
-		<div class="pr-3 pl-4.5 pb-3 lg:hidden flex flex-col gap-3">
-			<div class="flex items-center justify-between">
+		<!-- mobile-only large balance block. The "credits"/"points" units already label the
+		numbers, so no separate "Balance" caption. Columns bottom-align (items-end). -->
+		<div class="flex items-end justify-between gap-2 pr-3 pb-3 pl-4.5 lg:hidden">
+			<div class="flex flex-col gap-1">
 				<span class="text-[12.5px] font-medium tracking-wider uppercase opacity-80">Hi there,</span>
-				<span class="text-[12.5px] font-medium tracking-wider uppercase opacity-80">Balance</span>
-			</div>
-			<div class="flex items-center justify-between gap-2">
 				<span class="font-mono text-[22px] leading-none font-semibold tracking-tight">
 					{data.maskedPhone ?? 'Guest'}
 				</span>
-				<div class="flex items-baseline gap-2">
-					<span class="font-mono text-[22px] leading-none font-semibold tracking-tight"
-						>{balance}</span
+			</div>
+			<div class="flex flex-col items-end gap-1.5">
+				<span class="flex items-center gap-1.5">
+					<Icon name="star" size={13} class="text-points" />
+					<span class="font-mono text-[15px] font-semibold">{points}</span>
+					<span class="text-[13px] font-medium opacity-80">points</span>
+				</span>
+				<span class="flex items-baseline gap-1.5">
+					<span class="font-mono text-[22px] leading-none font-semibold tracking-tight">{balance}</span
 					>
-					<span class="text-base font-medium opacity-85">credits</span>
-				</div>
+					<span class="text-sm font-medium opacity-85">credits</span>
+				</span>
 			</div>
 		</div>
 	</header>
@@ -665,6 +681,9 @@
 						/>
 						{#each data.tiers as tier (tier.id)}
 							{@const ok = affordable(tier)}
+							{@const okP = affordablePoints(tier)}
+							{@const hasPoints = pointsPriced(tier)}
+							{@const buyable = ok || okP}
 							<div>
 								<!-- Hidden radio + `peer-checked` reveal this tier's sheet the instant "Buy" is
 								tapped — CSS only, so it works before hydration (dead JS onclick in the CNA). -->
@@ -675,10 +694,12 @@
 									<div>
 										<div class="text-[15px] font-semibold text-ink">{tier.name}</div>
 										<div class="text-[11.5px] font-medium text-muted">
-											{tier.durationMinutes} min · {tier.creditCost} cr
+											{tier.durationMinutes} min · {tier.creditCost} cr{hasPoints
+											? ` or ${tier.pointsCost} pts`
+											: ''}
 										</div>
 									</div>
-									{#if ok}
+									{#if buyable}
 										<label
 											for="buysheet-{tier.id}"
 											class="flex h-[42px] min-w-[44px] cursor-pointer items-center justify-center rounded-xl bg-brand px-5 text-sm font-semibold text-white transition-colors hover:bg-brand-hover"
@@ -700,7 +721,7 @@
 								<div
 									role="dialog"
 									aria-modal="true"
-									aria-label={ok ? `Start ${tier.name}` : 'Not enough credits'}
+									aria-label={buyable ? `Start ${tier.name}` : 'Not enough balance'}
 									class="pointer-events-none invisible fixed inset-0 z-50 flex items-end justify-center opacity-0 transition-[opacity,visibility] duration-200 peer-checked:pointer-events-auto peer-checked:visible peer-checked:opacity-100 lg:items-center"
 								>
 									<label
@@ -713,7 +734,7 @@
 									>
 										<div class="mx-auto mb-[18px] h-1 w-9 rounded bg-border lg:hidden"></div>
 
-										{#if ok}
+										{#if buyable}
 											<div class="mb-4 flex items-center gap-3">
 												<div
 													class="flex h-[42px] w-[42px] items-center justify-center rounded-xl bg-brand-tint"
@@ -729,22 +750,7 @@
 													</div>
 												</div>
 											</div>
-											<div class="mb-[18px] overflow-hidden rounded-xl border border-border">
-												<div
-													class="flex items-center justify-between border-b border-border px-4 py-3"
-												>
-													<span class="text-[13px] font-medium text-muted">Cost</span>
-													<span class="font-mono text-sm font-semibold text-ink"
-														>−{tier.creditCost} cr</span
-													>
-												</div>
-												<div class="flex items-center justify-between px-4 py-3">
-													<span class="text-[13px] font-medium text-muted">Balance after</span>
-													<span class="font-mono text-sm font-semibold text-brand">
-														{balance - (tier.creditCost ?? 0)} cr
-													</span>
-												</div>
-											</div>
+											<!-- Pay with credits (primary). Disabled when the credit balance cannot cover it. -->
 											<form
 												method="post"
 												action="?/buyTier"
@@ -755,10 +761,11 @@
 											>
 												<input type="hidden" name="mac" value={mac} />
 												<input type="hidden" name="packageId" value={tier.id} />
+												<input type="hidden" name="currency" value="credits" />
 												<button
 													type="submit"
-													disabled={!hasMac || buying}
-													class="mb-2.5 flex h-[52px] w-full items-center justify-center gap-2 rounded-xl bg-cta text-base font-bold text-white transition-colors hover:bg-cta-hover hover:cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 group-data-[pending]:pointer-events-none group-data-[pending]:opacity-70"
+													disabled={!hasMac || buying || !ok}
+													class="flex h-[52px] w-full items-center justify-center gap-2 rounded-xl bg-cta text-base font-bold text-white transition-colors hover:bg-cta-hover hover:cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 group-data-[pending]:pointer-events-none group-data-[pending]:opacity-70"
 												>
 													<span
 														class="hidden h-[18px] w-[18px] animate-spin rounded-full border-[2.5px] border-white/40 border-t-white group-data-[pending]:inline-block"
@@ -766,14 +773,47 @@
 													></span>
 													{#if armed?.id === tier.id}
 														Starting in {armed?.left}…
-													{:else}
+													{:else if ok}
 														Confirm — spend {tier.creditCost} cr
+													{:else}
+														Need {tier.creditCost} cr
 													{/if}
 												</button>
 											</form>
+
+											{#if hasPoints}
+												<!-- Pay with points (secondary). Redeems the loyalty wallet instead of credits. -->
+												<form
+													method="post"
+													action="?/buyTier"
+													use:enhance={confirmBuy()}
+													class="group mt-2.5"
+													data-pending={buying ? '' : null}
+													data-pending-form
+												>
+													<input type="hidden" name="mac" value={mac} />
+													<input type="hidden" name="packageId" value={tier.id} />
+													<input type="hidden" name="currency" value="points" />
+													<button
+														disabled={!hasMac || buying || !okP}
+														class="flex h-[52px] w-full items-center justify-center gap-2 rounded-xl border border-points/40 bg-points/15 text-base font-bold text-ink transition-colors hover:bg-points/25 hover:cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 group-data-[pending]:pointer-events-none group-data-[pending]:opacity-70"
+													>
+														<Icon name="star" size={17} class="text-points" />
+														{okP ? `Redeem ${tier.pointsCost} pts` : `Need ${tier.pointsCost} pts`}
+													</button>
+												</form>
+											{/if}
+
+											<div
+												class="mt-3.5 flex items-center justify-center gap-3 text-[12px] font-medium text-muted"
+											>
+												<span>Balance <span class="font-mono text-ink">{balance} cr</span></span>
+												<span aria-hidden="true">·</span>
+												<span>Points <span class="font-mono text-ink">{points} pts</span></span>
+											</div>
 											<label
 												for="buysheet-none"
-												class="flex h-11 w-full cursor-pointer items-center justify-center text-[13px] font-semibold text-muted hover:text-ink"
+												class="mt-1 flex h-11 w-full cursor-pointer items-center justify-center text-[13px] font-semibold text-muted hover:text-ink"
 											>
 												{armed?.id === tier.id ? 'Cancel — no charge' : 'Cancel'}
 											</label>
@@ -785,9 +825,11 @@
 													<Icon name="alert-circle" size={22} class="text-blocked" />
 												</div>
 												<div>
-													<div class="text-[17px] font-bold text-ink">Not enough credits</div>
+													<div class="text-[17px] font-bold text-ink">Not enough to buy this</div>
 													<div class="text-[12.5px] font-medium text-muted">
-														{tier.name} needs {tier.creditCost} credits.
+														{tier.name} needs {tier.creditCost} credits{hasPoints
+															? ` or ${tier.pointsCost} points`
+															: ''}.
 													</div>
 												</div>
 											</div>

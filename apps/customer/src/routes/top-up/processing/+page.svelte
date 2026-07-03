@@ -100,10 +100,18 @@
 				<h1 class="mb-2 text-[23px] leading-tight font-bold tracking-tight text-ink">
 					Payment confirmed
 				</h1>
-				<p class="mb-6 text-sm leading-relaxed text-muted">
+				<p class="mb-4 text-sm leading-relaxed text-muted">
 					<strong class="font-semibold text-online">+{data.creditsAdded} credits</strong> added to your
 					balance.
 				</p>
+				{#if data.pointsEarned > 0}
+					<p
+						class="mb-6 inline-flex items-center gap-1.5 rounded-full border border-points/40 bg-points/15 px-3 py-1.5 text-[12.5px] font-semibold text-ink"
+					>
+						<Icon name="star" size={13} class="text-points" />
+						+{data.pointsEarned} points earned
+					</p>
+				{/if}
 				<div
 					class="mb-7 flex w-full items-center justify-between rounded-2xl border border-border bg-surface px-[18px] py-4"
 				>

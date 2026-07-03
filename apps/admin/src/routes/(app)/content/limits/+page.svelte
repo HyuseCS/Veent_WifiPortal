@@ -20,6 +20,7 @@
 	let maxDevicesPerAccount = $state(String(seed.maxDevicesPerAccount));
 	let freeTimeMinutes = $state(String(seed.freeTimeMinutes));
 	let freeTimeCooldownHours = $state(String(seed.freeTimeCooldownHours));
+	let pointsEarnRate = $state(String(seed.pointsEarnRate));
 
 	const fields = [
 		{
@@ -45,6 +46,14 @@
 			suffix: 'hours',
 			get: () => freeTimeCooldownHours,
 			set: (v: string) => (freeTimeCooldownHours = v)
+		},
+		{
+			name: 'pointsEarnRate',
+			label: 'Points earn rate',
+			hint: 'Loyalty points awarded on each top-up, as a percent of the peso amount (0 disables earning). Points are redeemable for access tiers.',
+			suffix: '%',
+			get: () => pointsEarnRate,
+			set: (v: string) => (pointsEarnRate = v)
 		}
 	];
 </script>

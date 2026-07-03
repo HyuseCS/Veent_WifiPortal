@@ -70,6 +70,7 @@
 		fiatCost: string;
 		creditsProvided: string;
 		creditCost: string;
+		pointsCost: string;
 		durationMinutes: string;
 		isActive: boolean;
 	};
@@ -81,6 +82,7 @@
 		fiatCost: '',
 		creditsProvided: '',
 		creditCost: '',
+		pointsCost: '',
 		durationMinutes: '',
 		isActive: true
 	});
@@ -101,6 +103,7 @@
 			fiatCost: p.fiatCost?.toString() ?? '',
 			creditsProvided: p.creditsProvided?.toString() ?? '',
 			creditCost: p.creditCost?.toString() ?? '',
+			pointsCost: p.pointsCost?.toString() ?? '',
 			durationMinutes: p.durationMinutes?.toString() ?? '',
 			isActive: p.isActive
 		};
@@ -124,7 +127,7 @@
 	function summary(p: Pkg): string {
 		if (p.type === 'bundle') return `₱${p.fiatCost ?? '—'} → ${p.creditsProvided ?? '—'} credits`;
 		if (p.type === 'tier')
-			return `${p.creditCost ?? '—'} credits → ${p.durationMinutes ?? '—'} min`;
+			return `${p.creditCost ?? '—'} cr / ${p.pointsCost ?? '—'} pts → ${p.durationMinutes ?? '—'} min`;
 		return `${p.durationMinutes ?? '—'} min free`;
 	}
 </script>
@@ -237,6 +240,17 @@
 								min="0"
 								step="1"
 								bind:value={editing.creditCost}
+								class="min-h-[44px] rounded-lg border border-border bg-bg px-3 font-mono text-sm text-ink"
+							/>
+						</label>
+						<label class="flex flex-col gap-1.5 text-xs font-medium text-muted">
+							Points cost
+							<input
+								name="pointsCost"
+								type="number"
+								min="0"
+								step="1"
+								bind:value={editing.pointsCost}
 								class="min-h-[44px] rounded-lg border border-border bg-bg px-3 font-mono text-sm text-ink"
 							/>
 						</label>

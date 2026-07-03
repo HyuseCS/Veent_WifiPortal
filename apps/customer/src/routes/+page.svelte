@@ -146,7 +146,9 @@
 								class="flex items-center justify-between px-[15px] py-3.5 {i < data.bundles.length - 1 ? 'border-b border-border' : ''}"
 							>
 								<div class="flex items-center gap-2.5">
-									<span class="font-mono text-[17px] font-bold text-ink">₱{bundle.fiatCost}</span>
+									<span class="font-mono text-[17px] font-bold text-ink"
+										><span class="font-sans">₱</span>{bundle.fiatCost}</span
+									>
 								</div>
 								<div
 									class="font-mono text-[13px] font-semibold text-muted"

@@ -58,6 +58,7 @@ export async function listUsers(db: DB, now: Date = new Date()): Promise<AdminUs
 			// Customers register by phone only — the canonical identity for the table.
 			phone: customerUser.phoneNumber,
 			balance: customerProfile.creditBalance,
+			points: customerProfile.pointsBalance,
 			blocked: customerProfile.blocked,
 			// Account-owned access window (source of truth for online + time-left).
 			accessExpiresAt: customerProfile.accessExpiresAt,
@@ -123,6 +124,7 @@ export async function listUsers(db: DB, now: Date = new Date()): Promise<AdminUs
 			id: r.id,
 			phone: r.phone ?? '—',
 			balance,
+			points: Number(r.points ?? 0),
 			usage: '—', // byte-level usage isn't tracked yet (needs accounting feed)
 			tone,
 			status,

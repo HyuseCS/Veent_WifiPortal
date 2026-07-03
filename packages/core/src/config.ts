@@ -6,6 +6,13 @@ export const FREE_TIME_MINUTES = 15;
 export const FREE_TIME_COOLDOWN_HOURS = 12;
 
 /**
+ * Default loyalty-points earn rate as a WHOLE-NUMBER percent of each verified top-up's peso
+ * amount (10 = 10%). Admin-tunable via `app_settings.points_earn_rate`; this is the fallback
+ * when the settings row/read is unavailable. Earned points are floored: floor(pesos * rate / 100).
+ */
+export const POINTS_EARN_RATE = 10;
+
+/**
  * Max simultaneously-bound device MACs per ACCOUNT. Access time belongs to the
  * account; devices bind under it. A new bind beyond this cap evicts the
  * least-recently-seen device, so Apple per-SSID MAC rotation can't lock a user out.
@@ -57,3 +64,10 @@ export const LEDGER_TYPE = {
 	refund: 'refund'
 } as const;
 export type LedgerType = (typeof LEDGER_TYPE)[keyof typeof LEDGER_TYPE];
+
+/** points_ledger.type values. Positive amounts earn, negative amounts spend. */
+export const POINTS_LEDGER_TYPE = {
+	earn: 'earn', // points awarded as a % of a verified top-up
+	spend: 'spend' // points redeemed to buy an access tier
+} as const;
+export type PointsLedgerType = (typeof POINTS_LEDGER_TYPE)[keyof typeof POINTS_LEDGER_TYPE];

@@ -21,6 +21,7 @@ export const actions: Actions = {
 		const maxDevicesPerAccount = parseIntField(form, 'maxDevicesPerAccount', { min: 1, max: 20 });
 		const freeTimeMinutes = parseIntField(form, 'freeTimeMinutes', { min: 1, max: 1440 });
 		const freeTimeCooldownHours = parseIntField(form, 'freeTimeCooldownHours', { min: 0, max: 168 });
+		const pointsEarnRate = parseIntField(form, 'pointsEarnRate', { min: 0, max: 100 });
 
 		if (maxDevicesPerAccount === null) {
 			return fail(400, { error: 'Device cap must be a whole number from 1 to 20.' });
@@ -30,6 +31,9 @@ export const actions: Actions = {
 		}
 		if (freeTimeCooldownHours === null) {
 			return fail(400, { error: 'Cooldown hours must be a whole number from 0 to 168.' });
+		}
+		if (pointsEarnRate === null) {
+			return fail(400, { error: 'Points earn rate must be a whole percent from 0 to 100.' });
 		}
 
 		// Step-up last: a valid TOTP code confirms the save (after the values validate).
@@ -42,7 +46,8 @@ export const actions: Actions = {
 		await updateSessionLimits(db, {
 			maxDevicesPerAccount,
 			freeTimeMinutes,
-			freeTimeCooldownHours
+			freeTimeCooldownHours,
+			pointsEarnRate
 		});
 		return { ok: true };
 	}

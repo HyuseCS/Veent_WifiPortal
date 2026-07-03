@@ -59,6 +59,7 @@ export async function buildAccountView(db: DB, userId: string, thisMac: string |
 
 	return {
 		balance: account?.balance ?? 0,
+		points: account?.points ?? 0,
 		blocked: account?.blocked ?? false,
 		freeTime: getFreeTimeStatus(account?.lastFreeSessionAt ?? null, undefined, limits),
 		access: {
