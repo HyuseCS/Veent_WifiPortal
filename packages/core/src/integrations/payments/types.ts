@@ -86,4 +86,13 @@ export interface PaymentProvider {
 	 * no payment for it yet. Optional: providers that can't poll omit it.
 	 */
 	getCheckoutStatus?(checkoutId: string): Promise<PaymentEvent | null>;
+	/**
+	 * Reconciliation by OUR reference id (requestReferenceNumber). Resolves the authoritative
+	 * payment straight from the reference we set at checkout — needing neither an inbound webhook
+	 * NOR the gateway's checkout→payment mapping — so a missed webhook still credits even if the
+	 * relay/tunnel never recovers. Preferred over getCheckoutStatus by the reconcile safety nets.
+	 * Returns a normalized event, or null if the gateway has no payment for the reference yet.
+	 * Optional: providers without a by-reference lookup omit it.
+	 */
+	getPaymentByReference?(referenceId: string): Promise<PaymentEvent | null>;
 }

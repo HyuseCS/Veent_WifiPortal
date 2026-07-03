@@ -158,22 +158,12 @@ function mapStatus(raw: string | undefined, isPaid: boolean): PaymentEvent['stat
 }
 
 /**
- * Fetch Maya's authoritative PAYMENT resource (GET /payments/v1/payments/{id}) and normalize it
- * to a PaymentEvent. This is the single source of truth for a payment's status, used by BOTH the
- * webhook (verifyWebhook) and the reconcile safety nets (getCheckoutStatus) — so a payment
- * confirmed without a webhook is checked against the EXACT endpoint the webhook trusts, not the
- * checkout resource (which Maya doesn't reliably flip to paid). Bounded by a timeout + small retry
- * so a slow Maya API can't pin the caller.
+ * Normalize Maya's PAYMENT resource to our PaymentEvent. The single source of truth for a
+ * payment's status — used by the webhook, the by-id fetch, and the by-RRN reconcile lookup — so
+ * every path derives status/amount identically from the payment resource (not the checkout
+ * resource, which Maya doesn't reliably flip to paid).
  */
-async function fetchPaymentEvent(base: string, secretKey: string, paymentId: string): Promise<PaymentEvent> {
-	const res = await fetchWithRetry(`${base}/payments/v1/payments/${encodeURIComponent(paymentId)}`, {
-		headers: { authorization: basicAuth(secretKey) }
-	});
-	if (!res.ok) {
-		const detail = await res.text().catch(() => '');
-		throw new Error(`maya: payment lookup failed (${res.status}): ${detail}`);
-	}
-	const payment = (await res.json()) as MayaPayment;
+function toPaymentEvent(payment: MayaPayment): PaymentEvent {
 	const status = mapStatus(payment.paymentStatus ?? payment.status, payment.isPaid === true);
 	if (!payment.requestReferenceNumber) {
 		throw new Error('maya: payment missing requestReferenceNumber');
@@ -197,6 +187,49 @@ async function fetchPaymentEvent(base: string, secretKey: string, paymentId: str
 		referenceNo: payment.requestReferenceNumber,
 		...mapDetail(payment)
 	};
+}
+
+/**
+ * Authoritative re-fetch of a PAYMENT by its gateway id (GET /payments/v1/payments/{id}) — what
+ * makes an unsigned/relayed webhook trustworthy: a spoofed body can't fabricate a real paid
+ * payment. Bounded by a timeout + small retry so a slow Maya API can't pin the caller.
+ */
+async function fetchPaymentEvent(base: string, secretKey: string, paymentId: string): Promise<PaymentEvent> {
+	const res = await fetchWithRetry(`${base}/payments/v1/payments/${encodeURIComponent(paymentId)}`, {
+		headers: { authorization: basicAuth(secretKey) }
+	});
+	if (!res.ok) {
+		const detail = await res.text().catch(() => '');
+		throw new Error(`maya: payment lookup failed (${res.status}): ${detail}`);
+	}
+	return toPaymentEvent((await res.json()) as MayaPayment);
+}
+
+/**
+ * Resolve a payment straight from OUR request reference number (RRN) via
+ * GET /payments/v1/payment-rrns/{rrn}. THE reconcile path: it needs neither the webhook nor the
+ * checkout's payment-id field — we always know the RRN (it's our referenceId) — so a missed
+ * webhook still credits even if the DO/tunnel never recovers. Maya returns an ARRAY (one RRN can
+ * carry several attempts): prefer a settled success, else the latest terminal outcome, else report
+ * the pending one. Returns null when Maya has no payment for the RRN yet (buyer hasn't paid).
+ */
+async function fetchPaymentByRrn(base: string, secretKey: string, rrn: string): Promise<PaymentEvent | null> {
+	const res = await fetchWithRetry(`${base}/payments/v1/payment-rrns/${encodeURIComponent(rrn)}`, {
+		headers: { authorization: basicAuth(secretKey) }
+	});
+	if (res.status === 404) return null; // no payment recorded for this reference yet
+	if (!res.ok) {
+		const detail = await res.text().catch(() => '');
+		throw new Error(`maya: rrn lookup failed (${res.status}): ${detail}`);
+	}
+	const raw = await res.json();
+	const list: MayaPayment[] = Array.isArray(raw) ? raw : raw ? [raw as MayaPayment] : [];
+	if (list.length === 0) return null;
+	const withStatus = (want: PaymentEvent['status']) =>
+		list.find((p) => mapStatus(p.paymentStatus ?? p.status, p.isPaid === true) === want);
+	const chosen =
+		withStatus('paid') ?? withStatus('failed') ?? withStatus('expired') ?? withStatus('cancelled') ?? list[0];
+	return toPaymentEvent(chosen);
 }
 
 /**
@@ -352,6 +385,13 @@ export function createMayaProvider(config: MayaConfig): PaymentProvider {
 				currency: 'PHP',
 				referenceNo: c.requestReferenceNumber ?? undefined
 			};
+		},
+
+		async getPaymentByReference(referenceId: string): Promise<PaymentEvent | null> {
+			if (!config.secretKey) throw new Error('maya: secretKey not configured');
+			// Resolve the payment from OUR reference number — the reconcile path that works with the
+			// webhook/DO down indefinitely (see fetchPaymentByRrn).
+			return fetchPaymentByRrn(base, config.secretKey, referenceId);
 		}
 	};
 }
