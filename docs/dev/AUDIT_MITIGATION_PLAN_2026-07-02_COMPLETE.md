@@ -1,7 +1,14 @@
 # Mitigation Plan — Branch Audit Findings (2026-07-02)
 
 **Source:** `docs/dev/AUDIT_dev-system-sentry_2026-07-02.md`, plus a triaged external review pass (2026-07-02): 6 of its 12 comments were valid and new (the three sample-rate comments merged into A3; the others → A4, A5, B3.6), 4 overlapped this plan or the audit (MAC/phone regex + the +63 regression test → folded into A2; vite-config duplication → stays on the deferred cleanup list; device-cookie trust → assessed by-design in the audit), and 2 were verified not-actionable (Maya buyer guard — the only caller already validates; expire-revoke race — the in-tx recheck handles it, the remaining window is ms-scale and self-heals via auto-bind).
-**Status:** ▶ **PHASE 3 (router-free subset) SHIPPED + MERGED** (2026-07-03). Phases 0–2 COMPLETE; `dev/system-sentry` is now MERGED into `dev/audit-fixes` (`2d2b31b`) — which un-gated **B3.6** and the **B3.1/B2.2 `captureHandled`** seams, all now shipped. Only **B3.2** remains (bench-router + design gate). Phases 0–2 detail:
+**Status: ✅ CODE REMEDIATION COMPLETE (2026-07-03) — this file is the archived record.** Every fix in
+Phases 0–3 (A1–A5, B1–B2, B3.1–B3.6) is shipped + unit-tested (151 unit tests green, 0 typecheck
+errors); B3.2 (admin-bypass 4h expiry + guest/admin mutual exclusion) was the last, commit `1446353`.
+The **residual verification is all deploy-gated** and has moved to the go-live ship gate in
+[`docs/DEPLOYMENT.md`](../DEPLOYMENT.md) **§10** — bench-router pass (Checkpoint 3, runbook
+[`docs/mikrotik/bench-verify.md`](../mikrotik/bench-verify.md)), Sentry alert-rule apply (§9 +
+[`sentry-alert-rules.md`](sentry-alert-rules.md)), staging soak, and the prod no-MAC-in-spans check.
+`SECURITY_RISKS.md` / `BUG_AUDIT.md` get marked mitigated once those pass. Phases 0–2 detail:
 - **Phase 0 + 1** — `dev/system-sentry` commit `6018e33` (squashed; 118 → 125 tests green, 0 typecheck errors). Checkpoint 1 passed with the human Sentry-dashboard verification.
 - **Phase 2** — `dev/audit-fixes` (cut from `origin/main`) commit `a262f02`: B1, B2.1, B2.3 + an unplanned e2e-seed fix (main's seed collided with the R18 reference_no unique index and broke the governance suite at setup). Checkpoint 2 passed: 96 unit tests (10 new), 8/8 e2e, 0 typecheck errors, plus live verification — the finance-export gate by hand, and B2.1 by a REAL Maya sandbox webhook (via the registered ngrok tunnel) crediting a blind-expired checkout exactly once and refusing the replay.
 - **Cherry-picks on `dev/audit-fixes`**: `ac7efcd` (OTP single native input) + `ad42394` (Maya Kount buyer details) — needed to test payments on main-era code; both dedup automatically at the post-merge rebase. `ad42394` carries migrations 0031+0032 and intentionally omits its `captureHandled` call (no Sentry seam on main).
@@ -228,11 +235,14 @@ The finding: `openHostAccessForDevice`'s refresh loop removed walled-garden rows
 ---
 
 ### Phase 4 — Integration verification & rollout
-- [ ] 4.1 Merge order: `dev/system-sentry` (with Phase 1) first, then rebase + merge `dev/audit-fixes`; re-run the full suite after each merge.
-- [ ] 4.2 Staging soak: deploy staging, run the loadtest grant-spike (`apps/customer/loadtest/`) and a Maya sandbox payment loop; watch the new Sentry areas (`payment/attribution`, `network/unbind`, `reconcile/*`) for unexpected volume.
-- [x] 4.3 Sentry alert rules **specified** in [`docs/dev/sentry-alert-rules.md`](sentry-alert-rules.md): A1 pages on the first `payment/attribution` event, A2 spike-pages money-path errors, A3 notifies on warning volume (+ `network/unbind` carve-out), A4 covers the three cron monitors' missed/failed check-ins, A5 the uncaught-crash catch-all. → **operator applies the rules in the Sentry dashboard**, then tunes thresholds after the 4.2 soak.
-- [ ] 4.4 Post-deploy checks in production Sentry: confirm transaction events carry **no** MAC (raw or encoded) in spans — the A1 acceptance test against real traffic.
-- [ ] 4.5 Update `docs/SECURITY_RISKS.md` / `docs/BUG_AUDIT.md` to mark findings mitigated; rename this file `*_COMPLETE` per convention.
+> The deploy-gated items (4.2, 4.4) + the bench pass (Checkpoint 3) are **relocated to the go-live
+> ship gate in [`docs/DEPLOYMENT.md`](../DEPLOYMENT.md) §10** — their natural home, since they can only
+> run during/after a deploy. This archived plan keeps the record; DEPLOYMENT.md is the living checklist.
+- [x] 4.1 Merge order: `dev/system-sentry` first, then `dev/audit-fixes` (`2d2b31b`); full suite re-run after the merge.
+- [ ] 4.2 Staging soak — **relocated → DEPLOYMENT.md §10** (loadtest grant-spike + Maya sandbox loop; watch `payment/attribution`, `network/unbind`, `reconcile/*`).
+- [x] 4.3 Sentry alert rules **specified** in [`sentry-alert-rules.md`](sentry-alert-rules.md): A1 pages on the first `payment/attribution` event, A2 spike-pages money-path errors, A3 notifies on warning volume (+ `network/unbind` carve-out), A4 covers the three cron monitors' missed/failed check-ins, A5 the uncaught-crash catch-all. → operator applies in the dashboard (DEPLOYMENT.md §9), tunes after the soak.
+- [ ] 4.4 Prod post-deploy no-MAC-in-spans check — **relocated → DEPLOYMENT.md §10**.
+- [x] 4.5 **This file renamed `*_COMPLETE`** and its deploy checklist moved into DEPLOYMENT.md §9/§10. `docs/SECURITY_RISKS.md` / `docs/BUG_AUDIT.md` get their "mitigated" marks once the §10 bench + soak actually pass (not before — verifying-in-prod is the gate).
 
 ---
 

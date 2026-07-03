@@ -328,6 +328,26 @@ As part of go-live, set at least these two (both threshold-independent — no tu
 
 Volume alerts (A2/A3) go in with the spec's default thresholds and get retuned after the staging soak.
 
+## 10. Branch-audit ship gate (2026-07-02 findings)
+
+The security/robustness audit's code fixes are all shipped + unit-tested (151 tests). The archived
+record — every finding, fix, and rationale — is
+**[`docs/dev/AUDIT_MITIGATION_PLAN_2026-07-02_COMPLETE.md`](dev/AUDIT_MITIGATION_PLAN_2026-07-02_COMPLETE.md)**.
+Three verifications remain and are **deploy-gated** — they can only run during/after a deploy. Do them
+in order before calling the audit closed:
+
+- [ ] **Bench-router pass (Checkpoint 3).** Verify the router-touching changes against a real MikroTik —
+  the admin-bypass 4h expiry + guest/admin mutual exclusion, the reconcile safety net, and the checkout
+  walled-garden tag-guard. Runbook: **[`docs/mikrotik/bench-verify.md`](mikrotik/bench-verify.md)**.
+- [ ] **Sentry alerts wired** (**§9**) — A1 + A4 minimum before cutover; A2/A3 after the soak.
+- [ ] **Staging soak.** Run the loadtest grant-spike (`apps/customer/loadtest/`) + a Maya sandbox payment
+  loop; watch the new Sentry areas (`payment/attribution`, `network/unbind`, `reconcile/*`) for unexpected
+  volume; retune the alert thresholds against the observed baseline.
+- [ ] **Prod post-deploy PII check.** Confirm transaction spans carry **no** MAC (raw or encoded) against
+  real traffic — the audit's A1 PII-egress acceptance test.
+
+Once all four pass, mark the findings mitigated in `docs/SECURITY_RISKS.md` / `docs/BUG_AUDIT.md`.
+
 ## Pre-production checklist (do NOT ship without)
 
 - [x] ~~**Remove the open admin signup**~~ — **already done**: `apps/admin/src/routes/register/`
