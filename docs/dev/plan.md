@@ -223,7 +223,7 @@ The finding: `openHostAccessForDevice`'s refresh loop removed walled-garden rows
 *Why this can't mess anything up:* strictly narrows what gets deleted to rows this mechanism created; the add path and sweep are untouched. Worst case of the guard being too strict: a stale checkout row lingers 15 min until `sweepHostAccess` reaps it by the same tag.
 *Rollback:* revert the line.
 
-**Checkpoint 3:** full test suite + typecheck green; router verification matrix (B3.2.3) signed off on real hardware; **human verification handoff** for the customer-facing flows (pause/resume during a simulated router outage, purchase on a DHCP-reused IP, Networks page with hotspot disabled). → pause.
+**Checkpoint 3:** full test suite + typecheck green; router verification matrix signed off on real hardware — **runbook: [`docs/mikrotik/bench-verify.md`](../mikrotik/bench-verify.md)** (B3.2 expiry/mutual-exclusion, B3.1 reconcile safety net, B3.6 walled-garden tag-guard); **human verification handoff** for the customer-facing flows (pause/resume during a simulated router outage, purchase on a DHCP-reused IP, Networks page with hotspot disabled). → pause.
 
 ---
 
