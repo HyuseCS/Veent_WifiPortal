@@ -30,27 +30,12 @@ export const ADMIN_BYPASS_TTL_MINUTES = 240;
  * the controller re-stamps the binding WITHOUT re-flushing an already-bypassed device. If the MAC
  * already carries a guest bypass, this no-ops (the device already has internet; paid time is not
  * clobbered). `durationMinutes` is unused by the bypass — time lives in the timestamped comment.
- *
- * After granting, proactively logs the device into the hotspot so the OS captive "Sign in to
- * network" banner clears AT ONCE without a manual refresh — the same UX layer the guest bind uses
- * (afterBind). Best-effort and only when the controller exposes it (MIKROTIK_HOTSPOT_USER set); a
- * failure here must never undo the bypass we just granted.
  */
 export async function grantAdminAccess(
 	network: NetworkController,
 	macAddress: string
 ): Promise<void> {
 	await network.grant({ macAddress, durationMinutes: 0, tag: ADMIN_BYPASS_TAG });
-	if (network.activateSession) {
-		try {
-			await network.activateSession({ macAddress });
-		} catch (err) {
-			console.warn(
-				'[adminAccess] activateSession failed (access still granted):',
-				(err as Error).message
-			);
-		}
-	}
 }
 
 /** Re-blocks an admin device (sign-out / revoke). Tag-scoped so it only removes the admin bypass,
