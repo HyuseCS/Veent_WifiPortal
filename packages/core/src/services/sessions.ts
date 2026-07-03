@@ -875,12 +875,25 @@ export async function unbindAllDevices(
 
 	let revoked = 0;
 	for (const s of active) {
-		if (s.macAddress) await network.revoke(s.macAddress);
+		// DB-first (B3.1): mark the row revoked BEFORE touching the router, so a router error
+		// can't throw out of the loop and strand this (or any later) row as `active` — which would
+		// leave the device with free internet forever. "DB is truth, sweeper reconciles router
+		// drift" — the same ordering afterBind uses (see the evicted-revoke loop above).
 		await db
 			.update(networkSessions)
 			.set({ status: SESSION_STATUS.revoked })
 			.where(eq(networkSessions.id, s.id));
 		revoked++;
+		if (s.macAddress) {
+			try {
+				await network.revoke(s.macAddress);
+			} catch {
+				// Swallow + continue: the row is already revoked, and reconcileGuestBindings drops
+				// the orphaned router binding on the next cron. (captureHandled(err, { level:
+				// 'warning', tags: { area: 'network', scope: 'unbind' } }) lands here after the
+				// dev/system-sentry rebase — that seam doesn't exist on this branch yet. B3.1.)
+			}
+		}
 	}
 	return revoked;
 }

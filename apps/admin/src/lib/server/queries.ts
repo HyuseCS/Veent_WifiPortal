@@ -18,7 +18,8 @@ import {
 	adminProfile,
 	adminRole,
 	networkHealth,
-	routerModel
+	routerModel,
+	isNetworkHealthStale
 } from '@veent/db';
 import { SESSION_STATUS, LEDGER_TYPE } from '@veent/core';
 import type {
@@ -361,9 +362,16 @@ export async function listNetworkHealth(db: DB, now: Date = new Date()): Promise
 
 	return rows.map((r) => {
 		const uptime = Number(r.uptimePct);
+		// B3.5: if no fresh sample has landed within the ceiling, the stored online/uptime is no
+		// longer trustworthy — surface "Stale" rather than a confidently-wrong "Healthy". Checked
+		// first so it overrides the metric-based tones below.
+		const stale = isNetworkHealthStale(r.lastSampleAt, now);
 		let tone: StatusTone = 'online';
 		let status = 'Healthy';
-		if (!r.online) {
+		if (stale) {
+			tone = 'warning';
+			status = 'Stale';
+		} else if (!r.online) {
 			tone = 'blocked';
 			status = 'Offline';
 		} else if (uptime < 99 || (r.latencyMs ?? 0) > LATENCY_DEGRADED_MS) {
@@ -375,6 +383,7 @@ export async function listNetworkHealth(db: DB, now: Date = new Date()): Promise
 			name: r.name,
 			tone,
 			status,
+			stale,
 			uptime: `${uptime.toFixed(1)}%`,
 			latency: r.latencyMs == null ? '—' : `${r.latencyMs}ms`,
 			users: activeByNetwork.get(r.id) ?? 0,
