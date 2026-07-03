@@ -9,9 +9,13 @@
 	// outlined style for destructive *triggers* (signals caution); `danger-solid` is the loud
 	// filled-red style for the final irreversible confirm. `loading` disables it and shows a
 	// spinner — drive it from a form's enhance pending state to block double-submits.
+	// `type` defaults to 'button' — NOT the browser's implicit 'submit'. A <Button onclick> placed
+	// inside a <form> (e.g. a "Cancel" button) would otherwise submit the form on click; intended
+	// submit buttons pass type="submit" explicitly.
 	let {
 		variant = 'primary',
 		loading = false,
+		type = 'button',
 		class: klass = '',
 		children,
 		...rest
@@ -32,6 +36,7 @@
 
 <button
 	{...rest}
+	{type}
 	disabled={loading || rest.disabled}
 	aria-busy={loading}
 	class="inline-flex min-h-[44px] cursor-pointer items-center justify-center gap-2 rounded-lg px-4 text-sm transition-[background-color,border-color,transform,opacity] duration-150 outline-none active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60 disabled:active:scale-100 {variants[

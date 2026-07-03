@@ -4,6 +4,7 @@
 	import CircleCheck from 'lucide-svelte/icons/circle-check';
 	import Wallet from 'lucide-svelte/icons/wallet';
 	import type { Component } from 'svelte';
+	import { invalidateAll } from '$app/navigation';
 	import { Card, SectionHeading } from '$lib/components/ui';
 	import { KpiCard, RevenueChart, DonutChart } from '$lib/components/feature';
 	import type { Kpi } from '$lib/types';
@@ -17,12 +18,22 @@
 	// guard drops a stale resolve if the period changed again before this one landed.
 	type Snapshot = Awaited<PageData['snapshot']>;
 	let snapshot = $state<Snapshot | null>(null);
+	let loadError = $state(false);
 	$effect(() => {
 		const p = data.snapshot;
 		snapshot = null;
-		p.then((s) => {
-			if (data.snapshot === p) snapshot = s;
-		});
+		loadError = false;
+		// Handle BOTH settle paths: a streamed-promise rejection is delivered to the client but does
+		// NOT hit +error.svelte (the load already returned), so without this a query error would leave
+		// the skeleton up forever. The identity guard drops a stale settle if the period changed again.
+		p.then(
+			(s) => {
+				if (data.snapshot === p) snapshot = s;
+			},
+			() => {
+				if (data.snapshot === p) loadError = true;
+			}
+		);
 	});
 
 	// lucide types don't match Svelte's `Component` structurally; cast as the other pages do.
@@ -62,7 +73,20 @@
 	</div>
 {/snippet}
 
-{#if !snapshot}
+{#if loadError}
+	<div class="grid h-full min-h-[50vh] place-items-center">
+		<div class="max-w-sm rounded-xl border border-border bg-bg p-6 text-center shadow-sm">
+			<p class="text-sm text-muted">Couldn't load finance data for this period.</p>
+			<button
+				type="button"
+				onclick={() => invalidateAll()}
+				class="mt-4 inline-flex min-h-[44px] items-center justify-center rounded-lg bg-brand px-4 text-sm font-semibold text-white transition-colors hover:bg-brand-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+			>
+				Try again
+			</button>
+		</div>
+	</div>
+{:else if !snapshot}
 	<!-- Skeleton silhouette mirroring KPIs · revenue chart · two donuts, so the initial load and
 	     period switches paint instantly while the aggregates stream in (no layout shift on resolve). -->
 	<div class="flex animate-pulse flex-col gap-6 md:h-full" aria-hidden="true">

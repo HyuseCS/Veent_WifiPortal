@@ -153,25 +153,80 @@
 	};
 
 	let buying = $state(false);
+
+	// Undo window for an accidental Confirm. A user tap NEVER charges — it cancels the POST and arms
+	// a short countdown (nothing has hit the server yet). Only when the countdown elapses does the
+	// timer set `confirming` and resubmit; that one submission is the sole path that runs the atomic
+	// spend+grant. The latch is reliable now that the confirm button isn't disabled during the
+	// countdown, so `requestSubmit()` always fires and always consumes the latch. Cancelling or
+	// dismissing the sheet aborts with no charge. Pre-hydration the native form posts immediately
+	// (enhance inactive) — the CSS-only sheet keeps working, just without the undo nicety.
+	const UNDO_SECONDS = 3;
+	let armed = $state<{ id: number; left: number } | null>(null);
+	let confirming = false; // set true ONLY for the timer's programmatic resubmit
+	let armTimer: ReturnType<typeof setInterval> | null = null;
+	const clearArmTimer = () => {
+		if (armTimer) {
+			clearInterval(armTimer);
+			armTimer = null;
+		}
+	};
+	const cancelArmed = () => {
+		clearArmTimer();
+		armed = null;
+		confirming = false;
+	};
+	$effect(() => () => clearArmTimer()); // stop the countdown if the page unmounts mid-window
+
 	const confirmBuy = (): SubmitFunction => {
-		return () => {
-			buying = true;
-			return async ({ result, update }) => {
-				if (result.type === 'success') {
-					// Hard reload so the new connected state shows immediately. The in-place `update()`
-					// returns correct data (verified) but the live-backed view doesn't reliably
-					// re-render it — the page would otherwise look stuck for ~a minute until the SSE
-					// pushes. A full reload matches the manual refresh that always works.
-					location.reload();
-					return;
+		return ({ cancel, formElement, formData }) => {
+			// The countdown's programmatic resubmit set `confirming` → run the real charge.
+			if (confirming) {
+				confirming = false;
+				armed = null;
+				buying = true;
+				return async ({ result, update }) => {
+					if (result.type === 'success') {
+						// Hard reload so the new connected state shows immediately. The in-place `update()`
+						// returns correct data (verified) but the live-backed view doesn't reliably
+						// re-render it — the page would otherwise look stuck for ~a minute until the SSE
+						// pushes. A full reload matches the manual refresh that always works.
+						location.reload();
+						return;
+					}
+					if (result.type === 'failure') {
+						toasts.show('Could not start that tier. Please try again.', 'error');
+					}
+					await update();
+					resetAccountLive();
+					buying = false;
+				};
+			}
+			// User tap → never charge directly. Cancel the POST and (re)arm the undo countdown.
+			cancel();
+			// The app.html capture-phase script set data-pending='' on this submit (pre-hydration
+			// spinner). Arming keeps `buying` false, so Svelte's data-pending binding never changes and
+			// won't clear it — leaving the spinner stuck under "Starting in…". Clear it explicitly here.
+			formElement.removeAttribute('data-pending');
+			const id = Number(formData.get('packageId'));
+			if (armed?.id === id) return; // already counting down for this tier — ignore extra taps
+			clearArmTimer();
+			armed = { id, left: UNDO_SECONDS };
+			armTimer = setInterval(() => {
+				if (!armed) return clearArmTimer();
+				// Dismissing the sheet (Cancel / backdrop) unchecks this tier's radio via CSS AND fires
+				// the off-radio's onchange (→ cancelArmed). This is a backstop for the tier-switch case
+				// (opening another tier doesn't fire that onchange).
+				const sheet = document.getElementById(`buysheet-${armed.id}`) as HTMLInputElement | null;
+				if (!sheet?.checked) return cancelArmed();
+				if (armed.left <= 1) {
+					clearArmTimer();
+					confirming = true;
+					formElement.requestSubmit(); // → confirming is true → charges via the branch above
+				} else {
+					armed = { id: armed.id, left: armed.left - 1 };
 				}
-				if (result.type === 'failure') {
-					toasts.show('Could not start that tier. Please try again.', 'error');
-				}
-				await update();
-				resetAccountLive();
-				buying = false;
-			};
+			}, 1000);
 		};
 	};
 
@@ -578,12 +633,17 @@
 							spend credits{:else}Buy access — spend credits{/if}
 					</div>
 					<section class="mb-6 flex flex-col gap-2.5">
-						<!-- Off-state for the buy-sheet radio group: checked = no sheet open. -->
+						<!-- Off-state for the buy-sheet radio group: checked = no sheet open. Dismissing any
+						sheet (Cancel / backdrop = a `<label for="buysheet-none">`) checks this radio, firing
+						`change` — which immediately aborts an armed buy countdown so reopening a tier shows a
+						fresh "Confirm" (no stuck "Starting in…"). Handler lives on the radio, not the labels,
+						so it stays keyboard-a11y clean. -->
 						<input
 							type="radio"
 							name="buy-sheet"
 							id="buysheet-none"
 							checked
+							onchange={cancelArmed}
 							class="sr-only"
 							aria-hidden="true"
 							tabindex="-1"
@@ -681,6 +741,7 @@
 												<input type="hidden" name="mac" value={mac} />
 												<input type="hidden" name="packageId" value={tier.id} />
 												<button
+													type="submit"
 													disabled={!hasMac || buying}
 													class="mb-2.5 flex h-[52px] w-full items-center justify-center gap-2 rounded-xl bg-cta text-base font-bold text-white transition-colors hover:bg-cta-hover hover:cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 group-data-[pending]:pointer-events-none group-data-[pending]:opacity-70"
 												>
@@ -688,14 +749,18 @@
 														class="hidden h-[18px] w-[18px] animate-spin rounded-full border-[2.5px] border-white/40 border-t-white group-data-[pending]:inline-block"
 														aria-hidden="true"
 													></span>
-													Confirm — spend {tier.creditCost} cr
+													{#if armed?.id === tier.id}
+														Starting in {armed?.left}…
+													{:else}
+														Confirm — spend {tier.creditCost} cr
+													{/if}
 												</button>
 											</form>
 											<label
 												for="buysheet-none"
 												class="flex h-11 w-full cursor-pointer items-center justify-center text-[13px] font-semibold text-muted hover:text-ink"
 											>
-												Cancel
+												{armed?.id === tier.id ? 'Cancel — no charge' : 'Cancel'}
 											</label>
 										{:else}
 											<div class="mb-3 flex items-center gap-3">
