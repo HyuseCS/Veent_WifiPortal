@@ -18,11 +18,20 @@
 
 	const status = $derived(data.settled ? 'success' : timedOut ? 'failed' : 'pending');
 
-	// On settlement, bounce to the dashboard after a beat.
+	// On settlement, count down out loud, then bounce to the dashboard.
+	const REDIRECT_S = 3;
+	let secondsLeft = $state(REDIRECT_S);
 	$effect(() => {
 		if (!data.settled) return;
-		const t = setTimeout(() => goto(resolve('/dashboard') + data.portalQuery), 3000);
-		return () => clearTimeout(t);
+		secondsLeft = REDIRECT_S;
+		const tick = setInterval(() => {
+			secondsLeft -= 1;
+			if (secondsLeft <= 0) {
+				clearInterval(tick);
+				goto(resolve('/dashboard') + data.portalQuery);
+			}
+		}, 1000);
+		return () => clearInterval(tick);
 	});
 
 	// Poll until settled or timed out.
@@ -108,7 +117,9 @@
 					Back to dashboard
 					<Icon name="arrow-right" size={18} strokeWidth={2.4} />
 				</a>
-				<p class="mt-3 text-[11.5px] font-medium text-muted">Returning automatically in 3s…</p>
+				<p class="mt-3 text-[11.5px] font-medium text-muted">
+					Returning automatically in {secondsLeft}s…
+				</p>
 			{:else}
 				<div
 					class="mb-6 flex h-[74px] w-[74px] items-center justify-center rounded-full bg-blocked/[0.13]"
