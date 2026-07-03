@@ -18,8 +18,11 @@ import { network } from '$lib/server/network';
 import { buildAccountView } from '$lib/server/account-view';
 import { resolveMacForUser } from '$lib/server/network-location';
 import { maskPhone } from '$lib/server/otp';
+import { logger } from '$lib/server/logger';
 import type { Actions, PageServerLoad } from './$types';
 import { auth } from '$lib/server/auth';
+
+const log = logger('dashboard');
 
 /** Re-grant a known device on the router at most this often during dashboard loads. */
 const REBIND_REFRESH_MS = 60 * 1000;
@@ -65,7 +68,7 @@ export const load: PageServerLoad = async (event) => {
 				const r = await bindDevice(db, network, { userId: user.id, macAddress: mac });
 				if (r.ok) access = await getActiveAccess(db, user.id);
 			} catch (err) {
-				console.error('[customer] auto-bind failed:', err);
+				log.error('auto-bind failed:', err);
 			}
 		}
 		// !bound && at cap → leave the device unbound; the UI offers "replace oldest".
@@ -93,7 +96,9 @@ export const load: PageServerLoad = async (event) => {
 		const r = await auth.api.generateOneTimeToken({ headers: event.request.headers });
 		if (r?.token) handoffUrl = `${event.url.origin}/auth/handoff?token=${encodeURIComponent(r.token)}`;
 	} catch (err) {
-		console.warn('[handoff] token generation failed:', (err as Error).message);
+		// Low-priority: the link is simply omitted; the dashboard still renders. log.error routes
+		// through the seam → Sentry at warning level, so it's the rate that matters, not one miss.
+		log.error('[handoff] token generation failed:', err);
 	}
 
 	return {
@@ -129,7 +134,7 @@ export const actions: Actions = {
 		try {
 			result = await startFreeAccessAndBindDevice(db, network, { userId: user.id, macAddress: mac });
 		} catch (err) {
-			console.error('[customer] startFreeTime grant failed:', err);
+			log.error('startFreeTime grant failed:', err);
 			return fail(502, { error: 'Could not reach the network controller. Please try again.' });
 		}
 		if (!result.ok) {
@@ -168,7 +173,7 @@ export const actions: Actions = {
 				durationMinutes: pkg.durationMinutes ?? 0
 			});
 		} catch (err) {
-			console.error('[customer] buyTier grant failed (rolled back, not charged):', err);
+			log.error('buyTier grant failed (rolled back, not charged):', err);
 			return fail(502, {
 				error: 'The network grant failed — your credits were not charged. Please try again.'
 			});
@@ -194,7 +199,7 @@ export const actions: Actions = {
 		try {
 			result = await bindDevice(db, network, { userId: user.id, macAddress: mac });
 		} catch (err) {
-			console.error('[customer] bindThisDevice grant failed:', err);
+			log.error('bindThisDevice grant failed:', err);
 			return fail(502, { error: 'Could not reach the network controller. Please try again.' });
 		}
 		if (!result.ok) return fail(409, { error: 'No active account time to connect to.' });
@@ -214,7 +219,7 @@ export const actions: Actions = {
 			const r = await unbindDevice(db, network, { userId: user.id, sessionId });
 			if (!r.ok) return fail(404, { error: 'Device not found' });
 		} catch (err) {
-			console.error('[customer] unbindDevice failed:', err);
+			log.error('unbindDevice failed:', err);
 			return fail(502, { error: 'Could not reach the network controller. Please try again.' });
 		}
 		return { removed: true };
@@ -228,7 +233,7 @@ export const actions: Actions = {
 		try {
 			await unbindAllDevices(db, network, user.id);
 		} catch (err) {
-			console.error('[customer] unbindAll failed:', err);
+			log.error('unbindAll failed:', err);
 			return fail(502, { error: 'Could not reach the network controller. Please try again.' });
 		}
 		return { removed: true };
@@ -244,7 +249,7 @@ export const actions: Actions = {
 		try {
 			result = await pauseAccountAccess(db, network, user.id);
 		} catch (err) {
-			console.error('[customer] pauseAccess failed:', err);
+			log.error('pauseAccess failed:', err);
 			return fail(502, { error: 'Could not reach the network controller. Please try again.' });
 		}
 		if (!result.ok) {
@@ -267,7 +272,7 @@ export const actions: Actions = {
 		try {
 			result = await resumeAccountAccess(db, user.id);
 		} catch (err) {
-			console.error('[customer] resumeAccess failed:', err);
+			log.error('resumeAccess failed:', err);
 			return fail(502, { error: 'Could not resume access. Please try again.' });
 		}
 		if (!result.ok) {
@@ -281,7 +286,14 @@ export const actions: Actions = {
 	},
 
 	signOut: async (event) => {
+		// Re-thread this device's MAC across the logout→login boundary so the NEXT account's login
+		// re-captures it (into veent_portal + the pending cookie) even in the same browser. The
+		// device cookie already survives sign-out and covers this, but the explicit ?mac= also
+		// refreshes the short-lived portal cookie for the incoming account. Resolve BEFORE signing
+		// out (needs the user id for the per-user fallbacks); cheap and best-effort.
+		const user = event.locals.user;
+		const mac = user ? await resolveMacForUser(event, user.id) : null;
 		await auth.api.signOut({ headers: event.request.headers });
-		return redirect(302, '/login');
+		return redirect(302, mac ? `/login?mac=${encodeURIComponent(mac)}` : '/login');
 	}
 };

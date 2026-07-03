@@ -10,7 +10,10 @@ import {
 import { db } from '$lib/server/db';
 import { network } from '$lib/server/network';
 import { rateLimit } from '$lib/server/rateLimit';
+import { logger } from '$lib/server/logger';
 import type { RequestHandler } from './$types';
+
+const log = logger('grant');
 
 /**
  * POST /api/network/grant — start an access session for the authenticated user
@@ -71,7 +74,7 @@ export const POST: RequestHandler = async (event) => {
 			durationMinutes: pkg.durationMinutes ?? 0
 		});
 	} catch (err) {
-		console.error('[grant] paid access failed (rolled back, not charged):', err);
+		log.error('paid access failed (rolled back, not charged):', err);
 		error(503, 'Could not open access — your credits were not charged. Please try again.');
 	}
 	if (!result.ok) error(402, 'Insufficient credit balance');

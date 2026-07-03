@@ -395,6 +395,8 @@ export async function listNetworkHealth(db: DB, now: Date = new Date()): Promise
 			model: r.model,
 			rangeMeters: r.rangeMeters,
 			clusterName: r.clusterName,
+			maxDownKbps: r.maxDownKbps,
+			maxUpKbps: r.maxUpKbps,
 			logs: logsByNetwork.get(r.id) ?? []
 		};
 	});
@@ -408,6 +410,25 @@ export async function setNetworkInterface(
 	interfaceName: string | null
 ): Promise<void> {
 	await db.update(networkHealth).set({ interfaceName }).where(eq(networkHealth.id, id));
+}
+
+/**
+ * Set an AP's router-side config from the Networks card in one write: the interface binding
+ * plus the aggregate up/down bandwidth caps (Kbps; null = uncapped). Returns the row's
+ * canonical `name` so the caller can enforce the caps against the resolved interface
+ * (`interfaceName ?? name`), or null if the AP no longer exists.
+ */
+export async function setApRouterConfig(
+	db: DB,
+	id: number,
+	config: { interfaceName: string | null; maxDownKbps: number | null; maxUpKbps: number | null }
+): Promise<{ name: string } | null> {
+	const [row] = await db
+		.update(networkHealth)
+		.set(config)
+		.where(eq(networkHealth.id, id))
+		.returning({ name: networkHealth.name });
+	return row ?? null;
 }
 
 /** Placed members of a named cluster (for the coverage-reach assignment check), excluding the

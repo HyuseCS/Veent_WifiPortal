@@ -16,3 +16,4 @@ export { default as Button } from './Button.svelte';
 export { default as Field } from './Field.svelte';
 export { default as Select } from './Select.svelte';
 export { default as BaseDialog } from './BaseDialog.svelte';
+export { default as Sparkline } from './Sparkline.svelte';

@@ -15,6 +15,20 @@ import type { RequestEvent } from '@sveltejs/kit';
 export const PORTAL_COOKIE = 'veent_portal';
 const PORTAL_TTL_SECONDS = 60 * 30;
 
+/**
+ * Device-scoped MAC memory — account-independent, long-lived.
+ *
+ * `veent_portal` is browser-scoped AND short-lived, and MAC resolution's durable fallbacks
+ * are all keyed by userId. So a second account logging in on the same device (after a sign-out)
+ * has NO signal for its MAC — `resolveMacForUser` returns null and the grant can't target this
+ * device (see docs/problems/second-account-mac-not-captured.md). This cookie fills that gap: it
+ * remembers the last MAC seen in THIS browser regardless of which account (if any) is logged in,
+ * and is deliberately NOT cleared on sign-out. Read by `resolveMacForUser` ahead of the per-user
+ * fallbacks. Same HTTP-vs-HTTPS posture as `veent_portal` (the LAN portal is often plain HTTP).
+ */
+export const DEVICE_COOKIE = 'veent_device';
+const DEVICE_TTL_SECONDS = 60 * 60 * 24 * 180;
+
 const MAC_PARAMS = ['mac', 'id', 'clientmac', 'client_mac'];
 // MikroTik sends `link-login-only` (the auth POST URL) and `link-orig` (originally
 // requested page). We keep the former as the controller callback.
@@ -76,6 +90,32 @@ export function capturePortalContext(event: RequestEvent): void {
 		sameSite: 'lax',
 		maxAge: PORTAL_TTL_SECONDS
 	});
+	// Also stamp the device-scoped memory so a later second account on this browser can recover it.
+	rememberDeviceMac(event, ctx.mac);
+}
+
+/**
+ * Remember a MAC in the account-independent, long-lived device cookie. Called from every point
+ * that learns this browser's device MAC (`?mac=` capture and IP→MAC resolution) so MAC resolution
+ * survives a sign-out + fresh-account login on the same device. Best-effort; no-op for empty MAC.
+ */
+export function rememberDeviceMac(event: RequestEvent, mac: string): void {
+	if (!mac) return;
+	try {
+		event.cookies.set(DEVICE_COOKIE, mac, {
+			path: '/',
+			httpOnly: true,
+			sameSite: 'lax',
+			maxAge: DEVICE_TTL_SECONDS
+		});
+	} catch {
+		// Best-effort cache only (e.g. headers already sent) — never break the request over it.
+	}
+}
+
+/** Read the device-scoped MAC hint (`veent_device`), independent of any logged-in account. */
+export function getDeviceMac(event: RequestEvent): string | null {
+	return event.cookies.get(DEVICE_COOKIE) || null;
 }
 
 /**
@@ -110,6 +150,8 @@ export function persistResolvedMac(event: RequestEvent, mac: string): void {
 		// Best-effort cache only (e.g. headers already sent in a streaming response) —
 		// never let a failed cookie write knock out a validly-resolved MAC.
 	}
+	// Mirror into the long-lived device cookie so a later second account recovers it.
+	rememberDeviceMac(event, mac);
 }
 
 /** Read portal context: fresh query params win, else the captured cookie. */

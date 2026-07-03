@@ -76,6 +76,38 @@ mirrors what is **live on the router** (the captcha hosts use `*.` wildcards the
 /ip hotspot walled-garden add action=allow dst-host=admin.veent.lan comment=veent-admin
 ```
 
+### Deny the OS connectivity-check probes (ordering matters)
+
+The broad `*.google.com` / `*.gstatic.com` allows above (needed for Maya's reCAPTCHA) also happen to
+whitelist **Android's captive-portal probe hosts** — so an un-granted phone gets a real `204` from
+Google, flashes **"Connected"**, then reverts to **"Sign in to network."** (See
+`docs/problems/captive-connected-flap-on-free-time.md`.) Punch those specific probe hosts back with
+**`action=deny` rules placed ABOVE the allows** — walled-garden matching is **first-match,
+top-to-bottom**, so a deny only wins if it sits before the `*` allow. None of these hosts/paths is a
+reCAPTCHA resource (reCAPTCHA lives on `www.gstatic.com/recaptcha` and `www.google.com/recaptcha`),
+so denying them does not affect payments.
+
+```
+# Add with place-before so they land at the TOP, ahead of the *.google.com / *.gstatic.com allows.
+# (`bun run setup:router` does this automatically — it is idempotent, so re-running never dupes.)
+/ip hotspot walled-garden add action=deny dst-host=connectivitycheck.gstatic.com comment=veent-admin place-before=0
+/ip hotspot walled-garden add action=deny dst-host=clients3.google.com           comment=veent-admin place-before=0
+/ip hotspot walled-garden add action=deny dst-host=connectivitycheck.android.com comment=veent-admin place-before=0
+# www.google.com is needed by reCAPTCHA, so deny ONLY the probe path (HTTP-only match):
+/ip hotspot walled-garden add action=deny dst-host=www.google.com path=/generate_204 comment=veent-admin place-before=0
+```
+
+**Verify the fix on an un-granted device** (before relying on it):
+
+```
+# From a phone still behind the portal (NOT yet granted):
+curl -v http://connectivitycheck.gstatic.com/generate_204
+# BEFORE the deny: returns 204 (the leak). AFTER: intercepted/redirected to the portal (fixed).
+
+# Confirm ordering on the router — the deny rows must appear ABOVE the *.google.com/*.gstatic.com allows:
+/ip hotspot walled-garden print
+```
+
 ### 3-D Secure / card ACS — per-deployment
 
 Card payments may step up to the **issuing bank's** ACS domain, which can't be predicted in

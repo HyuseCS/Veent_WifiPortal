@@ -13,9 +13,12 @@
 		"test:unit": "vitest",
 		"test:e2e": "playwright test",
 		"auth:schema": "better-auth generate --config src/lib/server/auth.ts --output ../../packages/db/src/schema/auth-customer.generated.ts --yes",
-		"maya:webhooks": "bun scripts/maya-webhooks.ts"
+		"maya:webhooks": "bun scripts/maya-webhooks.ts",
+		"loadtest:seed": "bun loadtest/seed-sessions.ts",
+		"loadtest:cleanup": "bun loadtest/cleanup.ts"
 	},
 	"dependencies": {
+		"@sentry/sveltekit": "^10.62.0",
 		"@veent/core": "workspace:*",
 		"@veent/db": "workspace:*",
 		"better-auth": "~1.4.21",

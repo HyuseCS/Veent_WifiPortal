@@ -1,4 +1,5 @@
 import { json } from '@sveltejs/kit';
+import * as Sentry from '@sentry/sveltekit';
 import { refreshNetworkHealth } from '@veent/core';
 import { db } from '$lib/server/db';
 import { network } from '$lib/server/network';
@@ -19,6 +20,20 @@ import type { RequestHandler } from './$types';
 export const POST: RequestHandler = async (event) => {
 	requireCron(event);
 
-	const interfaces = await refreshNetworkHealth(db, network);
-	return json({ ok: true, interfaces });
+	// Sentry cron check-in: makes a DEAD scheduler detectable ("the cron never ran"), which the
+	// endpoint's own error coverage can't see. No-op passthrough when Sentry isn't initialised; a
+	// throw still fails the check-in AND bubbles to handleError (deliberately no swallowing catch).
+	return Sentry.withMonitor(
+		'admin-network-health-refresh',
+		async () => {
+			const interfaces = await refreshNetworkHealth(db, network);
+			return json({ ok: true, interfaces });
+		},
+		{
+			schedule: { type: 'crontab', value: '* * * * *' },
+			checkinMargin: 5,
+			maxRuntime: 5,
+			timezone: 'UTC'
+		}
+	);
 };

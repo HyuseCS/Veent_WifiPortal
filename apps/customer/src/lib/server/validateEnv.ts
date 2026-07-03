@@ -1,5 +1,6 @@
 import { dev, building } from '$app/environment';
 import { env } from '$env/dynamic/private';
+import { env as pub } from '$env/dynamic/public';
 
 /**
  * Boot-time environment check (called once from hooks.server.ts). Fails fast on a
@@ -49,6 +50,11 @@ export function validateEnv(): void {
 					'Only a private-LAN host (RFC1918 IP / .lan / localhost) may use http.'
 			);
 		}
+	}
+
+	// Observability degrades to off, so warn (don't fail) when the Sentry DSN is unset in prod.
+	if (!dev && !pub.PUBLIC_SENTRY_DSN) {
+		console.warn('[env] PUBLIC_SENTRY_DSN unset — error tracking & performance tracing are disabled.');
 	}
 
 	if (missing.length === 0) return;

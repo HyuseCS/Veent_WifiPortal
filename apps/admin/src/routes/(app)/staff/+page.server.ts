@@ -30,7 +30,10 @@ import {
 	ownerChangeRequestedEmail,
 	ownerChangeExecutedEmail
 } from '$lib/server/emails/owner-change';
+import { logger } from '$lib/server/logger';
 import type { Actions, PageServerLoad } from './$types';
+
+const log = logger('staff');
 
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 /** Upper bound on a single mass-invite batch — kept under the per-actor email cap (20/hr)
@@ -72,6 +75,7 @@ async function ownerStepUp(event: RequestEvent, code: string, action: string) {
 		await auth.api.verifyTOTP({ body: { code }, headers: event.request.headers });
 	} catch (err) {
 		if (err instanceof APIError) return fail(400, { action, error: 'Invalid authenticator code.' });
+		log.error('step-up TOTP verify unexpected error:', err);
 		return fail(500, { action, error: 'Unexpected error' });
 	}
 	return null;
@@ -82,7 +86,7 @@ async function sendOwnerEmail(to: string, msg: { subject: string; html: string; 
 	try {
 		await mailer.send({ to, ...msg });
 	} catch (err) {
-		console.warn('[email] owner-change send failed:', (err as Error)?.message);
+		log.error('owner-change notify send failed:', err);
 	}
 }
 
@@ -195,7 +199,9 @@ async function inviteOne(
 		// better-auth awaits the callback but swallows a thrown error, so the send outcome is
 		// surfaced via inviteSendFailures (keyed by email) instead.
 		await auth.api.requestPasswordReset({ body: { email, redirectTo: '/activate' } });
-	} catch {
+	} catch (err) {
+		// Invite create/send failed (e.g. email integration down) → capture, then roll back.
+		log.error('invite create/send failed:', err);
 		await removeStaff(db, userId);
 		return { error: `Couldn't create the invitation for ${email}.` };
 	}
@@ -322,6 +328,7 @@ export const actions: Actions = {
 			if (error instanceof APIError) {
 				return fail(400, { action: 'promote', error: 'Invalid authenticator code.' });
 			}
+			log.error('promote TOTP verify unexpected error:', error);
 			return fail(500, { action: 'promote', error: 'Unexpected error' });
 		}
 

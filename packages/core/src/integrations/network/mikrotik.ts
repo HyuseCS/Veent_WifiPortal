@@ -3,7 +3,9 @@ import type {
 	GrantInput,
 	NetworkApSample,
 	RouterLogEntry,
-	ActivateSessionInput
+	ActivateSessionInput,
+	InterfaceLimitInput,
+	DeviceHostAccessInput
 } from './types';
 
 export interface MikrotikConfig {
@@ -53,6 +55,43 @@ export interface MikrotikConfig {
 const LATENCY_PROBE_HOST = '1.1.1.1';
 /** Hard ceiling for the latency ping so a hung ping stream can't stall a health refresh. */
 const PING_TIMEOUT_MS = 5000;
+/** Comment/name prefix on the per-AP bandwidth queues we create, so ours are identifiable
+ * and a re-apply updates rather than duplicates: `veent-hotspot-limit:<apName>`. */
+const LIMIT_TAG = 'veent-hotspot-limit';
+
+/** Comment prefix on the per-device, src-scoped walled-garden entries `openHostAccessForDevice`
+ * creates. The creation time is appended (`veent-checkout:<epochMs>`) so `sweepHostAccess` can
+ * expire them with no external state — the router row is self-describing. */
+const CHECKOUT_TAG = 'veent-checkout';
+
+/**
+ * Render a Kbps cap as a RouterOS queue rate token. RouterOS `k` is decimal (×1000), so
+ * `<kbps>k` is exactly the kilobit rate. Null → `0`, which RouterOS reads as *unlimited* —
+ * used for the side of an asymmetric cap (only up or only down set). Exported for tests.
+ */
+export function formatQueueRate(kbps: number | null): string {
+	return kbps == null ? '0' : `${Math.round(kbps)}k`;
+}
+
+/**
+ * Network address for an IPv4 `address/prefix` (e.g. `10.210.0.1/18` → `10.210.0.0/18`),
+ * so a simple queue can target the AP's whole client subnet. Returns null on a malformed or
+ * non-IPv4 input (caller falls back to interface-target). Exported for tests.
+ */
+export function ipv4NetworkOf(cidr: string): string | null {
+	const [ip, prefixStr] = cidr.split('/');
+	const prefix = Number(prefixStr);
+	if (!ip || !Number.isInteger(prefix) || prefix < 0 || prefix > 32) return null;
+	const octets = ip.split('.').map(Number);
+	if (octets.length !== 4 || octets.some((o) => !Number.isInteger(o) || o < 0 || o > 255)) {
+		return null;
+	}
+	const ipInt = ((octets[0] << 24) | (octets[1] << 16) | (octets[2] << 8) | octets[3]) >>> 0;
+	const mask = prefix === 0 ? 0 : (0xffffffff << (32 - prefix)) >>> 0;
+	const netInt = (ipInt & mask) >>> 0;
+	const net = [(netInt >>> 24) & 255, (netInt >>> 16) & 255, (netInt >>> 8) & 255, netInt & 255];
+	return `${net.join('.')}/${prefix}`;
+}
 
 /** Reject if `p` doesn't settle within `ms` — bounds a single router call's wall time. */
 function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
@@ -187,6 +226,26 @@ export function createMikrotikController(config: MikrotikConfig): NetworkControl
 	}
 
 	/**
+	 * The device's IP as a CURRENTLY-CONNECTED hotspot client — read from the hotspot host table
+	 * ONLY, deliberately not the DHCP-lease/ARP union `ipsForMac` returns. For opening pre-auth
+	 * access scoped to a device (`openHostAccessForDevice`) we must be certain the IP still belongs
+	 * to THIS device right now: a stale lease/ARP row for a MAC whose device has left could name an
+	 * IP DHCP has since handed to another guest, and opening a captive-probe host (google.com) for
+	 * that IP would reintroduce the connectivity-flash for the wrong guest. The hotspot host table
+	 * only lists clients the router currently sees, so a miss (device gone) correctly yields null →
+	 * no entry is opened. A real buyer sitting on the captive portal is always a current host.
+	 */
+	async function currentHotspotIpForMac(conn: RosConn, mac: string): Promise<string | null> {
+		try {
+			const hosts = await conn.write('/ip/hotspot/host/print', [`?mac-address=${mac}`]);
+			return hosts.find((h) => h.address)?.address ?? null;
+		} catch {
+			// Hotspot host table unavailable — treat as "device not currently seen".
+			return null;
+		}
+	}
+
+	/**
 	 * Drop the device's live connection-tracking entries so a revoke takes effect
 	 * IMMEDIATELY. Removing the ip-binding only stops NEW flows from being bypassed — the
 	 * firewall's established/related accept rule keeps forwarding the device's ALREADY-OPEN
@@ -218,6 +277,25 @@ export function createMikrotikController(config: MikrotikConfig): NetworkControl
 		} catch {
 			// Connection table unavailable — binding removal alone still cuts new flows.
 		}
+	}
+
+	/**
+	 * Resolve the queue target for an AP interface: prefer the interface's own IP network
+	 * (the client subnet), so a simple queue's upload/download read as from-client/to-client.
+	 * Falls back to the interface name itself when no address is found (up/down then read
+	 * relative to the interface).
+	 */
+	async function resolveQueueTarget(conn: RosConn, ifaceName: string): Promise<string> {
+		try {
+			const addrs = await conn.write('/ip/address/print', [`?interface=${ifaceName}`]);
+			for (const a of addrs) {
+				const net = typeof a.address === 'string' ? ipv4NetworkOf(a.address) : null;
+				if (net) return net;
+			}
+		} catch {
+			// /ip/address unavailable or query error — fall back to interface-target.
+		}
+		return ifaceName;
 	}
 
 	const controller: NetworkController = {
@@ -271,6 +349,42 @@ export function createMikrotikController(config: MikrotikConfig): NetworkControl
 			});
 		},
 
+		async applyInterfaceLimit(input: InterfaceLimitInput): Promise<void> {
+			const comment = `${LIMIT_TAG}:${input.apName}`;
+			await withConn(async (conn) => {
+				// Our queue is found by comment, so a re-apply updates the same row (idempotent),
+				// mirroring provisionWalledGarden's find-by-comment.
+				const existing = await conn.write('/queue/simple/print', [`?comment=${comment}`]);
+				const id = existing[0]?.['.id'];
+
+				// Both caps cleared → tear our queue down (if any). Uncapped = no queue at all.
+				if (input.downKbps == null && input.upKbps == null) {
+					if (id) await conn.write('/queue/simple/remove', [`=.id=${id}`]);
+					return;
+				}
+
+				const target = await resolveQueueTarget(conn, input.interfaceName);
+				// RouterOS max-limit is <upload>/<download> relative to the target. With the client
+				// subnet as target: upload = from clients, download = to clients.
+				const maxLimit = `${formatQueueRate(input.upKbps)}/${formatQueueRate(input.downKbps)}`;
+				if (id) {
+					await conn.write('/queue/simple/set', [
+						`=.id=${id}`,
+						`=target=${target}`,
+						`=max-limit=${maxLimit}`,
+						'=disabled=no'
+					]);
+				} else {
+					await conn.write('/queue/simple/add', [
+						`=name=${comment}`,
+						`=target=${target}`,
+						`=max-limit=${maxLimit}`,
+						`=comment=${comment}`
+					]);
+				}
+			});
+		},
+
 		async resolveMacByIp(ipAddress: string): Promise<string | null> {
 			const ip = ipAddress.trim();
 			if (!ip) return null;
@@ -290,6 +404,67 @@ export function createMikrotikController(config: MikrotikConfig): NetworkControl
 				const arp = await conn.write('/ip/arp/print', [`?address=${ip}`]);
 				const fromArp = arp.find((r) => r['mac-address'])?.['mac-address'];
 				return fromArp ? fromArp.toUpperCase() : null;
+			});
+		},
+
+		async openHostAccessForDevice(
+			input: DeviceHostAccessInput
+		): Promise<{ ipAddress: string | null }> {
+			const mac = input.macAddress.toUpperCase();
+			return withConn(async (conn) => {
+				// The walled garden matches the device's own hotspot-side src IP (before the router's
+				// own NAT), so scope by the IP the router currently sees for this MAC. Use the hotspot
+				// host table ONLY (not the lease/ARP union) so a stale MAC can't scope access to an IP
+				// now belonging to another guest — see currentHotspotIpForMac.
+				const ip = await currentHotspotIpForMac(conn, mac);
+				if (!ip) return { ipAddress: null };
+				const comment = `${CHECKOUT_TAG}:${Date.now()}`;
+				for (const host of input.hosts) {
+					// Refresh rather than stack: drop any prior scoped entry for this (host, src)
+					// so a re-checkout renews the timestamp instead of accumulating duplicates.
+					const existing = await conn.write('/ip/hotspot/walled-garden/print', [
+						`?dst-host=${host}`
+					]);
+					for (const e of existing) {
+						const srcIp = (e['src-address'] ?? '').split('/')[0];
+						if (srcIp !== ip || !e['.id']) continue;
+						try {
+							await conn.write('/ip/hotspot/walled-garden/remove', [`=.id=${e['.id']}`]);
+						} catch {
+							// Already gone between print and remove — ignore.
+						}
+					}
+					await conn.write('/ip/hotspot/walled-garden/add', [
+						'=action=allow',
+						`=dst-host=${host}`,
+						`=src-address=${ip}`,
+						`=comment=${comment}`
+					]);
+				}
+				return { ipAddress: ip };
+			});
+		},
+
+		async sweepHostAccess(input?: { maxAgeMs?: number }): Promise<number> {
+			const maxAgeMs = input?.maxAgeMs ?? 15 * 60_000;
+			const now = Date.now();
+			return withConn(async (conn) => {
+				const rows = await conn.write('/ip/hotspot/walled-garden/print', []);
+				let removed = 0;
+				for (const r of rows) {
+					const comment = r.comment ?? '';
+					if (!comment.startsWith(`${CHECKOUT_TAG}:`)) continue;
+					const ts = Number(comment.slice(CHECKOUT_TAG.length + 1));
+					if (!Number.isFinite(ts) || now - ts < maxAgeMs) continue;
+					if (!r['.id']) continue;
+					try {
+						await conn.write('/ip/hotspot/walled-garden/remove', [`=.id=${r['.id']}`]);
+						removed++;
+					} catch {
+						// Raced with another sweep / manual removal — ignore.
+					}
+				}
+				return removed;
 			});
 		},
 
@@ -502,11 +677,28 @@ async function openConn(config: MikrotikConfig): Promise<RosConn> {
 	return conn;
 }
 
+export interface WalledGardenDeny {
+	/** Exact host to deny (no wildcard), e.g. `connectivitycheck.gstatic.com`. */
+	host: string;
+	/** Optional HTTP path to scope the deny to, e.g. `/generate_204`. HTTP-only (the router can't
+	 * see the path of an HTTPS request), so a bare-host deny is stronger where you can afford it. */
+	path?: string;
+}
+
 export interface WalledGardenInput {
 	/** DNS hostnames to allow pre-auth, e.g. `admin.veent.lan` (matched as `*host`). */
 	hosts?: string[];
 	/** LAN IPs/CIDRs to allow pre-auth at the IP layer, e.g. `10.5.50.1`. */
 	ips?: string[];
+	/**
+	 * Hosts to explicitly DENY pre-auth, placed ABOVE the `hosts` allows so they win (walled-garden
+	 * rules are first-match, top-to-bottom). Used to punch back the OS connectivity-check probes that
+	 * a broad allow like `*.google.com`/`*.gstatic.com` would otherwise let through — an accidental
+	 * pre-auth 204 makes Android flash "Connected" then revert (see
+	 * docs/problems/captive-connected-flap-on-free-time.md). Denying the exact probe host still lets
+	 * reCAPTCHA (a different host/path) load.
+	 */
+	denies?: WalledGardenDeny[];
 	/** Comment on the entries we create, so a re-run updates rather than duplicates. */
 	tag?: string;
 }
@@ -514,6 +706,7 @@ export interface WalledGardenInput {
 export interface WalledGardenResult {
 	hosts: { value: string; created: boolean }[];
 	ips: { value: string; created: boolean }[];
+	denies: { value: string; created: boolean }[];
 }
 
 /**
@@ -521,8 +714,9 @@ export interface WalledGardenResult {
  * reach the given hosts/IPs *before* authenticating — the same mechanism the
  * payment gateways use, here pointed at the LAN-served admin dashboard.
  *
- *   hosts → /ip/hotspot/walled-garden        (HTTP-layer, dst-host)
- *   ips   → /ip/hotspot/walled-garden/ip     (all protocols, dst-address)
+ *   denies → /ip/hotspot/walled-garden  action=deny  (added at the TOP so they beat the allows)
+ *   hosts  → /ip/hotspot/walled-garden               (HTTP-layer, dst-host, action=allow)
+ *   ips    → /ip/hotspot/walled-garden/ip            (all protocols, dst-address)
  *
  * Re-running is safe: entries already carrying our tag are left in place.
  */
@@ -531,9 +725,52 @@ export async function provisionWalledGarden(
 	input: WalledGardenInput
 ): Promise<WalledGardenResult> {
 	const tag = input.tag ?? 'veent-admin';
-	const result: WalledGardenResult = { hosts: [], ips: [] };
+	const result: WalledGardenResult = { hosts: [], ips: [], denies: [] };
 	const conn = await openConn(config);
 	try {
+		// Deny rules must sit ABOVE the allow rules they override (walled-garden matching is first-match,
+		// top-to-bottom). Target the FIRST real allow — a non-empty, non-dynamic, enabled `dst-host`
+		// allow — and `place-before` it, so denies land just ahead of the payment/reCAPTCHA allows. We
+		// deliberately skip the leading dynamic/placeholder rows (empty dst-host): referencing a dynamic
+		// entry's id is fragile, and there's no need to sit above it. undefined → append (fresh garden,
+		// or no allow to precede).
+		const beforeId =
+			(input.denies?.length ?? 0) > 0
+				? (await conn.write('/ip/hotspot/walled-garden/print', [])).find(
+						(r) =>
+							r.action === 'allow' &&
+							(r['dst-host'] ?? '') !== '' &&
+							r.dynamic !== 'true' &&
+							r.disabled !== 'true'
+					)?.['.id']
+				: undefined;
+		for (const deny of input.denies ?? []) {
+			// Idempotency: an equivalent deny already present → skip (never add a duplicate on re-run).
+			// Match host case-insensitively (RouterOS lower-cases dst-host, but don't rely on our input
+			// being pre-normalised) and compare the path exactly (empty when unset). Print the whole
+			// table rather than a server-side `?dst-host=` filter so a casing difference can't hide an
+			// existing row and let a duplicate through.
+			const wantHost = deny.host.toLowerCase();
+			const wantPath = deny.path ?? '';
+			const rows = await conn.write('/ip/hotspot/walled-garden/print', []);
+			const already = rows.some(
+				(r) =>
+					r.action === 'deny' &&
+					(r['dst-host'] ?? '').toLowerCase() === wantHost &&
+					(r.path ?? '') === wantPath
+			);
+			if (already) {
+				result.denies.push({ value: deny.host, created: false });
+				continue;
+			}
+			const params = ['=action=deny', `=dst-host=${deny.host}`, `=comment=${tag}`];
+			if (deny.path) params.push(`=path=${deny.path}`);
+			// Omit place-before on a fresh (empty) walled garden — there's nothing to sit ahead of.
+			if (beforeId) params.push(`=place-before=${beforeId}`);
+			await conn.write('/ip/hotspot/walled-garden/add', params);
+			result.denies.push({ value: deny.host, created: true });
+		}
+
 		for (const host of input.hosts ?? []) {
 			const existing = await conn.write('/ip/hotspot/walled-garden/print', [`?dst-host=${host}`]);
 			if (existing.length > 0) {

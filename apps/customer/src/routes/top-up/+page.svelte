@@ -125,12 +125,15 @@
 					<p class="-mt-1 mb-1.5 text-[11.5px] font-medium text-muted">
 						Required by our payment provider to process your payment.
 					</p>
+					<!-- Placeholders vanish on input and aren't reliably announced — aria-label gives each
+					field a persistent accessible name without changing the label-less visual design. -->
 					<div class="flex gap-2.5">
 						<input
 							name="firstName"
 							type="text"
 							autocomplete="given-name"
 							placeholder="First name"
+							aria-label="First name"
 							required
 							value={form?.values?.firstName ?? data.buyer.firstName}
 							class="h-[48px] w-full rounded-xl border-[1.5px] border-border bg-bg px-4 text-[15px] text-ink transition-colors placeholder:text-muted focus:border-brand focus:outline-none"
@@ -140,6 +143,7 @@
 							type="text"
 							autocomplete="family-name"
 							placeholder="Last name"
+							aria-label="Last name"
 							required
 							value={form?.values?.lastName ?? data.buyer.lastName}
 							class="h-[48px] w-full rounded-xl border-[1.5px] border-border bg-bg px-4 text-[15px] text-ink transition-colors placeholder:text-muted focus:border-brand focus:outline-none"
@@ -150,6 +154,7 @@
 						type="email"
 						autocomplete="email"
 						placeholder="Email address"
+						aria-label="Email address"
 						required
 						value={form?.values?.email ?? data.buyer.email}
 						class="h-[48px] w-full rounded-xl border-[1.5px] border-border bg-bg px-4 text-[15px] text-ink transition-colors placeholder:text-muted focus:border-brand focus:outline-none"

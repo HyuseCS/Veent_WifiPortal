@@ -123,10 +123,20 @@ export const networkHealth = pgTable('network_health', {
 	// from coverage overlap (no stable id), so the name rides on the members: renaming a
 	// cluster mirrors this value across all its current members. Null = unnamed (shown as
 	// "Cluster N" in the UI).
-	clusterName: text('cluster_name')
+	clusterName: text('cluster_name'),
+	// Aggregate per-AP bandwidth caps, enforced on the router as a `/queue/simple` on this
+	// hotspot's client subnet (so all guests on the AP share the cap, bypass bindings and
+	// all). Kilobits/s; null = uncapped. Operator-set from the admin Networks card and
+	// preserved across the health sweep (see refreshNetworkHealth — telemetry-only upsert).
+	maxDownKbps: integer('max_down_kbps'),
+	maxUpKbps: integer('max_up_kbps')
 }, (t) => [
 	// `name` is the natural key the health sweep upserts on (one row per router interface /
 	// map pin). Unique so concurrent sweeps can't race two rows for the same AP, and so the
 	// service can use onConflictDoUpdate instead of select-then-insert.
-	uniqueIndex('network_health_name_key').on(t.name)
+	uniqueIndex('network_health_name_key').on(t.name),
+	// A cap is either unset or a positive rate — a zero/negative Kbps is always corrupt.
+	// Mirrors the router_model range check; guards direct inserts and future migrations.
+	check('network_health_max_down_kbps_positive', sql`${t.maxDownKbps} IS NULL OR ${t.maxDownKbps} > 0`),
+	check('network_health_max_up_kbps_positive', sql`${t.maxUpKbps} IS NULL OR ${t.maxUpKbps} > 0`)
 ]);

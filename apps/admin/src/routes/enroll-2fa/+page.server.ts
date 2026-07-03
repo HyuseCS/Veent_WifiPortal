@@ -4,6 +4,9 @@ import { renderSVG } from 'uqr';
 import { auth } from '$lib/server/auth';
 import { APIError } from 'better-auth/api';
 import { isTotpCode, secretFromTotpUri } from '$lib/server/twoFactor';
+import { logger } from '$lib/server/logger';
+
+const log = logger('enroll-2fa');
 
 /**
  * Mandatory TOTP enrollment. Reached by any authenticated staff member who hasn't
@@ -45,6 +48,7 @@ export const actions: Actions = {
 			if (error instanceof APIError) {
 				return fail(400, { step: 'enable', message: 'Incorrect password. Please try again.' });
 			}
+			log.error('2FA enable unexpected error:', error);
 			return fail(500, { step: 'enable', message: 'Unexpected error' });
 		}
 	},
@@ -75,6 +79,7 @@ export const actions: Actions = {
 			if (error instanceof APIError) {
 				return fail(400, { ...echo, message: 'Invalid code. Please try again.' });
 			}
+			log.error('2FA verify unexpected error:', error);
 			return fail(500, { ...echo, message: 'Unexpected error' });
 		}
 

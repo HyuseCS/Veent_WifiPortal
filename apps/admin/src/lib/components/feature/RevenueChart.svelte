@@ -4,8 +4,19 @@
 	let {
 		data,
 		height = 220,
-		label = 'Revenue chart'
-	}: { data: RevenuePoint[]; height?: number; label?: string } = $props();
+		label = 'Revenue chart',
+		formatValue = (n: number) => `₱${n.toLocaleString('en-PH')}`,
+		formatTick = fmtPeso
+	}: {
+		data: RevenuePoint[];
+		height?: number;
+		label?: string;
+		/** Full value formatter for tooltip / peak callout / aria (default: peso). Pass an
+		 * integer formatter to reuse this chart for non-currency series (e.g. error counts). */
+		formatValue?: (n: number) => string;
+		/** Compact Y-axis tick formatter (default: compact peso, e.g. ₱10k). */
+		formatTick?: (n: number) => string;
+	} = $props();
 
 	// Dependency-free SVG area+line chart (same no-dep philosophy as DonutChart). One real
 	// series — `amount` per bucket; the design mockup's dashed "credits sold" comparison line
@@ -129,7 +140,7 @@
 		for (const p of pts) if (p.amount > best.amount) best = p;
 		return best;
 	});
-	const peakLabel = $derived(peak ? `₱${peak.amount.toLocaleString('en-PH')}` : '');
+	const peakLabel = $derived(peak ? formatValue(peak.amount) : '');
 	const bubbleW = $derived(Math.max(46, peakLabel.length * 8 + 16));
 	const bubbleX = $derived(
 		peak ? Math.min(Math.max(peak.x - bubbleW / 2, padLeft), W - padRight - bubbleW) : 0
@@ -201,7 +212,7 @@
 			{@const y = padTop + (plotH / STEPS) * i}
 			<line x1={padLeft} y1={y} x2={W - padRight} y2={y} class="stroke-border" stroke-width="1" />
 			<text x={padLeft - 8} {y} dy="3.5" text-anchor="end" class="fill-muted text-[11px]">
-				{fmtPeso(tick)}
+				{formatTick(tick)}
 			</text>
 		{/each}
 
@@ -273,14 +284,14 @@
 					fill="transparent"
 					role="button"
 					tabindex="0"
-					aria-label="{p.label}: ₱{p.amount.toLocaleString('en-PH')}"
+					aria-label="{p.label}: {formatValue(p.amount)}"
 					onpointerenter={(e) => showTip(i, e)}
 					onpointermove={(e) => showTip(i, e)}
 					onpointerleave={hideTip}
 					onfocus={(e) => showTip(i, e)}
 					onblur={hideTip}
 				>
-					<title>{p.label}: ₱{p.amount.toLocaleString('en-PH')}</title>
+					<title>{p.label}: {formatValue(p.amount)}</title>
 				</circle>
 			{/each}
 
@@ -323,7 +334,7 @@
 			<div class="rounded-lg border border-border bg-surface px-3 py-2 shadow-lg shadow-black/10">
 				<div class="text-[11px] font-medium uppercase tracking-wide text-muted">{tip.label}</div>
 				<div class="font-mono text-base font-bold text-ink">
-					₱{tip.amount.toLocaleString('en-PH')}
+					{formatValue(tip.amount)}
 				</div>
 			</div>
 			<span class="tip-caret border-border bg-surface"></span>

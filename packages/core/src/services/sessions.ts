@@ -620,6 +620,12 @@ export interface StartFreeSessionResult {
  * ONE account-wide 15-min window (all the account's devices share it), gated by the existing
  * account-scoped 12h cooldown. The conditional `last_free_session_at` stamp prevents two
  * concurrent requests from both claiming.
+ *
+ * Atomicity (business rule #1, matching the paid path): the cooldown claim, the bind, AND the
+ * router grant all run in ONE transaction. If the grant throws (router unreachable), the whole
+ * tx rolls back — so a router blip can NOT burn the user's free-time eligibility while leaving
+ * them with no access. (Previously the claim committed in its own tx before a separate grant,
+ * so a failed grant cost the user their free session for the full cooldown.)
  */
 export async function startFreeAccessAndBindDevice(
 	db: DB,
@@ -629,7 +635,7 @@ export async function startFreeAccessAndBindDevice(
 	const now = new Date();
 
 	const limits = await getSessionLimits(db);
-	const claimed = await db.transaction(async (tx) => {
+	const outcome = await db.transaction(async (tx) => {
 		// Atomic cooldown claim: the conditional WHERE is the race guard. A plain
 		// SELECT-then-UPDATE lets parallel free-time requests all read the same stale
 		// `lastFreeSessionAt`, all pass the eligibility check under READ COMMITTED, and each
@@ -664,26 +670,53 @@ export async function startFreeAccessAndBindDevice(
 			return { eligible: false as const, nextEligibleAt: status.nextEligibleAt };
 		}
 
-		return { eligible: true as const, durationMinutes: limits.freeTimeMinutes };
+		// Bind under the just-claimed window. The claim's UPDATE already locked this profile row,
+		// so bindMacTx's FOR UPDATE re-lock is free and the two profile writes don't conflict.
+		const plan = await bindMacTx(tx, now, {
+			userId: input.userId,
+			macAddress: input.macAddress,
+			addMinutes: limits.freeTimeMinutes,
+			requireLiveWindow: false,
+			maxDevices: limits.maxDevicesPerAccount
+		});
+		// requireLiveWindow is false, so plan is never `skip`.
+		if (plan.skip) throw new Error('startFreeAccessAndBindDevice: unexpected skip');
+
+		// Grant INSIDE the tx — a failed grant rolls back the cooldown claim AND the binding, so
+		// the user keeps their free-time eligibility to retry.
+		await network.grant({
+			macAddress: input.macAddress,
+			durationMinutes: limits.freeTimeMinutes
+		});
+
+		return {
+			eligible: true as const,
+			newWindow: plan.newWindow,
+			rowId: plan.rowId,
+			evicted: plan.evicted
+		};
 	});
 
-	if (!claimed.eligible) {
-		return { ok: false, reason: 'not_eligible', nextEligibleAt: claimed.nextEligibleAt };
+	if (!outcome.eligible) {
+		return { ok: false, reason: 'not_eligible', nextEligibleAt: outcome.nextEligibleAt };
 	}
 
-	const result = await extendAccessAndBindDevice(db, network, {
-		userId: input.userId,
-		macAddress: input.macAddress,
-		durationMinutes: claimed.durationMinutes
-	});
-	return { ok: true, accessExpiresAt: result.accessExpiresAt };
+	await afterBind(db, network, input.userId, outcome.rowId, input.macAddress, outcome.evicted);
+	return { ok: true, accessExpiresAt: outcome.newWindow };
 }
 
 /**
  * Revoke every device of any account whose access window has lapsed, then clear the window.
  * Drives /api/network/revoke (cron). Account-level now: one lapsed window drops ALL its
  * devices. Nulls `access_expires_at` so a lapsed account isn't re-selected every minute.
- * Returns the count of device MACs revoked.
+ * Returns the count of device sessions expired.
+ *
+ * Each account is re-checked under a `FOR UPDATE` lock before it's swept: the initial `due`
+ * SELECT is a snapshot, and the per-account router round-trips make a pass take seconds, during
+ * which a lapsed account may buy a tier / re-claim free time and extend (or pause) its window.
+ * Without the re-check, this would revoke the just-granted device and null the live window —
+ * charging the user then cutting them off (business rule #1). The claim/extend paths take the
+ * same lock, so the re-check sees their committed result and skips the account.
  */
 export async function expireDueAccounts(
 	db: DB,
@@ -703,42 +736,62 @@ export async function expireDueAccounts(
 			)
 		);
 
-	let revoked = 0;
+	let expired = 0;
 	for (const { userId } of due) {
-		const rows = await db
-			.select({ id: networkSessions.id, macAddress: networkSessions.macAddress })
-			.from(networkSessions)
-			.where(
-				and(eq(networkSessions.userId, userId), eq(networkSessions.status, SESSION_STATUS.active))
-			);
-		// Revoke each MAC best-effort: a single router error must not strand the rest of this
-		// account's devices (or later accounts) as active. A missed revoke is swept next pass by
-		// reconcileGuestBindings, which drops router bindings no longer backed by an active row —
-		// so we still mark the rows expired here regardless. One batched UPDATE per account.
-		const ids: number[] = [];
-		for (const s of rows) {
-			if (s.macAddress) {
-				try {
-					await network.revoke(s.macAddress);
-				} catch {
-					// reconcileGuestBindings drops the orphaned router binding on the next cron.
-				}
+		// Re-check + expire + null-window atomically under the profile lock, collecting the MACs to
+		// revoke. The router revokes happen AFTER commit so a slow/hung router never holds the lock.
+		const toRevoke = await db.transaction(async (tx) => {
+			const [profile] = await tx
+				.select({
+					accessExpiresAt: customerProfile.accessExpiresAt,
+					accessPausedAt: customerProfile.accessPausedAt
+				})
+				.from(customerProfile)
+				.where(eq(customerProfile.userId, userId))
+				.for('update')
+				.limit(1);
+
+			// Window was extended (paid buy / free re-claim) or paused since the snapshot — leave
+			// this account's access and devices untouched; a still-live window is not due.
+			if (!profile?.accessExpiresAt || profile.accessPausedAt || profile.accessExpiresAt > now) {
+				return [] as string[];
 			}
-			ids.push(s.id);
+
+			const rows = await tx
+				.select({ id: networkSessions.id, macAddress: networkSessions.macAddress })
+				.from(networkSessions)
+				.where(
+					and(eq(networkSessions.userId, userId), eq(networkSessions.status, SESSION_STATUS.active))
+				);
+
+			const ids = rows.map((r) => r.id);
+			if (ids.length) {
+				await tx
+					.update(networkSessions)
+					.set({ status: SESSION_STATUS.expired })
+					.where(inArray(networkSessions.id, ids));
+			}
+			await tx
+				.update(customerProfile)
+				.set({ accessExpiresAt: null })
+				.where(eq(customerProfile.userId, userId));
+
+			expired += ids.length;
+			return rows.map((r) => r.macAddress).filter((m): m is string => Boolean(m));
+		});
+
+		// Revoke each MAC best-effort: a single router error must not strand the rest of this
+		// account's devices (or later accounts). A missed revoke is swept next pass by
+		// reconcileGuestBindings, which drops router bindings no longer backed by an active row.
+		for (const mac of toRevoke) {
+			try {
+				await network.revoke(mac);
+			} catch {
+				// reconcileGuestBindings drops the orphaned router binding on the next cron.
+			}
 		}
-		if (ids.length) {
-			await db
-				.update(networkSessions)
-				.set({ status: SESSION_STATUS.expired })
-				.where(inArray(networkSessions.id, ids));
-			revoked += ids.length;
-		}
-		await db
-			.update(customerProfile)
-			.set({ accessExpiresAt: null })
-			.where(eq(customerProfile.userId, userId));
 	}
-	return revoked;
+	return expired;
 }
 
 /**

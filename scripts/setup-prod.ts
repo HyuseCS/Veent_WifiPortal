@@ -115,7 +115,7 @@ if (!psqlV) warn('psql not found — DB provisioning will be skipped; create the
 // router/guest subnet specifically (correct even on a multi-homed box). `--ip=` /
 // PROD_LAN_IP overrides it for a static IP the box will move to later.
 step('Detecting this device LAN IP');
-const routerHost = firstExistingEnv('MIKROTIK_HOST') || '10.0.0.1';
+const routerHost = firstExistingEnv('MIKROTIK_HOST') || '10.210.0.1';
 const LAN_IP = IP_OVERRIDE || (await detectLanIp(routerHost)) || '';
 if (IP_OVERRIDE) log(`using forced IP: ${LAN_IP} (--ip / PROD_LAN_IP)`);
 else if (LAN_IP) log(`detected LAN IP: ${LAN_IP} (egress toward ${routerHost})`);
@@ -337,7 +337,7 @@ function isPrivateLanHost(host: string): boolean {
  */
 function setLanOrigin(file: string, origin: string): 'set' | 'kept' {
 	const current = envValue(file, 'ORIGIN');
-	let host = '';
+	let host: string;
 	try {
 		host = current ? new URL(current).hostname : '';
 	} catch {

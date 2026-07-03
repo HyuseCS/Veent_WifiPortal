@@ -16,7 +16,7 @@
  *
  * ponytail: all rows are inserted STRAIGHT to the DB via Drizzle. We deliberately
  * never call startSession()/addCredits()/network.grant() — apps/admin/.env points
- * NETWORK_CONTROLLER at a real MikroTik (10.0.0.1), and a seed must never fire real
+ * NETWORK_CONTROLLER at a real MikroTik (10.210.0.1), and a seed must never fire real
  * firewall grants. The trade-off: we hand-maintain row consistency (balances ==
  * ledger sum) instead of leaning on the services. The self-check at the bottom
  * guards that invariant.

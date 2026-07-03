@@ -2,9 +2,14 @@
 	import { type Snippet } from 'svelte';
 	import { page } from '$app/state';
 	import { Sidebar, MobileDrawer, Topbar } from '$lib/components/layout';
-	import { FinanceHeaderControls, NetworkHeaderControls } from '$lib/components/feature';
+	import {
+		FinanceHeaderControls,
+		NetworkHeaderControls,
+		SentryHeaderControls
+	} from '$lib/components/feature';
 	import { nav } from '$lib/nav';
 	import { mobileNav } from '$lib/uiState.svelte';
+	import { editLock } from '$lib/edit-lock.svelte';
 	import type { LayoutData } from './$types';
 
 	let { children, data }: { children: Snippet; data: LayoutData } = $props();
@@ -22,7 +27,8 @@
 		'/users': 'Guests, credits & sessions',
 		'/finance': 'Settled revenue & payments',
 		'/content': 'Packages, FAQ & session limits',
-		'/staff': 'Admin access management'
+		'/staff': 'Admin access management',
+		'/sentry': 'Error monitoring'
 	};
 	const subtitle = $derived(
 		subtitles[
@@ -35,6 +41,21 @@
 	// Networks page opts into vertical scroll-snap (two full-screen sections). Scoped here
 	// so the snap + hidden scrollbar apply only on that route, not the whole admin.
 	const onNetworks = $derived(page.url.pathname.startsWith('/networks'));
+	const onSentryIssues = $derived(page.url.pathname === '/sentry/issues');
+
+	// Base scroll container, minus the default padding on the full-bleed Sentry-issues table, plus
+	// the Networks-only scroll-snap (suspended while an edit lock is held).
+	const mainClass = $derived(
+		[
+			'flex-1 overflow-y-auto bg-canvas',
+			onSentryIssues ? '' : 'p-4 sm:p-6',
+			onNetworks
+				? `[scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${editLock.active ? '' : 'md:snap-y md:snap-proximity'}`
+				: ''
+		]
+			.filter(Boolean)
+			.join(' ')
+	);
 </script>
 
 <div class="flex h-dvh overflow-hidden bg-bg">
@@ -47,13 +68,10 @@
 			{#snippet actions()}
 				{#if onFinance}<FinanceHeaderControls />{/if}
 			{#if onNetworks}<NetworkHeaderControls />{/if}
+			{#if onSentryIssues}<SentryHeaderControls />{/if}
 			{/snippet}
 		</Topbar>
-		<main
-			class="flex-1 overflow-y-auto bg-canvas p-4 sm:p-6 {onNetworks
-				? 'md:snap-y md:snap-proximity [scrollbar-width:none] [&::-webkit-scrollbar]:hidden'
-				: ''}"
-		>
+		<main class={mainClass}>
 			{@render children()}
 		</main>
 	</div>

@@ -6,9 +6,11 @@
 	"exports": {
 		".": "./src/index.ts",
 		"./services": "./src/services/index.ts",
-		"./integrations": "./src/integrations/index.ts"
+		"./integrations": "./src/integrations/index.ts",
+		"./observability": "./src/observability.ts"
 	},
 	"dependencies": {
+		"@sentry/core": "^10.62.0",
 		"@veent/db": "workspace:*",
 		"drizzle-orm": "^0.45.2",
 		"node-routeros": "^1.6.9",
