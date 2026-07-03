@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { unbindAllDevices, SESSION_STATUS } from '@veent/core';
+import { unbindAllDevices, reconcileGuestBindings, SESSION_STATUS } from '@veent/core';
 
 /**
  * B3.1 — `unbindAllDevices` ("disconnect all devices" / pause) must be DB-first: each row is
@@ -50,5 +50,35 @@ describe('unbindAllDevices DB-first ordering (B3.1)', () => {
 		// Every row was marked revoked in the DB (the update ran before each failing revoke).
 		expect(setCalls).toHaveLength(2);
 		expect(setCalls.every((c) => c.status === SESSION_STATUS.revoked)).toBe(true);
+	});
+});
+
+/**
+ * B3.1.2 — the safety net that makes the DB-first swallow above sound: `reconcileGuestBindings`
+ * must drop any router binding whose MAC has no `active` session row (i.e. a binding a failed
+ * revoke stranded, whose row is now `revoked`). Without this the "reconcileGuestBindings sweeps
+ * any miss" comment is a lie and a stranded binding = free internet forever.
+ */
+describe('reconcileGuestBindings sweeps orphaned bindings (B3.1.2)', () => {
+	it('revokes a binding with no active row, keeps one that is still active (case-insensitive)', async () => {
+		// DB reports one active MAC (lowercase, as a router/DHCP may). The sweep does one select.
+		const activeRows = [{ mac: 'aa:bb:cc:dd:ee:01' }];
+		const db = {
+			select: () => ({ from: () => ({ where: () => Promise.resolve(activeRows) }) })
+		} as never;
+		const revoke = vi.fn().mockResolvedValue(undefined);
+		const network = {
+			listGuestBindings: vi.fn().mockResolvedValue([
+				{ macAddress: 'AA:BB:CC:DD:EE:01' }, // still active (case differs) — keep
+				{ macAddress: 'AA:BB:CC:DD:EE:02' } // no active row — orphan, sweep it
+			]),
+			revoke
+		} as never;
+
+		const swept = await reconcileGuestBindings(db, network);
+
+		expect(swept).toBe(1);
+		expect(revoke).toHaveBeenCalledTimes(1); // ONLY the orphan
+		expect(revoke).toHaveBeenCalledWith('AA:BB:CC:DD:EE:02');
 	});
 });

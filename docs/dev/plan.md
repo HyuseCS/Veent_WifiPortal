@@ -144,9 +144,19 @@ drizzle-orm 0.45.x wraps driver errors in `DrizzleQueryError`; the SQLSTATE live
 
 ## ⏸ STOP → ▶ PARTIAL RESUME (owner decision, 2026-07-03)
 
-**2026-07-02:** paused before Phase 3. **2026-07-03:** shipped the router-free subset (**B3.3, B3.4, B3.5** + B3.1's DB-first reorder), THEN merged `dev/system-sentry` in (`2d2b31b`) and finished the newly-unblocked items — **B3.6** (checkout tag-guard) and the `captureHandled` seams for **B3.1** (unbind) and **B2.2** (unattributed-paid alert). All 141 tests green + merge browser-verified.
+**2026-07-02:** paused before Phase 3. **2026-07-03:** shipped the router-free subset (**B3.3, B3.4, B3.5** + B3.1's DB-first reorder), THEN merged `dev/system-sentry` in (`2d2b31b`) and finished the newly-unblocked items — **B3.6** (checkout tag-guard) and the `captureHandled` seams for **B3.1** (unbind) and **B2.2** (unattributed-paid alert). Then closed the last open unit test (B3.1.2 sweeper-drops-orphan) + ran the B3.4.3 data audit (clean) + reconciled every stale checkbox against the actual tree. Unit suite green: customer 46 / admin 76 / core 14 = **136**, 0 fail (+ the 8-test governance e2e from Checkpoint 2); merge browser-verified.
 
-Still gated — **B3.2 ONLY** (tag-aware grant/revoke): needs the design mini-checkpoint + bench-MikroTik confirmation that RouterOS holds multiple bindings per MAC. The real-router verification matrix + human handoff (Checkpoint 3) remains a **ship gate** for the router-touching code (B3.1/B3.6) before production.
+**Every code + unit-test item in Phases 1–3 is now DONE** except **B3.2**. What genuinely remains is gated on things outside the code — split by what unblocks each:
+
+| Remaining | Blocked on | Kind |
+|-----------|-----------|------|
+| **B3.2** (tag-aware grant/revoke) | design mini-checkpoint (owner + reviewer pick option a/b) **then** bench-MikroTik confirming RouterOS holds multiple ip-bindings per MAC | code (not yet written — assumption unverified, so no speculative impl) |
+| **B3.1 / B3.6 real-router legs** (B3.1.2 live, B3.6.2), **Checkpoint 3** | bench MikroTik + human sign-off | hardware verification (ship gate before prod) |
+| **B2.2.2 + Phase 4.3** (Sentry alert rules) | Sentry dashboard access | ops config, not code |
+| **Phase 4.2 / 4.4** (staging soak, prod post-deploy MAC check) | a staging/prod deploy | rollout |
+| **Phase 4.5** (mark findings mitigated, rename `*_COMPLETE`) | everything above landing | doc bookkeeping |
+
+The B3.2 design mini-checkpoint (option **(a)** fully tag-scoped vs **(b)** precedence rule) is the one decision that unblocks the only remaining *code*. Recommendation stays **(a)**. Nothing else here is finishable at a keyboard without hardware, a deploy, or a Sentry dashboard.
 
 ---
 
@@ -159,8 +169,8 @@ Highest-blast-radius phase: these paths talk to the physical router. Every task 
 #### B3.1 — Stop `pauseAccountAccess` stranding live bypasses (`packages/core/src/services/sessions.ts:855-877`, call site `:548`)
 *(re-anchored: function is `unbindAllDevices` (post-merge `~929`), per-device loop; `afterBind` pattern at `:192-198`. Shipped in two parts — DB-first reorder pre-merge; `captureHandled(err, …scope:'unbind')` wired post-merge 2026-07-03 once the observability seam landed.)*
 - [x] B3.1.1 Make `unbindAllDevices` DB-first and resilient, matching the architecture's "DB is truth, sweeper reconciles router drift" pattern used by `afterBind` (sessions.ts:192-197): mark each row `revoked` first, then attempt `network.revoke(mac)` in a per-device `try/catch` with `captureHandled(err, { level: 'warning', tags: { area: 'network', scope: 'unbind' } })` — continue on failure instead of throwing out of the loop.
-- [ ] B3.1.2 Verify (and pin with a unit test) that the sweeper actually drops a router binding whose session row is `revoked` — this is what makes the existing "reconcileGuestBindings sweeps any miss" comment true.
-- [ ] B3.1.3 Unit test: stub controller whose `revoke` throws — pause still completes, all rows end `revoked`, capture called, no unhandled rejection. Callers of `unbindAllDevices` ("disconnect all devices", pause) reviewed for return-value expectations (it returns a count — semantics unchanged).
+- [x] B3.1.2 Pinned with a unit test (`unbind-devices.spec.ts`): `reconcileGuestBindings` revokes a router binding whose MAC has no `active` session row (the stranded case) and leaves an active one alone — case-insensitive match — so the "reconcileGuestBindings sweeps any miss" comment is now true-by-test.
+- [x] B3.1.3 Unit test (`unbind-devices.spec.ts`): stub controller whose `revoke` throws for BOTH devices — pause still completes, returns count 2, every row ends `revoked`, revoke attempted per device, no unhandled rejection. *(The `captureHandled` call is a fire-and-forget no-op when Sentry is uninitialised — not asserted; the load-bearing swallow+continue+all-revoked behaviour is.)* Callers reviewed: return value is a count — semantics unchanged.
 
 *Why this can't mess anything up:* the failure ordering flips from "router-first, DB stranded on throw" (free internet forever) to "DB-first, router swept later" (worst case: a device keeps access until the next sweeper cron — bounded minutes, and the state self-describes). The happy path is byte-equivalent: rows revoked, router revoked, same count returned.
 *Rollback:* revert; pause returns to strand-on-throw.
@@ -177,17 +187,17 @@ Highest-blast-radius phase: these paths talk to the physical router. Every task 
 
 #### B3.3 — Age-bound the stale IP→MAC fallback (`packages/core/src/services/adminAccess.ts:88-91`)
 *(re-anchored: lines unchanged; function is `resolveDeviceMac` at `:69`. Happy-path TTL check is `:76`; the unbounded fallback is the `catch` at `:88-91` returning `cached?.mac ?? null`. Callers: customer `resolveMac` `apps/customer/.../network-location.ts:28`, admin `postLogin.ts:41`.)*
-- [ ] B3.3.1 On the error path, only return `cached.mac` if the entry is younger than a stale ceiling (`MAC_CACHE_STALE_MAX_MS = 5 * 60_000`); otherwise return `null`. Comment the ceiling: 5 min tolerates a router blip without surviving a DHCP lease reassignment.
-- [ ] B3.3.2 Unit test: fresh-cache outage → served; >5 min stale + outage → `null`.
+- [x] B3.3.1 On the error path, only return `cached.mac` if the entry is younger than a stale ceiling (`MAC_CACHE_STALE_MAX_MS = 5 * 60_000`); otherwise return `null`. Comment the ceiling: 5 min tolerates a router blip without surviving a DHCP lease reassignment. *(`adminAccess.ts:52,95`.)*
+- [x] B3.3.2 Unit test (`adminAccess.spec.ts`): fresh-cache outage within 5 min → served (and the 60s happy-path TTL is bypassed, proving the catch branch ran); >5 min stale + outage → `null`.
 
 *Why this can't mess anything up:* `null` is the already-handled "can't detect device" outcome every caller (customer portal `resolveMac`, admin flows) renders today; the change only shrinks the window where a *wrong* MAC could be served, which is strictly safer than the status quo. Happy path (fresh cache / live router) unchanged.
 *Rollback:* revert the constant/branch.
 
 #### B3.4 — Reject zero-minute packages (`apps/admin/.../content/packages/+page.server.ts:45-66` + `packages/core/src/services/sessions.ts`)
-- [ ] B3.4.1 Form validation: `durationMinutes < 1` is invalid for both `tier` and `free` types (the current `num()` accepts `>= 0`).
-- [ ] B3.4.2 Defense-in-depth at the money seam: `startPaidAccessAndBindDevice` refuses `addMinutes <= 0` **before** deducting credits (typed failure, surfaced like other purchase errors — never a silent no-op after spending).
-- [ ] B3.4.3 Data audit (read-only query, live DB is `localhost:5432` — *not* the db-1 container): list any existing `duration_minutes = 0` packages; if found, surface to owner for manual correction — this plan does not mutate data.
-- [ ] B3.4.4 Unit test on the seam guard; form-validation test if the suite covers actions.
+- [x] B3.4.1 Form validation: `durationMinutes < 1` is invalid for both `tier` and `free` types (the current `num()` accepts `>= 0`). *(`content/packages/+page.server.ts:68-71`.)*
+- [x] B3.4.2 Defense-in-depth at the money seam: `startPaidAccessAndBindDevice` refuses `durationMinutes <= 0` **before** deducting credits (throws, surfaced like other purchase errors — never a silent no-op after spending). *(`sessions.ts:339`.)*
+- [x] B3.4.3 Data audit (read-only, live DB `localhost:5432`) — **clean**: the only NULL/sub-1 duration rows are `bundle` type (credit top-ups ₱20/₱50/₱100), which legitimately have no duration; **zero** `tier`/`free` packages with `duration_minutes < 1`. No data mutation needed.
+- [x] B3.4.4 Unit test on the seam guard (`grant-atomic.spec.ts:120` — a 0-minute package throws `/non-positive durationMinutes/` **before** any spend). Form action itself remains untested (no action-level harness) — the seam guard is the money-safety backstop.
 
 *Why this can't mess anything up:* both changes are pure input rejection ahead of any state change; no legitimate flow sells a 0-minute package. Existing packages are reported, not touched (S5-adjacent caution).
 *Rollback:* revert; 0 becomes purchasable again.
@@ -196,8 +206,8 @@ Highest-blast-radius phase: these paths talk to the physical router. Every task 
 *(re-anchored: write-path lines unchanged, prune-guard `names.length > 0` at `:46`. Consumers with NO staleness derivation today: admin `listNetworkHealth` `apps/admin/src/lib/server/queries.ts:313`, locator `listPublicLocations` `apps/locator/src/lib/server/locations.ts:22`. Shared `lastSampleAt` column at `packages/db/src/schema/admin.ts:106`. No fixed refresh-interval constant exists — admin refreshes on-view `networks/+page.server.ts:39`.)*
 `sampleHealth` legitimately returns `[]` (no hotspot-bound interfaces), and `refreshNetworkHealth` then neither upserts nor prunes — so the Networks page and public locator show last-known state forever.
 
-- [ ] B3.5.1 Fix on the **read side**, not the write side: locate `listNetworkHealth` (admin queries) and the locator's equivalent, and derive `online: false` (or an explicit `stale: true` chip) when `lastSampleAt` is older than N× the refresh interval (propose N=3). The write path — including the deliberate `names.length > 0` prune guard that protects rows from a transient empty sample — stays untouched.
-- [ ] B3.5.2 Cover **both** consumers (admin Networks page, public locator) so they can't disagree; unit test the derivation boundary.
+- [x] B3.5.1 Fixed on the **read side**: a shared `@veent/db` helper `isNetworkHealthStale(lastSampleAt, now)` / `NETWORK_HEALTH_STALE_MS = 3*60_000` (`packages/db/src/network-health.ts`); both `apps/admin/.../queries.ts` and `apps/locator/.../locations.ts` derive stale/offline from it. Write path (incl. the `names.length > 0` prune guard) untouched.
+- [x] B3.5.2 Both consumers wired to the **one** shared helper so they can't disagree; boundary unit-tested (`networkHealthStale.spec.ts`: fresh at exactly the ceiling, stale 1ms past, never-sampled `null`/`undefined` → stale).
 
 *Why this can't mess anything up:* zero writes change, so no data can be lost or wrongly pruned; a freeze caused by *any* reason (empty samples, router unreachable, cron dead) now degrades to visibly-stale/offline instead of confidently-wrong "Healthy". Worst case of a mis-tuned N: an AP briefly shows stale during slow sample cycles — cosmetic, tunable.
 *Rollback:* revert the read-side derivation; display returns to frozen last-known.
