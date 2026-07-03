@@ -67,7 +67,7 @@ describe('getCheckoutStatus — authoritative via the payments endpoint', () => 
 		expect(evt?.status).toBe('expired');
 	});
 
-	it('falls back to checkout status (pending) and does NOT hit payments when no payment exists yet', async () => {
+	it('falls back to checkout status (pending) and does NOT hit payments when no payment exists yet (deprecated path)', async () => {
 		const calls: string[] = [];
 		mockByUrl((url) => {
 			calls.push(url);
@@ -80,5 +80,38 @@ describe('getCheckoutStatus — authoritative via the payments endpoint', () => 
 		const evt = await provider.getCheckoutStatus!('chk_2');
 		expect(evt?.status).toBe('pending');
 		expect(calls.some((u) => u.includes('/payments/v1/payments'))).toBe(false);
+	});
+});
+
+/**
+ * getPaymentByReference — the reconcile path that credits without a webhook. It resolves the
+ * payment straight from OUR request reference number via GET /payments/v1/payment-rrns/{rrn}, so a
+ * missed webhook credits even if the DO/tunnel never recovers. One RRN can carry multiple attempts;
+ * a settled success must win.
+ */
+describe('getPaymentByReference — authoritative RRN lookup', () => {
+	it('picks the successful payment among multiple attempts for one reference', async () => {
+		mockByUrl((url) => {
+			if (url.includes('/payments/v1/payment-rrns/ref_9')) {
+				return [
+					{ id: 'pay_fail', status: 'PAYMENT_FAILED', amount: '100.00', requestReferenceNumber: 'ref_9' },
+					{ id: 'pay_ok', isPaid: true, amount: '100.00', currency: 'PHP', requestReferenceNumber: 'ref_9' }
+				];
+			}
+			throw new Error(`unexpected url ${url}`);
+		});
+		const evt = await provider.getPaymentByReference!('ref_9');
+		expect(evt?.status).toBe('paid');
+		expect(evt?.externalTransactionId).toBe('pay_ok');
+		expect(evt?.amountMinor).toBe(10000);
+	});
+
+	it('returns null when the gateway has no payment for the reference yet', async () => {
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async () => ({ ok: false, status: 404, json: async () => [], text: async () => '' }))
+		);
+		const evt = await provider.getPaymentByReference!('ref_none');
+		expect(evt).toBeNull();
 	});
 });
