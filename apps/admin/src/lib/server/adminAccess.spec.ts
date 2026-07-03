@@ -50,3 +50,22 @@ describe('resolveDeviceMac error-path staleness bound', () => {
 		expect(await resolveDeviceMac(network, '10.0.0.2')).toBeNull();
 	});
 });
+
+/**
+ * The admin grant bug: getClientAddress() on a dual-stack listener hands back an IPv4-mapped IPv6
+ * address (`::ffff:10.0.0.5`), but RouterOS stores plain IPv4. resolveDeviceMac must strip the
+ * prefix before querying, or the router lookup misses → mac null → the `veent-admin` binding is
+ * never written (guest path worked because it strips at its own call sites). Without the strip
+ * these assertions fail: resolveMacByIp is called with the `::ffff:`-prefixed IP and returns null.
+ */
+describe('resolveDeviceMac strips the IPv4-mapped IPv6 prefix', () => {
+	it('queries the router with plain IPv4 when given ::ffff:', async () => {
+		stubNow(1_000_000);
+		const mac = 'AA:BB:CC:DD:EE:03';
+		const resolveMacByIp = vi.fn().mockResolvedValue(mac);
+		const network = { resolveMacByIp } as never;
+
+		expect(await resolveDeviceMac(network, '::ffff:10.0.0.3')).toBe(mac);
+		expect(resolveMacByIp).toHaveBeenCalledWith('10.0.0.3'); // prefix stripped, not `::ffff:10.0.0.3`
+	});
+});

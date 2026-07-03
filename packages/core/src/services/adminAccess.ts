@@ -113,16 +113,22 @@ export async function resolveDeviceMac(
 	ipAddress: string | null | undefined
 ): Promise<string | null> {
 	if (!ipAddress || !network.resolveMacByIp) return null;
+	// getClientAddress() on a dual-stack Node listener yields IPv4-mapped IPv6 (`::ffff:10.0.0.5`),
+	// but RouterOS stores plain IPv4 — a raw `?address=::ffff:…` lookup misses and the admin grant
+	// silently no-ops. Strip the prefix so this matches the customer path (which strips at its own
+	// call sites in network-location.ts / rateLimit.ts). ponytail: only the mapped-v4 case; a real
+	// IPv6 client isn't on the hotspot v4 LAN, so it correctly falls through to null.
+	const ip = ipAddress.replace(/^::ffff:/, '');
 	const now = Date.now();
-	const cached = macByIpCache.get(ipAddress);
+	const cached = macByIpCache.get(ip);
 	if (cached && now - cached.at < MAC_CACHE_TTL_MS) return cached.mac;
 	try {
 		const mac = await withTimeout(
-			Promise.resolve(network.resolveMacByIp(ipAddress)),
+			Promise.resolve(network.resolveMacByIp(ip)),
 			RESOLVE_TIMEOUT_MS
 		);
 		if (mac) {
-			macByIpCache.set(ipAddress, { mac, at: now });
+			macByIpCache.set(ip, { mac, at: now });
 			return mac;
 		}
 		// Clean "not found" (device genuinely absent) — don't resurrect a stale entry.
