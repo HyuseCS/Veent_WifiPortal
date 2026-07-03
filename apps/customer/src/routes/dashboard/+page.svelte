@@ -86,6 +86,10 @@
 	// Paused: the window is frozen and all devices are unbound. `expiresAt` is the FROZEN end
 	// (may be in the past), so countdown/expiry logic must ignore it and use the held remaining.
 	const paused = $derived(access.paused);
+	// Auto-paused by a network outage (vs. the guest tapping Pause). We hold their time and resume
+	// automatically when the AP recovers — so we hide the manual Resume (resuming into a live
+	// outage would just tick down time they can't use, and the sweep would re-pause them).
+	const outagePaused = $derived(paused && access.pausedReason === 'outage');
 	// The server loaded the window as live (expiresAt > now at load). Once the live
 	// ticker crosses expiresAt, flip to the "ended" frame locally — the real access
 	// cut-off is enforced server-side by the revoke cron, so this is cosmetic. Never while paused.
@@ -471,7 +475,7 @@
 												<span
 													class="rounded-full bg-warning px-2 py-[3px] text-[10px] font-semibold tracking-wide text-white uppercase"
 												>
-													Paused
+													{outagePaused ? 'Outage' : 'Paused'}
 												</span>
 											{:else}
 												<span
@@ -483,7 +487,9 @@
 										</div>
 										{#if paused}
 											<div class="text-xs font-medium text-warning lg:text-[13.5px]">
-												Time held — resume anytime
+												{outagePaused
+													? 'Network outage — your time is safe'
+													: 'Time held — resume anytime'}
 											</div>
 										{:else}
 											<div
@@ -523,7 +529,16 @@
 							{/if}
 
 							<!-- Pause is paid-only; Free Time can't be paused (it would game the cooldown). -->
-							{#if paused}
+							{#if outagePaused}
+								<!-- Auto-paused by an outage: no manual Resume — we reconnect automatically when
+								     the network is back (resuming into a live outage would just burn held time). -->
+								<div
+									class="mt-4 flex items-center justify-center gap-2 rounded-xl border border-warning/30 bg-warning/10 px-4 py-3 text-center text-[12.5px] font-medium text-warning"
+								>
+									<Icon name="clock" size={15} />
+									We'll reconnect you automatically when the network is back.
+								</div>
+							{:else if paused}
 								<form method="post" action="?/resumeAccess" use:enhance={resumeTime}>
 									<button
 										class="mt-4 flex h-[50px] w-full items-center justify-center gap-2 rounded-xl bg-cta text-[15px] font-bold text-white transition-colors hover:bg-cta-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cta hover:cursor-pointer"

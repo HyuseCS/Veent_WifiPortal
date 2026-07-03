@@ -99,6 +99,10 @@ export const networkHealth = pgTable('network_health', {
 	id: serial('id').primaryKey(),
 	name: text('name').notNull(),
 	online: boolean('online').notNull().default(true),
+	// When the AP most recently transitioned online→offline (cleared on recovery). Drives the
+	// outage sweep's debounce: guests on the AP are auto-paused only after it has been down for a
+	// sustained period, not on a brief blip.
+	offlineSince: timestamp('offline_since'),
 	uptimePct: numeric('uptime_pct', { precision: 5, scale: 2 }).notNull().default('0'),
 	latencyMs: integer('latency_ms'),
 	users: integer('users').notNull().default(0),

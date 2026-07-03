@@ -61,6 +61,13 @@ export const customerProfile = pgTable('customer_profile', {
 	// `access_expires_at = now + held` and clears this. Any window-extending buy/free claim
 	// also clears it (adding time un-pauses). Paid windows only.
 	accessPausedAt: timestamp('access_paused_at'),
+	// Why paused: 'user' (guest tapped Pause) or 'outage' (auto-paused because this account's AP
+	// went down — see the outage sweep). Null when not paused. Lets the outage auto-resume touch
+	// ONLY its own pauses and never un-pause a manual one.
+	accessPausedReason: text('access_paused_reason'),
+	// For an 'outage' pause: the network_health.id of the AP whose outage triggered it, so the
+	// sweep resumes the account only when THAT AP recovers. Null for a 'user' pause. Loose link.
+	accessPausedNetworkId: integer('access_paused_network_id'),
 	// Admin "block": when true, grant paths refuse to start sessions for this user.
 	blocked: boolean('blocked').notNull().default(false),
 	// Last AP/network this account was granted on (network_health.id), stamped whenever a

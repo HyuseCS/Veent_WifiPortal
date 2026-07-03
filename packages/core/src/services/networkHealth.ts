@@ -1,4 +1,4 @@
-import { and, eq, isNull, notInArray } from 'drizzle-orm';
+import { and, eq, isNull, notInArray, sql } from 'drizzle-orm';
 import { type DB, networkHealth } from '@veent/db';
 import type { NetworkController } from '../integrations/network';
 
@@ -28,14 +28,26 @@ export async function refreshNetworkHealth(
 			throughputMbps: s.throughputMbps,
 			uptimePct: s.online ? '100.00' : '0.00',
 			latencyMs: s.latencyMs ?? null,
-			lastSampleAt: now
+			lastSampleAt: now,
+			// New-row value (no conflict): a freshly-seen offline AP is "down since now".
+			offlineSince: s.online ? null : now
 		};
+		// On update, offline_since must track the transition, not overwrite it: stamp `now` only on
+		// the online→offline edge, keep the existing stamp while it stays down (so the debounce
+		// measures total downtime), and clear it on recovery. `network_health.offline_since` in the
+		// SET refers to the pre-update (existing) row; the JS `s.online` decides the branch.
+		const offlineSinceOnUpdate = s.online
+			? sql`NULL`
+			: sql`CASE WHEN ${networkHealth.online} = true THEN ${now} ELSE ${networkHealth.offlineSince} END`;
 		// Upsert on the unique `name`: one round-trip, and two concurrent sweeps can't create
 		// duplicate rows for the same AP (the select-then-insert this replaced could).
 		await db
 			.insert(networkHealth)
 			.values({ name: s.name, ...vals })
-			.onConflictDoUpdate({ target: networkHealth.name, set: vals });
+			.onConflictDoUpdate({
+				target: networkHealth.name,
+				set: { ...vals, offlineSince: offlineSinceOnUpdate }
+			});
 	}
 
 	// Drop auto-discovered rows the router didn't report this round (e.g. the seeded

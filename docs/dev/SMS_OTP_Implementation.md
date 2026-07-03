@@ -39,11 +39,26 @@ Set these in `apps/customer/.env` (documented in `.env.example`):
 
 All three are required to send.
 
+## Choosing the provider (iTexMo vs UniSMS)
+
+`SMS_PROVIDER` selects the gateway — `itexmo` (default) or `unisms` — so you can switch between
+them with no code change (e.g. depending on which SMS account is approved first). Only the selected
+provider's config is read. UniSMS config (when `SMS_PROVIDER=unisms`):
+
+| Env var | Required | Notes |
+| --- | --- | --- |
+| `UNISMS_SECRET_KEY` | yes | API secret key (`sk_…`); sent as the Basic-auth username with an empty password. |
+| `UNISMS_SENDER_ID` | yes | UniSMS requires a sender id on every message. |
+
+UniSMS (`POST unismsapi.com/api/sms`) takes the recipient in **E.164** (`+63…`, which
+`normalizePhone` already produces); iTexMo takes the **local** `09…` form. The fail-safe and 10s
+timeout behavior below applies to whichever provider is active.
+
 ## Behavior when not configured
 
 `sendOtp` is deliberately fail-safe-by-environment:
 
-- **Dev** (any credential missing): prints `[otp] iTexMo not configured — code for
+- **Dev** (any credential missing): prints `[otp] <provider> not configured — code for
   <phone>: <code>` to the server console, so you can keep logging in locally.
 - **Production** (any credential missing): **throws**. An OTP that can't be delivered
   must never be treated as "sent" — silently swallowing it would let anyone past the

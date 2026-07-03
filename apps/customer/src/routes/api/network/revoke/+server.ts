@@ -1,5 +1,10 @@
 import { json } from '@sveltejs/kit';
-import { expireDueAccounts, reconcileGuestBindings, sweepCheckoutAccess } from '@veent/core';
+import {
+	sweepOutagePauses,
+	expireDueAccounts,
+	reconcileGuestBindings,
+	sweepCheckoutAccess
+} from '@veent/core';
 import { db } from '$lib/server/db';
 import { network } from '$lib/server/network';
 import { requireCron } from '$lib/server/cron';
@@ -16,6 +21,11 @@ import type { RequestHandler } from './$types';
 export const POST: RequestHandler = async (event) => {
 	requireCron(event);
 
+	// Outage auto-pause FIRST: freeze the paid window of guests on a down AP before the expiry
+	// sweep runs, so an account whose AP is down isn't expired out from under them — it's held
+	// (expireDueAccounts skips paused accounts) and resumed when the AP recovers.
+	const outage = await sweepOutagePauses(db, network);
+
 	const revoked = await expireDueAccounts(db, network);
 	// Then sweep router bindings the DB no longer backs (wipe/cascade/crash orphans).
 	const reconciled = await reconcileGuestBindings(db, network);
@@ -23,5 +33,5 @@ export const POST: RequestHandler = async (event) => {
 	// abandoned checkout can't leave google.com open on an IP that DHCP later hands to another
 	// device. Self-describing on the router (comment-stamped), so no DB state to reconcile.
 	const sweptCheckoutAccess = await sweepCheckoutAccess(network);
-	return json({ ok: true, revoked, reconciled, sweptCheckoutAccess });
+	return json({ ok: true, outage, revoked, reconciled, sweptCheckoutAccess });
 };

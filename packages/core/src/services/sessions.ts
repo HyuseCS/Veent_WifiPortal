@@ -93,7 +93,9 @@ async function bindMacTx(
 			.set({
 				accessExpiresAt: newWindow,
 				accessPackageId: opts.packageId ?? null,
-				accessPausedAt: null
+				accessPausedAt: null,
+				accessPausedReason: null,
+				accessPausedNetworkId: null
 			})
 			.where(eq(customerProfile.userId, opts.userId));
 	}
@@ -418,6 +420,9 @@ export interface ActiveAccess {
 	isFree: boolean;
 	/** True when the window is paused (frozen, devices unbound). */
 	paused: boolean;
+	/** Why it's paused: 'user' (guest tapped Pause) or 'outage' (auto-paused, AP down). Null when
+	 * not paused. Lets the UI show "network outage — your time is safe" vs the manual-pause copy. */
+	pausedReason: 'user' | 'outage' | null;
 	/** Time left on the window: live (`expiresAt − now`) or, when paused, the frozen hold. */
 	remainingMs: number;
 	/** Devices currently bound under this window (empty while paused — pause unbinds all). */
@@ -441,6 +446,7 @@ export async function getActiveAccess(
 		.select({
 			accessExpiresAt: customerProfile.accessExpiresAt,
 			accessPausedAt: customerProfile.accessPausedAt,
+			accessPausedReason: customerProfile.accessPausedReason,
 			accessPackageId: customerProfile.accessPackageId,
 			packageName: packages.name
 		})
@@ -484,6 +490,7 @@ export async function getActiveAccess(
 		name: profile.packageName ?? null,
 		isFree: (profile.accessPackageId ?? null) == null,
 		paused,
+		pausedReason: paused ? ((profile.accessPausedReason as 'user' | 'outage' | null) ?? 'user') : null,
 		remainingMs,
 		devices: devices.map((d) => ({
 			id: d.id,
@@ -513,7 +520,10 @@ export async function pauseAccountAccess(
 	db: DB,
 	network: NetworkController,
 	userId: string,
-	now: Date = new Date()
+	now: Date = new Date(),
+	/** `reason` defaults to 'user' (guest tapped Pause). The outage sweep passes 'outage' + the
+	 *  triggering AP's `networkId` so its auto-resume only un-pauses its own pauses. */
+	opts: { reason?: 'user' | 'outage'; networkId?: number | null } = {}
 ): Promise<PauseAccessResult> {
 	const outcome = await db.transaction(async (tx) => {
 		const [p] = await tx
@@ -537,7 +547,11 @@ export async function pauseAccountAccess(
 
 		await tx
 			.update(customerProfile)
-			.set({ accessPausedAt: now })
+			.set({
+				accessPausedAt: now,
+				accessPausedReason: opts.reason ?? 'user',
+				accessPausedNetworkId: opts.networkId ?? null
+			})
 			.where(eq(customerProfile.userId, userId));
 		return { ok: true as const, remainingMs: window.getTime() - now.getTime() };
 	});
@@ -585,7 +599,12 @@ export async function resumeAccountAccess(
 		if (remainingMs <= 0) {
 			await tx
 				.update(customerProfile)
-				.set({ accessExpiresAt: null, accessPausedAt: null })
+				.set({
+					accessExpiresAt: null,
+					accessPausedAt: null,
+					accessPausedReason: null,
+					accessPausedNetworkId: null
+				})
 				.where(eq(customerProfile.userId, userId));
 			return { ok: false as const, reason: 'no_remaining' as const };
 		}
@@ -593,7 +612,12 @@ export async function resumeAccountAccess(
 		const newWindow = new Date(now.getTime() + remainingMs);
 		await tx
 			.update(customerProfile)
-			.set({ accessExpiresAt: newWindow, accessPausedAt: null })
+			.set({
+				accessExpiresAt: newWindow,
+				accessPausedAt: null,
+				accessPausedReason: null,
+				accessPausedNetworkId: null
+			})
 			.where(eq(customerProfile.userId, userId));
 		return { ok: true as const, accessExpiresAt: newWindow };
 	});
@@ -863,7 +887,12 @@ export async function revokeUserSessions(
 	// Clear the window AND any pause so a kicked/blocked account can't be silently resumed.
 	await db
 		.update(customerProfile)
-		.set({ accessExpiresAt: null, accessPausedAt: null })
+		.set({
+			accessExpiresAt: null,
+			accessPausedAt: null,
+			accessPausedReason: null,
+			accessPausedNetworkId: null
+		})
 		.where(eq(customerProfile.userId, userId));
 
 	return revoked;
