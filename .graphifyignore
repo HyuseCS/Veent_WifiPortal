@@ -1,0 +1,7 @@
+# Agent-tooling mirrors — not project content. Kept out of the knowledge graph
+# so `/graphify --update` stops reporting hundreds of phantom "changed" files.
+.claude/
+.agents/
+.gemini/
+.playwright-mcp/
+graphify-out/
