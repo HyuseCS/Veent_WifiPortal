@@ -1,7 +1,13 @@
 import { redirect, fail } from '@sveltejs/kit';
 import { and, eq, asc } from 'drizzle-orm';
 import { packages, paymentCheckouts, customerProfile } from '@veent/db';
-import { getAccount, getLatestLedgerId, captureHandled, openCheckoutAccess } from '@veent/core';
+import {
+	getAccount,
+	getLatestLedgerId,
+	captureHandled,
+	openCheckoutAccess,
+	getSessionLimits
+} from '@veent/core';
 import { env } from '$env/dynamic/private';
 import { db } from '$lib/server/db';
 import { network } from '$lib/server/network';
@@ -49,13 +55,17 @@ export const load: PageServerLoad = async (event) => {
 		email: profile?.contactEmail ?? ''
 	};
 
+	// Points earn rate (whole percent) so the storefront can preview "earn ~N points" per bundle.
+	const { pointsEarnRate } = await getSessionLimits(db);
+
 	return {
 		user,
 		balance: account?.balance ?? 0,
 		bundles,
 		portalQuery,
 		buyer,
-		savedDetails: !!profile?.firstName
+		savedDetails: !!profile?.firstName,
+		pointsEarnRate
 	};
 };
 

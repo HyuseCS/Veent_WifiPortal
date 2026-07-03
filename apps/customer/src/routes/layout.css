@@ -44,6 +44,10 @@
 	--color-warning: oklch(0.65 0.15 72);
 	--color-blocked: oklch(0.55 0.18 22);
 
+	/* Rewards — loyalty points accent (warm gold, distinct from the blue brand/cta and the
+	 * green/amber/red status colours). Generates `text-points`, `bg-points/15`, `border-points/40`. */
+	--color-points: oklch(0.68 0.13 75);
+
 	/* Type — Montserrat for headings, Plus Jakarta Sans for UI, JetBrains Mono for data fields.
 	 * `--font-heading` also generates a `font-heading` utility; the @layer base rule below applies
 	 * it to every h1–h6 automatically (data fields opt back to mono with `font-mono` as today). */

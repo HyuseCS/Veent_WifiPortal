@@ -3,6 +3,8 @@ import { type DB, paymentCheckouts, paymentTransactions, packages } from '@veent
 import { LEDGER_TYPE } from '../config';
 import type { PaymentEvent, PaymentProvider } from '../integrations/payments';
 import { addCreditsTx } from './credits';
+import { earnPointsTx } from './points';
+import { getSessionLimits } from './settings';
 import { captureHandled } from '../observability';
 
 /** Normalized PaymentEvent.status → the raw gateway status we persist for Finance. */
@@ -163,6 +165,10 @@ export async function creditCheckoutIfUnsettled(
 		? eq(paymentCheckouts.id, args.checkoutId)
 		: eq(paymentCheckouts.referenceId, args.referenceId ?? '');
 
+	// Admin-tunable points earn rate (cached, non-throwing). Read before the tx so the credit path
+	// never blocks on it; 0 disables earning.
+	const { pointsEarnRate } = await getSessionLimits(db);
+
 	return db.transaction(async (tx) => {
 		// Atomic claim: flip pending→settled, returning the checkout's recorded amount so we
 		// can assert the gateway charged what we asked. Postgres serializes the UPDATE, so under
@@ -220,6 +226,21 @@ export async function creditCheckoutIfUnsettled(
 			packageId: args.packageId,
 			externalTransactionId: args.externalTransactionId
 		});
+
+		// Award loyalty points in the SAME transaction as the credit — points are earned ONLY on a
+		// verified, credited top-up, and if this throws the whole claim rolls back. Idempotent on
+		// externalTransactionId (its own unique guard), so a retried webhook can't double-earn.
+		// Based on the validated charged amount (expectedMinor), not the package's credit count.
+		const points = Math.floor((expectedMinor / 100) * (pointsEarnRate / 100));
+		if (points > 0) {
+			await earnPointsTx(tx, {
+				userId: args.userId,
+				packageId: args.packageId,
+				amount: points,
+				externalTransactionId: args.externalTransactionId
+			});
+		}
+
 		return { credited: result.credited, balance: result.balance };
 	});
 }

@@ -1,7 +1,7 @@
 import { redirect } from '@sveltejs/kit';
 import { eq } from 'drizzle-orm';
 import { packages } from '@veent/db';
-import { getTopupSince, reconcileCheckout } from '@veent/core';
+import { getTopupSince, reconcileCheckout, getSessionLimits } from '@veent/core';
 import { db } from '$lib/server/db';
 import { payments } from '$lib/server/payments';
 import { resolveMacForUser } from '$lib/server/network-location';
@@ -61,5 +61,11 @@ export const load: PageServerLoad = async (event) => {
 	const mac = await resolveMacForUser(event, user.id);
 	const portalQuery = mac ? `?mac=${encodeURIComponent(mac)}` : '';
 
-	return { settled, balance, creditsAdded, expectedCredits, fiatCost, portalQuery };
+	// Points earned on this top-up, mirroring the server's earn formula (floor(pesos × rate%)).
+	// Computed from the bundle's peso price — equals the amount actually credited to points_ledger
+	// in the SAME transaction as the credit, so no extra query/watermark is needed to display it.
+	const { pointsEarnRate } = await getSessionLimits(db);
+	const pointsEarned = Math.floor(((fiatCost ?? 0) * pointsEarnRate) / 100);
+
+	return { settled, balance, creditsAdded, expectedCredits, fiatCost, portalQuery, pointsEarned };
 };

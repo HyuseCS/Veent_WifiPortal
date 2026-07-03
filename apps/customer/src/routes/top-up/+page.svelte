@@ -16,6 +16,11 @@
 	let userPick = $state<number | null>(null);
 	const selectedId = $derived(userPick ?? data.bundles[0]?.id ?? null);
 
+	// Loyalty points previewed per bundle: floor(pesos × rate%). Mirrors the server's earn formula
+	// in reconcilePayments (points are actually awarded there, on the verified webhook).
+	const earnedPoints = (fiatCost: number | null) =>
+		Math.floor(((fiatCost ?? 0) * data.pointsEarnRate) / 100);
+
 	let pending = $state(false);
 
 	// Selecting a bundle creates a Maya checkout server-side and 303-redirects to
@@ -108,10 +113,22 @@
 								aria-hidden="true"
 							></span>
 							<span class="flex flex-1 items-center gap-2">
-								<span class="font-mono text-lg font-bold text-ink">₱{bundle.fiatCost}</span>
+								<span class="font-mono text-lg font-bold text-ink"
+									><span class="font-sans">₱</span>{bundle.fiatCost}</span
+								>
 							</span>
-							<span class="font-mono text-[13px] font-semibold text-muted peer-checked:text-brand">
-								{bundle.creditsProvided} credits
+							<span class="flex flex-col items-end gap-0.5">
+								<span
+									class="font-mono text-[13px] font-semibold text-muted peer-checked:text-brand"
+								>
+									{bundle.creditsProvided} credits
+								</span>
+								{#if earnedPoints(bundle.fiatCost) > 0}
+									<span class="flex items-center gap-1 text-[11px] font-semibold text-points">
+										<Icon name="star" size={11} />
+										earn {earnedPoints(bundle.fiatCost)} pts
+									</span>
+								{/if}
 							</span>
 						</label>
 					{/each}

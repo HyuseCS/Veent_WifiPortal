@@ -21,6 +21,7 @@ export interface AdminPackageRow {
 	fiatCost: number | null;
 	creditsProvided: number | null;
 	creditCost: number | null;
+	pointsCost: number | null;
 	durationMinutes: number | null;
 	isActive: boolean;
 }
@@ -32,6 +33,7 @@ export interface PackageInput {
 	fiatCost: number | null;
 	creditsProvided: number | null;
 	creditCost: number | null;
+	pointsCost: number | null;
 	durationMinutes: number | null;
 	isActive: boolean;
 }
@@ -46,6 +48,7 @@ export async function listPackages(db: DB): Promise<AdminPackageRow[]> {
 		fiatCost: r.fiatCost,
 		creditsProvided: r.creditsProvided,
 		creditCost: r.creditCost,
+		pointsCost: r.pointsCost,
 		durationMinutes: r.durationMinutes,
 		isActive: r.isActive
 	}));
