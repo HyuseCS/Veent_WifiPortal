@@ -141,11 +141,22 @@ export async function sendOtp(phone: string, code: string): Promise<void> {
 	const senderId = env.ITEXMO_SENDER_ID;
 	if (senderId) payload.SenderId = senderId;
 
-	const res = await fetch('https://api.itexmo.com/api/broadcast-otp', {
-		method: 'POST',
-		headers: { 'content-type': 'application/json' },
-		body: JSON.stringify(payload)
-	});
+	// Bound the call: `fetch` has no default timeout, so a slow/unreachable iTexMo would hang the
+	// whole login request — and leave the guest stuck on the "Send code" spinner. AbortSignal.timeout
+	// caps it; a timeout surfaces as a normal send failure the login action can turn into a retry.
+	let res: Response;
+	try {
+		res = await fetch('https://api.itexmo.com/api/broadcast-otp', {
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify(payload),
+			signal: AbortSignal.timeout(10_000)
+		});
+	} catch (err) {
+		throw new Error(
+			`iTexMo SMS send failed: ${err instanceof Error ? err.message : String(err)}`
+		);
+	}
 
 	// Transport-level failure.
 	if (!res.ok) {
