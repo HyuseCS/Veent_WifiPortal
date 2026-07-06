@@ -1,4 +1,4 @@
-gi/**
+/**
  * Pure helpers over the router/AP catalog. The catalog itself now lives in the DB
  * (`router_model` table) and is operator-editable from /networks — callers pass the
  * loaded list in (server: from a query; client: from `load` data). No module-level
