@@ -4,6 +4,7 @@ import { auth } from '$lib/server/auth';
 import { db } from '$lib/server/db';
 import { network } from '$lib/server/network';
 import { logger } from '$lib/server/logger';
+import { setAdminDevMacCookie } from '$lib/server/adminBypass';
 
 const log = logger('sign-in');
 
@@ -45,6 +46,9 @@ export async function finishStaffSignIn(
 		const mac = await resolveDeviceMac(network, ip);
 		if (mac) {
 			await grantAdminAccess(network, mac);
+			// Stash the router-resolved MAC so the (app) layout can slide the 4h window forward and
+			// logout can revoke, both without re-doing the flaky lookup / getClientAddress().
+			setAdminDevMacCookie(event, mac);
 			log.info(`admin bypass granted: ip=${ip} mac=${mac}`);
 		} else {
 			// Not an error (device may be off-hotspot / on cellular) — but the IP the server saw is

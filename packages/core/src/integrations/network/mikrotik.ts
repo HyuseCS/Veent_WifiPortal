@@ -442,10 +442,16 @@ export function createMikrotikController(config: MikrotikConfig): NetworkControl
 						`=comment=${plan.comment}`
 					]);
 				}
-				// Clear the stale captured host so a NEW bypass applies at once (the "slow for 5 min"
-				// bug). Skipped on a comment-only refresh of an already-bypassed device (flush=false), so
-				// sliding admin renewals and repeat guest grants never poke a live device.
-				if (plan.flush) await flushHotspotHost(conn, mac);
+				// A fresh bypass (non-bypassed→bypassed) leaves the device's already-open connections
+				// tracked in the pre-bypass (hotspot-intercepted) state — they keep hitting the redirect
+				// and stay snail-slow until they age out. Cut the conntrack so they re-evaluate against
+				// the new bypass immediately (mirrors revoke's cleanup), then flush the stale captured
+				// host. Both are SKIPPED on a comment-only refresh of an already-bypassed device
+				// (flush=false), so sliding admin renewals and repeat guest grants never poke a live device.
+				if (plan.flush) {
+					await cutConnectionsForMac(conn, mac);
+					await flushHotspotHost(conn, mac);
+				}
 			});
 		},
 
