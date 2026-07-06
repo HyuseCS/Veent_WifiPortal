@@ -214,7 +214,10 @@
 			<img src={logo} alt="parafiber by parasat logo" class="h-8 w-auto lg:h-[30px]" />
 			<div class="flex items-center gap-3 lg:gap-[18px]">
 				<!-- live online/offline status (this device) -->
-				<span class="flex items-center gap-1.5">
+				<span
+					class="flex items-center gap-1.5"
+					title="This device's live connection to the WiFi"
+				>
 					{#if thisOnline}
 						<span class="h-2 w-2 rounded-full bg-online/80"></span>
 						<span class="text-xs font-medium opacity-90 lg:text-[13px]">Online</span>
@@ -224,7 +227,10 @@
 					{/if}
 				</span>
 				<!-- desktop balance pill -->
-				<span class="hidden items-baseline gap-2 rounded-full bg-white/15 px-[15px] py-2 lg:flex">
+				<span
+					class="hidden items-baseline gap-2 rounded-full bg-white/15 px-[15px] py-2 lg:flex"
+					title="Prepaid credits — spend these on access tiers"
+				>
 					<span class="text-xs font-medium text-white/80">Balance</span>
 					<span class="font-mono text-[15px] font-semibold">{balance} credits</span>
 				</span>

@@ -87,6 +87,7 @@
 					<input type="hidden" name="deviceId" value={d.id} />
 					<button
 						aria-label={d.thisDevice ? 'Disconnect this device' : `Remove device ··${d.macTail}`}
+						title={d.thisDevice ? 'Disconnect this device' : `Remove device ··${d.macTail}`}
 						class="flex h-9 w-9 items-center justify-center rounded-lg text-muted transition-colors hover:bg-blocked/10 hover:text-blocked hover:cursor-pointer"
 					>
 						<Icon name="trash" size={16} />
