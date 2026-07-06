@@ -13,10 +13,11 @@ import { resolveNetworkIdForMac } from './networkHealth';
  *
  * Run it from the per-minute revoke cron (it reads shared `network_health`, written by the admin
  * health-refresh cron). Two phases:
- *   PAUSE  — APs offline for ≥ `downMs` (debounced via `network_health.offline_since`) → pause each
- *            account with an ACTIVE, PAID session on that AP, tagged reason='outage' + the AP id.
- *            A device that has since roamed onto a healthy AP is skipped (re-checked live) so its
- *            working internet isn't cut on a stale bind-time `network_id`.
+ *   PAUSE  — APs NOT serving (link down OR uplink/WAN unreachable) for ≥ `downMs` (debounced via
+ *            `network_health.offline_since`) → pause each account with an ACTIVE, PAID session on that
+ *            AP, tagged reason='outage' + the AP id. A device that has since roamed onto a fully
+ *            serving AP is skipped (re-checked live) so its working internet isn't cut on a stale
+ *            bind-time `network_id`.
  *   RESUME — an outage-paused account is resumed once its AP is confirmed back UP for ≥ `upMs` (the
  *            symmetric debounce, via `network_health.online_since`), or its AP row was pruned, or the
  *            pause has been held past `maxPauseMs` (the dead-AP safety cap) → restore the held time.
@@ -28,9 +29,10 @@ import { resolveNetworkIdForMac } from './networkHealth';
  *    trade-off vs. a global "pause everyone on any outage".
  *  - The roamer re-check needs a controller MAC→AP lookup (`resolveApForMac`); on the stub/dev
  *    controller it's a no-op and we fall back to the stored bind-time `network_id`.
- *  - Detection keys on the router LINK state (`network_health.online`). A "false down" (link flaps
- *    but service is fine) is dampened by `downMs`; a "false up" (link up but WAN dead) by `upMs`.
- *    The link-vs-internet gap (an active uplink check) is the main thing still to harden.
+ *  - Detection keys on link state AND a shared uplink probe (`online` && `wan_ok`), so a WAN outage
+ *    on an up-link AP now pauses too. The probe is a single router ping (see mikrotik `sampleHealth`)
+ *    debounced by `downMs`/`upMs`; a multi-target prober (to rule out one probe host being down) is
+ *    the remaining hardening.
  */
 
 /** An AP must be continuously offline at least this long before its guests are auto-paused. */
@@ -67,14 +69,14 @@ export async function sweepOutagePauses(
 	const pausedApIds = new Set<number>();
 
 	// ── PAUSE ──────────────────────────────────────────────────────────────────
-	// APs down long enough to clear the debounce.
+	// APs NOT serving (link down OR uplink/WAN unreachable) long enough to clear the debounce.
 	const downThreshold = new Date(now.getTime() - downMs);
 	const downAps = await db
 		.select({ id: networkHealth.id })
 		.from(networkHealth)
 		.where(
 			and(
-				eq(networkHealth.online, false),
+				or(eq(networkHealth.online, false), eq(networkHealth.wanOk, false)),
 				isNotNull(networkHealth.offlineSince),
 				lte(networkHealth.offlineSince, downThreshold)
 			)
@@ -87,11 +89,13 @@ export async function sweepOutagePauses(
 	const canResolve = typeof network.resolveApForMac === 'function';
 	const onlineApIds = canResolve
 		? new Set(
+				// A roamed device only "has service elsewhere" if that AP is fully SERVING (link up AND
+				// uplink reachable) — an AP with a dead WAN is no refuge during a WAN outage.
 				(
 					await db
 						.select({ id: networkHealth.id })
 						.from(networkHealth)
-						.where(eq(networkHealth.online, true))
+						.where(and(eq(networkHealth.online, true), eq(networkHealth.wanOk, true)))
 				).map((a) => a.id)
 			)
 		: new Set<number>();
@@ -159,6 +163,7 @@ export async function sweepOutagePauses(
 				.where(
 					or(
 						eq(networkHealth.online, false),
+						eq(networkHealth.wanOk, false),
 						isNull(networkHealth.onlineSince),
 						gt(networkHealth.onlineSince, upThreshold)
 					)

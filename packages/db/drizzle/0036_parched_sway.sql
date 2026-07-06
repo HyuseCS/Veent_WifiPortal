@@ -1,0 +1,1 @@
+ALTER TABLE "network_health" ADD COLUMN "wan_ok" boolean DEFAULT true NOT NULL;

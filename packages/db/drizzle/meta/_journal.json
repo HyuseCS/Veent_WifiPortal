@@ -253,6 +253,13 @@
       "when": 1783300877952,
       "tag": "0035_aromatic_shape",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1783302158443,
+      "tag": "0036_parched_sway",
+      "breakpoints": true
     }
   ]
 }

@@ -99,6 +99,11 @@ export const networkHealth = pgTable('network_health', {
 	id: serial('id').primaryKey(),
 	name: text('name').notNull(),
 	online: boolean('online').notNull().default(true),
+	// Whether the router's uplink/WAN was reachable at the last sample (shared across a router's
+	// interfaces). `online` is the raw per-AP LINK state; an AP with `online=true` but `wan_ok=false`
+	// (radio up, internet dead) is NOT serving guests, so the outage sweep treats it as down. Defaults
+	// true so a never-sampled/legacy row is never mistaken for a WAN outage.
+	wanOk: boolean('wan_ok').notNull().default(true),
 	// When the AP most recently transitioned online→offline (cleared on recovery). Drives the
 	// outage sweep's PAUSE debounce: guests on the AP are auto-paused only after it has been down for
 	// a sustained period, not on a brief blip.
