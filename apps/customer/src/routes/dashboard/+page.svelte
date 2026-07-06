@@ -4,6 +4,7 @@
 	import { toasts } from '$lib/toasts.svelte';
 	import Icon from '$lib/Icon.svelte';
 	import DeviceList from '$lib/DeviceList.svelte';
+	import SocialLinks from '$lib/SocialLinks.svelte';
 	import { liveAccount, connectAccountLive, resetAccountLive } from '$lib/live.svelte';
 	import { resolve } from '$app/paths';
 	import type { PageServerData, ActionData } from './$types';
@@ -930,6 +931,8 @@
 			</div>
 		{/if}
 	</div>
+
+	<SocialLinks />
 
 	<!-- Sign-out confirmation. CSS-only (peer-checked) like the buy sheet, so it works before
 	hydration; the actual POST /signOut form lives inside and still submits without JS. Both the

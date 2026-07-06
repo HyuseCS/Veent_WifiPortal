@@ -1,5 +1,6 @@
 <script lang="ts">
 	import Icon from '$lib/Icon.svelte';
+	import SocialLinks from '$lib/SocialLinks.svelte';
 	import { resolve } from '$app/paths';
 	import type { PageServerData } from './$types';
 	import logo from '$lib/assets/parafiber-logo.webp';
@@ -17,8 +18,13 @@
 		<header class="flex items-center justify-between bg-brand px-5 py-3 lg:px-8 lg:py-4">
 			<img src={logo} alt="parafiber by parasat logo" class="h-8 w-auto lg:h-[30px]" />
 			<div class="flex items-center gap-1.5">
-				<span class="h-1.5 w-1.5 rounded-full bg-online"></span>
-				<span class="text-xs font-medium text-white">Online</span>
+				{#if data.online}
+					<span class="h-1.5 w-1.5 rounded-full bg-online"></span>
+					<span class="text-xs font-medium text-white">Online</span>
+				{:else}
+					<span class="h-1.5 w-1.5 rounded-full bg-blocked"></span>
+					<span class="text-xs font-medium text-white/80">Offline</span>
+				{/if}
 			</div>
 		</header>
 
@@ -31,7 +37,11 @@
 				{#if data.maskedPhone}
 					Signed in as <strong class="font-semibold text-ink">{data.maskedPhone}</strong>.
 				{/if}
-				You're connected to Parafiber WiFi.
+				{#if data.online}
+					You're connected to Parafiber WiFi.
+				{:else}
+					Open your dashboard to get this device connected.
+				{/if}
 			</p>
 
 			<div
@@ -198,4 +208,6 @@
 			</div>
 		</div>
 	{/if}
+
+	<SocialLinks />
 </main>
