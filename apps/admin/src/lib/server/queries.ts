@@ -114,6 +114,11 @@ export async function listUsers(db: DB, now: Date = new Date()): Promise<AdminUs
 		if (r.blocked) {
 			tone = 'blocked';
 			status = 'Blocked';
+		} else if (balance <= 0) {
+			// Empty wallet — can't buy any paid access (Free Time still works). Amber like Low
+			// Balance, but a distinct label so staff can spot fully-drained accounts at a glance.
+			tone = 'warning';
+			status = 'No credits';
 		} else if (balance < 10) {
 			tone = 'warning';
 			status = 'Low Balance';
