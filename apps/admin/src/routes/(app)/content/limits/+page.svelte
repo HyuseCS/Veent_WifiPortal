@@ -82,7 +82,12 @@
 			use:enhance={() => {
 				submitting = true;
 				return async ({ update }) => {
-					await update();
+					// Keep the entered values visible after saving. These number inputs bind one-way
+					// (value={f.get()}), so their HTML defaultValue is empty; the default form reset
+					// would blank every field until a manual refresh. reset:false preserves them.
+					await update({ reset: false });
+					// The authenticator code is single-use — clear it so the next save needs a fresh one.
+					code = '';
 					submitting = false;
 				};
 			}}

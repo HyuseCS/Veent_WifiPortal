@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tick } from 'svelte';
 	import { enhance } from '$app/forms';
 	import { Card, Button, Field } from '$lib/components/ui';
 	import StepUpDialog from '$lib/components/feature/StepUpDialog.svelte';
@@ -90,9 +91,22 @@
 	// The package being created/edited; null = the form is closed.
 	let editing = $state<EditState | null>(null);
 
+	// The edit panel renders once at the TOP of the page, so on a long list opening it from a
+	// row far down gives no visible cue. After the form renders, scroll it into view and focus
+	// the first field. Done imperatively (not via $effect on `editing`) so typing in the form
+	// doesn't re-trigger a scroll on every keystroke.
+	let editCard = $state<HTMLDivElement | null>(null);
+	let nameInput = $state<HTMLInputElement | null>(null);
+	async function revealEditForm() {
+		await tick(); // let the {#if editing} block mount
+		editCard?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+		nameInput?.focus({ preventScroll: true }); // preventScroll so focus doesn't fight the smooth scroll
+	}
+
 	function startNew() {
 		code = '';
 		editing = blank();
+		revealEditForm();
 	}
 	function startEdit(p: Pkg) {
 		code = '';
@@ -107,6 +121,7 @@
 			durationMinutes: p.durationMinutes?.toString() ?? '',
 			isActive: p.isActive
 		};
+		revealEditForm();
 	}
 
 	// Customer-facing groups, in the order a buyer meets them.
@@ -154,6 +169,7 @@
 
 	{#if editing}
 		<!-- Create / edit panel. Numeric fields show per type so an offer can't be half-configured. -->
+		<div bind:this={editCard}>
 		<Card>
 			<form
 				method="post"
@@ -187,6 +203,7 @@
 					<label class="flex flex-col gap-1.5 text-xs font-medium text-muted">
 						Name
 						<input
+							bind:this={nameInput}
 							name="name"
 							bind:value={editing.name}
 							required
@@ -305,6 +322,7 @@
 				</div>
 			</form>
 		</Card>
+		</div>
 	{/if}
 
 	{#each groups as group (group.type)}
