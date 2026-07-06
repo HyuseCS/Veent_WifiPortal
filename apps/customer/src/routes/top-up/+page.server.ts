@@ -124,16 +124,11 @@ export const actions: Actions = {
 		// fails loudly at Maya / the DO rather than emitting an unreachable URL.
 		const webhookOrigin = (env.TUNNEL_ORIGIN?.trim() || '').replace(/\/$/, '');
 
-		// Where the buyer's BROWSER returns after paying. Prefer the origin they actually started on,
-		// so a localhost dev session returns to localhost (not the tunnel) and a public-domain deploy
-		// returns to that domain. The one case that won't work is a private LAN http origin — the prod
-		// captive portal served on the LAN, which Maya rejects and the browser can't reach publicly on
-		// return — so those fall back to the public tunnel. Independent of the webhook originUrl above.
-		const requestOrigin = event.url.origin.replace(/\/$/, '');
-		const returnHost = new URL(requestOrigin).hostname;
-		const returnReachable =
-			requestOrigin.startsWith('https://') || /^(localhost|127\.0\.0\.1|\[?::1\]?)$/.test(returnHost);
-		const origin = returnReachable ? requestOrigin : webhookOrigin;
+		// Where the buyer's BROWSER returns after paying: always the origin they actually started on,
+		// so the return lands back on the same site they're browsing (LAN captive portal, localhost, or
+		// public domain). Independent of the webhook `originUrl` below — that's the server-to-server DO
+		// relay and must stay the public tunnel; the browser return must NOT be swapped to the tunnel.
+		const origin = event.url.origin.replace(/\/$/, '');
 		// Thread the device MAC through the gateway round-trip. Maya bounces the buyer to
 		// the system browser (not the captive CNA popup), which has a DIFFERENT cookie jar —
 		// so the `veent_portal` cookie holding the MAC is GONE on return, and the dashboard

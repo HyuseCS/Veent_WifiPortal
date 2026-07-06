@@ -49,7 +49,8 @@ export const actions: Actions = {
 
 		// Not-yet-enrolled staff have a real session now; run the shared gate inline.
 		// (They'll be sent to /enroll-2fa by the (app) layout once on the dashboard.)
-		const denied = await finishStaffSignIn(event, userId);
+		// `res.token` is the new session token — keys the device MAC we persist for the bypass.
+		const denied = await finishStaffSignIn(event, userId, res.token);
 		if (denied) return denied;
 
 		return redirect(302, '/dashboard');

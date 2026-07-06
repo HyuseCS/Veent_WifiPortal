@@ -46,7 +46,8 @@ export const actions: Actions = {
 		}
 
 		// Session is fully established now — safe to run the shared staff gate + device grant.
-		const denied = await finishStaffSignIn(event, res.user.id);
+		// `res.token` is the verified session's token — keys the device MAC we persist for the bypass.
+		const denied = await finishStaffSignIn(event, res.user.id, res.token);
 		if (denied) return denied;
 
 		return redirect(302, '/dashboard');
