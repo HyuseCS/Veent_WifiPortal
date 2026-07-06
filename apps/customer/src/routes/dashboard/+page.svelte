@@ -236,6 +236,15 @@
 					<Icon name="star" size={13} class="text-points self-center" />
 					<span class="font-mono text-[15px] font-semibold">{points} pts</span>
 				</span>
+				<!-- Help & FAQ (both breakpoints — the header cluster is always visible) -->
+				<a
+					href={resolve('/faq')}
+					aria-label="Help & FAQ"
+					title="Help & FAQ"
+					class="flex h-[34px] w-[34px] items-center justify-center rounded-full bg-white/15 text-white/80 transition-colors hover:bg-white/25 hover:text-white hover:cursor-pointer"
+				>
+					<Icon name="help-circle" size={17} />
+				</a>
 				<!-- desktop sign out -->
 				<form method="post" action="?/signOut" use:enhance={signOut} class="hidden lg:block">
 					<button

@@ -36,6 +36,16 @@
 					<h2 class="mb-1.5 text-[15px] font-bold text-ink">{item.q}</h2>
 					<p class="text-[13.5px] leading-relaxed text-muted">{item.a}</p>
 				</section>
+			{:else}
+				<div
+					class="flex flex-col items-center gap-3 rounded-2xl border border-border bg-surface px-6 py-12 text-center"
+				>
+					<Icon name="help-circle" size={28} class="text-muted" />
+					<p class="text-[14px] font-medium text-ink">No help articles yet</p>
+					<p class="text-[13px] leading-relaxed text-muted">
+						There's nothing here right now. Check back later.
+					</p>
+				</div>
 			{/each}
 		</div>
 
