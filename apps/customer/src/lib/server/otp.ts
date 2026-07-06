@@ -136,7 +136,7 @@ export async function sendOtp(phone: string, code: string): Promise<void> {
 		Email: email,
 		Password: password,
 		Recipients: [recipient],
-		Message: `Your Veent code is ${code}. It expires in 5 minutes.`
+		Message: `Your Parafiber code is ${code}. It expires in 5 minutes.`
 	};
 	const senderId = env.ITEXMO_SENDER_ID;
 	if (senderId) payload.SenderId = senderId;

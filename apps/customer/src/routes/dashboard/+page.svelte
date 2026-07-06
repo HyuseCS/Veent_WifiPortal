@@ -204,7 +204,7 @@
 </script>
 
 <svelte:head>
-	<title>Dashboard · Veent WiFi</title>
+	<title>Dashboard · Parafiber WiFi</title>
 </svelte:head>
 
 <main class="flex min-h-screen flex-col lg:bg-surface">

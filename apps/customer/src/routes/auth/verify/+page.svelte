@@ -58,7 +58,7 @@
 </script>
 
 <svelte:head>
-	<title>Enter code · Veent WiFi</title>
+	<title>Enter code · Parafiber WiFi</title>
 </svelte:head>
 
 <main class="flex min-h-screen flex-col lg:bg-surface">

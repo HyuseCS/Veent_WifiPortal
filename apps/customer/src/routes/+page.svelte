@@ -8,7 +8,7 @@
 </script>
 
 <svelte:head>
-	<title>Veent WiFi · Guest access</title>
+	<title>Parafiber WiFi · Guest access</title>
 </svelte:head>
 
 <main class="flex min-h-screen flex-col">
