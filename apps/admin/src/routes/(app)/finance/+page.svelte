@@ -123,7 +123,7 @@
 	     On md+, flex-1 + min-h-0 make the cards fill the leftover height down to the page bottom
 	     (one screen); on mobile they keep natural height and the page scrolls. Revenue spans 2 of
 	     3 columns; the two donuts stack vertically in the 3rd column. -->
-	<section class="grid grid-cols-1 gap-4 md:min-h-0 md:flex-1 lg:grid-cols-3 lg:items-stretch">
+	<section class="grid grid-cols-1 gap-4 md:min-h-0 md:flex-1 2xl:grid-cols-3 2xl:items-stretch">
 		<Card class="flex min-h-65 flex-col lg:col-span-2">
 			<SectionHeading title="Settled revenue over time" class="mb-4">
 				{#snippet aside()}
@@ -144,8 +144,8 @@
 		<!-- Two donuts. Below lg: a 2-up grid (compact cards) so they sit side-by-side instead of
 		     two tall stacked blocks. At lg they return to the stacked 3rd column, sharing its height
 		     (one screen, no overflow) — desktop is byte-identical (compact hidden, original shown). -->
-		<div class="grid grid-cols-2 gap-4 md:min-h-0 lg:flex lg:flex-col">
-			<Card padding="p-3 lg:p-5" class="flex flex-col md:min-h-0 md:flex-1">
+		<div class="grid grid-cols-2 gap-4 md:min-h-0 2xl:flex 2xl:flex-col">
+			<Card padding="p-3 lg:p-5" class="flex flex-col 2xl:min-h-0 2xl:flex-1">
 				<SectionHeading title="By payment method" class="mb-3 lg:mb-4" />
 				<!-- lg: center the donut in the leftover column height (avoids a top-heavy card next to
 				     the taller chart). Below lg: plain flow so the donut sits right under the title. -->
