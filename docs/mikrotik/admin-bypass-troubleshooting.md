@@ -121,5 +121,19 @@ It only fires on the non-bypassed→bypassed transition, so sliding renewals / r
 live device. (A hand-added binding skips this entirely, so it's the *slowest* path — don't judge settle
 time by it.) _Verify on bench: a fresh login-grant should browse fast within seconds._
 
+### The Wi-Fi "!" (no-internet) warning while internet actually works — EXPECTED
+A bypassed device can show the OS **"!" / "No internet"** indicator even though browsing (YouTube,
+sites) works fine. Not a bypass fault. The hotspot's walled-garden explicitly **denies the OS
+connectivity-check probe hosts** — `connectivitycheck.android.com`, `connectivitycheck.gstatic.com`,
+`www.google.com/generate_204`, `captive.apple.com`, `www.msftconnecttest.com`,
+`detectportal.firefox.com`, `clients1-4.google.com` (11 rules, `comment=veent-admin`, added by
+`provisionWalledGarden`). Those denies exist on purpose to stop the guest "flashes Connected then
+reverts" flap (`docs/problems/captive-connected-flap-on-free-time.md`). Side effect: the OS probe
+gets no `204` → the device shows "!" even when fully bypassed. Traffic to any non-denied host flows
+normally (that's why a video plays). Compounded by the uplink — measured **~1.1 Mbps** on the bench
+ONU (68 ms latency, 0% loss), which alone can time the probe out. **Leave the denies** (removing them
+reintroduces the guest flap); the "!" is cosmetic. Only revisit if a specific app hard-gates on the OS
+connectivity check and refuses to run — that'd need a targeted per-device carve-out.
+
 _Both code follow-ups are implemented (Caveat C cookie-carry + cut-conntrack-on-grant); pending bench
 verification._
