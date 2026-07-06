@@ -31,7 +31,7 @@
 				{#if data.maskedPhone}
 					Signed in as <strong class="font-semibold text-ink">{data.maskedPhone}</strong>.
 				{/if}
-				You're connected to Veent WiFi.
+				You're connected to Parafiber WiFi.
 			</p>
 
 			<div
