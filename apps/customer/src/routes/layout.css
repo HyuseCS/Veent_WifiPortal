@@ -143,12 +143,15 @@
 
 @layer base {
 	/*
-	 * Captive-portal constraint: overscroll-behavior: contain stops accidental
-	 * pull-to-refresh on Android inside the portal mini-browser. Background + ink
-	 * set here so every page inherits the token surface without repeating it.
+	 * Captive-portal constraint: overscroll-behavior: none stops accidental
+	 * pull-to-refresh on Android inside the portal mini-browser AND the rubber-band
+	 * bounce — force-scrolling up past a brand-coloured page header used to reveal a
+	 * white bar (the html background showing through the overscroll region); `none`
+	 * removes that region entirely. Background + ink set here so every page inherits
+	 * the token surface without repeating it.
 	 */
 	html {
-		overscroll-behavior: contain;
+		overscroll-behavior: none;
 		background-color: var(--color-bg);
 		color: var(--color-ink);
 		font-family: var(--font-sans);
