@@ -15,9 +15,15 @@
 
 	let { children, data }: { children: Snippet; data: LayoutData } = $props();
 
+	// Optimistic path: the instant a cross-page navigation starts, reflect the DESTINATION in the
+	// chrome (title, subtitle, header controls — and the sidebar highlight, which reads the same
+	// `navigating` state) so the tab visibly switches BEFORE the target's `load` resolves. The body
+	// shows RouteSkeleton meanwhile (see routeLoading below). Falls back to the committed path when
+	// idle, or when navigating.to is null (e.g. leaving the app).
+	const navPath = $derived(navigating.to?.url.pathname ?? page.url.pathname);
+
 	const title = $derived(
-		nav.find((n) => page.url.pathname === n.href || page.url.pathname.startsWith(n.href + '/'))
-			?.label ?? 'Admin'
+		nav.find((n) => navPath === n.href || navPath.startsWith(n.href + '/'))?.label ?? 'Admin'
 	);
 
 	// One-line context per section — purely descriptive header copy (no data).
@@ -34,15 +40,15 @@
 	const subtitle = $derived(
 		subtitles[
 			Object.keys(subtitles).find(
-				(href) => page.url.pathname === href || page.url.pathname.startsWith(href + '/')
+				(href) => navPath === href || navPath.startsWith(href + '/')
 			) ?? ''
 		]
 	);
-	const onFinance = $derived(page.url.pathname.startsWith('/finance'));
+	const onFinance = $derived(navPath.startsWith('/finance'));
 	// Networks page opts into vertical scroll-snap (two full-screen sections). Scoped here
 	// so the snap + hidden scrollbar apply only on that route, not the whole admin.
-	const onNetworks = $derived(page.url.pathname.startsWith('/networks'));
-	const onSentryIssues = $derived(page.url.pathname === '/sentry/issues');
+	const onNetworks = $derived(navPath.startsWith('/networks'));
+	const onSentryIssues = $derived(navPath === '/sentry/issues');
 
 	// Cross-route navigation only: SvelteKit blocks on the target's `load`, so swap in a neutral
 	// skeleton while it resolves (see RouteSkeleton). Same-route reloads (e.g. the finance period

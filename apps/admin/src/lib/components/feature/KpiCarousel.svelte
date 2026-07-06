@@ -3,11 +3,12 @@
 	import ChevronLeft from 'lucide-svelte/icons/chevron-left';
 	import ChevronRight from 'lucide-svelte/icons/chevron-right';
 
-	// KPI strip for pages with more metrics than fit across one row. Below xl the cards live in a
-	// horizontal snap-scroll track: ~4 squares (2 rows × 2 cols) are visible with the next column
-	// peeking to hint there's more. Swipe scrolls on
-	// touch; the arrows nudge by one column. At xl+ it renders the original flat 5-across grid so
-	// desktop is byte-identical. `card` is a snippet rendering one KpiCard from an item.
+	// KPI strip for pages with more metrics than fit across one row, in a horizontal snap-scroll
+	// track. Below md (phones) the cards stack 2 rows × ~2 cols for thumb scrolling; from md up the
+	// track is a SINGLE row — on tablets / short laptops the KPI strip shares vertical space with a
+	// scrolling table below it (e.g. Users), and a 2-row strip starved that table. Swipe scrolls on
+	// touch; the arrows nudge by one column. At lg+ it renders the flat grid (one equal column per
+	// metric). `card` is a snippet rendering one KpiCard from an item.
 	let {
 		items,
 		card,
@@ -48,14 +49,15 @@
 </script>
 
 <div class={klass}>
-	<div class="relative xl:hidden">
-		<!-- 2 rows, columns flow rightward; auto-cols-[46%] shows ~2 columns (4 cards) + a peek.
-		     overscroll-contain so a horizontal swipe doesn't bounce the page; py-1 keeps card
-		     shadows from being clipped by overflow. -->
+	<div class="relative lg:hidden">
+		<!-- Below md: 2 rows, columns flow rightward; auto-cols-[46%] shows ~2 columns (4 cards) + a
+		     peek. From md: a single row (grid-rows-[auto]) with wider ~3-per-view columns, so the
+		     strip is half as tall and leaves room for a scrolling table below. overscroll-contain so
+		     a horizontal swipe doesn't bounce the page; py-1 keeps card shadows from being clipped. -->
 		<div
 			bind:this={track}
 			onscroll={update}
-			class="grid snap-x snap-proximity grid-flow-col auto-cols-[46%] grid-rows-[auto_auto] gap-4 overflow-x-auto overscroll-x-contain scroll-smooth py-1 [scrollbar-width:none] motion-reduce:scroll-auto [&::-webkit-scrollbar]:hidden"
+			class="grid snap-x snap-proximity grid-flow-col auto-cols-[46%] md:auto-cols-[31%] grid-rows-[auto_auto] md:grid-rows-[auto] gap-4 overflow-x-auto overscroll-x-contain scroll-smooth py-1 [scrollbar-width:none] motion-reduce:scroll-auto [&::-webkit-scrollbar]:hidden"
 		>
 			{#each items as item, i (i)}
 				<div class="snap-start">{@render card(item)}</div>
@@ -86,9 +88,9 @@
 		{/if}
 	</div>
 
-	<!-- xl+: flat grid, one equal column per metric so the strip always spans full width
-	     regardless of count (5 metrics → byte-identical to the original grid-cols-5). -->
-	<div class="hidden gap-4 xl:grid" style="grid-template-columns: repeat({items.length}, minmax(0, 1fr))">
+	<!-- lg+: flat grid, one equal column per metric so the strip always spans full width
+	     regardless of count. -->
+	<div class="hidden gap-4 lg:grid" style="grid-template-columns: repeat({items.length}, minmax(0, 1fr))">
 		{#each items as item, i (i)}{@render card(item)}{/each}
 	</div>
 </div>
