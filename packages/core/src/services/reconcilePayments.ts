@@ -1,4 +1,4 @@
-import { and, eq, gt, isNull, lte, or } from 'drizzle-orm';
+import { and, eq, gt, isNull, lte, or, sql } from 'drizzle-orm';
 import { type DB, paymentCheckouts, paymentTransactions, packages } from '@veent/db';
 import { LEDGER_TYPE } from '../config';
 import type { PaymentEvent, PaymentProvider } from '../integrations/payments';
@@ -80,6 +80,13 @@ export async function recordPaymentTransaction(
 	// partial unique index on reference_no (payment_transactions_reference_no_key) lets Postgres
 	// reject the divergent duplicate atomically — closing the simultaneous-insert race a prior
 	// select-then-update couldn't. (One Maya checkout = one referenceNo = one terminal payment.)
+	// NEVER downgrade a terminal SUCCESS. Maya issues MULTIPLE payment ids under one RRN (a card
+	// fails, the buyer retries, it succeeds — see fetchPaymentByRrn's [fail, ok] handling), and
+	// webhook delivery isn't ordered, so a late FAILED event can arrive after the SUCCESS is already
+	// recorded. Guard both write paths: skip the update when it would overwrite a PAYMENT_SUCCESS row
+	// with a non-success status. (The buyer is credited via the independent claim regardless; this
+	// protects Finance reporting from a paid txn flipping to "failed".)
+	const noDowngrade = sql`NOT (${paymentTransactions.status} = ${STATUS_DB.paid} AND ${row.status} <> ${STATUS_DB.paid})`;
 	try {
 		await db
 			.insert(paymentTransactions)
@@ -90,7 +97,8 @@ export async function recordPaymentTransaction(
 				// PENDING→SUCCESS) enriches a row a reconcile pass recorded first. networkId and
 				// the userId/packageId attribution stay INSERT-only (fixed at first record); the
 				// gateway-supplied detail is what a transition can legitimately backfill.
-				set: detail
+				set: detail,
+				setWhere: noDowngrade
 			});
 	} catch (e) {
 		// 23505 = unique_violation: the same payment arrived under a DIFFERENT id and tripped the
@@ -101,7 +109,7 @@ export async function recordPaymentTransaction(
 			await db
 				.update(paymentTransactions)
 				.set(detail)
-				.where(eq(paymentTransactions.referenceNo, row.referenceNo));
+				.where(and(eq(paymentTransactions.referenceNo, row.referenceNo), noDowngrade));
 			return;
 		}
 		throw e;
@@ -192,9 +200,9 @@ export async function creditCheckoutIfUnsettled(
 		}
 
 		// Amount integrity (currency is PHP-only and not stored per-checkout, so amount is the
-		// authoritative check). A GENUINE finite-but-different mismatch keeps the claim (settled) to stop retries, but does
-			// not credit (a non-finite/unparseable amount is rejected BEFORE the claim, so it stays pending),
-		// not credit — surfaced so a spike is alertable.
+		// authoritative check). A GENUINE finite-but-different mismatch keeps the claim (settled) to
+		// stop retries but does NOT credit — surfaced so a spike is alertable. (A non-finite/
+		// unparseable amount is rejected BEFORE the claim, so that case stays pending.)
 		const expectedMinor = Math.round(Number(claimed.amount) * 100);
 		if (args.amountMinor !== expectedMinor) {
 			console.warn('[credit] amount mismatch — refusing to credit', {

@@ -1,0 +1,1 @@
+ALTER TABLE "network_health" ADD COLUMN "online_since" timestamp;
