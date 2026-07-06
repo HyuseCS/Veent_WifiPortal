@@ -1,5 +1,6 @@
 <script lang="ts">
 	import Icon from '$lib/Icon.svelte';
+	import SocialLinks from '$lib/SocialLinks.svelte';
 	import { resolve } from '$app/paths';
 	import type { PageServerData } from './$types';
 	import logo from '$lib/assets/parafiber-logo.webp';
@@ -207,4 +208,6 @@
 			</div>
 		</div>
 	{/if}
+
+	<SocialLinks />
 </main>
