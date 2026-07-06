@@ -116,6 +116,25 @@ describe('startPaidAccessAndBindDevice atomicity', () => {
 		expect(res.reason).toBe('insufficient_balance');
 		expect((network as { grant: ReturnType<typeof vi.fn> }).grant).not.toHaveBeenCalled();
 	});
+
+	it('throws BEFORE spending when the package has non-positive or NaN minutes (B3.4)', async () => {
+		// A zero-minute (or NaN — a corrupt row would compute an Invalid Date expiry) package must
+		// never charge credits. The guard fires before the transaction opens, so no spend and no
+		// grant happen — the throw is what the callers surface as "credits were not charged".
+		const transaction = vi.fn();
+		const db = { transaction } as never;
+		const network = { grant: vi.fn(), revoke: vi.fn() } as never;
+
+		await expect(
+			startPaidAccessAndBindDevice(db, network, { ...input, durationMinutes: 0 })
+		).rejects.toThrow(/invalid durationMinutes/);
+		await expect(
+			startPaidAccessAndBindDevice(db, network, { ...input, durationMinutes: NaN })
+		).rejects.toThrow(/invalid durationMinutes/);
+
+		expect(transaction).not.toHaveBeenCalled();
+		expect((network as { grant: ReturnType<typeof vi.fn> }).grant).not.toHaveBeenCalled();
+	});
 });
 
 /**

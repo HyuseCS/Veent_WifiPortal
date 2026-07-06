@@ -12,9 +12,13 @@ import type { RequestHandler } from './$types';
  * downloadable Response. The page links to it with a plain `<a download>`.
  */
 export const GET: RequestHandler = async (event) => {
+	// Layout guards don't run for +server.ts endpoints, and hooks expose locals.user
+	// pre-enrollment — enforce auth + mandatory 2FA here, same as /api/router-log.
+	if (!event.locals.user) error(401, 'Not authenticated');
+	if (!event.locals.user.twoFactorEnabled) error(403, 'Two-factor enrollment required');
+
 	// Each export scans up to 10k rows; cap per admin so it can't be hammered into a DB DoS.
-	// (The (app) layout already guarantees an authenticated staff user.)
-	const rl = await rateLimit('finance_export', event.locals.user!.id, 20);
+	const rl = await rateLimit('finance_export', event.locals.user.id, 20);
 	if (!rl.allowed) error(429, 'Too many exports. Please wait a bit and try again.');
 
 	const { from, to } = parsePeriod(event.url.searchParams.get('period'));

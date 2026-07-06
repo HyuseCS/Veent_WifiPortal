@@ -53,8 +53,12 @@
 	} = $props();
 </script>
 
+<!-- contain-layout isolates the table's block-size from the document: a nested scroll viewport
+	 (min-h-0 flex-1 overflow-auto) inside this overflow-hidden shell otherwise leaks a tall table's
+	 intrinsic height up to <html> (Chromium quirk), letting the WHOLE page scroll to white. Layout
+	 containment doesn't affect the shell's own sizing (max-h / flex still apply), only stops the leak. -->
 <div
-	class="flex flex-col overflow-hidden rounded-xl border border-border bg-bg shadow-sm [&_tbody_tr]:transition-colors [&_tbody_tr]:duration-150 [&_tbody_tr:hover]:bg-surface {klass}"
+	class="flex flex-col overflow-hidden contain-layout rounded-xl border border-border bg-bg shadow-sm [&_tbody_tr]:transition-colors [&_tbody_tr]:duration-150 [&_tbody_tr:hover]:bg-surface {klass}"
 >
 	{#if toolbar}
 		<div class="border-b border-border">{@render toolbar()}</div>

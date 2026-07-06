@@ -166,6 +166,20 @@ export async function handlePaymentWebhook(event: RequestEvent): Promise<Respons
 			receiptNo: evt.receiptNo ?? null,
 			ipFp: fingerprint(clientIp(event))
 		});
+		// B2.2: page immediately on any unattributed *paid* event — count 1, not volume-based. The
+		// 200-ack above stays (deliberate anti-500 design; remediation is a manual refund/credit).
+		// Non-PII fields only — scrubEvent runs again on send.
+		captureHandled(new Error('unattributed paid event'), {
+			level: 'error',
+			tags: { area: 'payment', scope: 'attribution' },
+			extra: {
+				txId: evt.externalTransactionId,
+				amountMinor: evt.amountMinor,
+				hadCheckoutRow: !!co,
+				userExists,
+				pkgExists
+			}
+		});
 		return json({ ok: true, recorded: true, credited: false, reason: 'unattributed' });
 	}
 

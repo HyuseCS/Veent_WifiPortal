@@ -5,7 +5,7 @@
  * client. Do NOT swap this for admin's `listNetworkHealth`, which returns telemetry.
  */
 import { and, asc, isNotNull } from 'drizzle-orm';
-import { type DB, networkHealth } from '@veent/db';
+import { type DB, networkHealth, isNetworkHealthStale } from '@veent/db';
 
 export interface PublicLocation {
 	id: number;
@@ -26,6 +26,8 @@ export async function listPublicLocations(db: DB): Promise<PublicLocation[]> {
 			name: networkHealth.name,
 			address: networkHealth.address,
 			online: networkHealth.online,
+			// Internal-only: drives the staleness derivation below; never returned to the client.
+			lastSampleAt: networkHealth.lastSampleAt,
 			latitude: networkHealth.latitude,
 			longitude: networkHealth.longitude,
 			clusterName: networkHealth.clusterName
@@ -39,7 +41,10 @@ export async function listPublicLocations(db: DB): Promise<PublicLocation[]> {
 		id: r.id,
 		name: r.name,
 		address: r.address,
-		online: r.online,
+		// B3.5: a row with no fresh sample within the ceiling is shown offline on the public map
+		// rather than a stale, confidently-wrong "online". Same derivation admin uses, so the two
+		// surfaces agree. lastSampleAt itself is not exposed.
+		online: r.online && !isNetworkHealthStale(r.lastSampleAt),
 		lat: Number(r.latitude),
 		lng: Number(r.longitude),
 		clusterName: r.clusterName

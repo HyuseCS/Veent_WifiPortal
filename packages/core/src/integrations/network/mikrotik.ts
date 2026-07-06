@@ -5,7 +5,8 @@ import type {
 	RouterLogEntry,
 	ActivateSessionInput,
 	InterfaceLimitInput,
-	DeviceHostAccessInput
+	DeviceHostAccessInput,
+	RevokeScope
 } from './types';
 
 export interface MikrotikConfig {
@@ -63,6 +64,108 @@ const LIMIT_TAG = 'veent-hotspot-limit';
  * creates. The creation time is appended (`veent-checkout:<epochMs>`) so `sweepHostAccess` can
  * expire them with no external state — the router row is self-describing. */
 const CHECKOUT_TAG = 'veent-checkout';
+
+// ── Bypass tags + tag-aware binding rules ────────────────────────────────────────────────────
+// Two kinds of ip-binding bypass share the ip-binding table, told apart by comment:
+//   guest sessions → `veent-portal`     (removed by the revoke cron when the DB window lapses)
+//   admin devices  → `veent-admin:<ms>` (self-expiring; `sweepAdminBindings` reaps past the TTL)
+// Mutual exclusion: at most ONE bypass binding per MAC — grant precedence + tag-scoped revoke keep
+// the guest and admin lifecycles from clobbering each other. Bare legacy `veent-admin` (pre-stamp,
+// or an operator-added permanent bypass) is grandfathered — never reaped — so a deploy can't
+// mass-drop currently-connected staff and an operator's manual binding is left intact.
+
+/** Comment on admin-device bypass bindings. Timestamped (`veent-admin:<epochMs>`) so the sweep can
+ * expire them with no external state, mirroring CHECKOUT_TAG. */
+export const ADMIN_BYPASS_TAG = 'veent-admin';
+/** Comment on guest-session bypass bindings (the controller's default tag). */
+export const GUEST_BYPASS_TAG = 'veent-portal';
+
+/** True if a binding comment is an admin bypass — bare legacy `veent-admin` or `veent-admin:<ms>`. */
+export function isAdminBypassComment(comment: string): boolean {
+	return commentMatchesTag(comment, ADMIN_BYPASS_TAG);
+}
+
+/** True if a binding comment belongs to `tag`'s family — exact, or `tag:<suffix>` (timestamped). */
+export function commentMatchesTag(comment: string, tag: string): boolean {
+	return comment === tag || comment.startsWith(`${tag}:`);
+}
+
+/** The comment to stamp on a fresh/refreshed admin bypass: `veent-admin:<nowMs>`. */
+export function adminBypassComment(nowMs: number): string {
+	return `${ADMIN_BYPASS_TAG}:${nowMs}`;
+}
+
+/**
+ * Whether an admin bypass has aged out. ONLY timestamped `veent-admin:<epoch>` bindings expire;
+ * bare `veent-admin` (legacy app grants OR an operator-added permanent bypass) and any unparseable
+ * stamp are grandfathered (never reaped) — they retire naturally as staff re-sign-in (which
+ * re-stamps them with a fresh window). Mirrors sweepHostAccess's "skip unparseable" stance.
+ */
+export function adminBypassExpired(comment: string, nowMs: number, maxAgeMs: number): boolean {
+	if (!comment.startsWith(`${ADMIN_BYPASS_TAG}:`)) return false;
+	const ts = Number(comment.slice(ADMIN_BYPASS_TAG.length + 1));
+	// A real stamp is a positive epoch; NaN / empty (`veent-admin:`) / non-positive → not ours → grandfather.
+	if (!Number.isFinite(ts) || ts <= 0) return false;
+	return nowMs - ts >= maxAgeMs;
+}
+
+/** One ip-binding row as RouterOS prints it (only the fields the grant planner reads). */
+export interface BindingRow {
+	'.id'?: string;
+	comment?: string;
+	type?: string;
+}
+
+/** What `grant` should do to the ip-binding table for one MAC. `flush` = the device transitions
+ * non-bypassed→bypassed and needs a hotspot-host flush to apply at once; a comment-only change on
+ * an already-bypassed device does NOT flush (avoids the connectivity-flash churn the no-op guard
+ * was built to prevent). */
+export type GrantDirective =
+	| { action: 'noop' }
+	| { action: 'set'; id: string; comment: string; flush: boolean }
+	| { action: 'add'; comment: string; flush: boolean };
+
+/**
+ * Mutual-exclusion grant precedence, computed purely over ALL of a MAC's current bindings (not
+ * rows[0] — legacy/drift data can carry more than one) so it's unit-testable without a router:
+ *  - admin grant WINS: refresh its own admin binding (sliding renewal, no flush); else if the
+ *    device is already bypassed by a guest/other binding, NO-OP (don't clobber paid time — the
+ *    admin already has internet through it); else create the admin binding.
+ *  - guest grant DEFERS: if an admin binding exists, NO-OP (don't demote it); else idempotent
+ *    upsert of the guest binding (no-op + no re-flush when already bypassed with the same comment).
+ */
+export function planGrant(
+	rows: readonly BindingRow[],
+	opts: { isAdmin: boolean; nowMs: number; guestTag: string }
+): GrantDirective {
+	const adminRow = rows.find((r) => isAdminBypassComment(r.comment ?? ''));
+	if (opts.isAdmin) {
+		const comment = adminBypassComment(opts.nowMs);
+		if (adminRow) {
+			const bypassed = adminRow.type === 'bypassed';
+			if (bypassed && adminRow.comment === comment) return { action: 'noop' };
+			return { action: 'set', id: adminRow['.id'] ?? '', comment, flush: !bypassed };
+		}
+		// Already bypassed by a guest/other binding → it already grants internet; leave it be.
+		if (rows.some((r) => r.type === 'bypassed')) return { action: 'noop' };
+		const target = rows[0];
+		if (target)
+			return { action: 'set', id: target['.id'] ?? '', comment, flush: target.type !== 'bypassed' };
+		return { action: 'add', comment, flush: true };
+	}
+	// Guest grant: never demote a standing admin bypass.
+	if (adminRow) return { action: 'noop' };
+	const comment = opts.guestTag;
+	const portalRow = rows.find((r) => (r.comment ?? '') === comment);
+	if (portalRow) {
+		if (portalRow.type === 'bypassed') return { action: 'noop' }; // idempotent — no re-flush
+		return { action: 'set', id: portalRow['.id'] ?? '', comment, flush: true };
+	}
+	const target = rows[0];
+	if (target)
+		return { action: 'set', id: target['.id'] ?? '', comment, flush: target.type !== 'bypassed' };
+	return { action: 'add', comment, flush: true };
+}
 
 /**
  * Render a Kbps cap as a RouterOS queue rate token. RouterOS `k` is decimal (×1000), so
@@ -173,9 +276,14 @@ export function createMikrotikController(config: MikrotikConfig): NetworkControl
 		}
 	}
 
-	async function findBindingIds(conn: RosConn, mac: string): Promise<string[]> {
+	async function findBindingIds(conn: RosConn, mac: string, scope: RevokeScope): Promise<string[]> {
 		const rows = await conn.write('/ip/hotspot/ip-binding/print', [`?mac-address=${mac}`]);
-		return rows.map((r) => r['.id']).filter((id): id is string => Boolean(id));
+		// Tag-scoped so a guest revoke can't strip an admin bypass (or vice-versa). `{ all: true }`
+		// is the full-cut escape hatch used only by the destructive levers (block / kick / delete).
+		return rows
+			.filter((r) => ('all' in scope ? true : commentMatchesTag(r.comment ?? '', scope.tag)))
+			.map((r) => r['.id'])
+			.filter((id): id is string => Boolean(id));
 	}
 
 	/**
@@ -255,10 +363,9 @@ export function createMikrotikController(config: MikrotikConfig): NetworkControl
 	 * the hotspot intercept and are cut. Best-effort: a revoke must still succeed (binding
 	 * already removed) even if this cleanup can't run.
 	 */
-	async function cutConnectionsForMac(conn: RosConn, mac: string): Promise<void> {
+	async function cutConnectionsForIps(conn: RosConn, ips: string[]): Promise<void> {
+		if (ips.length === 0) return;
 		try {
-			const ips = await ipsForMac(conn, mac);
-			if (ips.length === 0) return;
 			const rows = await conn.write('/ip/firewall/connection/print', []);
 			for (const r of rows) {
 				const id = r['.id'];
@@ -276,6 +383,16 @@ export function createMikrotikController(config: MikrotikConfig): NetworkControl
 			}
 		} catch {
 			// Connection table unavailable — binding removal alone still cuts new flows.
+		}
+	}
+
+	async function cutConnectionsForMac(conn: RosConn, mac: string): Promise<void> {
+		try {
+			// Broad ip union (host + lease + ARP) — safe on an EXPLICIT revoke where the device is
+			// present and user-initiated. The admin sweep uses a present-only IP instead (see there).
+			await cutConnectionsForIps(conn, await ipsForMac(conn, mac));
+		} catch {
+			// MAC→IP resolution unavailable — binding removal alone still cuts new flows.
 		}
 	}
 
@@ -303,42 +420,48 @@ export function createMikrotikController(config: MikrotikConfig): NetworkControl
 
 		async grant(input: GrantInput): Promise<void> {
 			const mac = input.macAddress.toUpperCase();
-			// Callers may override the comment (e.g. admin bypasses tagged so the
-			// time-based revoke cron, which only touches session MACs, leaves them be).
-			const comment = input.tag ?? tag;
+			// Admin grants pass `tag: ADMIN_BYPASS_TAG` (self-expiring, stamped); everything else is a
+			// guest binding under the controller's default tag. planGrant decides precedence over ALL
+			// of the MAC's bindings (mutual exclusion) and whether a hotspot-host flush is needed.
+			const resolvedTag = input.tag ?? tag;
+			const isAdmin = resolvedTag === ADMIN_BYPASS_TAG;
 			await withConn(async (conn) => {
 				const rows = await conn.write('/ip/hotspot/ip-binding/print', [`?mac-address=${mac}`]);
-				const existing = rows[0];
-				if (existing) {
-					// Already a bypass with our tag → nothing to do. Re-issuing /set here is
-					// what made the router log "ip binding rule changed" on every add-time,
-					// and the host-flush below would needlessly poke a live device. Access
-					// time lives in the DB window (customer_profile.access_expires_at), not in
-					// this binding, so a re-grant on an already-bypassed MAC is a true no-op.
-					if (existing.type === 'bypassed' && existing.comment === comment) return;
+				const plan = planGrant(rows, { isAdmin, nowMs: Date.now(), guestTag: resolvedTag });
+				if (plan.action === 'noop') return;
+				if (plan.action === 'set') {
 					await conn.write('/ip/hotspot/ip-binding/set', [
-						`=.id=${existing['.id']}`,
+						`=.id=${plan.id}`,
 						'=type=bypassed',
-						`=comment=${comment}`
+						`=comment=${plan.comment}`
 					]);
 				} else {
 					await conn.write('/ip/hotspot/ip-binding/add', [
 						`=mac-address=${mac}`,
 						'=type=bypassed',
-						`=comment=${comment}`
+						`=comment=${plan.comment}`
 					]);
 				}
-				// Clear the stale captured host so the bypass applies right away, not after
-				// the device's old intercepted connections time out (the "slow for 5 min" bug).
-				// Only reached on a real add/change — an unchanged re-grant returned above.
-				await flushHotspotHost(conn, mac);
+				// A fresh bypass (non-bypassed→bypassed) leaves the device's already-open connections
+				// tracked in the pre-bypass (hotspot-intercepted) state — they keep hitting the redirect
+				// and stay snail-slow until they age out. Cut the conntrack so they re-evaluate against
+				// the new bypass immediately (mirrors revoke's cleanup), then flush the stale captured
+				// host. Both are SKIPPED on a comment-only refresh of an already-bypassed device
+				// (flush=false), so sliding admin renewals and repeat guest grants never poke a live device.
+				if (plan.flush) {
+					await cutConnectionsForMac(conn, mac);
+					await flushHotspotHost(conn, mac);
+				}
 			});
 		},
 
-		async revoke(mac: string): Promise<void> {
+		async revoke(mac: string, scope: RevokeScope): Promise<void> {
 			const m = mac.toUpperCase();
 			await withConn(async (conn) => {
-				for (const id of await findBindingIds(conn, m)) {
+				// scope keeps guest and admin lifecycles from clobbering each other: guest-lifecycle
+				// callers pass { tag: GUEST_BYPASS_TAG }, admin sign-out { tag: ADMIN_BYPASS_TAG }, and
+				// the destructive levers (block / kick / delete) pass { all: true } for a full cut.
+				for (const id of await findBindingIds(conn, m, scope)) {
 					await conn.write('/ip/hotspot/ip-binding/remove', [`=.id=${id}`]);
 				}
 				// Removing the binding stops NEW bypassed flows; cut live conntrack + the stale
@@ -433,6 +556,10 @@ export function createMikrotikController(config: MikrotikConfig): NetworkControl
 					for (const e of existing) {
 						const srcIp = (e['src-address'] ?? '').split('/')[0];
 						if (srcIp !== ip || !e['.id']) continue;
+						// B3.6: only refresh OUR own checkout-tagged rows. Without this, a re-checkout would
+						// silently delete an operator-added walled-garden rule for the same (host, device-IP)
+						// — the same CHECKOUT_TAG guard sweepHostAccess applies before it reaps.
+						if (!(e.comment ?? '').startsWith(`${CHECKOUT_TAG}:`)) continue;
 						try {
 							await conn.write('/ip/hotspot/walled-garden/remove', [`=.id=${e['.id']}`]);
 						} catch {
@@ -470,6 +597,44 @@ export function createMikrotikController(config: MikrotikConfig): NetworkControl
 					}
 				}
 				return removed;
+			});
+		},
+
+		async sweepAdminBindings(input?: { maxAgeMs?: number }): Promise<string[]> {
+			// Default 4h ceiling; the service (sweepAdminAccess) passes the real TTL. Mirrors
+			// sweepHostAccess — the row is self-describing (comment carries the epoch), so this needs
+			// no external state and survives an app restart. Only timestamped `veent-admin:<epoch>`
+			// bindings are eligible; bare/legacy `veent-admin` is grandfathered (adminBypassExpired).
+			const maxAgeMs = input?.maxAgeMs ?? 4 * 60 * 60_000;
+			return withConn(async (conn) => {
+				const rows = await conn.write('/ip/hotspot/ip-binding/print', ['?type=bypassed']);
+				const reaped: string[] = [];
+				for (const r of rows) {
+					if (!adminBypassExpired(r.comment ?? '', Date.now(), maxAgeMs)) continue;
+					const id = r['.id'];
+					const mac = (r['mac-address'] ?? '').toUpperCase();
+					if (!id || !mac) continue;
+					// TOCTOU: an admin may re-sign-in between our print and this remove, re-stamping the
+					// SAME row with a fresh window. Re-read and skip if it's no longer expired, so we
+					// never cut an admin who just refreshed.
+					const fresh = await conn.write('/ip/hotspot/ip-binding/print', [`?mac-address=${mac}`]);
+					const current = fresh.find((f) => f['.id'] === id);
+					if (!current || !adminBypassExpired(current.comment ?? '', Date.now(), maxAgeMs)) continue;
+					try {
+						await conn.write('/ip/hotspot/ip-binding/remove', [`=.id=${id}`]);
+						reaped.push(mac);
+						// Cut only the device's CURRENTLY-present hotspot IP (not the lease/ARP union): this
+						// sweep fires against likely-departed devices, and a stale lease can name an IP DHCP
+						// has since handed to another guest. Binding removal already stops new flows; this
+						// drops any still-open ones without touching a reused IP.
+						const ip = await currentHotspotIpForMac(conn, mac);
+						if (ip) await cutConnectionsForIps(conn, [ip]);
+						await flushHotspotHost(conn, mac);
+					} catch {
+						// Raced with another sweep / manual removal — ignore.
+					}
+				}
+				return reaped;
 			});
 		},
 

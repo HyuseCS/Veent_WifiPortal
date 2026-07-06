@@ -68,6 +68,9 @@ export interface NetworkAp {
 	name: string;
 	tone: StatusTone;
 	status: string;
+	/** True when no fresh router sample has landed within the staleness ceiling — the metrics
+	 * shown are last-known, not live. Drives a "Stale" chip instead of a misleading "Healthy". */
+	stale: boolean;
 	uptime: string;
 	latency: string;
 	users: number;

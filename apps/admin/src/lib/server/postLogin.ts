@@ -4,6 +4,7 @@ import { auth } from '$lib/server/auth';
 import { db } from '$lib/server/db';
 import { network } from '$lib/server/network';
 import { logger } from '$lib/server/logger';
+import { setAdminDevMacCookie } from '$lib/server/adminBypass';
 
 const log = logger('sign-in');
 
@@ -41,8 +42,20 @@ export async function finishStaffSignIn(
 	// `?mac=` to read) and drop the firewall. Best-effort — a failed/unsupported grant
 	// (e.g. dev stub) must never block sign-in.
 	try {
-		const mac = await resolveDeviceMac(network, event.getClientAddress());
-		if (mac) await grantAdminAccess(network, mac);
+		const ip = event.getClientAddress();
+		const mac = await resolveDeviceMac(network, ip);
+		if (mac) {
+			await grantAdminAccess(network, mac);
+			// Stash the router-resolved MAC so the (app) layout can slide the 4h window forward and
+			// logout can revoke, both without re-doing the flaky lookup / getClientAddress().
+			setAdminDevMacCookie(event, mac);
+			log.info(`admin bypass granted: ip=${ip} mac=${mac}`);
+		} else {
+			// Not an error (device may be off-hotspot / on cellular) — but the IP the server saw is
+			// the whole diagnostic: if it isn't the device's hotspot LAN IP (proxy/NAT), the router
+			// can't map it and no veent-admin binding is written. console-only (not Sentry).
+			log.warn(`admin bypass skipped — no MAC for client ip=${ip}`);
+		}
 	} catch (err) {
 		log.error('device internet grant on sign-in failed:', err);
 	}

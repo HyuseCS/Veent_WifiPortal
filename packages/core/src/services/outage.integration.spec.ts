@@ -14,7 +14,7 @@ import {
 	packages
 } from '@veent/db';
 import { SESSION_STATUS } from '../config';
-import type { NetworkController } from '../integrations/network';
+import { GUEST_BYPASS_TAG, type NetworkController } from '../integrations/network';
 import { sweepOutagePauses } from './outage';
 import { refreshNetworkHealth } from './networkHealth';
 
@@ -137,7 +137,7 @@ describe('outage sweep (real Postgres)', () => {
 		expect(p.accessPausedReason).toBe('outage');
 		expect(p.accessPausedNetworkId).toBe(ap.id);
 		// device was unbound (router revoke + session marked revoked)
-		expect(revoke).toHaveBeenCalledWith('aa:bb');
+		expect(revoke).toHaveBeenCalledWith('aa:bb', { tag: GUEST_BYPASS_TAG });
 		const [s] = await db.select().from(networkSessions).where(eq(networkSessions.userId, 'u1'));
 		expect(s.status).toBe(SESSION_STATUS.revoked);
 	});
