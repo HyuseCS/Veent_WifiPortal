@@ -24,6 +24,7 @@
 			<a
 				href={resolve('/dashboard')}
 				aria-label="Back to dashboard"
+				title="Back to dashboard"
 				class="flex h-9 w-9 items-center justify-center rounded-full bg-white/15 text-white/90 transition-colors hover:bg-white/25 hover:cursor-pointer"
 			>
 				<Icon name="arrow-left" size={18} />
