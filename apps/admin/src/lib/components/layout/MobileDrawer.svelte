@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { page } from '$app/state';
+	import { page, navigating } from '$app/state';
 	import { afterNavigate } from '$app/navigation';
 	import X from 'lucide-svelte/icons/x';
 	import LogOut from 'lucide-svelte/icons/log-out';
@@ -14,6 +14,10 @@
 	// ponytail: dup over a shared child that would force edits into the frozen desktop sidebar.
 	let { user }: { user?: { name?: string; email?: string; role?: string | null } } = $props();
 	const items = $derived(nav.filter((item) => !item.ownerOnly || user?.role === 'owner'));
+
+	// Highlight the destination tab as soon as navigation starts (mirrors Sidebar) so a slow page
+	// switch feels immediate; falls back to the committed path when idle.
+	const activePath = $derived(navigating.to?.url.pathname ?? page.url.pathname);
 	const initials = $derived(
 		(user?.name ?? user?.email ?? '?')
 			.trim()
@@ -141,8 +145,7 @@
 		<div class="space-y-1">
 			{#each items as item (item.href)}
 				{@const Icon = item.icon}
-				{@const active =
-					page.url.pathname === item.href || page.url.pathname.startsWith(item.href + '/')}
+				{@const active = activePath === item.href || activePath.startsWith(item.href + '/')}
 				<a
 					href={item.href}
 					aria-current={active ? 'page' : undefined}
