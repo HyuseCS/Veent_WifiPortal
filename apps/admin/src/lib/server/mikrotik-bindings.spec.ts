@@ -135,4 +135,26 @@ describe('planGrant — mutual-exclusion precedence', () => {
 			})
 		).toEqual({ action: 'set', id: '*2', comment: 'veent-portal', flush: true });
 	});
+
+	// ── rows[0] fallback contract ──────────────────────────────────────────────
+	// A lone unrelated binding (manual block, foreign/untagged row) is CONVERTED in place, not
+	// stacked behind: RouterOS ip-binding is first-match, so an `add` behind an existing blocked
+	// row would never win and the grant would silently not take effect. One row per MAC — the
+	// grant converts it and flushes so the device re-evaluates immediately. Deliberate (bench-
+	// verified B3.2); this pins the contract so a change here is a conscious decision.
+	it('guest grant converts a lone unrelated non-bypassed row in place (rows[0] fallback)', () => {
+		expect(
+			planGrant([regular('manual-block')], {
+				isAdmin: false,
+				nowMs: NOW,
+				guestTag: GUEST_BYPASS_TAG
+			})
+		).toEqual({ action: 'set', id: '*2', comment: 'veent-portal', flush: true });
+	});
+
+	it('admin grant converts a lone unrelated non-bypassed row in place (rows[0] fallback)', () => {
+		expect(
+			planGrant([regular('manual-block')], { isAdmin: true, nowMs: NOW, guestTag: GUEST_BYPASS_TAG })
+		).toEqual({ action: 'set', id: '*2', comment: `veent-admin:${NOW}`, flush: true });
+	});
 });

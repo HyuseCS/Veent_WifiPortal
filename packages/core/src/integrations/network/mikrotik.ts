@@ -82,7 +82,7 @@ export const GUEST_BYPASS_TAG = 'veent-portal';
 
 /** True if a binding comment is an admin bypass — bare legacy `veent-admin` or `veent-admin:<ms>`. */
 export function isAdminBypassComment(comment: string): boolean {
-	return comment === ADMIN_BYPASS_TAG || comment.startsWith(`${ADMIN_BYPASS_TAG}:`);
+	return commentMatchesTag(comment, ADMIN_BYPASS_TAG);
 }
 
 /** True if a binding comment belongs to `tag`'s family — exact, or `tag:<suffix>` (timestamped). */

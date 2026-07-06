@@ -1,4 +1,6 @@
+import { createHmac, timingSafeEqual } from 'node:crypto';
 import type { RequestEvent } from '@sveltejs/kit';
+import { env } from '$env/dynamic/private';
 import { grantAdminAccess, revokeAdminAccess, ADMIN_BYPASS_TTL_MINUTES } from '@veent/core';
 import { network } from '$lib/server/network';
 import { logger } from '$lib/server/logger';
@@ -9,13 +11,33 @@ const log = logger('admin-bypass');
 // stashed here so the (app) layout can slide the 4h window forward on activity WITHOUT re-doing the
 // flaky live IP→MAC lookup — and without event.getClientAddress(), which is NOT reliably available in
 // the layout-load context (it throws "Could not determine clientAddress" on SvelteKit __data.json
-// navigation sub-requests, which is why the pre-cookie slide never actually ran). httpOnly: the
-// browser never reads it; we only trust it because WE set it from a router-vouched lookup.
+// navigation sub-requests, which is why the pre-cookie slide never actually ran). httpOnly keeps
+// scripts out, but a cookie is still client-editable — so the value is HMAC-signed with
+// BETTER_AUTH_SECRET (same pattern as the customer OTP cookie): only a login-resolved,
+// server-stamped MAC can slide or revoke a bypass; a forged/tampered value reads as absent.
 const ADMIN_DEV_MAC_COOKIE = 'admin_dev_mac';
+
+function signMac(mac: string): string {
+	return createHmac('sha256', env.BETTER_AUTH_SECRET ?? 'veent-admin-dev-secret')
+		.update(mac)
+		.digest('base64url');
+}
+
+/** The signed cookie's MAC — or null when the cookie is absent, malformed, or fails the HMAC. */
+function readSignedMac(event: RequestEvent): string | null {
+	const raw = event.cookies.get(ADMIN_DEV_MAC_COOKIE);
+	if (!raw) return null;
+	const dot = raw.lastIndexOf('.');
+	if (dot < 1) return null; // legacy unsigned cookie (pre-signing) — treat as absent; login rewrites it
+	const mac = raw.slice(0, dot);
+	const sig = Buffer.from(raw.slice(dot + 1));
+	const expected = Buffer.from(signMac(mac));
+	return sig.length === expected.length && timingSafeEqual(sig, expected) ? mac : null;
+}
 
 /** Persist the login-resolved device MAC so the sliding renewal + logout revoke can reuse it. */
 export function setAdminDevMacCookie(event: RequestEvent, mac: string): void {
-	event.cookies.set(ADMIN_DEV_MAC_COOKIE, mac, {
+	event.cookies.set(ADMIN_DEV_MAC_COOKIE, `${mac}.${signMac(mac)}`, {
 		httpOnly: true,
 		sameSite: 'lax',
 		path: '/',
@@ -39,8 +61,8 @@ const lastRefreshByMac = new Map<string, number>();
  */
 export async function refreshAdminBypass(event: RequestEvent): Promise<void> {
 	try {
-		const mac = event.cookies.get(ADMIN_DEV_MAC_COOKIE);
-		if (!mac) return; // no login-resolved device on this browser yet
+		const mac = readSignedMac(event);
+		if (!mac) return; // no login-resolved device on this browser yet (or a tampered cookie)
 		const now = Date.now();
 		const last = lastRefreshByMac.get(mac);
 		if (last !== undefined && now - last < REFRESH_INTERVAL_MS) return;
@@ -57,7 +79,7 @@ export async function refreshAdminBypass(event: RequestEvent): Promise<void> {
  * clears the cookie. Tag-scoped inside revokeAdminAccess, so it can never touch a guest binding.
  */
 export async function revokeAdminBypass(event: RequestEvent): Promise<void> {
-	const mac = event.cookies.get(ADMIN_DEV_MAC_COOKIE);
+	const mac = readSignedMac(event);
 	try {
 		if (mac) await revokeAdminAccess(network, mac);
 	} catch (err) {
