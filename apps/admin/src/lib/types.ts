@@ -119,6 +119,8 @@ export interface AdminUserRow {
 	phone: string;
 	/** Credit balance in pesos. */
 	balance: number;
+	/** Loyalty-points balance (separate wallet, earned on top-ups). */
+	points: number;
 	/** Lifetime/period usage, pre-formatted (e.g. "4.2 GB"). */
 	usage: string;
 	tone: StatusTone;

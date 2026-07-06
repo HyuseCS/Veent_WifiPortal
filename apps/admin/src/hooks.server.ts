@@ -1,6 +1,6 @@
 import type { Handle } from '@sveltejs/kit';
 import { building, dev } from '$app/environment';
-import { getStaffStatus, STAFF_STATUS, sentryOptions } from '@veent/core';
+import { getStaffStatus, STAFF_STATUS, sentryOptions, nonEmptyEnv } from '@veent/core';
 import * as Sentry from '@sentry/sveltekit';
 import { sequence } from '@sveltejs/kit/hooks';
 import { env as pub } from '$env/dynamic/public';
@@ -23,9 +23,11 @@ if (SENTRY_DSN && !building) {
 			dsn: SENTRY_DSN,
 			app: 'admin',
 			environment:
-				priv.SENTRY_ENVIRONMENT ?? pub.PUBLIC_SENTRY_ENVIRONMENT ?? (dev ? 'development' : 'production'),
-			release: priv.SENTRY_RELEASE,
-			tracesSampleRate: dev ? 1.0 : Number(priv.SENTRY_TRACES_SAMPLE_RATE ?? '0.2')
+				nonEmptyEnv(priv.SENTRY_ENVIRONMENT) ??
+				nonEmptyEnv(pub.PUBLIC_SENTRY_ENVIRONMENT) ??
+				(dev ? 'development' : 'production'),
+			release: nonEmptyEnv(priv.SENTRY_RELEASE),
+			tracesSampleRate: dev ? 1.0 : Number(nonEmptyEnv(priv.SENTRY_TRACES_SAMPLE_RATE) ?? '0.2')
 		})
 	);
 }
@@ -67,6 +69,23 @@ const handleBetterAuth: Handle = async ({ event, resolve }) => {
 			Sentry.setUser({ id: session.user.id });
 			const role = (session.user as { role?: string | null }).role;
 			if (role) Sentry.setTag('staff_role', role);
+		}
+	}
+
+	// Central auth gate for the whole (app) shell — matched via route.id, which includes the
+	// route group. This MUST live in the hook, not just (app)/+layout.server.ts: a SvelteKit
+	// form-action POST runs the action BEFORE any layout `load`, so the layout's redirect can't
+	// protect action POSTs (an unauthenticated POST to /users?/block or /map?/deletePlace would
+	// otherwise execute the mutation). Gating here blocks the request before the action runs, for
+	// every current and future (app) route — pages, actions, and the finance/export + sentry/event
+	// endpoints (which also require enrolled 2FA). Public routes (login, 2fa, enroll-2fa, activate,
+	// reset/forgot-password, /api/auth/*) are outside (app) and pass through untouched.
+	if (event.route.id?.startsWith('/(app)')) {
+		if (!event.locals.user) {
+			return new Response(null, { status: 302, headers: { location: '/login' } });
+		}
+		if (!event.locals.user.twoFactorEnabled) {
+			return new Response(null, { status: 302, headers: { location: '/enroll-2fa' } });
 		}
 	}
 

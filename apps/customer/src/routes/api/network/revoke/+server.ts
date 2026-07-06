@@ -1,6 +1,7 @@
 import { json } from '@sveltejs/kit';
 import * as Sentry from '@sentry/sveltekit';
 import {
+	sweepOutagePauses,
 	expireDueAccounts,
 	reconcileGuestBindings,
 	sweepCheckoutAccess,
@@ -28,6 +29,11 @@ export const POST: RequestHandler = async (event) => {
 	return Sentry.withMonitor(
 		'customer-network-revoke',
 		async () => {
+			// Outage auto-pause FIRST: freeze the paid window of guests on a down AP before the expiry
+			// sweep runs, so an account whose AP is down isn't expired out from under them — it's held
+			// (expireDueAccounts skips paused accounts) and resumed when the AP recovers.
+			const outage = await sweepOutagePauses(db, network);
+
 			const revoked = await expireDueAccounts(db, network);
 			// Then sweep router bindings the DB no longer backs (wipe/cascade/crash orphans).
 			const reconciled = await reconcileGuestBindings(db, network);
@@ -39,7 +45,7 @@ export const POST: RequestHandler = async (event) => {
 			// that still holds a live window (mutual exclusion across the expiry). Self-describing on
 			// the router (timestamped comment), like the checkout sweep.
 			const sweptAdminAccess = await sweepAdminAccess(db, network);
-			return json({ ok: true, revoked, reconciled, sweptCheckoutAccess, sweptAdminAccess });
+			return json({ ok: true, outage, revoked, reconciled, sweptCheckoutAccess, sweptAdminAccess });
 		},
 		{
 			schedule: { type: 'crontab', value: '* * * * *' },

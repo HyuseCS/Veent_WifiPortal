@@ -10,12 +10,17 @@
 	let code = $state('');
 	const codeValid = $derived(/^\d{6}$/.test(code));
 
+	// Pending state for the save: disables the button + shows a spinner while the server-side
+	// MFA re-check + DB write run, so a slow save gives feedback and can't be double-submitted.
+	let submitting = $state(false);
+
 	// Seed the form once from the saved limits; edits stay local until saved. `untrack`
 	// makes the one-time read of `data` explicit so it isn't treated as a live dependency.
 	const seed = untrack(() => data.limits);
 	let maxDevicesPerAccount = $state(String(seed.maxDevicesPerAccount));
 	let freeTimeMinutes = $state(String(seed.freeTimeMinutes));
 	let freeTimeCooldownHours = $state(String(seed.freeTimeCooldownHours));
+	let pointsEarnRate = $state(String(seed.pointsEarnRate));
 
 	const fields = [
 		{
@@ -41,6 +46,14 @@
 			suffix: 'hours',
 			get: () => freeTimeCooldownHours,
 			set: (v: string) => (freeTimeCooldownHours = v)
+		},
+		{
+			name: 'pointsEarnRate',
+			label: 'Points earn rate',
+			hint: 'Loyalty points awarded on each top-up, as a percent of the peso amount (0 disables earning). Points are redeemable for access tiers.',
+			suffix: '%',
+			get: () => pointsEarnRate,
+			set: (v: string) => (pointsEarnRate = v)
 		}
 	];
 </script>
@@ -63,7 +76,23 @@
 	{/if}
 
 	<Card class="max-w-xl">
-		<form method="post" action="?/save" use:enhance class="flex flex-col gap-5">
+		<form
+			method="post"
+			action="?/save"
+			use:enhance={() => {
+				submitting = true;
+				return async ({ update }) => {
+					// Keep the entered values visible after saving. These number inputs bind one-way
+					// (value={f.get()}), so their HTML defaultValue is empty; the default form reset
+					// would blank every field until a manual refresh. reset:false preserves them.
+					await update({ reset: false });
+					// The authenticator code is single-use — clear it so the next save needs a fresh one.
+					code = '';
+					submitting = false;
+				};
+			}}
+			class="flex flex-col gap-5"
+		>
 			{#each fields as f (f.name)}
 				<label class="flex flex-col gap-1.5">
 					<span class="text-sm font-medium text-ink">{f.label}</span>
@@ -96,7 +125,7 @@
 			/>
 
 			<div>
-				<Button type="submit" disabled={!codeValid}>Save limits</Button>
+				<Button type="submit" loading={submitting} disabled={!codeValid}>Save limits</Button>
 			</div>
 		</form>
 	</Card>

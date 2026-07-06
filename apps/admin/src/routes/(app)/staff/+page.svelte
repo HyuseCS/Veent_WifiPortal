@@ -4,7 +4,13 @@
 	import UserX from 'lucide-svelte/icons/user-x';
 	import Users from 'lucide-svelte/icons/users';
 	import type { Component } from 'svelte';
-	import { AddStaffForm, KpiCard, OwnerChangePanel, StaffTable } from '$lib/components/feature';
+	import {
+		AddStaffForm,
+		KpiCard,
+		KpiCarousel,
+		OwnerChangePanel,
+		StaffTable
+	} from '$lib/components/feature';
 	import type { StatusTone } from '$lib/types';
 	import type { ActionData, PageData } from './$types';
 
@@ -70,8 +76,8 @@
 <!-- Full-height flex column so the members table scrolls internally, not the page (see
      StaffTable's Table). KPIs + invite form stay fixed; the table takes the rest. -->
 <div class="flex flex-col gap-5 h-full">
-	<section class="grid shrink-0 grid-cols-2 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-4">
-		{#each kpis as k (k.label)}
+	<KpiCarousel items={kpis} class="shrink-0">
+		{#snippet card(k)}
 			<KpiCard
 				kpi={{ label: k.label, value: k.value }}
 				icon={k.icon}
@@ -80,8 +86,8 @@
 				captionTone={k.captionTone}
 				compact
 			/>
-		{/each}
-	</section>
+		{/snippet}
+	</KpiCarousel>
 
 	<OwnerChangePanel
 		requests={data.ownerChanges}

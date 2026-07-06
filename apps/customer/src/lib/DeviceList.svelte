@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
+	import { resolve } from '$app/paths';
 	import type { SubmitFunction } from '@sveltejs/kit';
 	import { toasts } from '$lib/toasts.svelte';
 	import Icon from '$lib/Icon.svelte';
@@ -86,6 +87,7 @@
 					<input type="hidden" name="deviceId" value={d.id} />
 					<button
 						aria-label={d.thisDevice ? 'Disconnect this device' : `Remove device ··${d.macTail}`}
+						title={d.thisDevice ? 'Disconnect this device' : `Remove device ··${d.macTail}`}
 						class="flex h-9 w-9 items-center justify-center rounded-lg text-muted transition-colors hover:bg-blocked/10 hover:text-blocked hover:cursor-pointer"
 					>
 						<Icon name="trash" size={16} />
@@ -96,7 +98,10 @@
 	</div>
 
 	<div class="mt-3 flex items-center justify-between border-t border-border pt-3">
-		<a href="/faq" class="text-[12px] font-medium text-muted underline-offset-2 hover:underline">
+		<a
+			href={resolve('/faq')}
+			class="text-[12px] font-medium text-muted underline-offset-2 hover:underline"
+		>
 			Why do I see extra devices?
 		</a>
 		{#if devices.count > 0}

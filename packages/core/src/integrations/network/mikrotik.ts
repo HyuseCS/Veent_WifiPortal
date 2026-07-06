@@ -509,7 +509,12 @@ export function createMikrotikController(config: MikrotikConfig): NetworkControl
 		},
 
 		async resolveMacByIp(ipAddress: string): Promise<string | null> {
-			const ip = ipAddress.trim();
+			// Strip the IPv4-mapped IPv6 prefix: a dev/prod server on a dual-stack socket reports an
+			// IPv4 client as `::ffff:10.210.x.x`, but the router's `?address=` filter only matches the
+			// plain IPv4 form (verified — the mapped form returns zero rows). The customer path strips
+			// this upstream; the admin-bypass path passes getClientAddress() raw, so do it here to cover
+			// every caller (was silently returning null → no admin-device bypass binding).
+			const ip = ipAddress.trim().replace(/^::ffff:/i, '');
 			if (!ip) return null;
 			return withConn(async (conn) => {
 				// Prefer the hotspot host table (knows currently-seen clients), then
@@ -743,6 +748,12 @@ export function createMikrotikController(config: MikrotikConfig): NetworkControl
 					// ping unavailable / no internet — leave null
 				}
 
+				// The latency ping doubles as the uplink/WAN reachability probe (shared across all
+				// interfaces — same WAN path). A successful ping means the router reached the internet;
+				// no reply (timeout / no route / ICMP blocked) is treated as WAN-down. The outage sweep's
+				// downMs debounce absorbs a transient miss, so a one-off failure won't pause anyone.
+				const wanReachable = latencyMs != null;
+
 				const ifaces = await conn.write('/interface/print');
 				const samples: NetworkApSample[] = [];
 				for (const i of ifaces) {
@@ -770,7 +781,8 @@ export function createMikrotikController(config: MikrotikConfig): NetworkControl
 						online: running,
 						users: connectedUsers,
 						throughputMbps,
-						latencyMs: running ? latencyMs : null
+						latencyMs: running ? latencyMs : null,
+						wanReachable
 					});
 				}
 				return samples;

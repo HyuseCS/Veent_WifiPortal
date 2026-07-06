@@ -42,6 +42,10 @@ export const customerProfile = pgTable('customer_profile', {
 	contactEmail: text('contact_email'),
 	// Phone lives on customer_user (better-auth phoneNumber plugin); no duplicate here.
 	creditBalance: numeric('credit_balance', { precision: 12, scale: 2 }).notNull().default('0'),
+	// Loyalty points, a SEPARATE wallet from credits: earned as a % of each verified top-up
+	// (points_ledger `earn`) and redeemable for the same access tiers instead of credits
+	// (points_ledger `spend`). Whole numbers only — earning floors the percentage. Never expires.
+	pointsBalance: integer('points_balance').notNull().default(0),
 	lastFreeSessionAt: timestamp('last_free_session_at'),
 	// The ACCOUNT's internet access window — authoritative source of truth for "is this
 	// account online and until when". Buying a tier / claiming free time extends it; the
@@ -61,6 +65,13 @@ export const customerProfile = pgTable('customer_profile', {
 	// `access_expires_at = now + held` and clears this. Any window-extending buy/free claim
 	// also clears it (adding time un-pauses). Paid windows only.
 	accessPausedAt: timestamp('access_paused_at'),
+	// Why paused: 'user' (guest tapped Pause) or 'outage' (auto-paused because this account's AP
+	// went down — see the outage sweep). Null when not paused. Lets the outage auto-resume touch
+	// ONLY its own pauses and never un-pause a manual one.
+	accessPausedReason: text('access_paused_reason'),
+	// For an 'outage' pause: the network_health.id of the AP whose outage triggered it, so the
+	// sweep resumes the account only when THAT AP recovers. Null for a 'user' pause. Loose link.
+	accessPausedNetworkId: integer('access_paused_network_id'),
 	// Admin "block": when true, grant paths refuse to start sessions for this user.
 	blocked: boolean('blocked').notNull().default(false),
 	// Last AP/network this account was granted on (network_health.id), stamped whenever a
@@ -85,6 +96,9 @@ export const packages = pgTable('packages', {
 	fiatCost: doublePrecision('fiat_cost'),
 	creditsProvided: integer('credits_provided'),
 	creditCost: integer('credit_cost'),
+	// Points price for a `tier`, set by admin independently of `creditCost`. Null = this tier
+	// can't be redeemed with points (only credits). Whole points only.
+	pointsCost: integer('points_cost'),
 	durationMinutes: integer('duration_minutes'),
 	isActive: boolean('is_active').notNull().default(true)
 });
@@ -110,6 +124,33 @@ export const creditLedger = pgTable(
 		createdAt: timestamp('created_at').notNull().defaultNow()
 	},
 	(t) => [index('credit_ledger_user_id_idx').on(t.userId)]
+);
+
+/**
+ * Append-only history of every POINTS movement — the credit_ledger twin for the loyalty wallet.
+ * Kept as its OWN table (not a `type` on credit_ledger) so the two wallets never share a balance
+ * or an idempotency key: a top-up writes ONE credit_ledger row and ONE points_ledger row, each
+ * with the SAME Maya txn id under its own unique `external_transaction_id`, so neither can
+ * double-apply and the two can't collide. Positive amount = earn, negative = spend.
+ */
+export const pointsLedger = pgTable(
+	'points_ledger',
+	{
+		id: serial('id').primaryKey(),
+		userId: text('user_id')
+			.notNull()
+			.references(() => customerUser.id, { onDelete: 'cascade' }),
+		// Nullable + set null on delete, same rationale as credit_ledger: spends may reference a
+		// tier, but removing a package config must not erase points history.
+		packageId: integer('package_id').references(() => packages.id, { onDelete: 'set null' }),
+		amount: integer('amount').notNull(),
+		type: text('type').notNull(), // earn | spend
+		// Unique so a retried payment webhook can't earn points twice (mirrors credit_ledger).
+		// NULL for spends (Postgres allows many NULLs under a unique constraint).
+		externalTransactionId: text('external_transaction_id').unique(),
+		createdAt: timestamp('created_at').notNull().defaultNow()
+	},
+	(t) => [index('points_ledger_user_id_idx').on(t.userId)]
 );
 
 /**
@@ -309,5 +350,8 @@ export const appSettings = pgTable('app_settings', {
 	maxDevicesPerAccount: integer('max_devices_per_account').notNull().default(2),
 	freeTimeMinutes: integer('free_time_minutes').notNull().default(15),
 	freeTimeCooldownHours: integer('free_time_cooldown_hours').notNull().default(12),
+	// Points awarded per top-up as a WHOLE-NUMBER percent of the peso amount (10 = 10%).
+	// Earned points are floored: floor(pesos * rate / 100). Admin-tunable; 0 disables earning.
+	pointsEarnRate: integer('points_earn_rate').notNull().default(10),
 	updatedAt: timestamp('updated_at').notNull().defaultNow()
 });

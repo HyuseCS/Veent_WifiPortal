@@ -1,8 +1,10 @@
-import { and, eq, gt, inArray, isNull, lte, or } from 'drizzle-orm';
+import { and, eq, gt, inArray, isNull, lte, or, sql } from 'drizzle-orm';
 import { type DB, paymentCheckouts, paymentTransactions, packages } from '@veent/db';
 import { LEDGER_TYPE } from '../config';
 import type { PaymentEvent, PaymentProvider } from '../integrations/payments';
 import { addCreditsTx } from './credits';
+import { earnPointsTx } from './points';
+import { getSessionLimits } from './settings';
 import { captureHandled } from '../observability';
 
 /** Normalized PaymentEvent.status → the raw gateway status we persist for Finance. */
@@ -78,6 +80,13 @@ export async function recordPaymentTransaction(
 	// partial unique index on reference_no (payment_transactions_reference_no_key) lets Postgres
 	// reject the divergent duplicate atomically — closing the simultaneous-insert race a prior
 	// select-then-update couldn't. (One Maya checkout = one referenceNo = one terminal payment.)
+	// NEVER downgrade a terminal SUCCESS. Maya issues MULTIPLE payment ids under one RRN (a card
+	// fails, the buyer retries, it succeeds — see fetchPaymentByRrn's [fail, ok] handling), and
+	// webhook delivery isn't ordered, so a late FAILED event can arrive after the SUCCESS is already
+	// recorded. Guard both write paths: skip the update when it would overwrite a PAYMENT_SUCCESS row
+	// with a non-success status. (The buyer is credited via the independent claim regardless; this
+	// protects Finance reporting from a paid txn flipping to "failed".)
+	const noDowngrade = sql`NOT (${paymentTransactions.status} = ${STATUS_DB.paid} AND ${row.status} <> ${STATUS_DB.paid})`;
 	try {
 		await db
 			.insert(paymentTransactions)
@@ -88,7 +97,8 @@ export async function recordPaymentTransaction(
 				// PENDING→SUCCESS) enriches a row a reconcile pass recorded first. networkId and
 				// the userId/packageId attribution stay INSERT-only (fixed at first record); the
 				// gateway-supplied detail is what a transition can legitimately backfill.
-				set: detail
+				set: detail,
+				setWhere: noDowngrade
 			});
 	} catch (e) {
 		// 23505 = unique_violation: the same payment arrived under a DIFFERENT id and tripped the
@@ -103,7 +113,7 @@ export async function recordPaymentTransaction(
 			await db
 				.update(paymentTransactions)
 				.set(detail)
-				.where(eq(paymentTransactions.referenceNo, row.referenceNo));
+				.where(and(eq(paymentTransactions.referenceNo, row.referenceNo), noDowngrade));
 			return;
 		}
 		throw e;
@@ -151,9 +161,25 @@ export async function creditCheckoutIfUnsettled(
 	db: DB,
 	args: CreditArgs
 ): Promise<{ credited: boolean; balance?: number; reason?: CreditSkipReason }> {
+	// A non-finite gateway amount means we couldn't determine what was charged (a parse/transient
+	// issue — e.g. Maya returned no amount), NOT a real underpayment. Refuse to touch the checkout
+	// at all: do NOT claim/settle it, so it stays `pending` and a later reconcile pass or the
+	// webhook can retry with a good amount — instead of trapping it settled-but-uncredited (which
+	// would make the recovered webhook return `already_settled` and lose the credit forever). Throw
+	// so the caller retries: reconcile catches + leaves pending; the webhook 500s → Maya re-delivers.
+	if (!Number.isFinite(args.amountMinor)) {
+		throw new Error(
+			`credit: refusing to settle checkout with a non-finite gateway amount (ref=${args.referenceId ?? args.checkoutId ?? 'unknown'})`
+		);
+	}
+
 	const match = args.checkoutId
 		? eq(paymentCheckouts.id, args.checkoutId)
 		: eq(paymentCheckouts.referenceId, args.referenceId ?? '');
+
+	// Admin-tunable points earn rate (cached, non-throwing). Read before the tx so the credit path
+	// never blocks on it; 0 disables earning.
+	const { pointsEarnRate } = await getSessionLimits(db);
 
 	return db.transaction(async (tx) => {
 		// Atomic claim: flip {pending,expired}→settled, returning the checkout's recorded amount
@@ -181,10 +207,11 @@ export async function creditCheckoutIfUnsettled(
 		}
 
 		// Amount integrity (currency is PHP-only and not stored per-checkout, so amount is the
-		// authoritative check). A mismatch keeps the claim (settled) to stop retries, but does
-		// not credit — surfaced so a spike is alertable.
+		// authoritative check). A GENUINE finite-but-different mismatch keeps the claim (settled) to
+		// stop retries but does NOT credit — surfaced so a spike is alertable. (A non-finite/
+		// unparseable amount is rejected BEFORE the claim, so that case stays pending.)
 		const expectedMinor = Math.round(Number(claimed.amount) * 100);
-		if (!Number.isFinite(args.amountMinor) || args.amountMinor !== expectedMinor) {
+		if (args.amountMinor !== expectedMinor) {
 			console.warn('[credit] amount mismatch — refusing to credit', {
 				checkoutId: claimed.id,
 				externalTransactionId: args.externalTransactionId,
@@ -214,6 +241,21 @@ export async function creditCheckoutIfUnsettled(
 			packageId: args.packageId,
 			externalTransactionId: args.externalTransactionId
 		});
+
+		// Award loyalty points in the SAME transaction as the credit — points are earned ONLY on a
+		// verified, credited top-up, and if this throws the whole claim rolls back. Idempotent on
+		// externalTransactionId (its own unique guard), so a retried webhook can't double-earn.
+		// Based on the validated charged amount (expectedMinor), not the package's credit count.
+		const points = Math.floor((expectedMinor / 100) * (pointsEarnRate / 100));
+		if (points > 0) {
+			await earnPointsTx(tx, {
+				userId: args.userId,
+				packageId: args.packageId,
+				amount: points,
+				externalTransactionId: args.externalTransactionId
+			});
+		}
+
 		return { credited: result.credited, balance: result.balance };
 	});
 }
@@ -227,6 +269,22 @@ async function markUnpaid(db: DB, checkoutId: string, status: 'failed' | 'expire
 }
 
 /**
+ * Resolve a checkout's authoritative gateway status, PREFERRING the by-reference (RRN) lookup: it
+ * resolves the payment from the reference WE set at checkout, needing neither an inbound webhook
+ * nor the gateway's checkout→payment mapping — so it credits even if the relay/tunnel never
+ * recovers. Falls back to the by-checkout-id status for providers that only offer that.
+ */
+function resolvePaymentStatus(
+	payments: PaymentProvider,
+	checkoutId: string,
+	referenceId: string | null | undefined
+): Promise<PaymentEvent | null> {
+	if (payments.getPaymentByReference && referenceId) return payments.getPaymentByReference(referenceId);
+	if (payments.getCheckoutStatus) return payments.getCheckoutStatus(checkoutId);
+	return Promise.resolve(null);
+}
+
+/**
  * Cron pass: poll the gateway for every pending checkout old enough that the webhook
  * has had its chance, and credit any that are actually paid. Catches missed webhooks
  * even when the buyer never returned to the processing page. Bounded both ways: skips
@@ -237,7 +295,7 @@ export async function reconcilePendingPayments(
 	payments: PaymentProvider,
 	opts: { minAgeMs?: number; maxAgeMs?: number } = {}
 ): Promise<{ checked: number; credited: number }> {
-	if (!payments.getCheckoutStatus) return { checked: 0, credited: 0 };
+	if (!payments.getPaymentByReference && !payments.getCheckoutStatus) return { checked: 0, credited: 0 };
 	const now = Date.now();
 	const minAge = new Date(now - (opts.minAgeMs ?? 90_000)); // webhook head start
 	const maxAge = new Date(now - (opts.maxAgeMs ?? 24 * 60 * 60 * 1000)); // stop after a day
@@ -245,6 +303,7 @@ export async function reconcilePendingPayments(
 	const pending = await db
 		.select({
 			id: paymentCheckouts.id,
+			referenceId: paymentCheckouts.referenceId,
 			userId: paymentCheckouts.userId,
 			packageId: paymentCheckouts.packageId,
 			networkId: paymentCheckouts.networkId
@@ -261,7 +320,7 @@ export async function reconcilePendingPayments(
 	let credited = 0;
 	for (const c of pending) {
 		try {
-			const evt = await payments.getCheckoutStatus!(c.id);
+			const evt = await resolvePaymentStatus(payments, c.id, c.referenceId);
 			if (!evt || evt.status === 'pending') continue;
 			// Record into payment_transactions like the webhook does, so a reconcile-settled
 			// payment still shows in Finance (with its checkout-time AP). Idempotent upsert.
@@ -314,7 +373,7 @@ export async function reconcileCheckout(
 	referenceId: string,
 	opts: { throttleMs?: number } = {}
 ): Promise<{ credited: boolean }> {
-	if (!payments.getCheckoutStatus) return { credited: false };
+	if (!payments.getPaymentByReference && !payments.getCheckoutStatus) return { credited: false };
 	const throttleBefore = new Date(Date.now() - (opts.throttleMs ?? 4000));
 
 	const [claimed] = await db
@@ -336,7 +395,7 @@ export async function reconcileCheckout(
 	if (!claimed) return { credited: false }; // settled already, or polled too recently
 
 	try {
-		const evt = await payments.getCheckoutStatus(claimed.id);
+		const evt = await resolvePaymentStatus(payments, claimed.id, referenceId);
 		// Record into payment_transactions like the webhook does, so a payment that settles
 		// via this poll (the usual path in local dev, where Maya can't reach localhost) still
 		// shows in Finance with its checkout-time AP. Idempotent upsert.

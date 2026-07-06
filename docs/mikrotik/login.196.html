@@ -2,7 +2,7 @@
   MikroTik Hotspot login page → redirect to the Veent portal.
   *** LEGACY VARIANT — kept only for history. ***
   After the 2026-06-30 re-IP to 10.210.0.0/18, the portal consolidated on
-  10.210.0.9:5173, so this file now redirects to the SAME host as login.html
+  10.210.63.17:5173, so this file now redirects to the SAME host as login.html
   (it used to point at the teammate dev-host 10.0.0.196). Prefer login.html;
   this copy is redundant and can be deleted once nobody relies on the filename.
 
@@ -11,16 +11,16 @@
   serve time, so the device lands on the portal with its MAC + the originally
   requested URL, which the SvelteKit app captures (see lib/server/portal.ts).
 
-  The portal host (10.210.0.9) MUST be in the walled garden
+  The portal host (10.210.63.17) MUST be in the walled garden
   (IP → Hotspot → Walled Garden IP List) or trapped devices can't reach it.
 -->
 <html>
 <head>
-	<meta http-equiv="refresh" content="0; url=http://10.210.0.9:5173/?mac=$(mac)&ip=$(ip)&link-login-only=$(link-login-only)&link-orig=$(link-orig)&ssid=$(ssid)" />
+	<meta http-equiv="refresh" content="0; url=http://10.210.63.17:5173/?mac=$(mac)&ip=$(ip)&link-login-only=$(link-login-only)&link-orig=$(link-orig)&ssid=$(ssid)" />
 	<title>Connecting…</title>
 </head>
 <body>
 	<p>Redirecting to the WiFi portal…</p>
-	<p>If nothing happens, <a href="http://10.210.0.9:5173/?mac=$(mac)&link-orig=$(link-orig)">tap here</a>.</p>
+	<p>If nothing happens, <a href="http://10.210.63.17:5173/?mac=$(mac)&link-orig=$(link-orig)">tap here</a>.</p>
 </body>
 </html>

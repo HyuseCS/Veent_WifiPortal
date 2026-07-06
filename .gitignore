@@ -46,6 +46,8 @@ start_db.sh
 .claude/
 .gemini/
 .vibecode-backup
+.vc-version
+.vc-installed-files
 CLAUDE.md
 GEMINI.md
 AGENTS.md

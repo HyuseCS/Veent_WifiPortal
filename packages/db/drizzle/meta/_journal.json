@@ -232,6 +232,34 @@
       "when": 1782962603043,
       "tag": "0032_breezy_blockbuster",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1783065639320,
+      "tag": "0033_clear_wendell_vaughn",
+      "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1783296254415,
+      "tag": "0034_harsh_kylun",
+      "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1783300877952,
+      "tag": "0035_aromatic_shape",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1783302158443,
+      "tag": "0036_parched_sway",
+      "breakpoints": true
     }
   ]
 }

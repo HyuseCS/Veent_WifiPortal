@@ -1,9 +1,94 @@
-/* Font @import MUST come before `@import 'tailwindcss'`: Tailwind v4 inlines its
- * import into generated rules, which would push any @import after it past the
- * "@import must precede all other statements" CSS rule (postcss errors otherwise). */
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+/* `@import 'tailwindcss'` must precede all other CSS statements (the CSS rule that
+ * @import comes first). The self-hosted @font-face rules below are regular at-rules,
+ * not @imports, so they intentionally sit AFTER it — no ordering conflict. */
 @import 'tailwindcss';
 @plugin '@tailwindcss/typography';
+
+/* Self-hosted fonts, served from the portal host itself — a trapped captive-portal device
+ * can't reach fonts.googleapis.com, so a Google Fonts @import hangs the page on loading.
+ * Only the `latin` subset is loaded (the portal is English), and font-display: block holds
+ * text for a beat rather than painting the system fallback first and swapping (that swap is
+ * the FOUT flash). Fonts are local so the block period is a few ms. Files come from
+ * @fontsource (see package.json); url()s are relative to this file → apps/customer/node_modules.
+ * Weights: Plus Jakarta Sans 400–700 (UI), Montserrat 500–800 (headings), JetBrains Mono
+ * 400–600 (numeric data) — see the --font-* tokens below. */
+@font-face {
+	font-family: 'Plus Jakarta Sans';
+	font-style: normal;
+	font-weight: 400;
+	font-display: block;
+	src: url('../../node_modules/@fontsource/plus-jakarta-sans/files/plus-jakarta-sans-latin-400-normal.woff2') format('woff2');
+}
+@font-face {
+	font-family: 'Plus Jakarta Sans';
+	font-style: normal;
+	font-weight: 500;
+	font-display: block;
+	src: url('../../node_modules/@fontsource/plus-jakarta-sans/files/plus-jakarta-sans-latin-500-normal.woff2') format('woff2');
+}
+@font-face {
+	font-family: 'Plus Jakarta Sans';
+	font-style: normal;
+	font-weight: 600;
+	font-display: block;
+	src: url('../../node_modules/@fontsource/plus-jakarta-sans/files/plus-jakarta-sans-latin-600-normal.woff2') format('woff2');
+}
+@font-face {
+	font-family: 'Plus Jakarta Sans';
+	font-style: normal;
+	font-weight: 700;
+	font-display: block;
+	src: url('../../node_modules/@fontsource/plus-jakarta-sans/files/plus-jakarta-sans-latin-700-normal.woff2') format('woff2');
+}
+@font-face {
+	font-family: 'Montserrat';
+	font-style: normal;
+	font-weight: 500;
+	font-display: block;
+	src: url('../../node_modules/@fontsource/montserrat/files/montserrat-latin-500-normal.woff2') format('woff2');
+}
+@font-face {
+	font-family: 'Montserrat';
+	font-style: normal;
+	font-weight: 600;
+	font-display: block;
+	src: url('../../node_modules/@fontsource/montserrat/files/montserrat-latin-600-normal.woff2') format('woff2');
+}
+@font-face {
+	font-family: 'Montserrat';
+	font-style: normal;
+	font-weight: 700;
+	font-display: block;
+	src: url('../../node_modules/@fontsource/montserrat/files/montserrat-latin-700-normal.woff2') format('woff2');
+}
+@font-face {
+	font-family: 'Montserrat';
+	font-style: normal;
+	font-weight: 800;
+	font-display: block;
+	src: url('../../node_modules/@fontsource/montserrat/files/montserrat-latin-800-normal.woff2') format('woff2');
+}
+@font-face {
+	font-family: 'JetBrains Mono';
+	font-style: normal;
+	font-weight: 400;
+	font-display: block;
+	src: url('../../node_modules/@fontsource/jetbrains-mono/files/jetbrains-mono-latin-400-normal.woff2') format('woff2');
+}
+@font-face {
+	font-family: 'JetBrains Mono';
+	font-style: normal;
+	font-weight: 500;
+	font-display: block;
+	src: url('../../node_modules/@fontsource/jetbrains-mono/files/jetbrains-mono-latin-500-normal.woff2') format('woff2');
+}
+@font-face {
+	font-family: 'JetBrains Mono';
+	font-style: normal;
+	font-weight: 600;
+	font-display: block;
+	src: url('../../node_modules/@fontsource/jetbrains-mono/files/jetbrains-mono-latin-600-normal.woff2') format('woff2');
+}
 
 /*
  * Veent customer-portal design tokens.
@@ -44,22 +129,43 @@
 	--color-warning: oklch(0.65 0.15 72);
 	--color-blocked: oklch(0.55 0.18 22);
 
-	/* Type — Plus Jakarta Sans for UI, JetBrains Mono for data fields */
+	/* Rewards — loyalty points accent (warm gold, distinct from the blue brand/cta and the
+	 * green/amber/red status colours). Generates `text-points`, `bg-points/15`, `border-points/40`. */
+	--color-points: oklch(0.68 0.13 75);
+
+	/* Type — Montserrat for headings, Plus Jakarta Sans for UI, JetBrains Mono for data fields.
+	 * `--font-heading` also generates a `font-heading` utility; the @layer base rule below applies
+	 * it to every h1–h6 automatically (data fields opt back to mono with `font-mono` as today). */
 	--font-sans: 'Plus Jakarta Sans', system-ui, sans-serif;
+	--font-heading: 'Montserrat', system-ui, sans-serif;
 	--font-mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', monospace;
 }
 
 @layer base {
 	/*
-	 * Captive-portal constraint: overscroll-behavior: contain stops accidental
-	 * pull-to-refresh on Android inside the portal mini-browser. Background + ink
-	 * set here so every page inherits the token surface without repeating it.
+	 * Captive-portal constraint: overscroll-behavior: none stops accidental
+	 * pull-to-refresh on Android inside the portal mini-browser AND the rubber-band
+	 * bounce — force-scrolling up past a brand-coloured page header used to reveal a
+	 * white bar (the html background showing through the overscroll region); `none`
+	 * removes that region entirely. Background + ink set here so every page inherits
+	 * the token surface without repeating it.
 	 */
 	html {
-		overscroll-behavior: contain;
+		overscroll-behavior: none;
 		background-color: var(--color-bg);
 		color: var(--color-ink);
 		font-family: var(--font-sans);
+	}
+
+	/* All headings render in Montserrat. In @layer base so a Tailwind utility (e.g. `font-mono`
+	 * on a numeric heading) can still override per-element. */
+	h1,
+	h2,
+	h3,
+	h4,
+	h5,
+	h6 {
+		font-family: var(--font-heading);
 	}
 }
 

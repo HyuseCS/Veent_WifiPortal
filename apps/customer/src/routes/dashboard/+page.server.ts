@@ -1,5 +1,5 @@
 import { redirect, fail } from '@sveltejs/kit';
-import { and, eq } from 'drizzle-orm';
+import { and, asc, eq } from 'drizzle-orm';
 import { packages } from '@veent/db';
 import {
 	getAccount,
@@ -49,7 +49,10 @@ export const load: PageServerLoad = async (event) => {
 	const tiers = await db
 		.select()
 		.from(packages)
-		.where(and(eq(packages.type, 'tier'), eq(packages.isActive, true)));
+		.where(and(eq(packages.type, 'tier'), eq(packages.isActive, true)))
+		// Ascending by access length so the shortest tier shows first (5 min → 30 min → 1 hour).
+		// Without an explicit order Postgres returns heap order, which shifts after any row UPDATE.
+		.orderBy(asc(packages.durationMinutes));
 
 	let access = await getActiveAccess(db, user.id);
 
@@ -150,9 +153,11 @@ export const actions: Actions = {
 		const form = await event.request.formData();
 		const mac = String(form.get('mac') ?? '') || (await resolveMacForUser(event, user.id)) || '';
 		const packageId = Number(form.get('packageId'));
+		// Which wallet to pay from — the buy sheet offers both. Default credits (back-compat).
+		const currency = form.get('currency') === 'points' ? 'points' : 'credits';
 		if (!Number.isFinite(packageId)) return fail(400, { error: 'Missing package' });
-		// Validate the device BEFORE spending credits — otherwise a bad MAC debits the
-		// user and then fails to grant, leaving them charged with no access.
+		// Validate the device BEFORE spending — otherwise a bad MAC debits the user and then
+		// fails to grant, leaving them charged with no access.
 		if (!MAC_RE.test(mac)) return fail(400, { error: NO_DEVICE });
 
 		const account = await getAccount(db, user.id);
@@ -160,6 +165,12 @@ export const actions: Actions = {
 
 		const [pkg] = await db.select().from(packages).where(eq(packages.id, packageId)).limit(1);
 		if (!pkg || !pkg.isActive) return fail(404, { error: 'Package not found' });
+
+		// A tier is redeemable with points only if the admin set a points price.
+		if (currency === 'points' && pkg.pointsCost == null) {
+			return fail(400, { error: 'This tier can’t be redeemed with points.' });
+		}
+		const amount = currency === 'points' ? (pkg.pointsCost ?? 0) : (pkg.creditCost ?? 0);
 
 		// Spend + grant atomically: a failed grant rolls back the spend, so a failed grant
 		// never leaves the user charged without access (business rule #1).
@@ -169,16 +180,23 @@ export const actions: Actions = {
 				userId: user.id,
 				macAddress: mac,
 				packageId: pkg.id,
-				amount: pkg.creditCost ?? 0,
-				durationMinutes: pkg.durationMinutes ?? 0
+				amount,
+				durationMinutes: pkg.durationMinutes ?? 0,
+				currency
 			});
 		} catch (err) {
 			log.error('buyTier grant failed (rolled back, not charged):', err);
+			const w = currency === 'points' ? 'points were' : 'credits were';
 			return fail(502, {
-				error: 'The network grant failed — your credits were not charged. Please try again.'
+				error: `The network grant failed — your ${w} not charged. Please try again.`
 			});
 		}
-		if (!result.ok) return fail(402, { error: 'Insufficient credit balance' });
+		if (!result.ok) {
+			return fail(402, {
+				error:
+					currency === 'points' ? 'Insufficient points balance' : 'Insufficient credit balance'
+			});
+		}
 		return { connected: true };
 	},
 
@@ -270,7 +288,9 @@ export const actions: Actions = {
 
 		let result;
 		try {
-			result = await resumeAccountAccess(db, user.id);
+			// onlyReason:'user' — a guest can resume only their own manual pause; outage pauses are
+			// released by the outage sweep alone (guard is enforced in the service, under lock).
+			result = await resumeAccountAccess(db, user.id, undefined, { onlyReason: 'user' });
 		} catch (err) {
 			log.error('resumeAccess failed:', err);
 			return fail(502, { error: 'Could not resume access. Please try again.' });

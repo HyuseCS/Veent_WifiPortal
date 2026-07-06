@@ -51,19 +51,36 @@ function parsePackage(form: FormData): { input: PackageInput } | { error: string
 	const fiatCost = num('fiatCost');
 	const creditsProvided = num('creditsProvided');
 	const creditCost = num('creditCost');
+	const pointsCost = num('pointsCost');
 	const durationMinutes = num('durationMinutes');
-	if ([fiatCost, creditsProvided, creditCost, durationMinutes].some((v) => Number.isNaN(v))) {
+	if (
+		[fiatCost, creditsProvided, creditCost, pointsCost, durationMinutes].some((v) =>
+			Number.isNaN(v)
+		)
+	) {
 		return { error: 'Numeric fields must be non-negative numbers.' };
 	}
 
 	if (type === 'bundle' && (fiatCost == null || creditsProvided == null)) {
 		return { error: 'A bundle needs a peso price and the credits it provides.' };
 	}
-	if (type === 'tier' && (creditCost == null || durationMinutes == null)) {
-		return { error: 'A tier needs a credit cost and a duration (minutes).' };
+	if (type === 'tier') {
+		if (creditCost == null || pointsCost == null || durationMinutes == null) {
+			return { error: 'A tier needs a credit cost, a points cost, and a duration (minutes).' };
+		}
+		// Zero is saveable by `num` (>= 0) but unbuyable: `spend*Tx` rejects a non-positive amount,
+		// which the buy action can only surface as a misleading "grant failed" 502. Require > 0.
+		if (creditCost <= 0 || pointsCost <= 0 || durationMinutes <= 0) {
+			return { error: 'A tier’s credit cost, points cost, and duration must be greater than zero.' };
+		}
 	}
-	if (type === 'free' && durationMinutes == null) {
-		return { error: 'Free Time needs a duration (minutes).' };
+	if (type === 'free') {
+		if (durationMinutes == null) {
+			return { error: 'Free Time needs a duration (minutes).' };
+		}
+		if (durationMinutes <= 0) {
+			return { error: 'Free Time’s duration must be greater than zero.' };
+		}
 	}
 	// B3.4: a zero-length window is never a real package. `< 1` also catches fractional entries
 	// (e.g. 0.5) that would truncate to 0 minutes below. num() already accepts >= 0, so 0 slips
@@ -80,6 +97,7 @@ function parsePackage(form: FormData): { input: PackageInput } | { error: string
 			fiatCost,
 			creditsProvided: int(creditsProvided),
 			creditCost: int(creditCost),
+			pointsCost: int(pointsCost),
 			durationMinutes: int(durationMinutes),
 			isActive: form.get('isActive') === 'on' || form.get('isActive') === 'true'
 		}

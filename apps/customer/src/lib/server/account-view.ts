@@ -59,12 +59,14 @@ export async function buildAccountView(db: DB, userId: string, thisMac: string |
 
 	return {
 		balance: account?.balance ?? 0,
+		points: account?.points ?? 0,
 		blocked: account?.blocked ?? false,
 		freeTime: getFreeTimeStatus(account?.lastFreeSessionAt ?? null, undefined, limits),
 		access: {
 			active: !!access,
 			isFree: access?.isFree ?? false,
 			paused: access?.paused ?? false,
+			pausedReason: access?.pausedReason ?? null,
 			// Frozen hold while paused; live remaining otherwise (client shows it directly
 			// when paused, falls back to expiresAt − now when running).
 			remainingMs: access?.remainingMs ?? 0,

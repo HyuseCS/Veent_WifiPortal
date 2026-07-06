@@ -6,6 +6,7 @@ import { captureHandled } from '../observability';
 import { getFreeTimeStatus } from './freeTime';
 import { getSessionLimits } from './settings';
 import { spendCreditsTx, type Tx } from './credits';
+import { spendPointsTx } from './points';
 import { resolveNetworkIdForMac } from './networkHealth';
 
 function expiry(durationMinutes: number, now: Date) {
@@ -94,7 +95,9 @@ async function bindMacTx(
 			.set({
 				accessExpiresAt: newWindow,
 				accessPackageId: opts.packageId ?? null,
-				accessPausedAt: null
+				accessPausedAt: null,
+				accessPausedReason: null,
+				accessPausedNetworkId: null
 			})
 			.where(eq(customerProfile.userId, opts.userId));
 	}
@@ -307,18 +310,19 @@ export async function extendAccessAndBindDevice(
 
 export interface StartPaidAccessResult {
 	ok: boolean;
-	/** Set when ok=false. */
-	reason?: 'insufficient_balance';
+	/** Set when ok=false — which wallet came up short. */
+	reason?: 'insufficient_balance' | 'insufficient_points';
 	balance: number;
 	accessExpiresAt?: Date | null;
 	evicted?: string[];
 }
 
 /**
- * Buy a tier: spend its credits, extend the ACCOUNT window, bind the device, and grant — all in
- * ONE transaction. If the grant (or anything after the spend) throws, the whole transaction
- * rolls back, so a charged user is never left without access (business rule #1). Returns
- * `{ ok: false, reason: 'insufficient_balance' }` for a committed no-op (nothing deducted).
+ * Buy a tier: spend from the chosen wallet (credits or points), extend the ACCOUNT window, bind the
+ * device, and grant — all in ONE transaction. If the grant (or anything after the spend) throws,
+ * the whole transaction rolls back, so a charged user is never left without access (business
+ * rule #1). Returns `{ ok: false, reason: 'insufficient_balance' | 'insufficient_points' }` for a
+ * committed no-op (nothing deducted). `amount` is the cost in the chosen `currency`.
  */
 export async function startPaidAccessAndBindDevice(
 	db: DB,
@@ -330,6 +334,8 @@ export async function startPaidAccessAndBindDevice(
 		amount: number;
 		durationMinutes: number;
 		bandwidthMbps?: number;
+		/** Which wallet to debit. Defaults to credits (the original behaviour). */
+		currency?: 'credits' | 'points';
 	}
 ): Promise<StartPaidAccessResult> {
 	// B3.4 defense-in-depth at the money seam: a zero/negative-minute package must never reach
@@ -343,13 +349,22 @@ export async function startPaidAccessAndBindDevice(
 	}
 	const now = new Date();
 	const { maxDevicesPerAccount } = await getSessionLimits(db);
+	const usePoints = input.currency === 'points';
 
 	const outcome = await db.transaction(async (tx) => {
-		const spend = await spendCreditsTx(tx, {
-			userId: input.userId,
-			amount: input.amount,
-			packageId: input.packageId
-		});
+		// Debit the chosen wallet. Both are conditional (`balance >= amount`) so an insufficient
+		// wallet is a committed no-op that never reaches the grant. Everything after is identical.
+		const spend = usePoints
+			? await spendPointsTx(tx, {
+					userId: input.userId,
+					amount: input.amount,
+					packageId: input.packageId
+				})
+			: await spendCreditsTx(tx, {
+					userId: input.userId,
+					amount: input.amount,
+					packageId: input.packageId
+				});
 		if (!spend.ok) return { ok: false as const, balance: spend.balance };
 
 		const plan = await bindMacTx(tx, now, {
@@ -379,7 +394,13 @@ export async function startPaidAccessAndBindDevice(
 		};
 	});
 
-	if (!outcome.ok) return { ok: false, reason: 'insufficient_balance', balance: outcome.balance };
+	if (!outcome.ok) {
+		return {
+			ok: false,
+			reason: usePoints ? 'insufficient_points' : 'insufficient_balance',
+			balance: outcome.balance
+		};
+	}
 
 	await afterBind(db, network, input.userId, outcome.rowId, input.macAddress, outcome.evicted);
 	return {
@@ -428,6 +449,9 @@ export interface ActiveAccess {
 	isFree: boolean;
 	/** True when the window is paused (frozen, devices unbound). */
 	paused: boolean;
+	/** Why it's paused: 'user' (guest tapped Pause) or 'outage' (auto-paused, AP down). Null when
+	 * not paused. Lets the UI show "network outage — your time is safe" vs the manual-pause copy. */
+	pausedReason: 'user' | 'outage' | null;
 	/** Time left on the window: live (`expiresAt − now`) or, when paused, the frozen hold. */
 	remainingMs: number;
 	/** Devices currently bound under this window (empty while paused — pause unbinds all). */
@@ -451,6 +475,7 @@ export async function getActiveAccess(
 		.select({
 			accessExpiresAt: customerProfile.accessExpiresAt,
 			accessPausedAt: customerProfile.accessPausedAt,
+			accessPausedReason: customerProfile.accessPausedReason,
 			accessPackageId: customerProfile.accessPackageId,
 			packageName: packages.name
 		})
@@ -494,6 +519,7 @@ export async function getActiveAccess(
 		name: profile.packageName ?? null,
 		isFree: (profile.accessPackageId ?? null) == null,
 		paused,
+		pausedReason: paused ? ((profile.accessPausedReason as 'user' | 'outage' | null) ?? 'user') : null,
 		remainingMs,
 		devices: devices.map((d) => ({
 			id: d.id,
@@ -523,7 +549,10 @@ export async function pauseAccountAccess(
 	db: DB,
 	network: NetworkController,
 	userId: string,
-	now: Date = new Date()
+	now: Date = new Date(),
+	/** `reason` defaults to 'user' (guest tapped Pause). The outage sweep passes 'outage' + the
+	 *  triggering AP's `networkId` so its auto-resume only un-pauses its own pauses. */
+	opts: { reason?: 'user' | 'outage'; networkId?: number | null } = {}
 ): Promise<PauseAccessResult> {
 	const outcome = await db.transaction(async (tx) => {
 		const [p] = await tx
@@ -547,7 +576,11 @@ export async function pauseAccountAccess(
 
 		await tx
 			.update(customerProfile)
-			.set({ accessPausedAt: now })
+			.set({
+				accessPausedAt: now,
+				accessPausedReason: opts.reason ?? 'user',
+				accessPausedNetworkId: opts.networkId ?? null
+			})
 			.where(eq(customerProfile.userId, userId));
 		return { ok: true as const, remainingMs: window.getTime() - now.getTime() };
 	});
@@ -575,13 +608,15 @@ export interface ResumeAccessResult {
 export async function resumeAccountAccess(
 	db: DB,
 	userId: string,
-	now: Date = new Date()
+	now: Date = new Date(),
+	opts: { onlyReason?: 'user' | 'outage' } = {}
 ): Promise<ResumeAccessResult> {
 	return db.transaction(async (tx) => {
 		const [p] = await tx
 			.select({
 				accessExpiresAt: customerProfile.accessExpiresAt,
-				accessPausedAt: customerProfile.accessPausedAt
+				accessPausedAt: customerProfile.accessPausedAt,
+				accessPausedReason: customerProfile.accessPausedReason
 			})
 			.from(customerProfile)
 			.where(eq(customerProfile.userId, userId))
@@ -589,13 +624,24 @@ export async function resumeAccountAccess(
 			.limit(1);
 
 		if (!p?.accessPausedAt) return { ok: false as const, reason: 'not_paused' as const };
+		// A guest may only resume the pause THEY created ('user'). Outage pauses are released solely
+		// by the outage sweep when the AP recovers, so a forged/replayed resume POST can't un-freeze
+		// held time while the WiFi is still down. Checked under the FOR UPDATE lock (no TOCTOU).
+		if (opts.onlyReason && p.accessPausedReason !== opts.onlyReason) {
+			return { ok: false as const, reason: 'not_paused' as const };
+		}
 
 		const window = p.accessExpiresAt ?? null;
 		const remainingMs = window ? window.getTime() - p.accessPausedAt.getTime() : 0;
 		if (remainingMs <= 0) {
 			await tx
 				.update(customerProfile)
-				.set({ accessExpiresAt: null, accessPausedAt: null })
+				.set({
+					accessExpiresAt: null,
+					accessPausedAt: null,
+					accessPausedReason: null,
+					accessPausedNetworkId: null
+				})
 				.where(eq(customerProfile.userId, userId));
 			return { ok: false as const, reason: 'no_remaining' as const };
 		}
@@ -603,7 +649,12 @@ export async function resumeAccountAccess(
 		const newWindow = new Date(now.getTime() + remainingMs);
 		await tx
 			.update(customerProfile)
-			.set({ accessExpiresAt: newWindow, accessPausedAt: null })
+			.set({
+				accessExpiresAt: newWindow,
+				accessPausedAt: null,
+				accessPausedReason: null,
+				accessPausedNetworkId: null
+			})
 			.where(eq(customerProfile.userId, userId));
 		return { ok: true as const, accessExpiresAt: newWindow };
 	});
@@ -896,7 +947,12 @@ export async function revokeUserSessions(
 	// Clear the window AND any pause so a kicked/blocked account can't be silently resumed.
 	await db
 		.update(customerProfile)
-		.set({ accessExpiresAt: null, accessPausedAt: null })
+		.set({
+			accessExpiresAt: null,
+			accessPausedAt: null,
+			accessPausedReason: null,
+			accessPausedNetworkId: null
+		})
 		.where(eq(customerProfile.userId, userId));
 
 	return revoked;

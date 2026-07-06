@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tick } from 'svelte';
 	import { enhance } from '$app/forms';
 	import { Card, Button, Field } from '$lib/components/ui';
 	import StepUpDialog from '$lib/components/feature/StepUpDialog.svelte';
@@ -14,6 +15,10 @@
 	// through a step-up confirm dialog. The server re-verifies the code on every write.
 	let code = $state('');
 	const codeValid = $derived(/^\d{6}$/.test(code));
+
+	// Pending state for the save: disables the button + shows a spinner while the server-side
+	// MFA re-check + DB write run, so a slow save gives feedback and can't be double-submitted.
+	let submitting = $state(false);
 
 	let dialogOpen = $state(false);
 	let dialogProps = $state<{
@@ -66,6 +71,7 @@
 		fiatCost: string;
 		creditsProvided: string;
 		creditCost: string;
+		pointsCost: string;
 		durationMinutes: string;
 		isActive: boolean;
 	};
@@ -77,6 +83,7 @@
 		fiatCost: '',
 		creditsProvided: '',
 		creditCost: '',
+		pointsCost: '',
 		durationMinutes: '',
 		isActive: true
 	});
@@ -84,9 +91,22 @@
 	// The package being created/edited; null = the form is closed.
 	let editing = $state<EditState | null>(null);
 
+	// The edit panel renders once at the TOP of the page, so on a long list opening it from a
+	// row far down gives no visible cue. After the form renders, scroll it into view and focus
+	// the first field. Done imperatively (not via $effect on `editing`) so typing in the form
+	// doesn't re-trigger a scroll on every keystroke.
+	let editCard = $state<HTMLDivElement | null>(null);
+	let nameInput = $state<HTMLInputElement | null>(null);
+	async function revealEditForm() {
+		await tick(); // let the {#if editing} block mount
+		editCard?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+		nameInput?.focus({ preventScroll: true }); // preventScroll so focus doesn't fight the smooth scroll
+	}
+
 	function startNew() {
 		code = '';
 		editing = blank();
+		revealEditForm();
 	}
 	function startEdit(p: Pkg) {
 		code = '';
@@ -97,9 +117,11 @@
 			fiatCost: p.fiatCost?.toString() ?? '',
 			creditsProvided: p.creditsProvided?.toString() ?? '',
 			creditCost: p.creditCost?.toString() ?? '',
+			pointsCost: p.pointsCost?.toString() ?? '',
 			durationMinutes: p.durationMinutes?.toString() ?? '',
 			isActive: p.isActive
 		};
+		revealEditForm();
 	}
 
 	// Customer-facing groups, in the order a buyer meets them.
@@ -120,7 +142,7 @@
 	function summary(p: Pkg): string {
 		if (p.type === 'bundle') return `₱${p.fiatCost ?? '—'} → ${p.creditsProvided ?? '—'} credits`;
 		if (p.type === 'tier')
-			return `${p.creditCost ?? '—'} credits → ${p.durationMinutes ?? '—'} min`;
+			return `${p.creditCost ?? '—'} cr / ${p.pointsCost ?? '—'} pts → ${p.durationMinutes ?? '—'} min`;
 		return `${p.durationMinutes ?? '—'} min free`;
 	}
 </script>
@@ -147,11 +169,18 @@
 
 	{#if editing}
 		<!-- Create / edit panel. Numeric fields show per type so an offer can't be half-configured. -->
+		<div bind:this={editCard}>
 		<Card>
 			<form
 				method="post"
 				action={editing.id ? '?/update' : '?/create'}
-				use:enhance
+				use:enhance={() => {
+					submitting = true;
+					return async ({ update }) => {
+						await update();
+						submitting = false;
+					};
+				}}
 				class="flex flex-col gap-4"
 			>
 				<div class="flex items-center justify-between">
@@ -174,6 +203,7 @@
 					<label class="flex flex-col gap-1.5 text-xs font-medium text-muted">
 						Name
 						<input
+							bind:this={nameInput}
 							name="name"
 							bind:value={editing.name}
 							required
@@ -231,6 +261,17 @@
 							/>
 						</label>
 						<label class="flex flex-col gap-1.5 text-xs font-medium text-muted">
+							Points cost
+							<input
+								name="pointsCost"
+								type="number"
+								min="0"
+								step="1"
+								bind:value={editing.pointsCost}
+								class="min-h-[44px] rounded-lg border border-border bg-bg px-3 font-mono text-sm text-ink"
+							/>
+						</label>
+						<label class="flex flex-col gap-1.5 text-xs font-medium text-muted">
 							Duration (minutes)
 							<input
 								name="durationMinutes"
@@ -274,13 +315,14 @@
 				/>
 
 				<div class="flex gap-2.5">
-					<Button type="submit" disabled={!codeValid}>
+					<Button type="submit" loading={submitting} disabled={!codeValid}>
 						{editing.id ? 'Save changes' : 'Create package'}
 					</Button>
 					<Button variant="secondary" onclick={() => (editing = null)}>Cancel</Button>
 				</div>
 			</form>
 		</Card>
+		</div>
 	{/if}
 
 	{#each groups as group (group.type)}

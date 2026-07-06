@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { page } from '$app/state';
+	import { page, navigating } from '$app/state';
 	import { browser } from '$app/environment';
 	import LogOut from 'lucide-svelte/icons/log-out';
 	import PanelLeftClose from 'lucide-svelte/icons/panel-left-close';
@@ -12,6 +12,11 @@
 	// the routes themselves enforce access server-side.
 	let { user }: { user?: { name?: string; email?: string; role?: string | null } } = $props();
 	const items = $derived(nav.filter((item) => !item.ownerOnly || user?.role === 'owner'));
+
+	// Highlight the DESTINATION tab the instant a navigation starts, not after its `load` resolves,
+	// so switching to a slow page (networks/sentry) feels immediate. Falls back to the committed
+	// path when idle (see (app)/+layout.svelte navPath).
+	const activePath = $derived(navigating.to?.url.pathname ?? page.url.pathname);
 
 	const initials = $derived(
 		(user?.name ?? user?.email ?? '?')
@@ -127,8 +132,7 @@
 		<div class="space-y-1">
 			{#each items as item (item.href)}
 				{@const Icon = item.icon}
-				{@const active =
-					page.url.pathname === item.href || page.url.pathname.startsWith(item.href + '/')}
+				{@const active = activePath === item.href || activePath.startsWith(item.href + '/')}
 				<a
 					href={item.href}
 					aria-current={active ? 'page' : undefined}
