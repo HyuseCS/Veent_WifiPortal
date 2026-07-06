@@ -35,7 +35,8 @@ describe('resolveDeviceMac error-path staleness bound', () => {
 
 		clock.ms += 2 * MIN; // past the 60s TTL (forces a re-query) but within the 5-min ceiling
 		expect(await resolveDeviceMac(network, '10.0.0.1')).toBe(mac);
-		expect(resolveMacByIp).toHaveBeenCalledTimes(2); // happy-path TTL was bypassed
+		// 1 (seed) + 3 (the re-query retries all reject before the stale fallback kicks in).
+		expect(resolveMacByIp).toHaveBeenCalledTimes(4);
 	});
 
 	it('returns null when the cached MAC is older than the 5-min ceiling', async () => {
@@ -67,5 +68,41 @@ describe('resolveDeviceMac strips the IPv4-mapped IPv6 prefix', () => {
 
 		expect(await resolveDeviceMac(network, '::ffff:10.0.0.3')).toBe(mac);
 		expect(resolveMacByIp).toHaveBeenCalledWith('10.0.0.3'); // prefix stripped, not `::ffff:10.0.0.3`
+	});
+});
+
+/**
+ * Capture consistency: the login-instant lookup is flaky (a fresh per-call TLS timeout, or the
+ * hotspot host table momentarily empty mid-reconnect) even though the router is authoritative.
+ * resolveDeviceMac retries so one transient miss no longer costs the admin the grant that session.
+ */
+describe('resolveDeviceMac retries a transient miss', () => {
+	it('resolves on a later attempt after an early error', async () => {
+		stubNow(1_000_000);
+		const mac = 'AA:BB:CC:DD:EE:04';
+		const resolveMacByIp = vi.fn().mockRejectedValueOnce(new Error('tls timeout')).mockResolvedValue(mac);
+		const network = { resolveMacByIp } as never;
+
+		expect(await resolveDeviceMac(network, '10.0.0.4')).toBe(mac);
+		expect(resolveMacByIp).toHaveBeenCalledTimes(2); // attempt 1 threw, attempt 2 hit
+	});
+
+	it('resolves on a later attempt after a momentary empty (null) result', async () => {
+		stubNow(1_000_000);
+		const mac = 'AA:BB:CC:DD:EE:05';
+		const resolveMacByIp = vi.fn().mockResolvedValueOnce(null).mockResolvedValue(mac);
+		const network = { resolveMacByIp } as never;
+
+		expect(await resolveDeviceMac(network, '10.0.0.5')).toBe(mac);
+		expect(resolveMacByIp).toHaveBeenCalledTimes(2); // attempt 1 empty, attempt 2 hit
+	});
+
+	it('gives up after all attempts miss (no cache to fall back on)', async () => {
+		stubNow(1_000_000);
+		const resolveMacByIp = vi.fn().mockResolvedValue(null);
+		const network = { resolveMacByIp } as never;
+
+		expect(await resolveDeviceMac(network, '10.0.0.6')).toBeNull();
+		expect(resolveMacByIp).toHaveBeenCalledTimes(3); // bounded — doesn't spin forever
 	});
 });

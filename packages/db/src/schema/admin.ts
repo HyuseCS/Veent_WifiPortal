@@ -22,7 +22,7 @@ import {
 	check
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
-import { adminUser } from './auth-admin';
+import { adminUser, adminSession } from './auth-admin';
 
 /**
  * Lookup table of staff roles — the single source of truth for what a role *is*.
@@ -153,3 +153,26 @@ export const networkHealth = pgTable('network_health', {
 	check('network_health_max_down_kbps_positive', sql`${t.maxDownKbps} IS NULL OR ${t.maxDownKbps} > 0`),
 	check('network_health_max_up_kbps_positive', sql`${t.maxUpKbps} IS NULL OR ${t.maxUpKbps} > 0`)
 ]);
+
+/**
+ * The device MAC that got an admin internet bypass (B3.2), stashed at login so the sliding
+ * renewal and logout revoke can find it without re-doing the flaky live IP→MAC lookup — replacing
+ * the old signed cookie, which didn't reliably survive the login form-action to logout.
+ *
+ * Keyed to the better-auth session (its unique `token`), so each device/login owns its own row:
+ * a staff member on two devices has two rows, and each logout revokes only its own binding. The
+ * FK cascades the row away when the session is deleted (logout) or expires — the router revoke on
+ * logout is what makes sign-out instant; the cascade is just cleanup. `updated_at` records the last
+ * slide for debugging (the renewal throttle itself is in-memory in the app).
+ *
+ * ponytail: keyed by `token` (in hand at both login `res.token` and later `locals.session.token`)
+ * so no session-id lookup is needed; better-auth doesn't rotate session tokens, so the FK is stable
+ * for the session's life. Switch the key to `session.id` if token rotation is ever enabled.
+ */
+export const adminBypassDevice = pgTable('admin_bypass_device', {
+	sessionToken: text('session_token')
+		.primaryKey()
+		.references(() => adminSession.token, { onDelete: 'cascade' }),
+	mac: text('mac').notNull(),
+	updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow()
+});

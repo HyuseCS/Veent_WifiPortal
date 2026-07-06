@@ -4,7 +4,7 @@ import { auth } from '$lib/server/auth';
 import { db } from '$lib/server/db';
 import { network } from '$lib/server/network';
 import { logger } from '$lib/server/logger';
-import { setAdminDevMacCookie } from '$lib/server/adminBypass';
+import { rememberAdminDevice } from '$lib/server/adminBypass';
 
 const log = logger('sign-in');
 
@@ -23,7 +23,13 @@ const log = logger('sign-in');
  */
 export async function finishStaffSignIn(
 	event: RequestEvent,
-	userId: string
+	userId: string,
+	// The new session's token (from the better-auth sign-in result). event.locals.session is still
+	// null here — hooks populated locals from the pre-sign-in request — so the token must be threaded
+	// in. It keys the persisted device MAC so the layout slide + logout revoke can find it. Optional:
+	// the 2FA verify result types it as maybe-undefined; a missing token just skips persistence (the
+	// grant still fires — best-effort, as ever).
+	sessionToken: string | undefined
 ): Promise<ActionFailure<{ message: string }> | null> {
 	// Only active staff may sign in. Pending invitees and disabled members are
 	// signed straight back out (the cookie was just set during sign-in/verify).
@@ -46,9 +52,10 @@ export async function finishStaffSignIn(
 		const mac = await resolveDeviceMac(network, ip);
 		if (mac) {
 			await grantAdminAccess(network, mac);
-			// Stash the router-resolved MAC so the (app) layout can slide the 4h window forward and
-			// logout can revoke, both without re-doing the flaky lookup / getClientAddress().
-			setAdminDevMacCookie(event, mac);
+			// Persist the router-resolved MAC (keyed by session token) so the (app) layout can slide
+			// the 4h window forward and logout can revoke, both without re-doing the flaky lookup /
+			// getClientAddress().
+			if (sessionToken) await rememberAdminDevice(sessionToken, mac);
 			log.info(`admin bypass granted: ip=${ip} mac=${mac}`);
 		} else {
 			// Not an error (device may be off-hotspot / on cellular) — but the IP the server saw is

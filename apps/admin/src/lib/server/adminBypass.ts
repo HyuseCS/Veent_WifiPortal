@@ -1,73 +1,72 @@
-import { createHmac, timingSafeEqual } from 'node:crypto';
 import type { RequestEvent } from '@sveltejs/kit';
-import { env } from '$env/dynamic/private';
+import { eq } from 'drizzle-orm';
 import { grantAdminAccess, revokeAdminAccess, ADMIN_BYPASS_TTL_MINUTES } from '@veent/core';
+import { adminBypassDevice } from '@veent/db';
+import { db } from '$lib/server/db';
 import { network } from '$lib/server/network';
 import { logger } from '$lib/server/logger';
 
 const log = logger('admin-bypass');
 
-// The device MAC, resolved from the router at LOGIN (postLogin, where getClientAddress() works) and
-// stashed here so the (app) layout can slide the 4h window forward on activity WITHOUT re-doing the
-// flaky live IP→MAC lookup — and without event.getClientAddress(), which is NOT reliably available in
-// the layout-load context (it throws "Could not determine clientAddress" on SvelteKit __data.json
-// navigation sub-requests, which is why the pre-cookie slide never actually ran). httpOnly keeps
-// scripts out, but a cookie is still client-editable — so the value is HMAC-signed with
-// BETTER_AUTH_SECRET (same pattern as the customer OTP cookie): only a login-resolved,
-// server-stamped MAC can slide or revoke a bypass; a forged/tampered value reads as absent.
-const ADMIN_DEV_MAC_COOKIE = 'admin_dev_mac';
+// The bypassed device MAC, resolved from the router at LOGIN (postLogin, where getClientAddress()
+// works) and stored keyed by the better-auth session token so the (app) layout can slide the 4h
+// window forward and logout can revoke — both WITHOUT re-doing the flaky live IP→MAC lookup, and
+// without event.getClientAddress() (which throws "Could not determine clientAddress" in the
+// layout-load __data.json context). This replaces the old signed cookie, which didn't reliably
+// survive the login form-action through to logout. Per-session: two devices → two rows, each
+// revoked independently on its own sign-out; the row FK-cascades away when the session ends.
 
-function signMac(mac: string): string {
-	return createHmac('sha256', env.BETTER_AUTH_SECRET ?? 'veent-admin-dev-secret')
-		.update(mac)
-		.digest('base64url');
+/** Persist the login-resolved device MAC for this session so refresh + logout can reuse it. */
+export async function rememberAdminDevice(sessionToken: string, mac: string): Promise<void> {
+	try {
+		await db
+			.insert(adminBypassDevice)
+			.values({ sessionToken, mac, updatedAt: new Date() })
+			.onConflictDoUpdate({
+				target: adminBypassDevice.sessionToken,
+				set: { mac, updatedAt: new Date() }
+			});
+	} catch (err) {
+		log.error('admin bypass device persist failed:', err);
+	}
 }
 
-/** The signed cookie's MAC — or null when the cookie is absent, malformed, or fails the HMAC. */
-function readSignedMac(event: RequestEvent): string | null {
-	const raw = event.cookies.get(ADMIN_DEV_MAC_COOKIE);
-	if (!raw) return null;
-	const dot = raw.lastIndexOf('.');
-	if (dot < 1) return null; // legacy unsigned cookie (pre-signing) — treat as absent; login rewrites it
-	const mac = raw.slice(0, dot);
-	const sig = Buffer.from(raw.slice(dot + 1));
-	const expected = Buffer.from(signMac(mac));
-	return sig.length === expected.length && timingSafeEqual(sig, expected) ? mac : null;
+async function macForSession(sessionToken: string): Promise<string | null> {
+	const rows = await db
+		.select({ mac: adminBypassDevice.mac })
+		.from(adminBypassDevice)
+		.where(eq(adminBypassDevice.sessionToken, sessionToken))
+		.limit(1);
+	return rows[0]?.mac ?? null;
 }
 
-/** Persist the login-resolved device MAC so the sliding renewal + logout revoke can reuse it. */
-export function setAdminDevMacCookie(event: RequestEvent, mac: string): void {
-	event.cookies.set(ADMIN_DEV_MAC_COOKIE, `${mac}.${signMac(mac)}`, {
-		httpOnly: true,
-		sameSite: 'lax',
-		path: '/',
-		maxAge: 60 * 60 * 24 * 30 // 30d; re-written on every login
-	});
-}
-
-// Sliding-renewal throttle, keyed by device MAC. The admin bypass is a fixed 4h window
+// Sliding-renewal throttle, keyed by session token. The admin bypass is a fixed 4h window
 // (ADMIN_BYPASS_TTL_MINUTES) slid forward on dashboard activity so an actively-working admin never
 // drops, while an idle/departed device ages out at 4h and is reaped by the customer revoke cron
 // (sweepAdminAccess). Re-granting on EVERY page load would hammer the router, so we only refresh once
-// the window is past ~half its life. In-memory: resets on restart, bounded by the handful of staff MACs.
+// the window is past ~half its life. In-memory: resets on restart (harmless — the next load re-grants
+// from the stored MAC), bounded by the handful of active staff sessions.
 const REFRESH_INTERVAL_MS = (ADMIN_BYPASS_TTL_MINUTES / 2) * 60_000; // 2h at a 4h TTL
-const lastRefreshByMac = new Map<string, number>();
+const lastRefreshByToken = new Map<string, number>();
 
 /**
  * Slide an active staff member's device bypass forward on dashboard activity. Fire-and-forget from
  * the (app) layout load — MUST never throw or block the page (best-effort, self-logging). Uses the
- * MAC stashed at login (cookie), so it needs no getClientAddress() and no live IP→MAC lookup.
- * Throttled so the vast majority of loads do no work at all. No-op until a login has stashed a MAC.
+ * MAC stored at login (keyed by session token), so it needs no getClientAddress() and no live
+ * IP→MAC lookup. Throttled so the vast majority of loads do no DB or router work at all. No-op until
+ * a login has stored a device for this session.
  */
 export async function refreshAdminBypass(event: RequestEvent): Promise<void> {
 	try {
-		const mac = readSignedMac(event);
-		if (!mac) return; // no login-resolved device on this browser yet (or a tampered cookie)
+		const token = event.locals.session?.token;
+		if (!token) return;
 		const now = Date.now();
-		const last = lastRefreshByMac.get(mac);
-		if (last !== undefined && now - last < REFRESH_INTERVAL_MS) return;
+		const last = lastRefreshByToken.get(token);
+		if (last !== undefined && now - last < REFRESH_INTERVAL_MS) return; // throttle before any query
+		const mac = await macForSession(token);
+		if (!mac) return; // no bypassed device on this session yet
 		await grantAdminAccess(network, mac);
-		lastRefreshByMac.set(mac, now);
+		lastRefreshByToken.set(token, now);
 	} catch (err) {
 		log.error('admin bypass refresh failed:', err);
 	}
@@ -75,17 +74,33 @@ export async function refreshAdminBypass(event: RequestEvent): Promise<void> {
 
 /**
  * Remove the signing-out device's admin bypass (best-effort). Called from /logout — MUST never block
- * the sign-out. Revokes the MAC stashed at login (reliable, unlike a fresh lookup would be) and
- * clears the cookie. Tag-scoped inside revokeAdminAccess, so it can never touch a guest binding.
+ * the sign-out. Revokes the MAC stored for this session (reliable, unlike a fresh lookup would be),
+ * then deletes the row. Tag-scoped inside revokeAdminAccess, so it can never touch a guest binding.
  */
 export async function revokeAdminBypass(event: RequestEvent): Promise<void> {
-	const mac = readSignedMac(event);
+	const token = event.locals.session?.token;
+	if (!token) {
+		log.warn('admin bypass revoke skipped on logout — no session');
+		return;
+	}
 	try {
-		if (mac) await revokeAdminAccess(network, mac);
+		const mac = await macForSession(token);
+		if (mac) {
+			await revokeAdminAccess(network, mac);
+			log.info(`admin bypass revoked on logout: mac=${mac}`);
+		} else {
+			// No stored device for this session — nothing was granted (capture missed) or it was
+			// already revoked. The binding, if any, then ages out at the 4h TTL.
+			log.warn('admin bypass revoke skipped on logout — no stored device for session');
+		}
 	} catch (err) {
 		log.error('admin bypass revoke on logout failed:', err);
 	} finally {
-		event.cookies.delete(ADMIN_DEV_MAC_COOKIE, { path: '/' });
-		if (mac) lastRefreshByMac.delete(mac);
+		try {
+			await db.delete(adminBypassDevice).where(eq(adminBypassDevice.sessionToken, token));
+		} catch (err) {
+			log.error('admin bypass device row delete failed:', err);
+		}
+		lastRefreshByToken.delete(token);
 	}
 }
