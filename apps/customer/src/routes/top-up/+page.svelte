@@ -41,7 +41,7 @@
 </script>
 
 <svelte:head>
-	<title>Top up · Veent WiFi</title>
+	<title>Top up · Parafiber WiFi</title>
 </svelte:head>
 
 <main class="flex min-h-screen flex-col p-5 lg:items-center lg:justify-center lg:bg-surface lg:p-8">

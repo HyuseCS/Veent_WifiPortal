@@ -15,7 +15,7 @@
 </script>
 
 <svelte:head>
-	<title>Help · Veent WiFi</title>
+	<title>Help · Parafiber WiFi</title>
 </svelte:head>
 
 <main class="flex min-h-screen flex-col bg-bg">

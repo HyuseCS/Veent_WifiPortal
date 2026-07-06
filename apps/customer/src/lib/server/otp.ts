@@ -100,7 +100,7 @@ export function maskPhone(phone: string): string {
 
 /** The OTP text — identical across providers and under the 160-char SMS limit. */
 function otpMessage(code: string): string {
-	return `Your Veent code is ${code}. It expires in 5 minutes.`;
+	return `Your Parafiber code is ${code}. It expires in 5 minutes.`;
 }
 
 /**
