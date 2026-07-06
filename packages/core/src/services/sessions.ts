@@ -598,13 +598,15 @@ export interface ResumeAccessResult {
 export async function resumeAccountAccess(
 	db: DB,
 	userId: string,
-	now: Date = new Date()
+	now: Date = new Date(),
+	opts: { onlyReason?: 'user' | 'outage' } = {}
 ): Promise<ResumeAccessResult> {
 	return db.transaction(async (tx) => {
 		const [p] = await tx
 			.select({
 				accessExpiresAt: customerProfile.accessExpiresAt,
-				accessPausedAt: customerProfile.accessPausedAt
+				accessPausedAt: customerProfile.accessPausedAt,
+				accessPausedReason: customerProfile.accessPausedReason
 			})
 			.from(customerProfile)
 			.where(eq(customerProfile.userId, userId))
@@ -612,6 +614,12 @@ export async function resumeAccountAccess(
 			.limit(1);
 
 		if (!p?.accessPausedAt) return { ok: false as const, reason: 'not_paused' as const };
+		// A guest may only resume the pause THEY created ('user'). Outage pauses are released solely
+		// by the outage sweep when the AP recovers, so a forged/replayed resume POST can't un-freeze
+		// held time while the WiFi is still down. Checked under the FOR UPDATE lock (no TOCTOU).
+		if (opts.onlyReason && p.accessPausedReason !== opts.onlyReason) {
+			return { ok: false as const, reason: 'not_paused' as const };
+		}
 
 		const window = p.accessExpiresAt ?? null;
 		const remainingMs = window ? window.getTime() - p.accessPausedAt.getTime() : 0;
