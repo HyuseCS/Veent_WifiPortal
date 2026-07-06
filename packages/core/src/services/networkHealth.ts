@@ -29,16 +29,26 @@ export async function refreshNetworkHealth(
 			uptimePct: s.online ? '100.00' : '0.00',
 			latencyMs: s.latencyMs ?? null,
 			lastSampleAt: now,
-			// New-row value (no conflict): a freshly-seen offline AP is "down since now".
-			offlineSince: s.online ? null : now
+			// New-row value (no conflict): a freshly-seen AP is "down since now" / "up since now".
+			offlineSince: s.online ? null : now,
+			onlineSince: s.online ? now : null
 		};
 		// On update, offline_since must track the transition, not overwrite it: stamp `now` only on
 		// the online→offline edge, keep the existing stamp while it stays down (so the debounce
 		// measures total downtime), and clear it on recovery. `network_health.offline_since` in the
 		// SET refers to the pre-update (existing) row; the JS `s.online` decides the branch.
+		// COALESCE backfills rows that were already offline with a NULL stamp (seeded/legacy, or
+		// offline before this feature shipped) — otherwise the outage sweep (which requires a
+		// non-NULL offline_since) would never pause their guests until the AP cycled online→offline.
 		const offlineSinceOnUpdate = s.online
 			? sql`NULL`
-			: sql`CASE WHEN ${networkHealth.online} = true THEN ${now} ELSE ${networkHealth.offlineSince} END`;
+			: sql`CASE WHEN ${networkHealth.online} = true THEN ${now} ELSE COALESCE(${networkHealth.offlineSince}, ${now}) END`;
+		// online_since is the exact mirror: stamp `now` on the offline→online edge, keep the existing
+		// stamp while it stays up (so the RESUME debounce measures sustained uptime), clear it while
+		// offline. COALESCE backfills an already-online row that never carried a stamp.
+		const onlineSinceOnUpdate = s.online
+			? sql`CASE WHEN ${networkHealth.online} = false THEN ${now} ELSE COALESCE(${networkHealth.onlineSince}, ${now}) END`
+			: sql`NULL`;
 		// Upsert on the unique `name`: one round-trip, and two concurrent sweeps can't create
 		// duplicate rows for the same AP (the select-then-insert this replaced could).
 		await db
@@ -46,7 +56,7 @@ export async function refreshNetworkHealth(
 			.values({ name: s.name, ...vals })
 			.onConflictDoUpdate({
 				target: networkHealth.name,
-				set: { ...vals, offlineSince: offlineSinceOnUpdate }
+				set: { ...vals, offlineSince: offlineSinceOnUpdate, onlineSince: onlineSinceOnUpdate }
 			});
 	}
 
