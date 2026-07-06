@@ -22,32 +22,35 @@ export async function refreshNetworkHealth(
 	const now = new Date();
 
 	for (const s of samples) {
+		// "Serving" folds LINK state together with WAN reachability: an AP with a live radio but a dead
+		// uplink isn't actually serving guests, so the outage debounce must treat it as down. `online`
+		// stays the raw link state (admin display); `wan_ok` is the shared uplink-probe result. Absent
+		// probe (stub/older sample) → assume reachable, so a missing signal never fabricates an outage.
+		const wanOk = s.wanReachable ?? true;
+		const serving = s.online && wanOk;
 		const vals = {
 			online: s.online,
+			wanOk,
 			users: s.users,
 			throughputMbps: s.throughputMbps,
 			uptimePct: s.online ? '100.00' : '0.00',
 			latencyMs: s.latencyMs ?? null,
 			lastSampleAt: now,
 			// New-row value (no conflict): a freshly-seen AP is "down since now" / "up since now".
-			offlineSince: s.online ? null : now,
-			onlineSince: s.online ? now : null
+			offlineSince: serving ? null : now,
+			onlineSince: serving ? now : null
 		};
-		// On update, offline_since must track the transition, not overwrite it: stamp `now` only on
-		// the online→offline edge, keep the existing stamp while it stays down (so the debounce
-		// measures total downtime), and clear it on recovery. `network_health.offline_since` in the
-		// SET refers to the pre-update (existing) row; the JS `s.online` decides the branch.
-		// COALESCE backfills rows that were already offline with a NULL stamp (seeded/legacy, or
-		// offline before this feature shipped) — otherwise the outage sweep (which requires a
-		// non-NULL offline_since) would never pause their guests until the AP cycled online→offline.
-		const offlineSinceOnUpdate = s.online
+		// offline_since/online_since track the SERVING transition (link AND uplink), not just link, so
+		// a WAN outage on an up-link AP still starts the pause debounce. The SET expression reads the
+		// pre-update (existing) row's online+wan_ok; the JS `serving` decides which branch is written.
+		// COALESCE backfills a row that was already not-serving / already-serving but carried no stamp
+		// (seeded/legacy, or predating this feature) so the sweep's non-NULL requirement is satisfied.
+		const wasServing = sql`(${networkHealth.online} = true AND ${networkHealth.wanOk} = true)`;
+		const offlineSinceOnUpdate = serving
 			? sql`NULL`
-			: sql`CASE WHEN ${networkHealth.online} = true THEN ${now} ELSE COALESCE(${networkHealth.offlineSince}, ${now}) END`;
-		// online_since is the exact mirror: stamp `now` on the offline→online edge, keep the existing
-		// stamp while it stays up (so the RESUME debounce measures sustained uptime), clear it while
-		// offline. COALESCE backfills an already-online row that never carried a stamp.
-		const onlineSinceOnUpdate = s.online
-			? sql`CASE WHEN ${networkHealth.online} = false THEN ${now} ELSE COALESCE(${networkHealth.onlineSince}, ${now}) END`
+			: sql`CASE WHEN ${wasServing} THEN ${now} ELSE COALESCE(${networkHealth.offlineSince}, ${now}) END`;
+		const onlineSinceOnUpdate = serving
+			? sql`CASE WHEN NOT ${wasServing} THEN ${now} ELSE COALESCE(${networkHealth.onlineSince}, ${now}) END`
 			: sql`NULL`;
 		// Upsert on the unique `name`: one round-trip, and two concurrent sweeps can't create
 		// duplicate rows for the same AP (the select-then-insert this replaced could).

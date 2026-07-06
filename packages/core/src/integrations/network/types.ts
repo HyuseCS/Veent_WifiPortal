@@ -33,6 +33,11 @@ export interface NetworkApSample {
 	/** Internet round-trip latency in ms (router ping to a public host). Null when
 	 * the controller can't measure it (stub/dev, no internet, ping unavailable). */
 	latencyMs?: number | null;
+	/** Whether the router could reach the internet at sample time (the uplink probe succeeded).
+	 * SHARED across all of a router's interfaces — it reflects the WAN, not the per-AP link. Lets
+	 * the outage sweep treat a "link up but uplink dead" AP as down. Undefined = signal unavailable
+	 * (stub/dev); consumers assume reachable so a missing probe never triggers a false outage. */
+	wanReachable?: boolean;
 }
 
 /** Input for applying (or clearing) an aggregate per-AP bandwidth cap on the router. */

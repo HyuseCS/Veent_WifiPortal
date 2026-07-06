@@ -583,6 +583,12 @@ export function createMikrotikController(config: MikrotikConfig): NetworkControl
 					// ping unavailable / no internet — leave null
 				}
 
+				// The latency ping doubles as the uplink/WAN reachability probe (shared across all
+				// interfaces — same WAN path). A successful ping means the router reached the internet;
+				// no reply (timeout / no route / ICMP blocked) is treated as WAN-down. The outage sweep's
+				// downMs debounce absorbs a transient miss, so a one-off failure won't pause anyone.
+				const wanReachable = latencyMs != null;
+
 				const ifaces = await conn.write('/interface/print');
 				const samples: NetworkApSample[] = [];
 				for (const i of ifaces) {
@@ -610,7 +616,8 @@ export function createMikrotikController(config: MikrotikConfig): NetworkControl
 						online: running,
 						users: connectedUsers,
 						throughputMbps,
-						latencyMs: running ? latencyMs : null
+						latencyMs: running ? latencyMs : null,
+						wanReachable
 					});
 				}
 				return samples;
