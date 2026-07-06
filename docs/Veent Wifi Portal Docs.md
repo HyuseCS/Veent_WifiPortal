@@ -44,11 +44,11 @@ Stack: SvelteKit, TailwindCSS, Drizzle (postgresql), better-auth
 * **Action:** The user lands on a personalized dashboard showing their current balance and Free Time eligibility (e.g., "Eligible for 15 Minutes Free Access").  
 * **Option A (The Free Window):** If eligible, the user starts their free session. SvelteKit logs the session\_end time in the database and triggers **Step 5 (The Handoff)**. The portal UI displays a countdown warning them of the impending cutoff. During this window, they have 100% open internet to browse or seamlessly top-up their account.  
 * **Option B (Spend):** If they have enough credits, they select a continuous access tier. SvelteKit deducts the credits and triggers **Step 5 (The Handoff)** for uninterrupted access.  
-* **Option C (Top-Up via Whitelisted Payment):** If their balance is zero *and* their Free Time is in Cooldown, they must select a credit bundle. Even though they have no open internet window, the payment gateway domains (PayMongo, Xendit, and the bank/e-wallet redirect hosts) are permanently **whitelisted in the router's Walled Garden**, so the user can always reach checkout and complete payment without any temporary firewall grant. This triggers **Step 4**.
+* **Option C (Top-Up via Whitelisted Payment):** If their balance is zero *and* their Free Time is in Cooldown, they must select a credit bundle. Even though they have no open internet window, the payment gateway domains (Maya/PayMaya, GCash, and the bank/e-wallet redirect hosts) are permanently **whitelisted in the router's Walled Garden**, so the user can always reach checkout and complete payment without any temporary firewall grant. This triggers **Step 4**.
 
 ### **Step 4: The Financial Transaction & Verification**
 
-* **Action:** The user is redirected to the payment gateway (PayMongo, Xendit) to purchase the credit bundle. Because the gateway and bank/e-wallet redirect hosts are whitelisted in the Walled Garden, the user can reach checkout and access bank OTPs or mobile wallet redirects whether or not they currently have an open internet window.  
+* **Action:** The user is redirected to the Maya (PayMaya) checkout page to purchase the credit bundle. Because the gateway and bank/e-wallet redirect hosts are whitelisted in the Walled Garden, the user can reach checkout and access bank OTPs or mobile wallet redirects whether or not they currently have an open internet window.  
 * **The Webhook (Backend):** The external gateway asynchronously fires a webhook back to your SvelteKit API confirming the payment. Drizzle adds the credits to the credit\_balance and updates the credit\_ledger.  
 * **Redirection (The Waiting Room):** Upon completing the payment, the user is sent to a specific pending route (/top-up/processing). This screen polls the PostgreSQL database. Once verified, the application pushes the user back to **Step 3 (The Dashboard)** so they can execute Option B.
 
@@ -82,7 +82,7 @@ Once logged in, all traffic should route here. These pages query PostgreSQL (via
   * **Logic:** This page dynamically renders options based on state. If they are eligible for free time, show a prominent "Start 15-Min Free Access" button. If they have credits, show the available internet tiers to purchase. If they are in a Cooldown and have 0 credits, restrict the UI to only allow a Top-Up.  
 * **src/routes/top-up/+page.svelte (The Storefront)**  
   * **Purpose:** Displays the credit bundles (e.g., "$5 for 50 Credits").  
-  * **Action (Crucial):** When the user selects a bundle, the associated \+page.server.ts action creates the checkout session and redirects the user to the PayMongo/Xendit checkout URL. No temporary firewall grant is needed — the payment gateway and its redirect hosts are permanently whitelisted in the router's Walled Garden, so checkout is reachable even when the user has no open internet window.
+  * **Action (Crucial):** When the user selects a bundle, the associated \+page.server.ts action creates the checkout session and redirects the user to the Maya checkout URL. No temporary firewall grant is needed — the payment gateway and its redirect hosts are permanently whitelisted in the router's Walled Garden, so checkout is reachable even when the user has no open internet window.
 
 ### **3\. Transaction Resolution (The Safe Bridge)**
 

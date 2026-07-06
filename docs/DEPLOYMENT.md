@@ -94,7 +94,15 @@ Minimum for production:
   (`/api/network/revoke`, `/api/payments/reconcile`); empty = allow any IP (still secret-gated)
 - `MAYA_PUBLIC_KEY` / `MAYA_SECRET_KEY` — your **live** account keys
 - `MAYA_SANDBOX="false"`
-- `ITEXMO_API_CODE` / `ITEXMO_EMAIL` / `ITEXMO_PASSWORD` — SMS OTP delivery (all three)
+- `TUNNEL_ORIGIN` — the site's public https tunnel URL (its ngrok URL). **Required for Maya checkouts
+  on a NAT'd LAN deploy**: Maya rejects http/private-IP URLs, and the central Veent DO relay forwards
+  the payment webhook to `${TUNNEL_ORIGIN}/api/webhooks/maya/payment-status`. Leave blank only when the
+  portal is served on a public https domain (§6). See `apps/customer/.env.example`.
+- `SMS_PROVIDER` — which gateway sends login OTPs: `itexmo` (default) or `unisms`. Only the selected
+  provider's keys are read:
+  - iTexMo: `ITEXMO_API_CODE` / `ITEXMO_EMAIL` / `ITEXMO_PASSWORD` (all three; trial accounts need
+    `ITEXMO_SENDER_ID="ITM.TEST3"`)
+  - UniSMS: `UNISMS_SECRET_KEY` + `UNISMS_SENDER_ID` (both)
 
 > **Boot-time validation:** each app runs `validateEnv()` on startup (`hooks.server.ts`). In
 > production a missing **required** var aborts the boot with a clear message instead of failing
@@ -356,7 +364,8 @@ Once all four pass, mark the findings mitigated in `docs/SECURITY_RISKS.md` / `d
 - [ ] `BETTER_AUTH_SECRET` set (distinct per app), real `CRON_SECRET`s.
       (Boot validation now **hard-fails** in prod on any missing required var — see note below.)
 - [ ] Maya **live** keys + `MAYA_SANDBOX="false"`.
-- [ ] `ITEXMO_API_CODE` / `ITEXMO_EMAIL` / `ITEXMO_PASSWORD` set (otherwise prod refuses the OTP flow).
+- [ ] SMS OTP keys set for the selected `SMS_PROVIDER` — iTexMo `ITEXMO_*` (default) or UniSMS
+      `UNISMS_*` (otherwise prod refuses the OTP flow).
 - [ ] Built + running via `node build` (not `vite dev`).
 - [ ] TLS in front; `ORIGIN` matches the public URL.
 - [ ] Router API on **api-ssl (8729)** — both apps' `.env` set `MIKROTIK_TLS="true"` /

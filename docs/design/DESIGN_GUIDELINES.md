@@ -16,31 +16,31 @@ Define tokens in each app's `layout.css`:
 @import 'tailwindcss';
 
 @theme {
-  /* Palette — default theme: teal + coral */
-  --color-brand:        oklch(0.38 0.130 185);
-  --color-brand-hover:  oklch(0.32 0.130 185);
-  --color-cta:          oklch(0.62 0.180 28);
-  --color-cta-hover:    oklch(0.56 0.180 28);
+  /* Palette — customer portal: Parafiber navy (brand) + blue (cta) */
+  --color-brand:        rgb(0, 18, 107);
+  --color-brand-hover:  rgb(0, 12, 78);
+  --color-cta:          rgb(10, 98, 169);
+  --color-cta-hover:    rgb(7, 75, 135);
 
   /* Surfaces */
-  --color-bg:           oklch(1.000 0.000 0);
-  --color-surface:      oklch(0.975 0.008 185);
-  --color-border:       oklch(0.920 0.008 185);
+  --color-bg:           oklch(1 0 0);
+  --color-surface:      rgb(244, 249, 255);
+  --color-border:       rgb(223, 234, 247);
 
   /* Text */
-  --color-ink:          oklch(0.14 0.020 190);
-  --color-muted:        oklch(0.52 0.010 190);
+  --color-ink:          rgb(12, 34, 58);
+  --color-muted:        rgb(92, 112, 138);
 
   /* Status — semantic, not themeable */
-  --color-online:       oklch(0.50 0.150 155);
-  --color-warning:      oklch(0.65 0.150 72);
-  --color-blocked:      oklch(0.55 0.180 22);
+  --color-online:       oklch(0.50 0.15 155);
+  --color-warning:      oklch(0.65 0.15 72);
+  --color-blocked:      oklch(0.55 0.18 22);
 }
 ```
 
 ### Admin theme
 
-The admin dashboard does **not** inherit the customer's teal+coral base — it ships its own `@theme` in `apps/admin/src/routes/layout.css`. Identity: a Parafiber royal-blue accent (hue 262) with a deep-navy sidebar (hue 266) and a sparing gold highlight. `cta` is a deliberate alias of `brand` (one accent, kept as a separate token only so the ~16 files using `bg-cta`/`text-cta` don't need editing).
+The admin dashboard does **not** inherit the customer's navy+blue base — it ships its own `@theme` in `apps/admin/src/routes/layout.css`. Identity: a Parafiber royal-blue accent (hue 262) with a deep-navy sidebar (hue 266) and a sparing gold highlight. `cta` is a deliberate alias of `brand` (one accent, kept as a separate token only so the ~16 files using `bg-cta`/`text-cta` don't need editing).
 
 ```css
 @theme {
@@ -105,13 +105,13 @@ Text on `--color-brand`/`--color-cta` is always `white` — the accent is mid-to
 
 ### Customer portal
 
-**[Plus Jakarta Sans](https://fonts.google.com/specimen/Plus+Jakarta+Sans)** — variable font, loaded once for the whole app.
+**[Plus Jakarta Sans](https://fonts.google.com/specimen/Plus+Jakarta+Sans)** for body/UI, **Montserrat** for headings — self-hosted via `@fontsource` (no external font request; the portal loads over a captive connection).
 
 ```css
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
-
-/* In @theme: */
---font-sans: 'Plus Jakarta Sans', system-ui, sans-serif;
+/* Self-hosted @font-face from @fontsource — no Google Fonts request. In @theme: */
+--font-sans:    'Plus Jakarta Sans', system-ui, sans-serif;
+--font-heading: 'Montserrat', var(--font-sans);            /* applied to h1–h6 */
+--font-mono:    'JetBrains Mono', ui-monospace, monospace; /* numeric data */
 ```
 
 Usage:
@@ -148,7 +148,7 @@ Admin type scale (tighter ratio, 1.15 steps):
 
 All interactive elements enforce `min-h-[44px]`. That's the one non-negotiable on the customer portal — this runs on Android phones tapped with thumbs.
 
-**Primary CTA** — coral, used once per screen:
+**Primary CTA** — blue, used once per screen:
 
 ```html
 <button class="w-full min-h-[44px] cursor-pointer rounded-lg px-4 py-3
@@ -161,7 +161,7 @@ All interactive elements enforce `min-h-[44px]`. That's the one non-negotiable o
 </button>
 ```
 
-**Brand action** — teal, for secondary actions that are still important (login, confirm):
+**Brand action** — navy, for secondary actions that are still important (login, confirm):
 
 ```html
 <button class="min-h-[44px] cursor-pointer rounded-lg px-4 py-2.5
@@ -424,8 +424,8 @@ Sizes: `h-4 w-4` inline/dense · `h-5 w-5` buttons · `h-5 w-5` sidebar nav.
 The customer portal loads in a captive portal mini-browser over a restricted, pre-auth connection. These rules are non-negotiable:
 
 - **No external images in the critical path.** SVG or CSS only for decorative elements. If you need a logo image, inline the SVG.
-- **One Google Fonts request.** The Plus Jakarta Sans import handles it. Don't add a second `@import`.
-- **SSR auth pages.** The landing (`/`), login, and register pages must render fully without client JavaScript. No `onMount` data fetch on these routes.
+- **No external font request.** Fonts are self-hosted via `@fontsource` (Plus Jakarta Sans + Montserrat). Don't add a Google Fonts `@import`.
+- **SSR auth pages.** The landing (`/`), login, and OTP verify pages must render fully without client JavaScript. No `onMount` data fetch on these routes.
 - **`overscroll-behavior: contain` on the portal root.** Prevents accidental pull-to-refresh on Android.
 - **No animations on auth pages.** Motion loads after JS; auth pages must be immediately usable.
 

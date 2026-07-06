@@ -81,10 +81,11 @@ delegate to the same `handlePaymentWebhook`.
    - **`originUrl`** (webhook routing, in metadata) = **`TUNNEL_ORIGIN`** always (the public tunnel
      the DO forwards to). Blank when unset — no LAN fallback, so a misconfigured NAT'd site fails
      loudly at Maya / the DO instead of shipping an unreachable URL.
-   - **Buyer redirect URLs** (`successUrl`/`cancelUrl`) = the origin the buyer **started on**
-     (`event.url.origin`), so a localhost dev session returns to localhost and a public-domain
-     deploy returns to that domain. Only a private LAN http origin (the prod captive portal on the
-     LAN, which Maya rejects and the browser can't reach on return) falls back to `TUNNEL_ORIGIN`.
+   - **Buyer redirect URLs** (`successUrl`/`cancelUrl`) = **always** the origin the buyer
+     **started on** (`event.url.origin`), so the return lands back on the same site they're
+     browsing — the LAN captive portal, localhost, or a public domain. It is **never** swapped to
+     `TUNNEL_ORIGIN` (that is the server-to-server relay origin only); swapping the browser return to
+     the tunnel would strand the buyer on the wrong site (commit `5cf15ae`).
    `ORIGIN` stays the LAN address guests browse on.
 4. **New route** `/api/webhooks/maya/payment-status` — the DO's forward target. Thin wrapper over
    the shared handler; the existing `/api/webhooks/payment` stays as a direct/dev alias.

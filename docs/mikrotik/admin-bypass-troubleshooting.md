@@ -1,13 +1,15 @@
-# Admin bypass on a real router — troubleshooting (PARTIAL / WIP)
+# Admin bypass on a real router — troubleshooting
 
 Bring-up notes for the **admin-device bypass** (`veent-admin` ip-binding, B3.2) against a live
-MikroTik. Written during the first real-router bring-up on `dev/audit-fixes`.
+MikroTik. Written during the first real-router bring-up on `dev/audit-fixes`; the flow now works
+and is bench-verified.
 
 **Status**
 - ✅ **SOLVED:** device MAC resolves on admin login → `veent-admin:<epoch>` binding is written and
   appears in Winbox (IP → Hotspot → IP Bindings).
-- 🚧 **OPEN:** device shows the `bypassed` binding but still has **no internet** — under investigation
-  (see the last section).
+- ✅ **RESOLVED:** the earlier "shows the binding but has **no internet**" report was the OS **"!"
+  connectivity-check indicator** — the device is genuinely online; browsing works. See the "!"
+  section below. A fresh grant now also cuts conntrack, so the bypass is fast within seconds.
 
 ---
 
@@ -95,22 +97,29 @@ walled-garden-only. So a device only keeps internet **while the staff member is 
 forward on activity, reaped at the 4h TTL). If you're testing and the binding "disappears," you
 logged out.
 
-### Caveat B — MAC resolution at login is occasionally flaky
-Because the admin path has no `?mac=`, it does a live `resolveMacByIp` at the instant of login. That
-can transiently miss (router-API latency, or the device mid-reconnect so it's briefly absent from the
-hotspot host/lease tables) → that login grants nothing (`skipped — no MAC for client ip=…`). A second
-login when the device is settled grants fine. The DHCP lease is the durable fallback, so a stably-
-connected device resolves reliably.
+### Caveat B — MAC resolution at login can transiently miss (mitigated by retry)
+Because the admin path has no `?mac=`, it does a live IP→MAC lookup at the instant of login. That can
+transiently miss (router-API latency, or the device mid-reconnect so it's briefly absent from the
+hotspot host/lease tables). **Mitigated:** `resolveDeviceMac` now *retries* the live lookup (3 attempts
+× 2.5 s + ~300 ms backoff, ~8 s worst case) and keeps an age-bounded stale-cache fallback, so a
+transient timeout/empty usually converts into the grant it should have been (`packages/core/src/services/adminAccess.ts`,
+commit 8116b11). If every attempt still misses, that login grants nothing (`skipped — no MAC for
+client ip=…`) and the next dashboard load (the sliding refresh) grants it once the device is visible.
+The DHCP lease is the durable fallback, so a stably-connected device resolves reliably.
 
 ### Caveat C — the sliding-refresh retry (FIXED)
 `refreshAdminBypass` (the `(app)` layout retry that should re-grant on each dashboard load, sliding the
 4h window and papering over a Caveat-B miss) used to call `event.getClientAddress()`, which throws
 **`Could not determine clientAddress`** in the layout-load context (SvelteKit `__data.json`
-sub-requests) → the slide never ran. **Fixed:** the login-resolved MAC is stashed in an httpOnly
-`admin_dev_mac` cookie (`postLogin.ts` → `setAdminDevMacCookie`), and the renewal grants from that
-cookie — no `getClientAddress()`, no re-lookup (`adminBypass.ts`). Logout revokes from the same cookie
-and clears it. _Verify on bench: stay signed in past the refresh interval, confirm the binding's epoch
-advances._
+sub-requests) → the slide never ran. **Fixed:** the login-resolved MAC is persisted in a durable
+server-side store keyed by the better-auth **session token** — the `admin_bypass_device` table
+(`postLogin.ts` → `rememberAdminDevice`). The renewal and logout read the MAC back from that store via
+`event.locals.session.token` — no `getClientAddress()`, no re-lookup (`adminBypass.ts`). Logout revokes
+that MAC and deletes the row (the row also FK-cascades away when the session ends). This replaced an
+earlier signed httpOnly `admin_dev_mac` cookie, which didn't reliably survive the login form-action
+through to logout (commit 8116b11); the store is per-session, so two devices get two rows, each revoked
+independently on its own sign-out. _Verify on bench: stay signed in past the refresh interval, confirm
+the binding's epoch advances._
 
 ### Slowness after grant (FIXED)
 Fresh bypass, snail-slow browsing for a bit: the device's **existing** connections keep riding the
@@ -135,5 +144,5 @@ ONU (68 ms latency, 0% loss), which alone can time the probe out. **Leave the de
 reintroduces the guest flap); the "!" is cosmetic. Only revisit if a specific app hard-gates on the OS
 connectivity check and refuses to run — that'd need a targeted per-device carve-out.
 
-_Both code follow-ups are implemented (Caveat C cookie-carry + cut-conntrack-on-grant); pending bench
-verification._
+_Both code follow-ups are implemented (Caveat C session-keyed device store + cut-conntrack-on-grant)
+and bench-verified._

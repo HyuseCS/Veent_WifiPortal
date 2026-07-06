@@ -1,5 +1,11 @@
 # Adding a 3D Location View to a Leaflet + OpenStreetMap App
 
+> **Status (2026-07-06): proposed — not yet implemented.** The locator app today
+> uses Leaflet 1.9.4 (2D) with CARTO raster tiles over OpenStreetMap data and
+> `leaflet.markercluster` for clustering; no 3D engine (MapLibre / CesiumJS /
+> Three.js) and no `/api/locations/3d` endpoint exist yet. This document is the
+> design proposal for the feature.
+
 The cleanest implementation is to keep Leaflet as your 2D map, then open a separate 3D viewer or modal when the user clicks a location. Leaflet is excellent for 2D raster and vector maps, but for true 3D scenes, it is better to hand off to a dedicated 3D map or graphics engine.
 
 A typical flow looks like this:

@@ -45,18 +45,20 @@ a binding's timestamp to an old epoch (`1000000000000` = Sept 2001, always "expi
 > **Expected latency — the admin bypass is NOT instant, unlike a guest `?mac=` purchase.** Two
 > lags, both normal (don't read them as "broken"):
 > 1. **The binding shows in Winbox only once the grant fires.** The admin path has no captive
->    `?mac=`; it resolves the MAC with a *live* router lookup (`resolveMacByIp`, up to a ~5s ceiling
->    on a cold cache). If the device isn't yet in the router's host/lease/ARP tables at the moment of
->    login, that first lookup returns null and NO binding is written — the next dashboard load (the
->    sliding refresh) writes it once the device is visible. Tail `journalctl -u radius-admin -f` and
->    watch for `admin bypass granted: ip=… mac=…` vs `skipped — no MAC for client ip=…`.
-> 2. **The device actually gets internet up to ~1 min later.** Grant adds the bypass and flushes the
->    hotspot host, but does **not** cut the device's already-open connections (only *revoke* does).
->    The OS flips to "connected" when it next re-probes the captive check (~30–60 s on Android/iOS)
->    and opens a fresh, now-bypassed connection. Hotspot-login *activation* — which would clear the
->    OS banner at once — is disabled on this deployment (`MIKROTIK_HOTSPOT_USER` retired), so this
->    settle time is inherent to the bypass-binding approach here. To make it near-instant you'd cut
->    conntrack on grant (mirror revoke) and/or re-enable activation — deferred, not wired.
+>    `?mac=`; it resolves the MAC with a *live* router lookup (`resolveDeviceMac`, which now **retries**
+>    — 3 attempts × 2.5 s + ~300 ms backoff, ~8 s worst case — plus an age-bounded stale-cache
+>    fallback). If the device still isn't in the router's host/lease/ARP tables after the retries, no
+>    binding is written that login — the next dashboard load (the sliding refresh) writes it once the
+>    device is visible. Tail `journalctl -u radius-admin -f` and watch for
+>    `admin bypass granted: ip=… mac=…` vs `skipped — no MAC for client ip=…`.
+> 2. **The device gets internet within seconds of the grant.** A fresh bypass (non-bypassed→bypassed)
+>    now **cuts the device's already-open conntrack rows** and flushes the stale hotspot host
+>    (mirroring *revoke*), so existing flows re-evaluate against the bypass at once instead of riding
+>    the pre-bypass path until they age out (`grant()` in `mikrotik.ts`, `flush=true` only on the
+>    transition — a comment-only sliding renewal never pokes a live device). The OS **"!" banner** can
+>    still linger until the device's next captive re-probe (~30–60 s) — that's cosmetic; browsing works
+>    (see `admin-bypass-troubleshooting.md`). Hotspot-login *activation*, which clears the banner at
+>    once, is opt-in via `MIKROTIK_HOTSPOT_USER` and simply not enabled on this deployment.
 
 ### Expiry + grandfather (router-only, fast — no device flows needed)
 - [ ] **Grandfather a legacy binding.** Add a *bare* admin binding, then sweep:
