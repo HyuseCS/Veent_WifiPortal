@@ -57,7 +57,7 @@
 </script>
 
 <svelte:head>
-	<title>{status} · Veent WiFi</title>
+	<title>{status} · Parafiber WiFi</title>
 </svelte:head>
 
 <main class="flex min-h-screen flex-col items-center justify-center bg-surface px-6 py-12">

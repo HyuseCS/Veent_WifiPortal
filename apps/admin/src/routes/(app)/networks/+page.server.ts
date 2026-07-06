@@ -1,6 +1,6 @@
 import { fail } from '@sveltejs/kit';
 import { dev } from '$app/environment';
-import { refreshNetworkHealth, STAFF_ROLE } from '@veent/core';
+import { refreshNetworkHealth, countOutagePausedAccounts, STAFF_ROLE } from '@veent/core';
 import { db } from '$lib/server/db';
 import { requireOwner as ownerGate } from '$lib/server/auth-guard';
 import { network } from '$lib/server/network';
@@ -59,7 +59,10 @@ export const load: PageServerLoad = async (event) => {
 		}
 		return listNetworkHealth(db);
 	})();
-	return { networks, isOwner: user.role === STAFF_ROLE.owner };
+	// Guests whose paid time is currently frozen because their AP is down (the outage auto-pause).
+	// Cheap count — awaited directly so the outage banner renders with the page shell.
+	const outagePausedGuests = await countOutagePausedAccounts(db);
+	return { networks, outagePausedGuests, isOwner: user.role === STAFF_ROLE.owner };
 };
 
 export const actions: Actions = {

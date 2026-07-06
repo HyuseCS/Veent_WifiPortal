@@ -22,11 +22,11 @@ Stack: SvelteKit, TailwindCSS, Drizzle (postgresql), better-auth
 
 **ERD**
   
-**![WIFI Portal ERD](wifi-portal-erd.png)**
+**![WIFI Portal ERD](assets/wifi-portal-erd.png)**
 
 **Use Case**
 
-**![WIFI Portal Use case diagram](wifi-portal-flow.png)**
+**![WIFI Portal Use case diagram](assets/wifi-portal-flow.png)**
 
 ## **Descriptive Use Case Flow**
 

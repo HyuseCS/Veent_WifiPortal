@@ -4,7 +4,7 @@
 	import CircleCheck from 'lucide-svelte/icons/circle-check';
 	import Wallet from 'lucide-svelte/icons/wallet';
 	import type { Component } from 'svelte';
-	import { navigating, page } from '$app/state';
+	import { invalidateAll } from '$app/navigation';
 	import { Card, SectionHeading } from '$lib/components/ui';
 	import { KpiCard, RevenueChart, DonutChart } from '$lib/components/feature';
 	import type { Kpi } from '$lib/types';
@@ -12,9 +12,29 @@
 
 	let { data }: { data: PageData } = $props();
 
-	// Changing the period (Topbar) is a same-route navigation that re-runs the load; show a
-	// skeleton while it resolves so the page doesn't sit on stale numbers with no feedback.
-	const loading = $derived(navigating.to?.url.pathname === page.url.pathname);
+	// The heavy aggregates stream from the load (see +page.server.ts). Resolve them into local
+	// state; reset to null while a new promise is in flight (initial load AND period switches,
+	// which return a fresh promise) so the skeleton shows instead of stale numbers. The identity
+	// guard drops a stale resolve if the period changed again before this one landed.
+	type Snapshot = Awaited<PageData['snapshot']>;
+	let snapshot = $state<Snapshot | null>(null);
+	let loadError = $state(false);
+	$effect(() => {
+		const p = data.snapshot;
+		snapshot = null;
+		loadError = false;
+		// Handle BOTH settle paths: a streamed-promise rejection is delivered to the client but does
+		// NOT hit +error.svelte (the load already returned), so without this a query error would leave
+		// the skeleton up forever. The identity guard drops a stale settle if the period changed again.
+		p.then(
+			(s) => {
+				if (data.snapshot === p) snapshot = s;
+			},
+			() => {
+				if (data.snapshot === p) loadError = true;
+			}
+		);
+	});
 
 	// lucide types don't match Svelte's `Component` structurally; cast as the other pages do.
 	const icon = (c: unknown) => c as Component;
@@ -41,8 +61,8 @@
 	});
 	const chromeFor = (kpi: Kpi) => kpiChrome[kpi.label] ?? { icon: undefined, helper: '' };
 
-	const revenueTotal = $derived(data.revenue.reduce((sum, p) => sum + p.amount, 0));
-	const settledTotal = $derived(data.breakdown.reduce((sum, s) => sum + s.amount, 0));
+	const revenueTotal = $derived((snapshot?.revenue ?? []).reduce((sum, p) => sum + p.amount, 0));
+	const settledTotal = $derived((snapshot?.breakdown ?? []).reduce((sum, s) => sum + s.amount, 0));
 </script>
 
 {#snippet skelCard()}
@@ -53,9 +73,22 @@
 	</div>
 {/snippet}
 
-{#if loading}
-	<!-- Skeleton silhouette mirroring KPIs · revenue chart · two donuts, so the period switch
-	     paints instantly while the new range loads (no layout shift on resolve). -->
+{#if loadError}
+	<div class="grid h-full min-h-[50vh] place-items-center">
+		<div class="max-w-sm rounded-xl border border-border bg-bg p-6 text-center shadow-sm">
+			<p class="text-sm text-muted">Couldn't load finance data for this period.</p>
+			<button
+				type="button"
+				onclick={() => invalidateAll()}
+				class="mt-4 inline-flex min-h-[44px] items-center justify-center rounded-lg bg-brand px-4 text-sm font-semibold text-white transition-colors hover:bg-brand-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+			>
+				Try again
+			</button>
+		</div>
+	</div>
+{:else if !snapshot}
+	<!-- Skeleton silhouette mirroring KPIs · revenue chart · two donuts, so the initial load and
+	     period switches paint instantly while the aggregates stream in (no layout shift on resolve). -->
 	<div class="flex animate-pulse flex-col gap-6 md:h-full" aria-hidden="true">
 		<section class="grid shrink-0 grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
 			{#each Array.from({ length: 4 }, (_, i) => i) as i (i)}{@render skelCard()}{/each}
@@ -74,7 +107,7 @@
 <div class="flex flex-col gap-6 md:h-full">
 	<!-- KPIs -->
 	<section class="grid shrink-0 grid-cols-2 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-4">
-		{#each data.kpis as kpi (kpi.label)}
+		{#each snapshot.kpis as kpi (kpi.label)}
 			{@const c = chromeFor(kpi)}
 			<KpiCard
 				{kpi}
@@ -98,8 +131,8 @@
 				{/snippet}
 			</SectionHeading>
 			<div class="min-h-[200px] flex-1 md:min-h-0">
-				{#if data.revenue.length > 0}
-					<RevenueChart data={data.revenue} />
+				{#if snapshot.revenue.length > 0}
+					<RevenueChart data={snapshot.revenue} />
 				{:else}
 					<p class="grid h-full place-items-center text-sm text-muted">
 						No settled revenue in this period.
@@ -119,7 +152,7 @@
 				<div class="md:min-h-0 lg:flex lg:flex-1 lg:items-center">
 					<div class="w-full lg:hidden">
 						<DonutChart
-							data={data.breakdown}
+							data={snapshot.breakdown}
 							compact
 							centerValue="₱{settledTotal.toLocaleString('en-PH')}"
 							centerLabel="Settled"
@@ -127,7 +160,7 @@
 					</div>
 					<div class="hidden w-full lg:block">
 						<DonutChart
-							data={data.breakdown}
+							data={snapshot.breakdown}
 							centerValue="₱{settledTotal.toLocaleString('en-PH')}"
 							centerLabel="Settled"
 						/>
@@ -140,7 +173,7 @@
 				<div class="md:min-h-0 lg:flex lg:flex-1 lg:items-center">
 					<div class="w-full lg:hidden">
 						<DonutChart
-							data={data.apRevenue}
+							data={snapshot.apRevenue}
 							label="Revenue by access point"
 							compact
 							centerValue="₱{settledTotal.toLocaleString('en-PH')}"
@@ -149,7 +182,7 @@
 					</div>
 					<div class="hidden w-full lg:block">
 						<DonutChart
-							data={data.apRevenue}
+							data={snapshot.apRevenue}
 							label="Revenue by access point"
 							centerValue="₱{settledTotal.toLocaleString('en-PH')}"
 							centerLabel="Settled"

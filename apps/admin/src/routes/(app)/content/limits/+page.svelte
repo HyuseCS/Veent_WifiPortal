@@ -10,6 +10,10 @@
 	let code = $state('');
 	const codeValid = $derived(/^\d{6}$/.test(code));
 
+	// Pending state for the save: disables the button + shows a spinner while the server-side
+	// MFA re-check + DB write run, so a slow save gives feedback and can't be double-submitted.
+	let submitting = $state(false);
+
 	// Seed the form once from the saved limits; edits stay local until saved. `untrack`
 	// makes the one-time read of `data` explicit so it isn't treated as a live dependency.
 	const seed = untrack(() => data.limits);
@@ -72,7 +76,18 @@
 	{/if}
 
 	<Card class="max-w-xl">
-		<form method="post" action="?/save" use:enhance class="flex flex-col gap-5">
+		<form
+			method="post"
+			action="?/save"
+			use:enhance={() => {
+				submitting = true;
+				return async ({ update }) => {
+					await update();
+					submitting = false;
+				};
+			}}
+			class="flex flex-col gap-5"
+		>
 			{#each fields as f (f.name)}
 				<label class="flex flex-col gap-1.5">
 					<span class="text-sm font-medium text-ink">{f.label}</span>
@@ -105,7 +120,7 @@
 			/>
 
 			<div>
-				<Button type="submit" disabled={!codeValid}>Save limits</Button>
+				<Button type="submit" loading={submitting} disabled={!codeValid}>Save limits</Button>
 			</div>
 		</form>
 	</Card>

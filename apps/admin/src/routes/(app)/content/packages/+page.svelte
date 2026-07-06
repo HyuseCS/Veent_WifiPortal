@@ -15,6 +15,10 @@
 	let code = $state('');
 	const codeValid = $derived(/^\d{6}$/.test(code));
 
+	// Pending state for the save: disables the button + shows a spinner while the server-side
+	// MFA re-check + DB write run, so a slow save gives feedback and can't be double-submitted.
+	let submitting = $state(false);
+
 	let dialogOpen = $state(false);
 	let dialogProps = $state<{
 		title: string;
@@ -154,7 +158,13 @@
 			<form
 				method="post"
 				action={editing.id ? '?/update' : '?/create'}
-				use:enhance
+				use:enhance={() => {
+					submitting = true;
+					return async ({ update }) => {
+						await update();
+						submitting = false;
+					};
+				}}
 				class="flex flex-col gap-4"
 			>
 				<div class="flex items-center justify-between">
@@ -288,7 +298,7 @@
 				/>
 
 				<div class="flex gap-2.5">
-					<Button type="submit" disabled={!codeValid}>
+					<Button type="submit" loading={submitting} disabled={!codeValid}>
 						{editing.id ? 'Save changes' : 'Create package'}
 					</Button>
 					<Button variant="secondary" onclick={() => (editing = null)}>Cancel</Button>

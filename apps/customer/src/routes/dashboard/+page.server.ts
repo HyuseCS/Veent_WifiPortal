@@ -288,7 +288,9 @@ export const actions: Actions = {
 
 		let result;
 		try {
-			result = await resumeAccountAccess(db, user.id);
+			// onlyReason:'user' — a guest can resume only their own manual pause; outage pauses are
+			// released by the outage sweep alone (guard is enforced in the service, under lock).
+			result = await resumeAccountAccess(db, user.id, undefined, { onlyReason: 'user' });
 		} catch (err) {
 			log.error('resumeAccess failed:', err);
 			return fail(502, { error: 'Could not resume access. Please try again.' });

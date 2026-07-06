@@ -72,6 +72,23 @@ const handleBetterAuth: Handle = async ({ event, resolve }) => {
 		}
 	}
 
+	// Central auth gate for the whole (app) shell — matched via route.id, which includes the
+	// route group. This MUST live in the hook, not just (app)/+layout.server.ts: a SvelteKit
+	// form-action POST runs the action BEFORE any layout `load`, so the layout's redirect can't
+	// protect action POSTs (an unauthenticated POST to /users?/block or /map?/deletePlace would
+	// otherwise execute the mutation). Gating here blocks the request before the action runs, for
+	// every current and future (app) route — pages, actions, and the finance/export + sentry/event
+	// endpoints (which also require enrolled 2FA). Public routes (login, 2fa, enroll-2fa, activate,
+	// reset/forgot-password, /api/auth/*) are outside (app) and pass through untouched.
+	if (event.route.id?.startsWith('/(app)')) {
+		if (!event.locals.user) {
+			return new Response(null, { status: 302, headers: { location: '/login' } });
+		}
+		if (!event.locals.user.twoFactorEnabled) {
+			return new Response(null, { status: 302, headers: { location: '/enroll-2fa' } });
+		}
+	}
+
 	const response = await svelteKitHandler({ event, resolve, auth, building });
 	setSecurityHeaders(event, response);
 	return response;

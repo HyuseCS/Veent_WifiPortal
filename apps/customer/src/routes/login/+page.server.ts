@@ -51,7 +51,18 @@ export const actions: Actions = {
 		// Already charged above — tell the auth sendOTP callback not to charge it again.
 		event.locals.otpLimitEnforced = true;
 
-		await auth.api.sendPhoneNumberOTP({ body: { phoneNumber: phone } });
+		// A slow/failing SMS gateway must not blow up into a full-page 500 — keep the guest on the
+		// form with their number intact so they can retry. (The send itself is timeout-bounded in
+		// $lib/server/otp, so this can't hang either.)
+		try {
+			await auth.api.sendPhoneNumberOTP({ body: { phoneNumber: phone } });
+		} catch (error) {
+			console.warn('[login] OTP send failed:', error instanceof Error ? error.message : error);
+			return fail(502, {
+				phone: phoneRaw,
+				message: "We couldn't send your code right now. Please try again in a moment."
+			});
+		}
 
 		// Stash the captive-portal device MAC alongside the pending verification, so
 		// the dashboard can grant access after verify regardless of cookie survival.

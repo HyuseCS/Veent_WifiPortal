@@ -8,7 +8,7 @@
 </script>
 
 <svelte:head>
-	<title>Veent WiFi · Guest access</title>
+	<title>Parafiber WiFi · Guest access</title>
 </svelte:head>
 
 <main class="flex min-h-screen flex-col">
@@ -31,7 +31,7 @@
 				{#if data.maskedPhone}
 					Signed in as <strong class="font-semibold text-ink">{data.maskedPhone}</strong>.
 				{/if}
-				You're connected to Veent WiFi.
+				You're connected to Parafiber WiFi.
 			</p>
 
 			<div

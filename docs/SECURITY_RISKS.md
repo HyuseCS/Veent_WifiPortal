@@ -36,6 +36,7 @@
 | R18 | `payment_transactions` double-count (webhook vs poll record under divergent ids)                                   | Medium          | ✅ Resolved                  | —     |
 | R19 | OTP-send throttle bypassable via direct `/api/auth/phone-number/send-otp`                                          | High            | ✅ Resolved                  | —     |
 | R20 | Low-severity hardening: no security headers, webhook error reflection, MAC case-drift, proxy-IP trust undocumented | Low             | ✅ Resolved                  | —     |
+| R21 | No guest client isolation on the flat `/18` hotspot VLAN (peer-to-peer attacks + access/revenue sharing)           | High            | 🔴 Open (needs decision)     | —     |
 
 Severity = impact × likelihood for _this_ app at its current scale, not generic CVSS.
 
@@ -454,6 +455,65 @@ to a phone-only cap. `otpRateLimit.ts` itself (teammate-owned) was not modified 
 **Regression tests added** to lock in earlier fixes: CSV `cell()` formula-escaping
 (`apps/admin/src/lib/server/csv.test.ts`, R17) and `recordPaymentTransaction` referenceNo dedupe
 (`apps/customer/src/lib/server/record-payment.spec.ts`, R18).
+
+---
+
+# Security audit 2026-07-03 (R21)
+
+## R21 — No guest client isolation on the flat hotspot VLAN 🔴 Open (needs decision)
+
+**Risk (High):** every guest sits on one flat `/18` guest VLAN with **no client isolation**, so
+devices can reach each other directly — the hotspot gates _internet_ (routed/forward traffic for
+un-authed MACs), not _intra-LAN_ traffic. Confirmed both by config and by an active test.
+
+Evidence (live router `10.210.0.1`, probed 2026-07-03):
+
+- Guest subnet `10.210.0.1/18` on `vlan70 hotspot` — ~16k hosts in **one L2/broadcast domain**.
+- The router has **no wireless interfaces and no bridge** — the WiFi radios are separate downstream
+  APs, so this router cannot enforce wireless client-isolation or bridge-port horizon; that has to
+  happen on the APs.
+- Forward chain carries only the two default hotspot `!auth` jumps — **no guest-to-guest drop rule**.
+- No isolation is provisioned in code: `apps/admin/scripts/setup-router.ts` only does the walled
+  garden + API lockdown; `mikrotik.ts` only writes ip-bindings, queues, walled-garden, and
+  `/ip/service`. (This risk was already flagged as a deferred idea in the R11 discussion above.)
+- **Active proof:** from a guest client (`10.210.63.17`) other guests answered
+  (`10.210.62.204`, `10.210.63.15`) and their real device MACs resolved via ARP
+  (`10.210.63.15 → e4:67:1e:b6:fc:60`). Some peers resolved to the gateway MAC
+  (`48:8f:5a:6a:ce:de`) — hotspot proxy-ARP, meaning that cross-AP peer traffic _does_ route
+  through the MikroTik and is therefore filterable there; same-AP peer traffic is pure L2 and is
+  only stoppable on the AP.
+
+**Two attacks:**
+
+1. **Guest-to-guest, on an open SSID.** Any device can scan/attack other guests' phones and do
+   ARP-spoof → MITM → **sidejack the portal session cookie** (plain HTTP on the LAN — see the
+   sidejacking note in `docs/mikrotik/login.html:14-24` and R20). 16k hosts, one broadcast domain,
+   zero trust between them.
+2. **Access / revenue sharing.** A paid/bypassed device can run a tether/SOCKS proxy; unpaid peers
+   reach it at L2 and route out through its bypass — the hotspot only sees the paid MAC, so it's
+   allowed. This **compounds R12** (client-supplied MAC trusted on grant): binding a sniffed MAC is
+   already possible; open peer reachability makes sharing trivial.
+
+**Constraint that shapes the fix:** the portal is currently served from a _peer client_ (a LAN box,
+e.g. the dev host the walled garden points trapped devices to — `docs/mikrotik/login.html:11-12`).
+Blanket isolation would break that reach path, so the portal should move to the **gateway**
+(`10.210.0.1`, already an allowed option per `docs/mikrotik/admin-lan-access.md`) before isolation
+is turned on.
+
+**Remediation ladder (infra, not app code):**
+
+1. **AP-level client isolation** — enable "client/AP isolation" / "guest mode" on the actual APs.
+   Primary fix; the only thing that stops _same-AP_ L2 peer traffic (the router can't see it).
+2. **Router forward-chain drop for intra-hotspot traffic** — catches _cross-AP_ traffic (which
+   proxy-ARP routes through the MikroTik). Scope it to allow client→gateway, client→walled-garden,
+   and client→internet, dropping only guest↔guest.
+3. **Serve the portal from the gateway**, not a peer client, so (1)/(2) don't break portal reach.
+4. **HTTPS on the portal** removes the sidejacking payoff regardless of isolation (see login.html).
+5. Consider **smaller per-AP subnets/VLANs** instead of one flat `/18`.
+
+**Not verifiable from the repo/router:** the APs' own client-isolation setting (separate devices).
+But the router enforces none and peers are reachable _right now_, so at minimum cross-AP isolation
+is off. Needs an owner decision on how far to take the ladder before production.
 
 ---
 

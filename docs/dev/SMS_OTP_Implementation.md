@@ -39,18 +39,37 @@ Set these in `apps/customer/.env` (documented in `.env.example`):
 
 All three are required to send.
 
+## Choosing the provider (iTexMo vs UniSMS)
+
+`SMS_PROVIDER` selects the gateway — `itexmo` (default) or `unisms` — so you can switch between
+them with no code change (e.g. depending on which SMS account is approved first). Only the selected
+provider's config is read. UniSMS config (when `SMS_PROVIDER=unisms`):
+
+| Env var | Required | Notes |
+| --- | --- | --- |
+| `UNISMS_SECRET_KEY` | yes | API secret key (`sk_…`); sent as the Basic-auth username with an empty password. |
+| `UNISMS_SENDER_ID` | yes | UniSMS requires a sender id on every message. |
+
+UniSMS (`POST unismsapi.com/api/sms`) takes the recipient in **E.164** (`+63…`, which
+`normalizePhone` already produces); iTexMo takes the **local** `09…` form. The fail-safe and 10s
+timeout behavior below applies to whichever provider is active.
+
 ## Behavior when not configured
 
 `sendOtp` is deliberately fail-safe-by-environment:
 
-- **Dev** (any credential missing): prints `[otp] iTexMo not configured — code for
+- **Dev** (any credential missing): prints `[otp] <provider> not configured — code for
   <phone>: <code>` to the server console, so you can keep logging in locally.
 - **Production** (any credential missing): **throws**. An OTP that can't be delivered
   must never be treated as "sent" — silently swallowing it would let anyone past the
   login with no code. Failing loudly forces the deployment to be configured first.
 
-Failures are surfaced two ways: a non-OK HTTP status throws with the response body,
-and an API-level rejection (`{ "Error": true, "Message": … }`) throws with the message.
+Failures are surfaced three ways: a non-OK HTTP status throws with the response body,
+an API-level rejection (`{ "Error": true, "Message": … }`) throws with the message, and a
+timeout / connection failure throws too — the send is bounded by a 10s `AbortSignal.timeout`
+so a slow or unreachable gateway can't hang the login request. (The login action catches all of
+these and re-renders the form with an inline "try again" instead of a 500 — see
+`apps/customer/src/routes/login/+page.server.ts`.)
 
 > ⚠️ `ponytail:` the success/failure response shape is taken as `{ Error: boolean,
 > Message?: string }`. Confirm the exact field in the iTexMo dashboard/docs before

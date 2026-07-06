@@ -18,6 +18,9 @@
 		"loadtest:cleanup": "bun loadtest/cleanup.ts"
 	},
 	"dependencies": {
+		"@fontsource/jetbrains-mono": "^5.2.8",
+		"@fontsource/montserrat": "^5.2.8",
+		"@fontsource/plus-jakarta-sans": "^5.2.8",
 		"@sentry/sveltekit": "^10.62.0",
 		"@veent/core": "workspace:*",
 		"@veent/db": "workspace:*",

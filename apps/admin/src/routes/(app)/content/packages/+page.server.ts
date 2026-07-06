@@ -64,11 +64,23 @@ function parsePackage(form: FormData): { input: PackageInput } | { error: string
 	if (type === 'bundle' && (fiatCost == null || creditsProvided == null)) {
 		return { error: 'A bundle needs a peso price and the credits it provides.' };
 	}
-	if (type === 'tier' && (creditCost == null || pointsCost == null || durationMinutes == null)) {
-		return { error: 'A tier needs a credit cost, a points cost, and a duration (minutes).' };
+	if (type === 'tier') {
+		if (creditCost == null || pointsCost == null || durationMinutes == null) {
+			return { error: 'A tier needs a credit cost, a points cost, and a duration (minutes).' };
+		}
+		// Zero is saveable by `num` (>= 0) but unbuyable: `spend*Tx` rejects a non-positive amount,
+		// which the buy action can only surface as a misleading "grant failed" 502. Require > 0.
+		if (creditCost <= 0 || pointsCost <= 0 || durationMinutes <= 0) {
+			return { error: 'A tier’s credit cost, points cost, and duration must be greater than zero.' };
+		}
 	}
-	if (type === 'free' && durationMinutes == null) {
-		return { error: 'Free Time needs a duration (minutes).' };
+	if (type === 'free') {
+		if (durationMinutes == null) {
+			return { error: 'Free Time needs a duration (minutes).' };
+		}
+		if (durationMinutes <= 0) {
+			return { error: 'Free Time’s duration must be greater than zero.' };
+		}
 	}
 
 	const int = (v: number | null) => (v == null ? null : Math.trunc(v));

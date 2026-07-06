@@ -232,6 +232,19 @@
 	     is desktop-only — on mobile the map/log are gone, so let this shrink to content and the
 	     access points pull up right under it instead of sitting a screen-height below. -->
 	<div class="snap-start space-y-5 pt-5 pb-5 md:min-h-full">
+		{#if data.outagePausedGuests > 0}
+			<div class="flex items-center gap-3 rounded-xl border border-warning/30 bg-warning/10 px-4 py-3">
+				<TriangleAlert class="h-5 w-5 shrink-0 text-warning" aria-hidden="true" />
+				<p class="text-sm">
+					<span class="font-semibold text-ink">Outage auto-pause active.</span>
+					<span class="text-muted">
+						{data.outagePausedGuests}
+						{data.outagePausedGuests === 1 ? 'guest is' : 'guests are'} auto-paused — their paid time
+						is frozen and resumes automatically when their AP recovers.
+					</span>
+				</p>
+			</div>
+		{/if}
 		<!-- KPI STRIP -->
 		<KpiCarousel items={kpis}>
 			{#snippet card(k)}

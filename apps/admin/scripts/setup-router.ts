@@ -133,15 +133,31 @@ const PAYMENT_HOSTS = [
  *                                     explicit deny documents intent and covers a manual allow).
  *   - www.google.com PATH /generate_204 — www.google.com IS needed by reCAPTCHA, so deny only the
  *                                     probe PATH (HTTP-only match; reCAPTCHA uses /recaptcha, not this).
+ *
+ * Apple / Windows / Firefox probe hosts are added below too. Unlike the Google set, these aren't
+ * covered by any allow, so they're already intercepted by default — but the explicit deny keeps
+ * the OS "Sign in to network" popup firing even if someone later adds a broad allow (e.g.
+ * `*.apple.com`), documents intent, and gives every platform the same treatment. None are reCAPTCHA
+ * or payment resources, so denying them is pure upside:
+ *   - captive.apple.com          — iOS/iPadOS/macOS CNA probe (http://captive.apple.com/hotspot-detect.html).
+ *   - www.msftconnecttest.com    — Windows 10/11 NCSI probe (/connecttest.txt).
+ *   - www.msftncsi.com           — legacy Windows NCSI probe.
+ *   - detectportal.firefox.com   — Firefox's own captive-portal detector.
  */
 const PROBE_DENIES = [
+	// Android / Google
 	{ host: 'connectivitycheck.gstatic.com' },
 	{ host: 'clients1.google.com' },
 	{ host: 'clients2.google.com' },
 	{ host: 'clients3.google.com' },
 	{ host: 'clients4.google.com' },
 	{ host: 'connectivitycheck.android.com' },
-	{ host: 'www.google.com', path: '/generate_204' }
+	{ host: 'www.google.com', path: '/generate_204' },
+	// Apple (iOS/macOS), Windows, Firefox
+	{ host: 'captive.apple.com' },
+	{ host: 'www.msftconnecttest.com' },
+	{ host: 'www.msftncsi.com' },
+	{ host: 'detectportal.firefox.com' }
 ];
 
 const hosts = new Set([...splitList(ADMIN_WG_HOSTS), ...PAYMENT_HOSTS]);

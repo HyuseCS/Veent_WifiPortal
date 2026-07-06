@@ -90,6 +90,10 @@
 	// Paused: the window is frozen and all devices are unbound. `expiresAt` is the FROZEN end
 	// (may be in the past), so countdown/expiry logic must ignore it and use the held remaining.
 	const paused = $derived(access.paused);
+	// Auto-paused by a network outage (vs. the guest tapping Pause). We hold their time and resume
+	// automatically when the AP recovers — so we hide the manual Resume (resuming into a live
+	// outage would just tick down time they can't use, and the sweep would re-pause them).
+	const outagePaused = $derived(paused && access.pausedReason === 'outage');
 	// The server loaded the window as live (expiresAt > now at load). Once the live
 	// ticker crosses expiresAt, flip to the "ended" frame locally — the real access
 	// cut-off is enforced server-side by the revoke cron, so this is cosmetic. Never while paused.
@@ -157,25 +161,80 @@
 	};
 
 	let buying = $state(false);
+
+	// Undo window for an accidental Confirm. A user tap NEVER charges — it cancels the POST and arms
+	// a short countdown (nothing has hit the server yet). Only when the countdown elapses does the
+	// timer set `confirming` and resubmit; that one submission is the sole path that runs the atomic
+	// spend+grant. The latch is reliable now that the confirm button isn't disabled during the
+	// countdown, so `requestSubmit()` always fires and always consumes the latch. Cancelling or
+	// dismissing the sheet aborts with no charge. Pre-hydration the native form posts immediately
+	// (enhance inactive) — the CSS-only sheet keeps working, just without the undo nicety.
+	const UNDO_SECONDS = 3;
+	let armed = $state<{ id: number; left: number } | null>(null);
+	let confirming = false; // set true ONLY for the timer's programmatic resubmit
+	let armTimer: ReturnType<typeof setInterval> | null = null;
+	const clearArmTimer = () => {
+		if (armTimer) {
+			clearInterval(armTimer);
+			armTimer = null;
+		}
+	};
+	const cancelArmed = () => {
+		clearArmTimer();
+		armed = null;
+		confirming = false;
+	};
+	$effect(() => () => clearArmTimer()); // stop the countdown if the page unmounts mid-window
+
 	const confirmBuy = (): SubmitFunction => {
-		return () => {
-			buying = true;
-			return async ({ result, update }) => {
-				if (result.type === 'success') {
-					// Hard reload so the new connected state shows immediately. The in-place `update()`
-					// returns correct data (verified) but the live-backed view doesn't reliably
-					// re-render it — the page would otherwise look stuck for ~a minute until the SSE
-					// pushes. A full reload matches the manual refresh that always works.
-					location.reload();
-					return;
+		return ({ cancel, formElement, formData }) => {
+			// The countdown's programmatic resubmit set `confirming` → run the real charge.
+			if (confirming) {
+				confirming = false;
+				armed = null;
+				buying = true;
+				return async ({ result, update }) => {
+					if (result.type === 'success') {
+						// Hard reload so the new connected state shows immediately. The in-place `update()`
+						// returns correct data (verified) but the live-backed view doesn't reliably
+						// re-render it — the page would otherwise look stuck for ~a minute until the SSE
+						// pushes. A full reload matches the manual refresh that always works.
+						location.reload();
+						return;
+					}
+					if (result.type === 'failure') {
+						toasts.show('Could not start that tier. Please try again.', 'error');
+					}
+					await update();
+					resetAccountLive();
+					buying = false;
+				};
+			}
+			// User tap → never charge directly. Cancel the POST and (re)arm the undo countdown.
+			cancel();
+			// The app.html capture-phase script set data-pending='' on this submit (pre-hydration
+			// spinner). Arming keeps `buying` false, so Svelte's data-pending binding never changes and
+			// won't clear it — leaving the spinner stuck under "Starting in…". Clear it explicitly here.
+			formElement.removeAttribute('data-pending');
+			const id = Number(formData.get('packageId'));
+			if (armed?.id === id) return; // already counting down for this tier — ignore extra taps
+			clearArmTimer();
+			armed = { id, left: UNDO_SECONDS };
+			armTimer = setInterval(() => {
+				if (!armed) return clearArmTimer();
+				// Dismissing the sheet (Cancel / backdrop) unchecks this tier's radio via CSS AND fires
+				// the off-radio's onchange (→ cancelArmed). This is a backstop for the tier-switch case
+				// (opening another tier doesn't fire that onchange).
+				const sheet = document.getElementById(`buysheet-${armed.id}`) as HTMLInputElement | null;
+				if (!sheet?.checked) return cancelArmed();
+				if (armed.left <= 1) {
+					clearArmTimer();
+					confirming = true;
+					formElement.requestSubmit(); // → confirming is true → charges via the branch above
+				} else {
+					armed = { id: armed.id, left: armed.left - 1 };
 				}
-				if (result.type === 'failure') {
-					toasts.show('Could not start that tier. Please try again.', 'error');
-				}
-				await update();
-				resetAccountLive();
-				buying = false;
-			};
+			}, 1000);
 		};
 	};
 
@@ -204,7 +263,7 @@
 </script>
 
 <svelte:head>
-	<title>Dashboard · Veent WiFi</title>
+	<title>Dashboard · Parafiber WiFi</title>
 </svelte:head>
 
 <main class="flex min-h-screen flex-col lg:bg-surface">
@@ -214,7 +273,10 @@
 			<img src={logo} alt="parafiber by parasat logo" class="h-8 w-auto lg:h-[30px]" />
 			<div class="flex items-center gap-3 lg:gap-[18px]">
 				<!-- live online/offline status (this device) -->
-				<span class="flex items-center gap-1.5">
+				<span
+					class="flex items-center gap-1.5"
+					title="This device's live connection to the WiFi"
+				>
 					{#if thisOnline}
 						<span class="h-2 w-2 rounded-full bg-online/80"></span>
 						<span class="text-xs font-medium opacity-90 lg:text-[13px]">Online</span>
@@ -224,7 +286,10 @@
 					{/if}
 				</span>
 				<!-- desktop balance pill -->
-				<span class="hidden items-baseline gap-2 rounded-full bg-white/15 px-[15px] py-2 lg:flex">
+				<span
+					class="hidden items-baseline gap-2 rounded-full bg-white/15 px-[15px] py-2 lg:flex"
+					title="Prepaid credits — spend these on access tiers"
+				>
 					<span class="text-xs font-medium text-white/80">Balance</span>
 					<span class="font-mono text-[15px] font-semibold">{balance} credits</span>
 				</span>
@@ -236,15 +301,24 @@
 					<Icon name="star" size={13} class="text-points self-center" />
 					<span class="font-mono text-[15px] font-semibold">{points} pts</span>
 				</span>
-				<!-- desktop sign out -->
-				<form method="post" action="?/signOut" use:enhance={signOut} class="hidden lg:block">
-					<button
-						aria-label="Sign out"
-						class="flex h-[34px] w-[34px] items-center justify-center rounded-full bg-white/15 text-white/80 transition-colors hover:bg-white/25 hover:text-white hover:cursor-pointer"
-					>
-						<Icon name="log-out" size={17} />
-					</button>
-				</form>
+				<!-- Help & FAQ (both breakpoints — the header cluster is always visible) -->
+				<a
+					href={resolve('/faq')}
+					aria-label="Help & FAQ"
+					title="Help & FAQ"
+					class="flex h-[34px] w-[34px] items-center justify-center rounded-full bg-white/15 text-white/80 transition-colors hover:bg-white/25 hover:text-white hover:cursor-pointer"
+				>
+					<Icon name="help-circle" size={17} />
+				</a>
+				<!-- desktop sign out — opens the confirm dialog (CSS peer, below) -->
+				<label
+					for="signout-confirm"
+					aria-label="Sign out"
+					title="Sign out"
+					class="hidden h-[34px] w-[34px] items-center justify-center rounded-full bg-white/15 text-white/80 transition-colors hover:bg-white/25 hover:text-white hover:cursor-pointer lg:flex"
+				>
+					<Icon name="log-out" size={17} />
+				</label>
 			</div>
 		</div>
 
@@ -432,7 +506,7 @@
 												<span
 													class="rounded-full bg-warning px-2 py-[3px] text-[10px] font-semibold tracking-wide text-white uppercase"
 												>
-													Paused
+													{outagePaused ? 'Outage' : 'Paused'}
 												</span>
 											{:else}
 												<span
@@ -444,7 +518,9 @@
 										</div>
 										{#if paused}
 											<div class="text-xs font-medium text-warning lg:text-[13.5px]">
-												Time held — resume anytime
+												{outagePaused
+													? 'Network outage — your time is safe'
+													: 'Time held — resume anytime'}
 											</div>
 										{:else}
 											<div
@@ -484,7 +560,16 @@
 							{/if}
 
 							<!-- Pause is paid-only; Free Time can't be paused (it would game the cooldown). -->
-							{#if paused}
+							{#if outagePaused}
+								<!-- Auto-paused by an outage: no manual Resume — we reconnect automatically when
+								     the network is back (resuming into a live outage would just burn held time). -->
+								<div
+									class="mt-4 flex items-center justify-center gap-2 rounded-xl border border-warning/30 bg-warning/10 px-4 py-3 text-center text-[12.5px] font-medium text-warning"
+								>
+									<Icon name="clock" size={15} />
+									We'll reconnect you automatically when the network is back.
+								</div>
+							{:else if paused}
 								<form method="post" action="?/resumeAccess" use:enhance={resumeTime}>
 									<button
 										class="mt-4 flex h-[50px] w-full items-center justify-center gap-2 rounded-xl bg-cta text-[15px] font-bold text-white transition-colors hover:bg-cta-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cta hover:cursor-pointer"
@@ -594,12 +679,17 @@
 							spend credits{:else}Buy access — spend credits{/if}
 					</div>
 					<section class="mb-6 flex flex-col gap-2.5">
-						<!-- Off-state for the buy-sheet radio group: checked = no sheet open. -->
+						<!-- Off-state for the buy-sheet radio group: checked = no sheet open. Dismissing any
+						sheet (Cancel / backdrop = a `<label for="buysheet-none">`) checks this radio, firing
+						`change` — which immediately aborts an armed buy countdown so reopening a tier shows a
+						fresh "Confirm" (no stuck "Starting in…"). Handler lives on the radio, not the labels,
+						so it stays keyboard-a11y clean. -->
 						<input
 							type="radio"
 							name="buy-sheet"
 							id="buysheet-none"
 							checked
+							onchange={cancelArmed}
 							class="sr-only"
 							aria-hidden="true"
 							tabindex="-1"
@@ -688,6 +778,7 @@
 												<input type="hidden" name="packageId" value={tier.id} />
 												<input type="hidden" name="currency" value="credits" />
 												<button
+													type="submit"
 													disabled={!hasMac || buying || !ok}
 													class="flex h-[52px] w-full items-center justify-center gap-2 rounded-xl bg-cta text-base font-bold text-white transition-colors hover:bg-cta-hover hover:cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 group-data-[pending]:pointer-events-none group-data-[pending]:opacity-70"
 												>
@@ -695,7 +786,13 @@
 														class="hidden h-[18px] w-[18px] animate-spin rounded-full border-[2.5px] border-white/40 border-t-white group-data-[pending]:inline-block"
 														aria-hidden="true"
 													></span>
-													{ok ? `Spend ${tier.creditCost} cr` : `Need ${tier.creditCost} cr`}
+													{#if armed?.id === tier.id}
+														Starting in {armed?.left}…
+													{:else if ok}
+														Confirm — spend {tier.creditCost} cr
+													{:else}
+														Need {tier.creditCost} cr
+													{/if}
 												</button>
 											</form>
 
@@ -733,7 +830,7 @@
 												for="buysheet-none"
 												class="mt-1 flex h-11 w-full cursor-pointer items-center justify-center text-[13px] font-semibold text-muted hover:text-ink"
 											>
-												Cancel
+												{armed?.id === tier.id ? 'Cancel — no charge' : 'Cancel'}
 											</label>
 										{:else}
 											<div class="mb-3 flex items-center gap-3">
@@ -800,14 +897,13 @@
 							<Icon name="plus" size={17} />
 							Top up
 						</a>
-						<form method="post" action="?/signOut" use:enhance={signOut} class="flex-1">
-							<button
-								class="flex h-12 w-full items-center justify-center gap-1.5 rounded-xl border border-border bg-bg text-sm font-semibold text-muted transition-colors hover:text-ink hover:cursor-pointer"
-							>
-								<Icon name="log-out" size={17} />
-								Sign out
-							</button>
-						</form>
+						<label
+							for="signout-confirm"
+							class="flex h-12 flex-1 items-center justify-center gap-1.5 rounded-xl border border-border bg-bg text-sm font-semibold text-muted transition-colors hover:cursor-pointer hover:text-ink"
+						>
+							<Icon name="log-out" size={17} />
+							Sign out
+						</label>
 					</div>
 
 					{#if data.handoffUrl}
@@ -835,4 +931,58 @@
 		{/if}
 	</div>
 
+	<!-- Sign-out confirmation. CSS-only (peer-checked) like the buy sheet, so it works before
+	hydration; the actual POST /signOut form lives inside and still submits without JS. Both the
+	app-bar and mobile Sign out controls are <label for="signout-confirm"> that toggle this. -->
+	<input type="checkbox" id="signout-confirm" class="peer sr-only" />
+	<div
+		role="dialog"
+		aria-modal="true"
+		aria-label="Confirm sign out"
+		class="pointer-events-none invisible fixed inset-0 z-50 flex items-end justify-center opacity-0 transition-[opacity,visibility] duration-200 peer-checked:pointer-events-auto peer-checked:visible peer-checked:opacity-100 lg:items-center"
+	>
+		<label for="signout-confirm" aria-label="Cancel" class="absolute inset-0 cursor-default bg-ink/40"
+		></label>
+		<div
+			class="relative z-10 w-full max-w-sm rounded-t-3xl bg-bg px-5 pt-5 pb-6 shadow-[0_-8px_30px_rgba(0,0,0,0.16)] lg:rounded-3xl lg:p-7"
+		>
+			<div class="mx-auto mb-[18px] h-1 w-9 rounded bg-border lg:hidden"></div>
+			<div class="mb-4 flex items-center gap-3">
+				<div class="flex h-[42px] w-[42px] items-center justify-center rounded-xl bg-brand-tint">
+					<Icon name="log-out" size={22} class="text-brand" />
+				</div>
+				<div>
+					<div class="text-[17px] font-bold text-ink">Sign out?</div>
+					<div class="text-[12.5px] font-medium text-muted">
+						You'll need to verify your number again to get back in.
+					</div>
+				</div>
+			</div>
+			<div class="flex gap-2.5">
+				<label
+					for="signout-confirm"
+					class="flex h-[52px] flex-1 items-center justify-center rounded-xl border border-border bg-surface text-[15px] font-semibold text-muted transition-colors hover:cursor-pointer hover:text-ink"
+				>
+					Cancel
+				</label>
+				<form
+					method="post"
+					action="?/signOut"
+					use:enhance={signOut}
+					class="group flex-1"
+					data-pending-form
+				>
+					<button
+						class="flex h-[52px] w-full items-center justify-center gap-2 rounded-xl bg-blocked text-[15px] font-bold text-white transition-colors hover:cursor-pointer group-data-[pending]:pointer-events-none group-data-[pending]:opacity-70"
+					>
+						<span
+							class="hidden h-[18px] w-[18px] animate-spin rounded-full border-[2.5px] border-white/40 border-t-white group-data-[pending]:inline-block"
+							aria-hidden="true"
+						></span>
+						Sign out
+					</button>
+				</form>
+			</div>
+		</div>
+	</div>
 </main>

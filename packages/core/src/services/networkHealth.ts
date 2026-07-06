@@ -1,4 +1,4 @@
-import { and, eq, isNull, notInArray } from 'drizzle-orm';
+import { and, eq, isNull, notInArray, sql } from 'drizzle-orm';
 import { type DB, networkHealth } from '@veent/db';
 import type { NetworkController } from '../integrations/network';
 
@@ -22,20 +22,45 @@ export async function refreshNetworkHealth(
 	const now = new Date();
 
 	for (const s of samples) {
+		// "Serving" folds LINK state together with WAN reachability: an AP with a live radio but a dead
+		// uplink isn't actually serving guests, so the outage debounce must treat it as down. `online`
+		// stays the raw link state (admin display); `wan_ok` is the shared uplink-probe result. Absent
+		// probe (stub/older sample) → assume reachable, so a missing signal never fabricates an outage.
+		const wanOk = s.wanReachable ?? true;
+		const serving = s.online && wanOk;
 		const vals = {
 			online: s.online,
+			wanOk,
 			users: s.users,
 			throughputMbps: s.throughputMbps,
 			uptimePct: s.online ? '100.00' : '0.00',
 			latencyMs: s.latencyMs ?? null,
-			lastSampleAt: now
+			lastSampleAt: now,
+			// New-row value (no conflict): a freshly-seen AP is "down since now" / "up since now".
+			offlineSince: serving ? null : now,
+			onlineSince: serving ? now : null
 		};
+		// offline_since/online_since track the SERVING transition (link AND uplink), not just link, so
+		// a WAN outage on an up-link AP still starts the pause debounce. The SET expression reads the
+		// pre-update (existing) row's online+wan_ok; the JS `serving` decides which branch is written.
+		// COALESCE backfills a row that was already not-serving / already-serving but carried no stamp
+		// (seeded/legacy, or predating this feature) so the sweep's non-NULL requirement is satisfied.
+		const wasServing = sql`(${networkHealth.online} = true AND ${networkHealth.wanOk} = true)`;
+		const offlineSinceOnUpdate = serving
+			? sql`NULL`
+			: sql`CASE WHEN ${wasServing} THEN ${now} ELSE COALESCE(${networkHealth.offlineSince}, ${now}) END`;
+		const onlineSinceOnUpdate = serving
+			? sql`CASE WHEN NOT ${wasServing} THEN ${now} ELSE COALESCE(${networkHealth.onlineSince}, ${now}) END`
+			: sql`NULL`;
 		// Upsert on the unique `name`: one round-trip, and two concurrent sweeps can't create
 		// duplicate rows for the same AP (the select-then-insert this replaced could).
 		await db
 			.insert(networkHealth)
 			.values({ name: s.name, ...vals })
-			.onConflictDoUpdate({ target: networkHealth.name, set: vals });
+			.onConflictDoUpdate({
+				target: networkHealth.name,
+				set: { ...vals, offlineSince: offlineSinceOnUpdate, onlineSince: onlineSinceOnUpdate }
+			});
 	}
 
 	// Drop auto-discovered rows the router didn't report this round (e.g. the seeded
