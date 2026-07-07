@@ -23,7 +23,9 @@
 	const navPath = $derived(navigating.to?.url.pathname ?? page.url.pathname);
 
 	const title = $derived(
-		nav.find((n) => navPath === n.href || navPath.startsWith(n.href + '/'))?.label ?? 'Admin'
+		navPath.startsWith('/profile')
+			? 'Profile settings'
+			: (nav.find((n) => navPath === n.href || navPath.startsWith(n.href + '/'))?.label ?? 'Admin')
 	);
 
 	// One-line context per section — purely descriptive header copy (no data).
@@ -35,7 +37,8 @@
 		'/finance': 'Settled revenue & payments',
 		'/content': 'Packages, FAQ & session limits',
 		'/staff': 'Admin access management',
-		'/sentry': 'Error monitoring'
+		'/sentry': 'Error monitoring',
+		'/profile': 'Your account & security'
 	};
 	const subtitle = $derived(
 		subtitles[

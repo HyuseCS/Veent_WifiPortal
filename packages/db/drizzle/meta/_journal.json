@@ -267,6 +267,13 @@
       "when": 1783324745944,
       "tag": "0037_condemned_ronan",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1783391759470,
+      "tag": "0038_motionless_ultragirl",
+      "breakpoints": true
     }
   ]
 }
