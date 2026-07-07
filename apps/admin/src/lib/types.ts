@@ -146,10 +146,11 @@ export interface AdminUserRow {
 /**
  * Access level of an admin-side staff member.
  * `owner` holds full control and is never disabled or removed. Everyone provisioned
- * by the owner starts as an `admin`; an active admin can be promoted to `owner`.
+ * by the owner starts as an `admin`; an active admin can be promoted to `owner`, or
+ * granted `system_admin` (manages Issues + Content, but not Staff).
  * Role *values* are DB-driven (admin_role); this union names the ones with behaviour.
  */
-export type StaffRole = 'owner' | 'admin';
+export type StaffRole = 'owner' | 'system_admin' | 'admin';
 
 /**
  * Lifecycle state of a staff member.

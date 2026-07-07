@@ -1,6 +1,6 @@
 import { fail, type RequestEvent } from '@sveltejs/kit';
 import { db } from '$lib/server/db';
-import { requireOwner as ownerGate } from '$lib/server/auth-guard';
+import { requireManager as managerGate } from '$lib/server/auth-guard';
 import { verifyStepUp } from '$lib/server/step-up';
 import {
 	listFaqs,
@@ -12,12 +12,12 @@ import {
 } from '$lib/server/faq';
 import type { Actions, PageServerLoad } from './$types';
 
-// Section-level owner gate lives in content/+layout.server.ts; loads inherit it. Actions
-// re-assert owner per-handler (loads don't run on form POSTs).
+// Section-level manager gate lives in content/+layout.server.ts; loads inherit it. Actions
+// re-assert the role per-handler (loads don't run on form POSTs).
 export const load: PageServerLoad = async () => ({ faqs: await listFaqs(db) });
 
-const requireOwner = (userId: string | undefined) =>
-	ownerGate(userId, 'Only the owner can manage content.');
+const requireManager = (userId: string | undefined) =>
+	managerGate(userId, 'You do not have permission to manage content.');
 
 function parseFaq(form: FormData): { input: FaqInput } | { error: string } {
 	const question = String(form.get('question') ?? '').trim();
@@ -49,7 +49,7 @@ const stepUp = (event: RequestEvent, code: FormDataEntryValue | null, action: st
 
 export const actions: Actions = {
 	create: async (event) => {
-		const denied = await requireOwner(event.locals.user?.id);
+		const denied = await requireManager(event.locals.user?.id);
 		if (denied) return denied;
 		const form = await event.request.formData();
 		const parsed = parseFaq(form);
@@ -61,7 +61,7 @@ export const actions: Actions = {
 	},
 
 	update: async (event) => {
-		const denied = await requireOwner(event.locals.user?.id);
+		const denied = await requireManager(event.locals.user?.id);
 		if (denied) return denied;
 		const form = await event.request.formData();
 		const id = faqId(form);
@@ -75,7 +75,7 @@ export const actions: Actions = {
 	},
 
 	togglePublished: async (event) => {
-		const denied = await requireOwner(event.locals.user?.id);
+		const denied = await requireManager(event.locals.user?.id);
 		if (denied) return denied;
 		const form = await event.request.formData();
 		const id = faqId(form);
@@ -87,7 +87,7 @@ export const actions: Actions = {
 	},
 
 	remove: async (event) => {
-		const denied = await requireOwner(event.locals.user?.id);
+		const denied = await requireManager(event.locals.user?.id);
 		if (denied) return denied;
 		const form = await event.request.formData();
 		const id = faqId(form);

@@ -20,3 +20,6 @@ export { default as RouterLogPanel } from './RouterLogPanel.svelte';
 export { default as RouterModelsPanel } from './RouterModelsPanel.svelte';
 export { default as WipeDialog } from './WipeDialog.svelte';
 export { default as OwnerChangePanel } from './OwnerChangePanel.svelte';
+export { default as IssuesTable } from './IssuesTable.svelte';
+export { default as IssueForm } from './IssueForm.svelte';
+export { default as MyIssuesList } from './MyIssuesList.svelte';

@@ -4,5 +4,6 @@ export * from './auth-customer';
 export * from './auth-admin';
 export * from './admin-two-factor';
 export * from './admin-owner-change';
+export * from './admin-issue';
 export * from './customer';
 export * from './admin';

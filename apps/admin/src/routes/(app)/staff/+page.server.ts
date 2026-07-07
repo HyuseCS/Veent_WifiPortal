@@ -2,6 +2,7 @@ import { error, fail, type RequestEvent } from '@sveltejs/kit';
 import { env } from '$env/dynamic/private';
 import {
 	setStaffStatus,
+	setStaffRole,
 	removeStaff,
 	promoteToOwner,
 	STAFF_ROLE,
@@ -270,6 +271,26 @@ export const actions: Actions = {
 		}
 		const changed = await setStaffStatus(db, userId, status);
 		return { ok: changed, action: 'setStatus' };
+	},
+
+	/**
+	 * Grant/revoke the `system_admin` role (Issues + Content management). Owner-only.
+	 * Scoped to `admin` ⇄ `system_admin`; the service never touches an `owner` row, so
+	 * this can't be used to demote the owner (that's the governed owner-change flow).
+	 */
+	setStaffRole: async (event) => {
+		const denied = await requireOwner(event.locals.user?.id);
+		if (denied) return denied;
+
+		const form = await event.request.formData();
+		const userId = String(form.get('userId') ?? '');
+		const role = String(form.get('role') ?? '');
+		if (!userId) return fail(400, { action: 'setStaffRole', error: 'Missing userId' });
+		if (role !== STAFF_ROLE.admin && role !== STAFF_ROLE.systemAdmin) {
+			return fail(400, { action: 'setStaffRole', error: 'Invalid role' });
+		}
+		const changed = await setStaffRole(db, userId, role);
+		return { ok: changed, action: 'setStaffRole' };
 	},
 
 	/** Permanently remove a staff member (owner protected in the service). */
