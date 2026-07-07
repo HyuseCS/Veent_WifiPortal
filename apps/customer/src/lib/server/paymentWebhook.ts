@@ -191,7 +191,8 @@ export async function handlePaymentWebhook(event: RequestEvent): Promise<Respons
 		userId: attributedUserId,
 		packageId: attributedPackageId,
 		externalTransactionId: evt.externalTransactionId,
-		amountMinor: evt.amountMinor
+		amountMinor: evt.amountMinor,
+		currency: evt.currency
 	});
 
 	// Observability: one structured line per paid event — feeds webhook success-rate tracking.

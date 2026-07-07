@@ -1,6 +1,6 @@
 import { and, eq, gt, inArray, isNull, lte, or, sql } from 'drizzle-orm';
 import { type DB, paymentCheckouts, paymentTransactions, packages } from '@veent/db';
-import { LEDGER_TYPE } from '../config';
+import { LEDGER_TYPE, SETTLEMENT_CURRENCY } from '../config';
 import type { PaymentEvent, PaymentProvider } from '../integrations/payments';
 import { addCreditsTx } from './credits';
 import { earnPointsTx } from './points';
@@ -132,7 +132,37 @@ export async function recordPaymentTransaction(
  */
 
 /** Why a credit attempt did not result in a new ledger entry (for the caller / logs). */
-export type CreditSkipReason = 'no_checkout' | 'already_settled' | 'amount_mismatch' | 'unknown_package';
+export type CreditSkipReason =
+	| 'no_checkout'
+	| 'already_settled'
+	| 'amount_mismatch'
+	| 'currency_mismatch'
+	| 'unknown_package';
+
+/**
+ * A settled-but-uncredited money mismatch (I-1). Buyer paid the gateway but the charge doesn't
+ * match the checkout (wrong amount or wrong currency), so we keep the claim to stop retries but
+ * do NOT credit. These strand funds and need manual remediation, so alert (not just log): a Sentry
+ * issue tagged area=payment scope=credit drives the refund runbook
+ * (docs/runbooks/payment-credit-mismatch.md). All fields are non-PII.
+ */
+function reportCreditMismatch(
+	reason: 'amount_mismatch' | 'currency_mismatch',
+	ctx: {
+		checkoutId: string;
+		externalTransactionId: string;
+		expectedMinor: number;
+		gotMinor: number;
+		currency: string;
+	}
+): void {
+	console.warn(`[credit] ${reason} — refusing to credit`, ctx);
+	captureHandled(new Error(`credit ${reason}`), {
+		level: 'error',
+		tags: { area: 'payment', scope: 'credit', reason },
+		extra: ctx
+	});
+}
 
 interface CreditArgs {
 	/** Match the checkout by gateway id (reconcile) or by referenceId (webhook). */
@@ -147,6 +177,11 @@ interface CreditArgs {
 	 * edited under a stale checkout) must NOT credit.
 	 */
 	amountMinor: number;
+	/**
+	 * The currency the gateway charged in. Asserted == SETTLEMENT_CURRENCY before crediting (L-3):
+	 * checkouts are PHP-only, so a non-PHP charge can't be credited even if its minor amount matches.
+	 */
+	currency: string;
 }
 
 /**
@@ -206,18 +241,28 @@ export async function creditCheckoutIfUnsettled(
 			return { credited: false, reason: exists ? 'already_settled' : 'no_checkout' };
 		}
 
-		// Amount integrity (currency is PHP-only and not stored per-checkout, so amount is the
-		// authoritative check). A GENUINE finite-but-different mismatch keeps the claim (settled) to
-		// stop retries but does NOT credit — surfaced so a spike is alertable. (A non-finite/
-		// unparseable amount is rejected BEFORE the claim, so that case stays pending.)
+		// Amount + currency integrity. A GENUINE terminal mismatch keeps the claim (settled) to stop
+		// retries but does NOT credit, and is alerted for manual remediation. This differs from the
+		// non-finite-amount case (rejected BEFORE the claim, stays `pending` -> auto-retried): that is
+		// indeterminate (we don't know what was charged), whereas a wrong-but-known amount/currency is
+		// determinate (we know it's wrong) -- re-polling reads the same value, so leaving it pending
+		// would just re-alert every pass.
 		const expectedMinor = Math.round(Number(claimed.amount) * 100);
+		const mismatchCtx = {
+			checkoutId: claimed.id,
+			externalTransactionId: args.externalTransactionId,
+			expectedMinor,
+			gotMinor: args.amountMinor,
+			currency: args.currency
+		};
+		// Currency first (L-3): a foreign-currency amount could numerically coincide with expectedMinor
+		// and slip the amount check, so reject a non-PHP settlement before comparing amounts.
+		if (args.currency.toUpperCase() !== SETTLEMENT_CURRENCY) {
+			reportCreditMismatch('currency_mismatch', mismatchCtx);
+			return { credited: false, reason: 'currency_mismatch' };
+		}
 		if (args.amountMinor !== expectedMinor) {
-			console.warn('[credit] amount mismatch — refusing to credit', {
-				checkoutId: claimed.id,
-				externalTransactionId: args.externalTransactionId,
-				expectedMinor,
-				gotMinor: args.amountMinor
-			});
+			reportCreditMismatch('amount_mismatch', mismatchCtx);
 			return { credited: false, reason: 'amount_mismatch' };
 		}
 
@@ -335,7 +380,8 @@ export async function reconcilePendingPayments(
 					userId: c.userId,
 					packageId: c.packageId,
 					externalTransactionId: evt.externalTransactionId,
-					amountMinor: evt.amountMinor
+					amountMinor: evt.amountMinor,
+					currency: evt.currency
 				});
 				if (r.credited) credited++;
 			} else if (evt.status === 'failed' || evt.status === 'cancelled') {
@@ -412,7 +458,8 @@ export async function reconcileCheckout(
 				userId: claimed.userId,
 				packageId: claimed.packageId,
 				externalTransactionId: evt.externalTransactionId,
-				amountMinor: evt.amountMinor
+				amountMinor: evt.amountMinor,
+				currency: evt.currency
 			});
 			return { credited: r.credited };
 		}

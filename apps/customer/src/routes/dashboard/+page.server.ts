@@ -15,6 +15,7 @@ import {
 } from '@veent/core';
 import { db } from '$lib/server/db';
 import { network } from '$lib/server/network';
+import { rateLimit } from '$lib/server/rateLimit';
 import { buildAccountView } from '$lib/server/account-view';
 import { resolveMacForUser } from '$lib/server/network-location';
 import { maskPhone } from '$lib/server/otp';
@@ -121,10 +122,16 @@ const MAC_RE = /^[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}$/;
 const NO_DEVICE =
 	'Could not detect your device. Reconnect through the WiFi portal and try again.';
 
+// Per-user grant throttle (L-4): the grant/bind actions share the JSON endpoint's `grant_user`
+// budget so a user can't sidestep it via the dashboard form. `bindThisDevice` in particular can
+// churn arbitrary MAC binds/unbinds against the router, so it must be throttled like the rest.
+const TOO_MANY = fail(429, { error: 'Too many requests. Please slow down and try again.' });
+
 export const actions: Actions = {
 	startFreeTime: async (event) => {
 		const user = event.locals.user;
 		if (!user) return redirect(302, '/login');
+		if (!(await rateLimit('grant_user', user.id, 20)).allowed) return TOO_MANY;
 
 		const form = await event.request.formData();
 		const mac = String(form.get('mac') ?? '') || (await resolveMacForUser(event, user.id)) || '';
@@ -149,6 +156,7 @@ export const actions: Actions = {
 	buyTier: async (event) => {
 		const user = event.locals.user;
 		if (!user) return redirect(302, '/login');
+		if (!(await rateLimit('grant_user', user.id, 20)).allowed) return TOO_MANY;
 
 		const form = await event.request.formData();
 		const mac = String(form.get('mac') ?? '') || (await resolveMacForUser(event, user.id)) || '';
@@ -205,6 +213,7 @@ export const actions: Actions = {
 	bindThisDevice: async (event) => {
 		const user = event.locals.user;
 		if (!user) return redirect(302, '/login');
+		if (!(await rateLimit('grant_user', user.id, 20)).allowed) return TOO_MANY;
 
 		const form = await event.request.formData();
 		const mac = String(form.get('mac') ?? '') || (await resolveMacForUser(event, user.id)) || '';

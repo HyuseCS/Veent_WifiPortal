@@ -26,18 +26,20 @@ A multi-agent audit was run per security dimension (authn-authz, payments, grant
 | Severity | Count |
 |----------|-------|
 | Critical | 0 |
-| High | 0 |
+| High | 1 |
 | Medium | 4 |
-| Low | 8 |
-| Info | 3 |
-| **Total confirmed / needs-context** | **15** |
+| Low | 9 |
+| Info | 4 |
+| **Total confirmed / needs-context** | **18** |
 | Refuted (appendix) | 1 |
 
 *(One finding is a `needs-context` verdict at Info severity; it is counted in the Info row above and detailed in its own section.)*
 
+> **Follow-up pass (2026-07-07).** A second read-only pass extended coverage to vectors the first pass did not reach: OTP *verification* brute-force, payment-webhook authenticity, OTP randomness, SQL injection, RouterOS command injection / SSRF, money arithmetic, concurrency double-spend, CSRF, session-cookie flags, open redirect, and admin role/IDOR. It added one **High** (H-1, OTP-verify brute-force), one **Low** (L-10, map-action privilege asymmetry), and one **Info** (I-3, admin cookie flags rely on library defaults). Everything else on that list was verified **safe** — see *Additionally Verified Safe* below.
+
 ### Key takeaways
 
-1. **No critical or high-severity vulnerabilities were confirmed.** The two most consequential defects are the customer-side grant/network-authorization gaps, both rated **medium**.
+1. **One high-severity vulnerability was confirmed on the follow-up pass:** OTP *verification* is brute-forceable (H-1) — the verify action has no throttle and its only guard, better-auth's 3-attempt counter, is a non-atomic read-check-write that a concurrency race defeats, enabling customer account takeover (session + wallet). The next most consequential defects are the customer-side grant/network-authorization gaps, both rated **medium**.
 2. **Client-supplied device MAC is trusted end-to-end (the theme of this audit).** The customer app never binds the target MAC to the caller's own device on either the JSON grant endpoint or the dashboard form actions. This underpins three distinct findings: self-funded access resale, a **remote targeted DoS** against another user's live session (cross-user router-bypass collision), and an unthrottled bind/unbind amplification path.
 3. **SMS toll-fraud is the clearest abuse-cost risk.** The OTP send limiter is keyed only per phone number (and optional MAC) with no per-IP/global cap, so one source can drain the operator's paid SMS balance across an enumerable PH mobile number space.
 4. **Rate-limit coverage is inconsistent.** The programmatic grant endpoint and webhook are throttled, but the dashboard grant actions, the top-up checkout action, and the forgot-password recipient axis are not.
@@ -47,6 +49,33 @@ A multi-agent audit was run per security dimension (authn-authz, payments, grant
 ---
 
 ## Confirmed Findings
+
+### High
+
+---
+
+#### H-1 — OTP verification is brute-forceable: no verify-side throttle, and the 3-attempt cap is a non-atomic counter defeated by a concurrency race (customer account takeover)
+
+- **File:** `apps/customer/src/routes/auth/verify/+page.server.ts:28-49`; `apps/customer/src/lib/server/auth.ts:69-100`; better-auth `phone-number/routes.mjs:281-296`
+- **Category / Dimension:** Authentication / OTP brute-force — authn-authz (follow-up pass)
+- **Corrected severity:** High
+
+**Description:** The `verify` form action calls `auth.api.verifyPhoneNumber({ body: { phoneNumber, code } })` (line 43) with **no** rate limit of any kind — only the sibling `resend` action is throttled (`enforceOtpSendLimit`, line 67). Because this is a *programmatic* `auth.api.*` call rather than an HTTP request through better-auth's router, better-auth's own HTTP rate limiter (`onRequestRateLimit`) never fires on it either. The only defense against guessing the 6-digit code (`otpLength: 6`, 1,000,000-value space, `expiresIn: 300` = 5-minute window, `auth.ts:71-73`) is the plugin's `allowedAttempts: 3` counter. That counter is implemented as a non-atomic read-modify-write: `findVerificationValue` (read), parse `attempts`, gate on `>= allowedAttempts`, then `updateVerificationValue` writing `attempts+1` on a wrong guess or `deleteVerificationValue` on cap/success (`routes.mjs:281,286-296`) — with no transaction, row lock, or atomic increment. Under Postgres read-committed, a burst of concurrent verify requests all read the same low `attempts`, all pass the `>= 3` gate, and last-writer-wins keeps the persisted counter near 1, so the cap-triggered delete rarely fires and the code survives burst after burst until it expires.
+
+**Impact:** Remote account takeover of an arbitrary **customer** account. The only precondition is initiating a login for the victim's phone number (the login identifier — attacker-suppliable), which sends one SMS and issues the attacker a `pending` cookie. The attacker then floods `POST /auth/verify?/verify` with concurrent distinct guesses; the racy counter lets far more than 3 guesses through per code, and the 5-sends/hr cap only limits *fresh* codes, not guesses-per-code. A successful match signs the attacker in as the victim (`signUpOnVerification` / session cookie set via the sveltekit plugin), yielding the victim's session and spendable `credit_balance`. Blast radius is customer-tier only (no admin/owner reach).
+
+**Evidence:**
+```
+verify/+page.server.ts:43   await auth.api.verifyPhoneNumber({ body: { phoneNumber: pending.phone, code } });  // no rateLimit / enforceOtpSendLimit — only `resend` (line 67) is throttled
+auth.ts:71-73               otpLength: 6, expiresIn: 300, allowedAttempts: 3
+routes.mjs:281-296          otp = findVerificationValue(...); [v, attempts] = otp.value.split(':');
+                            if (attempts && parseInt(attempts) >= allowedAttempts) { deleteVerificationValue(...); throw TOO_MANY_ATTEMPTS; }
+                            if (v !== code) { updateVerificationValue(otp.id, { value: `${v}:${+attempts+1}` }); throw INVALID_OTP; }   // read→check→write, non-atomic
+```
+
+**Verifier — confirmed (high confidence):** Every link verified against source. The `verify` action neither imports nor calls a throttle (grep: only `resend` calls `enforceOtpSendLimit`); the call is programmatic, so no HTTP limiter applies; the counter's read (`:281`) and write (`:293`) are separate awaited DB ops with no serialization. Sequentially the cap holds (3 wrong → code deleted; 5 codes/hr × 3 = 15 guesses/hr against 10⁶ is safe), so severity rests entirely on the race — which is genuinely winnable because nothing serializes the read-modify-write and nothing rate-limits the endpoint to blunt request volume. Rated **High** rather than medium because the outcome is full impersonation plus wallet theft (categorically worse than the medium DoS/resale/toll-fraud findings), tempered only by it being (a) probabilistic/throughput-dependent rather than single-shot and (b) confined to customer accounts. Even discounting the race, the total absence of a verify-side throttle is itself a real defect: the safe-sequential bound is owned entirely by a third-party library counter the app does not control. **Fix direction:** add an app-layer throttle to the `verify` action keyed on phone + MAC + IP (mirror `enforceOtpSendLimit`), and/or make the attempt counter atomic (`UPDATE ... WHERE split(attempts) < 3 RETURNING`, or `SELECT ... FOR UPDATE`).
+
+---
 
 ### Medium
 
@@ -325,6 +354,25 @@ await auth.api.requestPasswordReset({ body: { email, redirectTo: '/reset-passwor
 
 ---
 
+#### L-10 — Map AP-location actions are writable by any staff, while the Networks records they represent are owner-only (privilege asymmetry)
+
+- **File:** `apps/admin/src/routes/(app)/map/+page.server.ts:75-171`
+- **Category / Dimension:** Authorization / privilege asymmetry — authn-authz (follow-up pass)
+- **Corrected severity:** Low
+
+**Description:** The admin authorization model is otherwise robust: owner-only actions consistently call `requireOwner` (`auth-guard.ts`), which re-reads the role from the DB rather than trusting the session, and the `(app)` hook gates auth + 2FA before any action runs (`hooks.server.ts:83-90`). The map actions `addPlace`/`updatePlace`/`nameCluster`/`deletePlace` have **no** `requireOwner` gate, so any active staff (admin role) can create, move, rename, or delete AP-location markers — whereas the Networks records those markers represent are owner-only (`nav.ts` marks Networks/Staff/Content `ownerOnly`, but not `/map`). This appears deliberate, and impact is low: markers are display-only, `network_id` is a loose link with no FK (per the code comment), and every action is reversible.
+
+**Impact:** A non-owner staff member can alter or delete the operator's AP location map (display-only geography), a lower-trust action than the owner-gated Networks management it visually mirrors. No data loss beyond reversible marker edits; flagged as a privilege-boundary inconsistency to confirm against intent.
+
+**Evidence:**
+```
+map/+page.server.ts:75-171   addPlace / updatePlace / nameCluster / deletePlace  // no requireOwner(...) — cf. networks/staff/content actions which all call requireOwner
+```
+
+**Verifier — confirmed (high confidence):** The four map actions run under the `(app)` auth+2FA gate but call no `requireOwner`, unlike the Networks/Staff/Content/user-delete actions. Deliberate per `nav.ts` (no `ownerOnly` on `/map`) and low impact (display-only, reversible, loose `network_id`). Note the same intentional pattern for `users` block/unblock/kick/allowWifi and `sentry` resolve/ignore — those are moderation/triage actions the code documents as staff-accessible, with the destructive `users` delete/wipe correctly owner-gated. If map placement is considered network configuration, add `requireOwner`; otherwise no action needed. Low.
+
+---
+
 ### Info
 
 ---
@@ -369,6 +417,41 @@ h.set('Content-Security-Policy', "frame-ancestors 'self'");  // no script-src/st
 
 ---
 
+#### I-3 — Admin session-cookie security attributes rely on better-auth defaults rather than being pinned (parity gap)
+
+- **File:** `apps/admin/src/lib/server/auth.ts:100`
+- **Category / Dimension:** Session hardening — secrets-config-deps (follow-up pass)
+- **Corrected severity:** Info
+
+**Description:** The customer app pins its session-cookie attributes explicitly — `httpOnly: true`, `sameSite: 'lax'`, and `secure` bound to the `ORIGIN` protocol (`apps/customer/src/lib/server/auth.ts:57-67`, a documented deliberate choice). The admin app sets only `advanced: { cookiePrefix: 'radius-admin' }` and inherits better-auth's defaults. Those defaults are safe (`secure = baseURL.startsWith('https://')`, `httpOnly: true`, `sameSite: 'lax'`), so admin cookies are Secure/HttpOnly/Lax in an HTTPS deployment — but the posture is implicit and would silently follow a library default change, unlike the customer app's pinned attributes.
+
+**Impact:** No vulnerability today — the resolved attributes match the customer app's hardened baseline. Purely a robustness/parity observation: pin `defaultCookieAttributes` (and `useSecureCookies`) on the admin instance so the owner-privileged app's cookie security is explicit rather than inherited.
+
+**Evidence:**
+```
+admin auth.ts:100   advanced: { cookiePrefix: 'radius-admin' }   // no defaultCookieAttributes / useSecureCookies — cf. customer auth.ts:57-67 which pins httpOnly/sameSite/secure
+```
+
+**Verifier — confirmed (high confidence):** Admin sets only the cookie prefix; better-auth's default (`secure = baseURL.startsWith('https://')`, `httpOnly`, `sameSite: 'lax'`) yields a safe posture that matches the customer app under HTTPS. Not exploitable — a parity/robustness nit, correctly Info.
+
+---
+
+## Additionally Verified Safe (follow-up pass)
+
+The 2026-07-07 pass examined these vectors and found **no exploitable defect**; recording them so the coverage is explicit:
+
+- **Payment-webhook authenticity (SAFE):** The Maya webhook is transport-unsigned, but forging a "paid" event cannot mint credit. `verifyWebhook` reads only a payment `id` from the body and authoritatively re-fetches `GET /payments/v1/payments/{id}` with the merchant secret key (`maya.ts:203-217,320-337`), trusting that response, not the body. Attribution requires a real `payment_checkouts` row matching the 32-hex `referenceId` nonce (`paymentWebhook.ts:96-126`); crediting is an atomic claim idempotent on `externalTransactionId` (`reconcilePayments.ts:191-195`, `credits.ts:124`). The unauthenticated surface is DoS-scoped only and already has a 120/min/IP cap.
+- **OTP generation randomness (SAFE):** `generateOTP` → better-auth `generateRandomString(size, '0-9')` uses `crypto.getRandomValues` with rejection sampling (no modulo bias); no `Math.random`.
+- **SQL injection (SAFE):** Every `sql\`\`` in `packages/core` / `packages/db` binds values as Drizzle parameters (e.g. `sessions.ts:870`, `staff.ts:132`, `credits.ts`/`points.ts` arithmetic); no `sql.raw`, no interpolated `db.execute`.
+- **RouterOS command injection / SSRF (SAFE):** The binary RouterOS API (`node-routeros`) sends each attribute as a length-prefixed word, so a newline/space/`=` inside a MAC or comment cannot frame a second command (`mikrotik.ts:433-444`); request-reachable MACs are format-validated and uppercased, all comment tags are internally generated, and router host/port come only from env (`network.ts:10`) — never request-derived.
+- **Money arithmetic (SAFE):** Amounts are never client-supplied (all derive from server-side package rows); minor-unit conversion is integer-safe with NaN guards (`maya.ts:92-94`, `reconcilePayments.ts:170,213-214`); negative/zero guards exist at every spend/earn seam (`credits.ts:110,159`, `points.ts:48,96`); points-earn is floored on the validated charged amount.
+- **Concurrency / double-spend (SAFE):** Credit/points spend use conditional `UPDATE ... WHERE balance >= amount` (row-lock serialized); free-time claim uses conditional `UPDATE ... WHERE lastFreeSessionAt <= cutoff RETURNING`; paid buy runs spend+bind+grant in one transaction with `SELECT ... FOR UPDATE`; payment-credit claim is an atomic single-winner `UPDATE ... RETURNING` plus `externalTransactionId` idempotency. No check-then-write double-spend.
+- **CSRF (SAFE):** Neither app disables SvelteKit's default `checkOrigin` (no `svelte.config.js` override). The JSON grant endpoint is not CSRF-reachable — session cookie is `SameSite=Lax`, a cross-origin `application/json` POST triggers a failing CORS preflight (no CORS headers exist), and other content-types hit the default origin check.
+- **Open redirect (SAFE):** Every dynamic redirect resolves to a server-controlled value — `/dashboard` with an `encodeURIComponent`'d MAC from the signed pending cookie (`auth/verify/+page.server.ts:54`), Maya's gateway URL / same-origin `event.url.origin` success/cancel URLs (`top-up/+page.server.ts:219`), and hardcoded internal paths for the admin flows. The recent "return to own origin" change is a same-origin echo, not a user-supplied absolute URL.
+- **Cross-network IDOR (SAFE):** The model is single-operator with global `owner`/`admin` roles; networks are not scoped per-staff, so no "staff for network A reads network B" surface exists. Owner-only actions consistently call `requireOwner`, which re-reads the role from the DB.
+
+---
+
 ## Needs Runtime / Deploy Context
 
 #### NC-1 — Per-IP rate-limit keys are spoofable when ADDRESS_HEADER is enabled behind a proxy
@@ -405,11 +488,12 @@ return event.getClientAddress().replace(/^::ffff:/, '');
 
 Suggested prioritization for a follow-up remediation engagement (owner's decision — not performed here):
 
-1. **Bind the device MAC to the caller (M-1, M-2, L-1).** Resolve the caller's true device MAC server-side (portal `?mac` cookie / router IP→MAC) and reject client-supplied MACs that don't match; add cross-user collision handling so one user's unbind cannot revoke another user's shared router binding.
-2. **Add per-IP/global caps to OTP sends and a throttle to the top-up checkout action (M-3, M-4).**
-3. **Extend rate limiting to the dashboard grant actions and the forgot-password recipient axis (L-4, L-9).**
-4. **Wire the `amount_mismatch` warning to an alert and document a refund runbook (I-1).**
-5. **Harden secrets/config: enforce `BETTER_AUTH_SECRET` length/entropy, give each app a distinct secret, rotate the working-tree secrets, and treat `XFF_DEPTH` as security-critical at deploy time (L-5, L-7, NC-1).**
-6. **Housekeeping: add security headers to the locator app, scrub MAC/IP from `console.*` logs, and consider a `script-src` CSP baseline (L-6, L-8, I-2).**
+1. **Throttle and harden OTP verification (H-1) — highest priority.** Add an app-layer rate limit to the `verify` action (phone + MAC + IP, mirroring `enforceOtpSendLimit`) and/or make better-auth's attempt counter atomic so the concurrency race cannot bypass the 3-attempt cap. This is the only high-severity finding and the only confirmed account-takeover path.
+2. **Bind the device MAC to the caller (M-1, M-2, L-1).** Resolve the caller's true device MAC server-side (portal `?mac` cookie / router IP→MAC) and reject client-supplied MACs that don't match; add cross-user collision handling so one user's unbind cannot revoke another user's shared router binding.
+3. **Add per-IP/global caps to OTP sends and a throttle to the top-up checkout action (M-3, M-4).**
+4. **Extend rate limiting to the dashboard grant actions and the forgot-password recipient axis (L-4, L-9).**
+5. **Wire the `amount_mismatch` warning to an alert and document a refund runbook (I-1).**
+6. **Harden secrets/config: enforce `BETTER_AUTH_SECRET` length/entropy, give each app a distinct secret, rotate the working-tree secrets, and treat `XFF_DEPTH` as security-critical at deploy time (L-5, L-7, NC-1).**
+7. **Housekeeping: add security headers to the locator app, scrub MAC/IP from `console.*` logs, consider a `script-src` CSP baseline, confirm the map-action privilege boundary, and pin the admin cookie attributes (L-6, L-8, L-10, I-2, I-3).**
 
 All file paths cited in this report are relative to the monorepo root and were verified against the working tree on the `system-audit` branch as of 2026-07-06.

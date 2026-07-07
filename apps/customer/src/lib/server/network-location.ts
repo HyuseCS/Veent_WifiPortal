@@ -8,6 +8,19 @@ import { db } from '$lib/server/db';
 import { network } from '$lib/server/network';
 import { getDeviceMac, getPortalContext, persistResolvedMac } from '$lib/server/portal';
 
+// Device MAC and client IP are PII. observability.ts scrubs them from Sentry events, but that hook
+// doesn't touch console.* — so mask them here before they reach stdout/log files (L-8). Keep enough
+// tail/head to correlate a session without persisting the full identifier.
+function maskMac(mac: string | null | undefined): string | null {
+	if (!mac) return mac ?? null;
+	return mac.replace(/^(?:[0-9A-Fa-f]{2}:){4}/, '**:**:**:**:'); // keep the last two octets
+}
+function maskIp(ip: string | null | undefined): string | null {
+	if (!ip) return ip ?? null;
+	const v4 = ip.match(/^(\d{1,3})\.(\d{1,3})\.\d{1,3}\.\d{1,3}$/);
+	return v4 ? `${v4[1]}.${v4[2]}.*.*` : ip.replace(/[^:]+(?=:[^:]*$)/, '*'); // v4: keep /16; else mask tail
+}
+
 /**
  * Resolve the device MAC. The captive-portal redirect (`?mac=`) is preferred, but the OS
  * captive popup (CNA) is a separate browser with its own cookie jar — so the stashed MAC
@@ -35,7 +48,9 @@ export async function resolveMac(event: RequestEvent): Promise<string | null> {
 			// after the Maya hop) AND the router couldn't map this client IP → MAC. The IP it
 			// saw is the key clue — if it isn't the device's LAN IP (e.g. it's the router/NAT
 			// address, or the phone fell back to cellular so it's a WAN IP), the lookup can't win.
-			console.warn('[mac] unresolved — no portal cookie; router IP→MAC returned null', { ip });
+			console.warn('[mac] unresolved — no portal cookie; router IP→MAC returned null', {
+				ip: maskIp(ip)
+			});
 		}
 		return mac;
 	} catch (e) {
@@ -179,8 +194,8 @@ export async function resolveCheckoutNetworkId(
 			apName = null;
 		}
 		const byMac = apName ? await resolveNetworkIdByApName(db, apName) : null;
-		if (byMac !== null) return logResolved('device-mac', { mac, apName }, byMac);
-		console.warn('[topup] MAC→AP unresolved', { mac, apName });
+		if (byMac !== null) return logResolved('device-mac', { mac: maskMac(mac), apName }, byMac);
+		console.warn('[topup] MAC→AP unresolved', { mac: maskMac(mac), apName });
 	}
 
 	const [active] = await db

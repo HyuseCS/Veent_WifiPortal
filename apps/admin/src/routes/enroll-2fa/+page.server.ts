@@ -4,6 +4,7 @@ import { renderSVG } from 'uqr';
 import { auth } from '$lib/server/auth';
 import { APIError } from 'better-auth/api';
 import { isTotpCode, secretFromTotpUri } from '$lib/server/twoFactor';
+import { finishStaffSignIn } from '$lib/server/postLogin';
 import { logger } from '$lib/server/logger';
 
 const log = logger('enroll-2fa');
@@ -71,10 +72,11 @@ export const actions: Actions = {
 			return fail(400, { ...echo, message: 'Enter the 6-digit code from your app.' });
 		}
 
+		let res;
 		try {
 			// On an authenticated session with twoFactorEnabled still false, a valid code
 			// flips it true and refreshes the session. headers → reads the session cookie.
-			await auth.api.verifyTOTP({ body: { code }, headers: event.request.headers });
+			res = await auth.api.verifyTOTP({ body: { code }, headers: event.request.headers });
 		} catch (error) {
 			if (error instanceof APIError) {
 				return fail(400, { ...echo, message: 'Invalid code. Please try again.' });
@@ -82,6 +84,13 @@ export const actions: Actions = {
 			log.error('2FA verify unexpected error:', error);
 			return fail(500, { ...echo, message: 'Unexpected error' });
 		}
+
+		// A second factor is now established — this is the first-login moment where the device bypass
+		// may safely be granted (L-2: the direct-login path withheld it). Best-effort inside the gate.
+		const userId = res?.user?.id ?? event.locals.user!.id;
+		const token = res?.token ?? event.locals.session?.token;
+		const denied = await finishStaffSignIn(event, userId, token, { grantDevice: true });
+		if (denied) return denied;
 
 		return redirect(302, '/dashboard');
 	}

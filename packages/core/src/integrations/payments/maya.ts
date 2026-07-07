@@ -184,6 +184,11 @@ function toPaymentEvent(payment: MayaPayment): PaymentEvent {
 			rawAmount: payment.amount ?? null
 		});
 	}
+	// A paid payment SHOULD carry a currency; the credit path asserts it (L-3). Surface a missing one
+	// rather than let the `?? 'PHP'` default below mask it — a real Maya paid event always includes it.
+	if (status === 'paid' && !payment.currency) {
+		console.warn('[maya] paid payment has no currency — defaulting to PHP', { paymentId: payment.id });
+	}
 	return {
 		externalTransactionId: payment.id,
 		referenceId: payment.requestReferenceNumber,

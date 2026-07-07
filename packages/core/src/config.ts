@@ -6,6 +6,13 @@ export const FREE_TIME_MINUTES = 15;
 export const FREE_TIME_COOLDOWN_HOURS = 12;
 
 /**
+ * The only currency the portal settles in. Checkouts are created in PHP and `payment_checkouts`
+ * has no per-row currency column, so a non-PHP settlement can't be credited — the credit path
+ * asserts against this (L-3) and the top-up route stamps checkouts with it (single source of truth).
+ */
+export const SETTLEMENT_CURRENCY = 'PHP';
+
+/**
  * Default loyalty-points earn rate as a WHOLE-NUMBER percent of each verified top-up's peso
  * amount (10 = 10%). Admin-tunable via `app_settings.points_earn_rate`; this is the fallback
  * when the settings row/read is unavailable. Earned points are floored: floor(pesos * rate / 100).

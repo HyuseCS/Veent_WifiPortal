@@ -14,6 +14,12 @@ import { logger } from '$lib/server/logger';
 
 const log = logger('invite-email');
 
+// Pin session-cookie Secure to the ORIGIN protocol (NOT NODE_ENV), matching the customer app. In a
+// TLS deploy every admin cookie is Secure; a LAN/localhost http deploy keeps them non-Secure so the
+// dashboard still works. Better-auth's default derives the same value, but pinning it (I-3) makes the
+// owner-privileged app's cookie posture explicit rather than an inherited library default.
+const useSecureCookies = (env.ORIGIN ?? '').startsWith('https://');
+
 /**
  * Records a failed activation-email send so the invite action can roll back.
  *
@@ -97,7 +103,18 @@ export const auth = betterAuth({
 			await activateStaff(db, user.id);
 		}
 	},
-	advanced: { cookiePrefix: 'radius-admin' },
+	advanced: {
+		cookiePrefix: 'radius-admin',
+		useSecureCookies,
+		// HttpOnly + SameSite=Lax are better-auth defaults; pin them explicitly as the admin
+		// session-cookie baseline (I-3). Lax (not Strict) keeps the email activation/reset links
+		// (top-level GET navigations) able to carry the session.
+		defaultCookieAttributes: {
+			httpOnly: true,
+			sameSite: 'lax',
+			secure: useSecureCookies
+		}
+	},
 	plugins: [
 		// Mandatory TOTP second factor for staff (enrollment gate in (app)/+layout.server.ts).
 		// secret + backupCodes are stored encrypted (BETTER_AUTH_SECRET) in admin_two_factor.

@@ -10,6 +10,7 @@ import { db } from '$lib/server/db';
 import { normalizePhone } from '$lib/phone';
 import { sendOtp } from '$lib/server/otp';
 import { enforceOtpSendLimit } from '$lib/server/otpRateLimit';
+import { clientIp } from '$lib/server/rateLimit';
 import { getPortalContext } from '$lib/server/portal';
 
 // Issue 2b/C1: pin cookie `Secure` to the ORIGIN protocol (NOT NODE_ENV). With the TLS portal
@@ -93,7 +94,7 @@ export const auth = betterAuth({
 				// On a direct call there's no portal context, so this falls back to a phone-only cap.
 				const ev = getRequestEvent();
 				if (!ev.locals.otpLimitEnforced) {
-					await enforceOtpSendLimit(phone, getPortalContext(ev)?.mac);
+					await enforceOtpSendLimit(phone, getPortalContext(ev)?.mac, clientIp(ev));
 				}
 				await sendOtp(phone, code);
 			}

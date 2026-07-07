@@ -45,9 +45,9 @@ export const actions: Actions = {
 			return fail(500, { message: 'Unexpected error' });
 		}
 
-		// Session is fully established now — safe to run the shared staff gate + device grant.
-		// `res.token` is the verified session's token — keys the device MAC we persist for the bypass.
-		const denied = await finishStaffSignIn(event, res.user.id, res.token);
+		// Session is fully established now — a second factor was just proven, so grant the device
+		// bypass. `res.token` is the verified session's token — keys the device MAC we persist.
+		const denied = await finishStaffSignIn(event, res.user.id, res.token, { grantDevice: true });
 		if (denied) return denied;
 
 		return redirect(302, '/dashboard');
