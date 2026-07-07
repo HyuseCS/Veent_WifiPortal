@@ -58,7 +58,7 @@
 	 intrinsic height up to <html> (Chromium quirk), letting the WHOLE page scroll to white. Layout
 	 containment doesn't affect the shell's own sizing (max-h / flex still apply), only stops the leak. -->
 <div
-	class="flex flex-col overflow-hidden contain-layout rounded-xl border border-border bg-bg shadow-sm [&_tbody_tr]:transition-colors [&_tbody_tr]:duration-150 [&_tbody_tr:hover]:bg-surface {klass}"
+	class="flex flex-col overflow-hidden contain-layout rounded-xl border border-border bg-bg shadow-sm {klass}"
 >
 	{#if toolbar}
 		<div class="border-b border-border">{@render toolbar()}</div>
@@ -97,3 +97,17 @@
 		<div class="border-t border-border">{@render footer()}</div>
 	{/if}
 </div>
+
+<style>
+	/* Row hover highlight. Scoped here (not a Tailwind arbitrary variant) so it can use :has()
+	   to SKIP full-width placeholder rows: an empty-state or "+N more" row is a single
+	   <td colspan>, not an interactive data row, so hovering it shouldn't light up the whole
+	   band. `tr` comes from the caller's snippet, hence :global; `tbody` is ours, so the rule
+	   only reaches rows inside this shell. */
+	tbody :global(tr:not(:has(td[colspan]))) {
+		transition: background-color 150ms;
+	}
+	tbody :global(tr:not(:has(td[colspan]))):hover {
+		background-color: var(--color-surface);
+	}
+</style>
