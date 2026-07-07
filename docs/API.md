@@ -42,7 +42,8 @@ apps/admin   ──┼─→ @veent/core services ─┤
 ### `POST /api/network/grant` — start access (authenticated)
 Body `{ macAddress?: string, packageId?: number }`
 - The device MAC is resolved **server-side** (`resolveMacForUser`: portal `?mac=` → router IP→MAC →
-  durable `last_known_mac` fallbacks). `macAddress` in the body is **advisory only** — if it disagrees
+  browser-scoped `veent_device` hint → durable per-account `last_known_mac` fallback). `macAddress` in
+  the body is **advisory only** — if it disagrees
   with the resolved MAC it's logged (`scope:mac-trust`) and ignored (M-1). `400` if the device can't be
   detected. **Caveat:** the resolved MAC can still originate from the client-visible captive-portal
   `?mac=` query param (inherent to captive portals — that's how a real device's MAC reaches us), so a

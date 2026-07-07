@@ -5,13 +5,12 @@ import {
 	getAccount,
 	isValidMac,
 	startFreeAccessAndBindDevice,
-	startPaidAccessAndBindDevice,
-	captureHandled
+	startPaidAccessAndBindDevice
 } from '@veent/core';
 import { db } from '$lib/server/db';
 import { network } from '$lib/server/network';
 import { rateLimit } from '$lib/server/rateLimit';
-import { resolveMacForUser, maskMac } from '$lib/server/network-location';
+import { resolveMacTrusted } from '$lib/server/network-location';
 import { logger } from '$lib/server/logger';
 import type { RequestHandler } from './$types';
 
@@ -40,35 +39,20 @@ export const POST: RequestHandler = async (event) => {
 		macAddress?: string;
 		packageId?: number;
 	};
-	// Resolve the device MAC SERVER-SIDE — never trust `body.macAddress` (M-1/L-1). resolveMacForUser
-	// layers portal cookie → router IP→MAC → durable per-account fallbacks, so a legit caller resolves
-	// without supplying a MAC; a null result means we genuinely can't identify the device.
-	const mac = await resolveMacForUser(event, user.id);
+	// Throttle FIRST — before the expensive/side-effectful MAC resolution (router IP→MAC lookup +
+	// durable fallback persistence in resolveMacForUser) — so a client can't hammer that path or the
+	// spend→grant behind it.
+	const rl = await rateLimit('grant_user', user.id, 20);
+	if (!rl.allowed) error(429, 'Too many access requests. Please wait a moment and try again.');
+
+	// Resolve the device MAC SERVER-SIDE — never trust `body.macAddress` (M-1/L-1). resolveMacTrusted
+	// layers portal cookie → router IP→MAC → durable per-account fallbacks (so a legit caller resolves
+	// without supplying a MAC) and logs a masked tamper signal if the body MAC disagrees. A null result
+	// means we genuinely can't identify the device.
+	const mac = await resolveMacTrusted(event, user.id, body.macAddress);
 	if (!isValidMac(mac)) {
 		error(400, 'Could not detect your device. Reconnect through the WiFi portal and try again.');
 	}
-	// A body MAC that disagrees is a tamper/diagnostic signal (userId only, no raw MAC) — not fatal.
-	if (
-		body.macAddress &&
-		isValidMac(body.macAddress) &&
-		body.macAddress.toUpperCase() !== mac.toUpperCase()
-	) {
-		// Log to stdout AND Sentry (captureHandled is a no-op when Sentry is off, e.g. dev). Masked (PII).
-		console.warn('[mac-trust] posted MAC differs from server-resolved — using server', {
-			userId: user.id,
-			posted: maskMac(body.macAddress),
-			resolved: maskMac(mac)
-		});
-		captureHandled('grant endpoint MAC mismatch — using server-resolved', {
-			level: 'warning',
-			tags: { area: 'network', scope: 'mac-trust' },
-			extra: { userId: user.id }
-		});
-	}
-
-	// Throttle grant attempts per user so a client can't hammer the spend→grant path.
-	const rl = await rateLimit('grant_user', user.id, 20);
-	if (!rl.allowed) error(429, 'Too many access requests. Please wait a moment and try again.');
 
 	const account = await getAccount(db, user.id);
 	if (account?.blocked) error(403, 'Account is blocked');

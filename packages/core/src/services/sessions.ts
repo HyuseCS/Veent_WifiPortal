@@ -887,6 +887,18 @@ export async function hasLiveAccessForMac(db: DB, macAddress: string): Promise<b
  * MAC) — M-2. `bindMacTx` upserts exactly one active row per (user, MAC), so excluding by userId can't
  * hide a same-user duplicate — the exclusion is exact. Case-insensitive to match `hasLiveAccessForMac`.
  */
+/** The shared predicate behind the two "another account live on this MAC?" helpers below — keeps their
+ * live-window/exclude-user semantics identical (case-insensitive MAC, active status, unexpired window,
+ * not `excludeUserId`). Both join `customerProfile` on `userId`. */
+function liveOnMacExcludingUser(macAddress: string, excludeUserId: string) {
+	return and(
+		sql`lower(${networkSessions.macAddress}) = ${macAddress.toLowerCase()}`,
+		eq(networkSessions.status, SESSION_STATUS.active),
+		gt(customerProfile.accessExpiresAt, new Date()),
+		ne(networkSessions.userId, excludeUserId)
+	);
+}
+
 export async function hasLiveAccessForMacExcludingUser(
 	db: DB,
 	macAddress: string,
@@ -896,14 +908,7 @@ export async function hasLiveAccessForMacExcludingUser(
 		.select({ id: networkSessions.id })
 		.from(networkSessions)
 		.innerJoin(customerProfile, eq(customerProfile.userId, networkSessions.userId))
-		.where(
-			and(
-				sql`lower(${networkSessions.macAddress}) = ${macAddress.toLowerCase()}`,
-				eq(networkSessions.status, SESSION_STATUS.active),
-				gt(customerProfile.accessExpiresAt, new Date()),
-				ne(networkSessions.userId, excludeUserId)
-			)
-		)
+		.where(liveOnMacExcludingUser(macAddress, excludeUserId))
 		.limit(1);
 	return rows.length > 0;
 }
@@ -924,14 +929,7 @@ export async function otherAccountAccessUntilForMac(
 		.select({ until: customerProfile.accessExpiresAt })
 		.from(networkSessions)
 		.innerJoin(customerProfile, eq(customerProfile.userId, networkSessions.userId))
-		.where(
-			and(
-				sql`lower(${networkSessions.macAddress}) = ${macAddress.toLowerCase()}`,
-				eq(networkSessions.status, SESSION_STATUS.active),
-				gt(customerProfile.accessExpiresAt, new Date()),
-				ne(networkSessions.userId, excludeUserId)
-			)
-		)
+		.where(liveOnMacExcludingUser(macAddress, excludeUserId))
 		.orderBy(desc(customerProfile.accessExpiresAt))
 		.limit(1);
 	return row?.until ?? null;
@@ -1065,13 +1063,22 @@ export async function unbindDevice(
 		.limit(1);
 	if (!row) return { ok: false };
 
-	// Drop the router binding unless another account still holds a live window on this MAC (M-2). The DB
-	// row is marked revoked regardless (below), keeping "DB is truth".
-	if (row.macAddress) await revokeGuestUnlessShared(db, network, row.macAddress, input.userId);
+	// DB-first ("DB is truth"), same ordering as unbindAllDevices/afterBind/expireDueAccounts: mark the
+	// row revoked BEFORE touching the router, so a router error can't strand the row `active` and leave
+	// the device with free internet forever.
 	await db
 		.update(networkSessions)
 		.set({ status: SESSION_STATUS.revoked })
 		.where(eq(networkSessions.id, row.id));
+	if (row.macAddress) {
+		try {
+			// Best-effort: drop the router binding unless a co-tenant still holds a live window on the MAC
+			// (M-2). The row is already revoked; reconcileGuestBindings sweeps an orphaned binding next cron.
+			await revokeGuestUnlessShared(db, network, row.macAddress, input.userId);
+		} catch (err) {
+			captureHandled(err, { level: 'warning', tags: { area: 'network', scope: 'unbind' } });
+		}
+	}
 	return { ok: true, macAddress: row.macAddress };
 }
 
