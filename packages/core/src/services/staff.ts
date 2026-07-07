@@ -102,6 +102,25 @@ export async function promoteToOwner(db: DB, userId: string): Promise<boolean> {
 	return updated.length > 0;
 }
 
+/**
+ * Set a staff member's role between `admin` and `system_admin`. Deliberately scoped so
+ * it can NEVER touch an `owner` (the `ne(role, owner)` guard) nor grant `owner` — owner
+ * is reached only through the governed promote/owner-change flow. `system_admin` is an
+ * elevated role (Issues + Content, not Staff). Returns true if a row changed.
+ */
+export async function setStaffRole(
+	db: DB,
+	userId: string,
+	role: Extract<StaffRole, 'admin' | 'system_admin'>
+): Promise<boolean> {
+	const updated = await db
+		.update(adminProfile)
+		.set({ role })
+		.where(and(eq(adminProfile.userId, userId), ne(adminProfile.role, STAFF_ROLE.owner)))
+		.returning({ userId: adminProfile.userId });
+	return updated.length > 0;
+}
+
 /** All current owners (id/name/email), for approval routing + the owner-count guard. */
 export async function listOwners(db: DB): Promise<Owner[]> {
 	return db

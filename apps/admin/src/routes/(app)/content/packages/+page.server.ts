@@ -1,7 +1,7 @@
 import { error, fail, type RequestEvent } from '@sveltejs/kit';
-import { STAFF_ROLE } from '@veent/core';
+import { MANAGER_ROLES, type StaffRole } from '@veent/core';
 import { db } from '$lib/server/db';
-import { requireOwner as ownerGate } from '$lib/server/auth-guard';
+import { requireManager as managerGate } from '$lib/server/auth-guard';
 import { verifyStepUp } from '$lib/server/step-up';
 import {
 	listPackages,
@@ -15,18 +15,18 @@ import {
 } from '$lib/server/packages';
 import type { Actions, PageServerLoad } from './$types';
 
-/** Owner-only page: manage purchasable packages — the CMS "Package Control". */
+/** Manager page (owner + system_admin): manage purchasable packages — the CMS "Package Control". */
 export const load: PageServerLoad = async (event) => {
 	const { user } = await event.parent();
-	if (user.role !== STAFF_ROLE.owner) {
-		throw error(403, 'Only the owner can manage packages.');
+	if (!MANAGER_ROLES.includes(user.role as StaffRole)) {
+		throw error(403, 'You do not have permission to manage packages.');
 	}
 	return { packages: await listPackages(db) };
 };
 
-/** Re-assert owner from the DB (never trust client state) on every mutation. */
-const requireOwner = (userId: string | undefined) =>
-	ownerGate(userId, 'Only the owner can manage packages.');
+/** Re-assert the role from the DB (never trust client state) on every mutation. */
+const requireManager = (userId: string | undefined) =>
+	managerGate(userId, 'You do not have permission to manage packages.');
 
 const isType = (v: string): v is PackageType => (PACKAGE_TYPES as readonly string[]).includes(v);
 
@@ -109,15 +109,16 @@ function packageId(form: FormData): number | null {
 	return Number.isInteger(id) && id > 0 ? id : null;
 }
 
-// Every content write is owner-only AND TOTP step-up-gated (a deliberate code per save, so a
-// fat-fingered change can't land without re-confirming identity). The code is the LAST gate —
-// checked after field validation so a rotating code isn't wasted on an unrelated form error.
+// Every content write requires manager access (owner or system_admin, via requireManager) AND is
+// TOTP step-up-gated (a deliberate code per save, so a fat-fingered change can't land without
+// re-confirming identity). The code is the LAST gate — checked after field validation so a
+// rotating code isn't wasted on an unrelated form error.
 const stepUp = (event: RequestEvent, code: FormDataEntryValue | null, action: string) =>
 	verifyStepUp(event, String(code ?? ''), { scope: 'admin_content_step_up', action });
 
 export const actions: Actions = {
 	create: async (event) => {
-		const denied = await requireOwner(event.locals.user?.id);
+		const denied = await requireManager(event.locals.user?.id);
 		if (denied) return denied;
 		const form = await event.request.formData();
 		const parsed = parsePackage(form);
@@ -129,7 +130,7 @@ export const actions: Actions = {
 	},
 
 	update: async (event) => {
-		const denied = await requireOwner(event.locals.user?.id);
+		const denied = await requireManager(event.locals.user?.id);
 		if (denied) return denied;
 		const form = await event.request.formData();
 		const id = packageId(form);
@@ -143,7 +144,7 @@ export const actions: Actions = {
 	},
 
 	toggleActive: async (event) => {
-		const denied = await requireOwner(event.locals.user?.id);
+		const denied = await requireManager(event.locals.user?.id);
 		if (denied) return denied;
 		const form = await event.request.formData();
 		const id = packageId(form);
@@ -155,7 +156,7 @@ export const actions: Actions = {
 	},
 
 	remove: async (event) => {
-		const denied = await requireOwner(event.locals.user?.id);
+		const denied = await requireManager(event.locals.user?.id);
 		if (denied) return denied;
 		const form = await event.request.formData();
 		const id = packageId(form);

@@ -48,12 +48,35 @@ export const SESSION_STATUS = {
 export type SessionStatus = (typeof SESSION_STATUS)[keyof typeof SESSION_STATUS];
 
 /** Staff access levels (stored in admin_profile.role). `owner` is the singular
- * bootstrap account; everyone invited is an `admin`. */
+ * bootstrap account; everyone invited starts as an `admin`. `system_admin` is an
+ * elevated role the owner can grant: it manages Issues + Content, but NOT the Staff
+ * page (owner-only). */
 export const STAFF_ROLE = {
 	owner: 'owner',
+	systemAdmin: 'system_admin',
 	admin: 'admin'
 } as const;
 export type StaffRole = (typeof STAFF_ROLE)[keyof typeof STAFF_ROLE];
+
+/** Roles that may manage Issues and Content (owner + system_admin). Used by the
+ * `requireManager` guard and the role-aware Issues load. */
+export const MANAGER_ROLES: readonly StaffRole[] = [STAFF_ROLE.owner, STAFF_ROLE.systemAdmin];
+
+/** admin_issue.status lifecycle. */
+export const ISSUE_STATUS = {
+	open: 'open',
+	inProgress: 'in_progress',
+	resolved: 'resolved'
+} as const;
+export type IssueStatus = (typeof ISSUE_STATUS)[keyof typeof ISSUE_STATUS];
+
+/** admin_issue.priority levels. */
+export const ISSUE_PRIORITY = {
+	low: 'low',
+	medium: 'medium',
+	high: 'high'
+} as const;
+export type IssuePriority = (typeof ISSUE_PRIORITY)[keyof typeof ISSUE_PRIORITY];
 
 /** Staff lifecycle (stored in admin_profile.status). Only `active` may sign in. */
 export const STAFF_STATUS = {

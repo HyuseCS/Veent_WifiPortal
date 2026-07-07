@@ -7,6 +7,8 @@
 	import Crown from 'lucide-svelte/icons/crown';
 	import RotateCcw from 'lucide-svelte/icons/rotate-ccw';
 	import Search from 'lucide-svelte/icons/search';
+	import ShieldCheck from 'lucide-svelte/icons/shield-check';
+	import ShieldOff from 'lucide-svelte/icons/shield-off';
 	import Trash2 from 'lucide-svelte/icons/trash-2';
 	import UserCog from 'lucide-svelte/icons/user-cog';
 	import UserPlus from 'lucide-svelte/icons/user-plus';
@@ -291,6 +293,29 @@
 										promoteOpen = true;
 									}}
 								/>
+							{/if}
+							<!-- Grant/revoke the System Admin role (Issues + Content, not Staff). Active,
+							     non-owner members only; the owner role is untouched by this control. -->
+							{#if member.status === 'active' && member.role === 'admin'}
+								<form method="post" action="?/setStaffRole" use:enhance>
+									<input type="hidden" name="userId" value={member.id} />
+									<input type="hidden" name="role" value="system_admin" />
+									<IconButton
+										type="submit"
+										icon={ShieldCheck as unknown as Component}
+										label="Make {member.name} a System Admin"
+									/>
+								</form>
+							{:else if member.status === 'active' && member.role === 'system_admin'}
+								<form method="post" action="?/setStaffRole" use:enhance>
+									<input type="hidden" name="userId" value={member.id} />
+									<input type="hidden" name="role" value="admin" />
+									<IconButton
+										type="submit"
+										icon={ShieldOff as unknown as Component}
+										label="Remove {member.name}'s System Admin role"
+									/>
+								</form>
 							{/if}
 							{#if member.status === 'disabled'}
 								<form method="post" action="?/setStatus" use:enhance>

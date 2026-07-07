@@ -6,6 +6,7 @@
  * against the shapes below. When real `load()` functions land, they return the
  * same shapes and pages switch from `import { … } from '$lib/mocks'` to props.
  */
+import type { StaffRole } from '@veent/core';
 
 /** Semantic tone for a status badge — maps to a `--color-*` token. */
 export type StatusTone = 'online' | 'warning' | 'blocked';
@@ -146,10 +147,12 @@ export interface AdminUserRow {
 /**
  * Access level of an admin-side staff member.
  * `owner` holds full control and is never disabled or removed. Everyone provisioned
- * by the owner starts as an `admin`; an active admin can be promoted to `owner`.
- * Role *values* are DB-driven (admin_role); this union names the ones with behaviour.
+ * by the owner starts as an `admin`; an active admin can be promoted to `owner`, or
+ * granted `system_admin` (manages Issues + Content, but not Staff).
+ * Role *values* are DB-driven (admin_role). Sourced from @veent/core (derived from
+ * STAFF_ROLE) so the admin and core definitions can never drift.
  */
-export type StaffRole = 'owner' | 'admin';
+export type { StaffRole };
 
 /**
  * Lifecycle state of a staff member.
