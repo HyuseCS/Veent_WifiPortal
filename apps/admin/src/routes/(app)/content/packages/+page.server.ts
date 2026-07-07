@@ -109,9 +109,10 @@ function packageId(form: FormData): number | null {
 	return Number.isInteger(id) && id > 0 ? id : null;
 }
 
-// Every content write is owner-only AND TOTP step-up-gated (a deliberate code per save, so a
-// fat-fingered change can't land without re-confirming identity). The code is the LAST gate —
-// checked after field validation so a rotating code isn't wasted on an unrelated form error.
+// Every content write requires manager access (owner or system_admin, via requireManager) AND is
+// TOTP step-up-gated (a deliberate code per save, so a fat-fingered change can't land without
+// re-confirming identity). The code is the LAST gate — checked after field validation so a
+// rotating code isn't wasted on an unrelated form error.
 const stepUp = (event: RequestEvent, code: FormDataEntryValue | null, action: string) =>
 	verifyStepUp(event, String(code ?? ''), { scope: 'admin_content_step_up', action });
 

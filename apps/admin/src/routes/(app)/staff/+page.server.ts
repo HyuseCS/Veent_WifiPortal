@@ -290,6 +290,10 @@ export const actions: Actions = {
 			return fail(400, { action: 'setStaffRole', error: 'Invalid role' });
 		}
 		const changed = await setStaffRole(db, userId, role);
+		// Audit trail for privilege changes (mirrors the owner-change flow's visibility).
+		if (changed) {
+			log.info('staff role changed', { actor: event.locals.user?.id, target: userId, role });
+		}
 		return { ok: changed, action: 'setStaffRole' };
 	},
 

@@ -148,7 +148,7 @@
 			{:else}
 				<div class="max-h-40 space-y-1 overflow-y-auto rounded-lg border border-border p-2">
 					{#each staff as s (s.id)}
-						<label class="flex items-center gap-2 rounded-md px-2 py-1.5 hover:bg-surface">
+						<label class="flex min-h-11 items-center gap-2 rounded-md px-2 py-1.5 hover:bg-surface">
 							<input
 								type="checkbox"
 								name="assigneeId"

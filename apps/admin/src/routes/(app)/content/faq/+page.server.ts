@@ -42,8 +42,9 @@ function faqId(form: FormData): number | null {
 	return Number.isInteger(id) && id > 0 ? id : null;
 }
 
-// Every FAQ write is owner-only AND TOTP step-up-gated (a code per save). The code is the
-// LAST gate — after field validation, so a rotating code isn't wasted on a form error.
+// Every FAQ write requires manager access (owner or system_admin, via requireManager) AND is
+// TOTP step-up-gated (a code per save). The code is the LAST gate — after field validation, so
+// a rotating code isn't wasted on a form error.
 const stepUp = (event: RequestEvent, code: FormDataEntryValue | null, action: string) =>
 	verifyStepUp(event, String(code ?? ''), { scope: 'admin_content_step_up', action });
 

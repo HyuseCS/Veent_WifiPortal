@@ -80,7 +80,9 @@ function parseIssueInput(form: FormData): { input: IssueInput } | { error: strin
 	const rawDue = String(form.get('issue-dueDate') ?? '').trim();
 	let dueDate: Date | null = null;
 	if (rawDue) {
-		const d = new Date(`${rawDue}T00:00:00`);
+		// Parse as UTC midnight so it round-trips with issues.ts toDateInput() (which reads back
+		// via toISOString/UTC) — a local parse would drift the date by a day in non-UTC zones.
+		const d = new Date(`${rawDue}T00:00:00Z`);
 		if (Number.isNaN(d.getTime())) return { error: 'Invalid due date.' };
 		dueDate = d;
 	}

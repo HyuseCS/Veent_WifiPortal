@@ -12,8 +12,10 @@
 
 	const icon = (c: unknown) => c as Component;
 
-	// Per-issue selected status (drives whether the resolution-note field shows).
+	// Per-issue selected status (drives whether the resolution-note field shows) + per-issue
+	// error surfaced from a failed submit.
 	let draft = $state<Record<number, string>>({});
+	let errors = $state<Record<number, string>>({});
 	let submittingId = $state<number | null>(null);
 
 	const statusOf = (i: AdminIssueRow) => draft[i.id] ?? i.status;
@@ -76,8 +78,20 @@
 					action="?/updateStatus"
 					use:enhance={() => {
 						submittingId = issue.id;
-						return async ({ update }) => {
-							await update();
+						return async ({ result, update }) => {
+							if (result.type === 'failure') {
+								// Drop the optimistic draft so statusOf() falls back to the (unchanged)
+								// server status, and surface the error like IssueForm does.
+								delete draft[issue.id];
+								errors[issue.id] = (result.data?.error as string) ?? 'Could not update the issue.';
+								await update({ reset: false });
+							} else {
+								if (result.type === 'success') {
+									delete draft[issue.id];
+									delete errors[issue.id];
+								}
+								await update();
+							}
 							submittingId = null;
 						};
 					}}
@@ -90,7 +104,7 @@
 							name="status"
 							value={statusOf(issue)}
 							onchange={(e) => (draft[issue.id] = e.currentTarget.value)}
-							class="min-h-9 cursor-pointer rounded-lg border border-border bg-bg px-2.5 py-1.5 text-sm text-ink hover:border-brand/40 focus:border-brand focus:ring-2 focus:ring-brand/20 focus:outline-none"
+							class="min-h-11 cursor-pointer rounded-lg border border-border bg-bg px-2.5 py-1.5 text-sm text-ink hover:border-brand/40 focus:border-brand focus:ring-2 focus:ring-brand/20 focus:outline-none"
 						>
 							{#each statusOptions as o (o.value)}
 								<option value={o.value}>{o.label}</option>
@@ -108,12 +122,16 @@
 								name="resolutionNote"
 								value={issue.resolutionNote ?? ''}
 								placeholder="What fixed it?"
-								class="min-h-9 w-full rounded-lg border border-border bg-bg px-2.5 py-1.5 text-sm text-ink hover:border-brand/40 focus:border-brand focus:ring-2 focus:ring-brand/20 focus:outline-none"
+								class="min-h-11 w-full rounded-lg border border-border bg-bg px-2.5 py-1.5 text-sm text-ink hover:border-brand/40 focus:border-brand focus:ring-2 focus:ring-brand/20 focus:outline-none"
 							/>
 						</div>
 					{/if}
 
 					<Button type="submit" loading={submittingId === issue.id}>Update</Button>
+
+					{#if errors[issue.id]}
+						<p class="w-full text-sm text-blocked" role="alert">{errors[issue.id]}</p>
+					{/if}
 				</form>
 			</div>
 		{/each}

@@ -134,7 +134,7 @@
 						value={issue.status}
 						aria-label="Status for {issue.title}"
 						onchange={(e) => e.currentTarget.form?.requestSubmit()}
-						class="min-h-9 cursor-pointer rounded-lg border border-border bg-bg px-2.5 py-1.5 text-xs text-ink hover:border-brand/40 focus:border-brand focus:ring-2 focus:ring-brand/20 focus:outline-none"
+						class="min-h-11 cursor-pointer rounded-lg border border-border bg-bg px-2.5 py-1.5 text-xs text-ink hover:border-brand/40 focus:border-brand focus:ring-2 focus:ring-brand/20 focus:outline-none"
 					>
 						{#each statusOptions as o (o.value)}
 							<option value={o.value}>{o.label}</option>
