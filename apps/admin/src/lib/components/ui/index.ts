@@ -15,6 +15,7 @@ export { default as LiveStatusPill } from './LiveStatusPill.svelte';
 export { default as IconButton } from './IconButton.svelte';
 export { default as Button } from './Button.svelte';
 export { default as Field } from './Field.svelte';
+export { default as Avatar } from './Avatar.svelte';
 export { default as Select } from './Select.svelte';
 export { default as BaseDialog } from './BaseDialog.svelte';
 export { default as Sparkline } from './Sparkline.svelte';

@@ -49,6 +49,11 @@ export const adminRole = pgTable('admin_role', {
  * Staff-domain extension of the better-auth admin user (1:1).
  *   role   — FK into admin_role: 'owner' (bootstrap/promotion) | 'admin' (invited)
  *   status — 'pending' (invited, awaiting activation) | 'active' | 'disabled'
+ *
+ * Self-service contact fields (edited from the staff member's own Profile page):
+ *   phone / jobTitle / contactEmail — optional display/contact details. `contactEmail`
+ *   is a separate reach-me address; the LOGIN email stays on admin_user (the auth
+ *   identity). The avatar lives in the better-auth `admin_user.image` column.
  */
 export const adminProfile = pgTable('admin_profile', {
 	userId: text('user_id')
@@ -59,7 +64,10 @@ export const adminProfile = pgTable('admin_profile', {
 		.default('admin')
 		.references(() => adminRole.key),
 	status: text('status').notNull().default('pending'),
-	lastActiveAt: timestamp('last_active_at')
+	lastActiveAt: timestamp('last_active_at'),
+	phone: text('phone'),
+	jobTitle: text('job_title'),
+	contactEmail: text('contact_email')
 });
 
 /**
