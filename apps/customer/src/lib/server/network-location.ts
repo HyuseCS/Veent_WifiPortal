@@ -11,7 +11,7 @@ import { getDeviceMac, getPortalContext, persistResolvedMac } from '$lib/server/
 // Device MAC and client IP are PII. observability.ts scrubs them from Sentry events, but that hook
 // doesn't touch console.* — so mask them here before they reach stdout/log files (L-8). Keep enough
 // tail/head to correlate a session without persisting the full identifier.
-function maskMac(mac: string | null | undefined): string | null {
+export function maskMac(mac: string | null | undefined): string | null {
 	if (!mac) return mac ?? null;
 	return mac.replace(/^(?:[0-9A-Fa-f]{2}:){4}/, '**:**:**:**:'); // keep the last two octets
 }

@@ -11,13 +11,14 @@ import {
 	bindDevice,
 	unbindDevice,
 	unbindAllDevices,
-	getSessionLimits
+	getSessionLimits,
+	captureHandled
 } from '@veent/core';
 import { db } from '$lib/server/db';
 import { network } from '$lib/server/network';
 import { rateLimit } from '$lib/server/rateLimit';
 import { buildAccountView } from '$lib/server/account-view';
-import { resolveMacForUser } from '$lib/server/network-location';
+import { resolveMacForUser, maskMac } from '$lib/server/network-location';
 import { maskPhone } from '$lib/server/otp';
 import { logger } from '$lib/server/logger';
 import type { Actions, PageServerLoad } from './$types';
@@ -87,7 +88,7 @@ export const load: PageServerLoad = async (event) => {
 	// `update()` should re-run this load and log a SECOND line with thisBound=true. Remove once
 	// the "needs a refresh to show connected" bug is understood.
 	console.info(
-		`[dash-load] mac=${mac ?? 'null'} active=${view.access.active} thisBound=${view.devices.thisDeviceBound} devices=${view.devices.count}`
+		`[dash-load] mac=${mac ? maskMac(mac) : 'null'} active=${view.access.active} thisBound=${view.devices.thisDeviceBound} devices=${view.devices.count}`
 	);
 
 	// Issue 2b/B: mint a CNA→browser handoff token for THIS session so the page can offer an
@@ -134,7 +135,26 @@ export const actions: Actions = {
 		if (!(await rateLimit('grant_user', user.id, 20)).allowed) return TOO_MANY;
 
 		const form = await event.request.formData();
-		const mac = String(form.get('mac') ?? '') || (await resolveMacForUser(event, user.id)) || '';
+		// Server-authoritative device identity (M-1/L-1): trust only what the server resolves for this
+		// account, never the posted `mac`. The hidden form field is just an echo of `data.mac` (itself
+		// server-resolved in load), so this re-derives the same MAC from the durable chain. A client MAC
+		// that DIFFERS is a tamper/diagnostic signal — log it (userId only, no raw MAC) and proceed.
+		const mac = (await resolveMacForUser(event, user.id)) || '';
+		const claimed = String(form.get('mac') ?? '').toUpperCase();
+		if (claimed && MAC_RE.test(claimed) && mac && claimed !== mac.toUpperCase()) {
+			// Log to stdout AND Sentry (captureHandled is a no-op when Sentry is off, e.g. dev) — the
+			// point of keeping this signal is diagnosability. MACs are masked (PII).
+			console.warn('[mac-trust] posted MAC differs from server-resolved — using server', {
+				userId: user.id,
+				posted: maskMac(claimed),
+				resolved: maskMac(mac)
+			});
+			captureHandled('dashboard MAC mismatch — using server-resolved', {
+				level: 'warning',
+				tags: { area: 'network', scope: 'mac-trust' },
+				extra: { userId: user.id }
+			});
+		}
 		if (!MAC_RE.test(mac)) return fail(400, { error: NO_DEVICE });
 
 		const account = await getAccount(db, user.id);
@@ -159,7 +179,26 @@ export const actions: Actions = {
 		if (!(await rateLimit('grant_user', user.id, 20)).allowed) return TOO_MANY;
 
 		const form = await event.request.formData();
-		const mac = String(form.get('mac') ?? '') || (await resolveMacForUser(event, user.id)) || '';
+		// Server-authoritative device identity (M-1/L-1): trust only what the server resolves for this
+		// account, never the posted `mac`. The hidden form field is just an echo of `data.mac` (itself
+		// server-resolved in load), so this re-derives the same MAC from the durable chain. A client MAC
+		// that DIFFERS is a tamper/diagnostic signal — log it (userId only, no raw MAC) and proceed.
+		const mac = (await resolveMacForUser(event, user.id)) || '';
+		const claimed = String(form.get('mac') ?? '').toUpperCase();
+		if (claimed && MAC_RE.test(claimed) && mac && claimed !== mac.toUpperCase()) {
+			// Log to stdout AND Sentry (captureHandled is a no-op when Sentry is off, e.g. dev) — the
+			// point of keeping this signal is diagnosability. MACs are masked (PII).
+			console.warn('[mac-trust] posted MAC differs from server-resolved — using server', {
+				userId: user.id,
+				posted: maskMac(claimed),
+				resolved: maskMac(mac)
+			});
+			captureHandled('dashboard MAC mismatch — using server-resolved', {
+				level: 'warning',
+				tags: { area: 'network', scope: 'mac-trust' },
+				extra: { userId: user.id }
+			});
+		}
 		const packageId = Number(form.get('packageId'));
 		// Which wallet to pay from — the buy sheet offers both. Default credits (back-compat).
 		const currency = form.get('currency') === 'points' ? 'points' : 'credits';
@@ -216,7 +255,26 @@ export const actions: Actions = {
 		if (!(await rateLimit('grant_user', user.id, 20)).allowed) return TOO_MANY;
 
 		const form = await event.request.formData();
-		const mac = String(form.get('mac') ?? '') || (await resolveMacForUser(event, user.id)) || '';
+		// Server-authoritative device identity (M-1/L-1): trust only what the server resolves for this
+		// account, never the posted `mac`. The hidden form field is just an echo of `data.mac` (itself
+		// server-resolved in load), so this re-derives the same MAC from the durable chain. A client MAC
+		// that DIFFERS is a tamper/diagnostic signal — log it (userId only, no raw MAC) and proceed.
+		const mac = (await resolveMacForUser(event, user.id)) || '';
+		const claimed = String(form.get('mac') ?? '').toUpperCase();
+		if (claimed && MAC_RE.test(claimed) && mac && claimed !== mac.toUpperCase()) {
+			// Log to stdout AND Sentry (captureHandled is a no-op when Sentry is off, e.g. dev) — the
+			// point of keeping this signal is diagnosability. MACs are masked (PII).
+			console.warn('[mac-trust] posted MAC differs from server-resolved — using server', {
+				userId: user.id,
+				posted: maskMac(claimed),
+				resolved: maskMac(mac)
+			});
+			captureHandled('dashboard MAC mismatch — using server-resolved', {
+				level: 'warning',
+				tags: { area: 'network', scope: 'mac-trust' },
+				extra: { userId: user.id }
+			});
+		}
 		if (!MAC_RE.test(mac)) return fail(400, { error: NO_DEVICE });
 
 		const account = await getAccount(db, user.id);
