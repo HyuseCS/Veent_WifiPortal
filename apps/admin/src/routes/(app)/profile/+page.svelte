@@ -27,6 +27,16 @@
 	const vals = $derived(
 		(form as { values?: Record<string, string> } | null)?.values
 	);
+
+	// Progressive disclosure: the authenticator-code field only appears once the user has actually
+	// started the change (typed a new email / a password), so the form isn't cluttered at rest.
+	let emailNew = $state('');
+	let pwCurrent = $state('');
+	let pwNew = $state('');
+	let pwConfirm = $state('');
+	const emailStarted = $derived(emailNew.trim().length > 0);
+	const pwStarted = $derived(!!(pwCurrent || pwNew || pwConfirm));
+	const val = (e: Event) => (e.currentTarget as HTMLInputElement).value;
 </script>
 
 {#snippet feedback(action: string, okMsg: string)}
@@ -148,18 +158,21 @@
 				autocomplete="off"
 				required
 				value={vals?.email ?? ''}
+				oninput={(e) => (emailNew = val(e))}
 			/>
-			<Field
-				id="email-code"
-				name="code"
-				label="Authenticator code"
-				inputmode="numeric"
-				autocomplete="one-time-code"
-				placeholder="6-digit code"
-				maxlength={6}
-				required
-				class="font-mono tracking-widest"
-			/>
+			{#if emailStarted}
+				<Field
+					id="email-code"
+					name="code"
+					label="Authenticator code"
+					inputmode="numeric"
+					autocomplete="one-time-code"
+					placeholder="6-digit code"
+					maxlength={6}
+					required
+					class="font-mono tracking-widest"
+				/>
+			{/if}
 			{@render feedback('email', 'Sign-in email updated.')}
 			<Button type="submit" loading={busy === 'email'}>Update email</Button>
 		</form>
@@ -169,20 +182,22 @@
 	<Card>
 		<SectionHeading title="Password" />
 		<form method="post" action="?/changePassword" use:enhance={submit('password')} class="mt-4 space-y-4">
-			<Field id="currentPassword" label="Current password" type="password" autocomplete="current-password" required />
-			<Field id="newPassword" label="New password" type="password" autocomplete="new-password" required minlength={8} />
-			<Field id="confirmPassword" label="Confirm new password" type="password" autocomplete="new-password" required minlength={8} />
-			<Field
-				id="password-code"
-				name="code"
-				label="Authenticator code"
-				inputmode="numeric"
-				autocomplete="one-time-code"
-				placeholder="6-digit code"
-				maxlength={6}
-				required
-				class="font-mono tracking-widest"
-			/>
+			<Field id="currentPassword" label="Current password" type="password" autocomplete="current-password" required oninput={(e) => (pwCurrent = val(e))} />
+			<Field id="newPassword" label="New password" type="password" autocomplete="new-password" required minlength={8} oninput={(e) => (pwNew = val(e))} />
+			<Field id="confirmPassword" label="Confirm new password" type="password" autocomplete="new-password" required minlength={8} oninput={(e) => (pwConfirm = val(e))} />
+			{#if pwStarted}
+				<Field
+					id="password-code"
+					name="code"
+					label="Authenticator code"
+					inputmode="numeric"
+					autocomplete="one-time-code"
+					placeholder="6-digit code"
+					maxlength={6}
+					required
+					class="font-mono tracking-widest"
+				/>
+			{/if}
 			{@render feedback('password', 'Password changed. Other sessions were signed out.')}
 			<Button type="submit" loading={busy === 'password'}>Change password</Button>
 		</form>
