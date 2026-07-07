@@ -10,7 +10,13 @@ import {
 	parsePending,
 	serializePending
 } from '$lib/server/otp';
-import { enforceOtpSendLimit, RateLimitError, retryAfterMessage } from '$lib/server/otpRateLimit';
+import {
+	enforceOtpSendLimit,
+	enforceOtpVerifyLimit,
+	RateLimitError,
+	retryAfterMessage
+} from '$lib/server/otpRateLimit';
+import { clientIp } from '$lib/server/rateLimit';
 
 export const load: PageServerLoad = (event) => {
 	if (event.locals.user) {
@@ -34,6 +40,21 @@ export const actions: Actions = {
 		const code = (await event.request.formData()).get('code')?.toString().replace(/\D/g, '') ?? '';
 		if (!/^\d{6}$/.test(code)) {
 			return fail(400, { message: 'Enter the 6-digit code.' });
+		}
+
+		// Throttle guesses BEFORE handing the code to better-auth (H-1). Its own 3-attempt
+		// counter is a non-atomic read-check-write that a concurrency race defeats, so a burst
+		// of parallel guesses could otherwise brute-force the 6-digit code. Per-phone is the
+		// axis that bounds a targeted victim; IP/MAC bound a single source. The direct HTTP
+		// endpoint /api/auth/phone-number/verify is blocked in hooks.server.ts so this seam
+		// can't be bypassed.
+		try {
+			await enforceOtpVerifyLimit(pending.phone, pending.mac, clientIp(event));
+		} catch (error) {
+			if (error instanceof RateLimitError) {
+				return fail(429, { message: retryAfterMessage(error.retryAfterSec) });
+			}
+			throw error;
 		}
 
 		try {
@@ -64,7 +85,7 @@ export const actions: Actions = {
 		// Same per-phone + per-MAC throttle as the initial send — resend is the
 		// other unauthenticated path into the SMS gateway.
 		try {
-			await enforceOtpSendLimit(pending.phone, pending.mac);
+			await enforceOtpSendLimit(pending.phone, pending.mac, clientIp(event));
 		} catch (error) {
 			if (error instanceof RateLimitError) {
 				return fail(429, { message: retryAfterMessage(error.retryAfterSec) });

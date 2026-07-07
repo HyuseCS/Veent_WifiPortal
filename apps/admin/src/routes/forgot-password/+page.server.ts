@@ -1,6 +1,7 @@
 import { fail, redirect } from '@sveltejs/kit';
 import { auth } from '$lib/server/auth';
 import { rateLimit, clientIp } from '$lib/server/rateLimit';
+import { checkAdminEmailLimit } from '$lib/server/emailRateLimit';
 import type { Actions, PageServerLoad } from './$types';
 
 /** Public — a member who can't sign in has no session. Bounce anyone already in. */
@@ -20,6 +21,14 @@ export const actions: Actions = {
 		const form = await event.request.formData();
 		const email = form.get('email')?.toString().trim() ?? '';
 		if (!email) return fail(400, { message: 'Enter your email address.' });
+
+		// Per-recipient cap (L-9): the per-IP limit above doesn't stop a distributed source (rotating
+		// IPs) from mail-bombing ONE staff mailbox. Reuse the same per-recipient limiter the invite path
+		// uses. Over cap → silently skip the (paid) send and still return the generic confirmation, so
+		// this stays enumeration-safe (the client can't tell a suppressed send from a non-existent one).
+		if (await checkAdminEmailLimit(email)) {
+			return { sent: true };
+		}
 
 		// Fire the reset token → sendResetPassword (auth.ts) mails the /reset-password link.
 		// We NEVER reveal whether the address matched an account: any error is swallowed and the

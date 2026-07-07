@@ -46,7 +46,18 @@ function setSecurityHeaders(event: Parameters<Handle>[0]['event'], response: Res
 	}
 }
 
+// better-auth mounts /phone-number/verify as a public HTTP endpoint. The portal only ever
+// verifies via the in-process `auth.api.verifyPhoneNumber` call in the /auth/verify action
+// (throttled by enforceOtpVerifyLimit) — nothing legitimate hits this route directly. Blocking
+// external POSTs here closes the same bypass the send limiter guards against: an attacker skipping
+// the throttled form action to brute-force the OTP straight against the raw endpoint (H-1).
+const AUTH_VERIFY_PATH = '/api/auth/phone-number/verify';
+
 const handleBetterAuth: Handle = async ({ event, resolve }) => {
+	if (event.url.pathname === AUTH_VERIFY_PATH && event.request.method === 'POST') {
+		return new Response('Not found', { status: 404 });
+	}
+
 	// Stash the device MAC / callback from the captive-portal redirect before the
 	// auth flow's redirects drop the query string.
 	capturePortalContext(event);

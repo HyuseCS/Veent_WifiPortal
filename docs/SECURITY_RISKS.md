@@ -99,8 +99,8 @@ sign in (email auth off) and can be deleted at will.
 awaits. If `startSession` (or the firewall drop) failed after credits were deducted,
 the user paid and got nothing.
 
-**Fix:** `startPaidSession` (`packages/core/src/services/sessions.ts`) wraps spend +
-session-open + router grant in **one `db.transaction`**; a failed grant throws and
+**Fix:** `startPaidAccessAndBindDevice` (`packages/core/src/services/sessions.ts`) wraps
+spend + session-open + router grant in **one `db.transaction`**; a failed grant throws and
 rolls back the spend (no charge stands). Wired into `/api/network/grant` and the
 dashboard buy-tier action, both with try/catch → 502/503 "credits were not charged".
 Covered by `apps/customer/src/lib/server/grant-atomic.spec.ts`.

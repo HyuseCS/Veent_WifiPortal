@@ -8,19 +8,21 @@ implemented with [iTexMo](https://itexmo.com), the PH SMS gateway.
 ## Where it lives
 
 `sendOtp(phone, code)` in `apps/customer/src/lib/server/otp.ts` is **the single SMS
-integration point** — it's wired into the plugin's `sendOTP`. The phone number is
-already E.164 (e.g. `+639171234567`), which iTexMo's Broadcast API accepts as-is.
+integration point** — it's wired into the plugin's `sendOTP`. The phone number arrives
+E.164 (e.g. `+639171234567`); iTexMo wants the **local** `09…` form, so the handler
+converts it (`phone.replace(/^\+?63/, '0')`) before sending.
 
-It POSTs the code to iTexMo's Broadcast endpoint:
+It POSTs the code to iTexMo's Broadcast-OTP endpoint:
 
 ```
-POST https://api.itexmo.com/api/broadcast        (application/json)
+POST https://api.itexmo.com/api/broadcast-otp    (application/json)
 {
+  "ApiCode":    ITEXMO_API_CODE,
   "Email":      ITEXMO_EMAIL,
   "Password":   ITEXMO_PASSWORD,
-  "ApiCode":    ITEXMO_API_CODE,
-  "Recipients": ["+639171234567"],
-  "Message":    "Your Veent code is 123456. It expires in 5 minutes."
+  "Recipients": ["09171234567"],
+  "Message":    "Your Parafiber code is 123456. It expires in 5 minutes.",
+  "SenderId":   ITEXMO_SENDER_ID        // optional; omitted when unset
 }
 ```
 
@@ -36,8 +38,9 @@ Set these in `apps/customer/.env` (documented in `.env.example`):
 | `ITEXMO_API_CODE` | yes | API code from the iTexMo dashboard. |
 | `ITEXMO_EMAIL` | yes | Your iTexMo account email. |
 | `ITEXMO_PASSWORD` | yes | Your iTexMo account password. |
+| `ITEXMO_SENDER_ID` | no | Approved sender id; sent only when set. On a **trial** account this MUST be `ITM.TEST3`. |
 
-All three are required to send.
+The first three are required to send.
 
 ## Choosing the provider (iTexMo vs UniSMS)
 
@@ -65,15 +68,16 @@ timeout behavior below applies to whichever provider is active.
   login with no code. Failing loudly forces the deployment to be configured first.
 
 Failures are surfaced three ways: a non-OK HTTP status throws with the response body,
-an API-level rejection (`{ "Error": true, "Message": … }`) throws with the message, and a
-timeout / connection failure throws too — the send is bounded by a 10s `AbortSignal.timeout`
-so a slow or unreachable gateway can't hang the login request. (The login action catches all of
-these and re-renders the form with an inline "try again" instead of a 500 — see
+an API-level rejection throws with the message, and a timeout / connection failure throws
+too — the send is bounded by a 10s `AbortSignal.timeout` so a slow or unreachable gateway
+can't hang the login request. (The login action catches all of these and re-renders the form
+with an inline "try again" instead of a 500 — see
 `apps/customer/src/routes/login/+page.server.ts`.)
 
-> ⚠️ `ponytail:` the success/failure response shape is taken as `{ Error: boolean,
-> Message?: string }`. Confirm the exact field in the iTexMo dashboard/docs before
-> going live; if it differs, adjust the check in that one spot.
+The iTexMo result shape is `{ Error?, Accepted?, Failed?, ReferenceId?, Message? }`; the send
+is treated as failed on `Error` **or** `Accepted < 1` (a `200` with `Accepted: 0` means nothing
+went out). UniSMS returns `{ message: { status, fail_reason } }` — a missing message or
+`status === 'failed'` is the failure signal.
 
 ## Going live
 

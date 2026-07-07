@@ -8,6 +8,7 @@ apps/
   admin/      radius-admin   — staff management dashboard           (admin.veent.io)
   locator/    veent-locator  — public read-only AP/coverage map     (radius.veent.io)
 packages/
+  core/       @veent/core    — shared services + integrations (payments/network/email) + observability
   db/         @veent/db      — shared Drizzle schema + client; the single migration source
 compose.yaml  shared Postgres for local dev
 ```
@@ -21,7 +22,7 @@ compose.yaml  shared Postgres for local dev
   migrations, so the customer and admin schemas can never drift apart.
 - **Separate auth domains.** Customers and staff are different populations. There are two
   isolated better-auth instances: customer auth uses the `customer_*` tables with the
-  `veent-portal` cookie prefix; admin auth uses the `admin_*` tables with the `veent-admin`
+  `veent-portal` cookie prefix; admin auth uses the `admin_*` tables with the `radius-admin`
   cookie prefix. Each app also has its own `BETTER_AUTH_SECRET`, so a session from one app
   is never valid in the other.
 

@@ -83,7 +83,8 @@ const args = {
 	userId: 'u1',
 	packageId: 7,
 	externalTransactionId: 'pay_1',
-	amountMinor: 10000 // matches the checkout's recorded ₱100.00
+	amountMinor: 10000, // matches the checkout's recorded ₱100.00
+	currency: 'PHP' // the credit path now asserts currency (L-3); PHP is the happy path
 };
 
 describe('creditCheckoutIfUnsettled — {pending,expired}→settled claim', () => {
@@ -131,6 +132,15 @@ describe('creditCheckoutIfUnsettled — {pending,expired}→settled claim', () =
 		const r = await creditCheckoutIfUnsettled(db, { ...args, amountMinor: 9999 });
 		expect(r).toEqual({ credited: false, reason: 'amount_mismatch' });
 		expect(state.checkout!.status).toBe('settled'); // claimed — no retry loop
+		expect(state.ledgerInserts).toBe(0);
+	});
+
+	it('currency mismatch: keeps the claim but refuses to credit even when the amount matches (L-3)', async () => {
+		const { db, state } = fakeDb({ status: 'expired', amount: '100.00' });
+		// Amount matches exactly; only the currency is wrong — must still fail closed.
+		const r = await creditCheckoutIfUnsettled(db, { ...args, currency: 'USD' });
+		expect(r).toEqual({ credited: false, reason: 'currency_mismatch' });
+		expect(state.checkout!.status).toBe('settled'); // determinate mismatch — no retry loop
 		expect(state.ledgerInserts).toBe(0);
 	});
 

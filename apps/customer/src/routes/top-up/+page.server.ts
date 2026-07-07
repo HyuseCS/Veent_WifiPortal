@@ -6,11 +6,13 @@ import {
 	getLatestLedgerId,
 	captureHandled,
 	openCheckoutAccess,
-	getSessionLimits
+	getSessionLimits,
+	SETTLEMENT_CURRENCY
 } from '@veent/core';
 import { env } from '$env/dynamic/private';
 import { db } from '$lib/server/db';
 import { network } from '$lib/server/network';
+import { rateLimit } from '$lib/server/rateLimit';
 import { payments } from '$lib/server/payments';
 import { resolveCheckoutNetworkId, resolveMacForUser } from '$lib/server/network-location';
 import type { Actions, PageServerLoad } from './$types';
@@ -88,6 +90,14 @@ export const actions: Actions = {
 		const email = String(form.get('email') ?? '').trim();
 		const saveDetails = form.get('saveDetails') === 'on';
 		const values = { firstName, lastName, email, saveDetails };
+
+		// Throttle checkout creation (M-4): every submission fires an outbound Maya API call, a router
+		// openCheckoutAccess call, and a DB insert. Cap it per-user like the grant endpoint so one
+		// authenticated guest can't loop it to exhaust those resources / abuse the gateway. Placed
+		// before those calls (the form parse above is cheap) and echoes `values` like the other fails.
+		if (!(await rateLimit('checkout_user', user.id, 20)).allowed) {
+			return fail(429, { error: 'Too many checkout attempts. Please wait a moment and try again.', values });
+		}
 
 		if (!Number.isFinite(packageId)) return fail(400, { error: 'Missing package', values });
 
@@ -173,7 +183,7 @@ export const actions: Actions = {
 			const checkout = await payments.createCheckout({
 				referenceId,
 				amountMinor: Math.round((pkg.fiatCost ?? 0) * 100),
-				currency: 'PHP',
+				currency: SETTLEMENT_CURRENCY,
 				description: pkg.name,
 				successUrl: `${origin}/top-up/processing?since=${since}&pkg=${pkg.id}&attempt=${referenceId}${macQuery}`,
 				cancelUrl: `${origin}/top-up${cancelMacQuery}`,

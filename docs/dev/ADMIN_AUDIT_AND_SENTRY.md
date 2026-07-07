@@ -22,6 +22,14 @@ A standing strength worth stating up front: the codebase is in good shape. SSE l
 rate-limiting, mandatory 2FA, step-up governance, env fail-fast, and security headers are all
 done well. The items below are refinements, not rescues.
 
+> **Status update (2026-07-06).** Several audit items have since shipped. Resolved:
+> **#1** (governance E2E suite now lives in `apps/admin/e2e/` — promote/owner-change/invite/wipe/
+> content-mfa/finance-export), **#3** (dialogs are now modal via a shared `BaseDialog.svelte` using
+> `.showModal()` + focus restore), **#4** (`requireOwner()` extracted to one place —
+> `$lib/server/auth-guard.ts`, not `auth.ts`), **#6** (the `listOpenRequests()` N+1 is batched into one
+> approvals query), and **#8** (`BaseDialog.svelte` landed). **OUTPUT 2 (Sentry) is now fully
+> implemented** — see the note at the head of that section. Remaining open items below are unchanged.
+
 ---
 
 # OUTPUT 1 — Admin Improvement Audit
@@ -30,14 +38,14 @@ done well. The items below are refinements, not rescues.
 
 | # | Sev | Area | Issue | Fix location |
 |---|-----|------|-------|--------------|
-| 1 | High | Testing | Zero E2E + zero form-action tests on governance flows (promote/demote/wipe/invite) | new `*.e2e.ts`, action unit tests |
+| 1 | High | Testing | ✅ **Done** — governance E2E suite added (`apps/admin/e2e/*.e2e.ts`) | new `*.e2e.ts`, action unit tests |
 | 2 | High | Resilience | DB/grant/email calls unwrapped → raw 500s, swallowed failures | map/users/networks/staff `+page.server.ts` |
-| 3 | High | A11y | 4 dialogs are non-modal (`<dialog open>`, not `.showModal()`) → no focus trap, no Esc, no `aria-modal` | `PromoteDialog`, `OwnerChangeDialog`, `WipeDialog`, `AddStaffForm` |
-| 4 | Med | DRY | `requireOwner()` reimplemented in 6 server files | extract to `$lib/server/auth.ts` |
+| 3 | High | A11y | ✅ **Done** — dialogs now modal via `BaseDialog.svelte` (`.showModal()` + focus restore) | `PromoteDialog`, `OwnerChangeDialog`, `WipeDialog`, `AddStaffForm` |
+| 4 | Med | DRY | ✅ **Done** — `requireOwner()` centralized in `$lib/server/auth-guard.ts` | ~~`$lib/server/auth.ts`~~ → `auth-guard.ts` |
 | 5 | Med | DRY | Email send + numeric-field validation duplicated 4×/3× | `$lib/server/email.ts`, `$lib/server/formValidation.ts` |
-| 6 | Med | Perf | N+1 approval query in `listOpenRequests()` | `owner-change.ts:258` |
+| 6 | Med | Perf | ✅ **Done** — N+1 batched into one approvals query | `owner-change.ts` (`listOpenRequests`) |
 | 7 | Med | UX | Missing loading skeletons (Users, Staff, Finance/transactions) | those `+page.svelte` |
-| 8 | Med | DRY | ~250 lines of near-identical dialog + table-toolbar boilerplate | `BaseDialog.svelte`, `TableToolbar.svelte` |
+| 8 | Med | DRY | ✅ **Done** (`BaseDialog.svelte`) — `TableToolbar.svelte` still open | `BaseDialog.svelte`, `TableToolbar.svelte` |
 | 9 | Low | Observability | All-`console.*` logging, no centralized capture (feeds Output 2) | new `$lib/server/logger.ts` |
 | 10 | Low | Auth | Session not server-invalidated on demote (role re-check covers it) | `owner-change.ts` |
 | 11 | Low | Schema | No index on `adminOwnerChangeRequest.initiatedBy` | `schema/admin-owner-change.ts` |
@@ -46,6 +54,11 @@ done well. The items below are refinements, not rescues.
 ---
 
 ## 1. Testing (Highest leverage gap)
+
+> **Resolved (2026-07-06):** the governance E2E gap below is closed. `apps/admin/e2e/` now holds a
+> Playwright suite (throwaway `radius_admin_test` DB, auto-2FA-enroll + `storageState`, stdlib TOTP)
+> covering promote, owner-change (demote), invite, wipe, content-MFA, and finance-export. Form-action
+> and SSE-resilience unit tests remain the open follow-ups.
 
 **What exists (good):** pure-logic unit tests — `owner-change-rules.test.ts`, `confirm.test.ts`,
 `reach.test.ts`, `clustering.test.ts`, `csv.test.ts`, `rateLimit.test.ts`, `twoFactor.test.ts`,
@@ -98,6 +111,11 @@ icon buttons, `aria-sort` on sortable headers, `.sr-only` headers, `RevenueChart
 `role="img"` + labeled focusable points. `MobileDrawer.svelte` already implements a correct
 focus trap + restore + Esc — it's the reference pattern.
 
+> **Resolved (2026-07-06):** all four dialogs now render through a shared `ui/BaseDialog.svelte` that
+> opens with `.showModal()` and restores focus to the trigger on close — giving the focus trap,
+> Esc-to-close, inert backdrop, and `aria-modal` the audit called for. The description below is kept as
+> the original finding.
+
 **The real gap — dialogs are non-modal.** `PromoteDialog`, `OwnerChangeDialog`, `WipeDialog`,
 `AddStaffForm` render `<dialog>` driven by the **`open` attribute** (see comment
 `PromoteDialog.svelte:26`). With the attribute (vs `dialog.showModal()`) there is **no focus
@@ -110,9 +128,11 @@ Smaller: dialog close doesn't return focus to the invoking control.
 
 ## 4–5. Duplication & dead code
 
-- **`requireOwner()` ×6.** Re-implemented in staff/users/networks and content/{packages,limits,faq}
-  server files. Extract one `requireOwner(userId)` into `$lib/server/auth.ts` returning
-  `fail(403)` or null. Centralizes the policy; one place to change if roles get more granular.
+- **`requireOwner()` ×6.** ✅ **Resolved (2026-07-06)** — extracted to one
+  `requireOwner(userId, message?)` in `$lib/server/auth-guard.ts` (re-reads role from DB, returns
+  `fail(403)` or null); the six server files now import it. (Note: it landed in `auth-guard.ts`, kept
+  separate from the better-auth setup in `auth.ts`.) *Original finding:* re-implemented in
+  staff/users/networks and content/{packages,limits,faq} server files.
 - **Email send ×4.** `try { mailer.send } catch { console.warn }` repeated in auth/staff/users/
   networks. Extract `sendEmail(to, msg, context): Promise<boolean>` into `$lib/server/email.ts`,
   with the critical-vs-notification rule from #2 baked in.
@@ -123,10 +143,10 @@ Smaller: dialog close doesn't return focus to the invoking control.
 
 ## 6. Query layer
 
-- **N+1 in `listOpenRequests()`** (`owner-change.ts:258`): one approvals query **per pending
-  request** inside the `for` loop. Low blast radius (pending owner-changes are rare and few), but
-  trivially fixed: batch with `inArray(approval.requestId, rows.map(r => r.id))` then group in a
-  `Map`. Worth doing for correctness-of-pattern.
+- **N+1 in `listOpenRequests()`** (`owner-change.ts`): ✅ **Resolved (2026-07-06)** — the per-request
+  approvals query is now a single grouped query for all pending requests (was one query per request
+  inside the `for` loop). Low blast radius originally (pending owner-changes are rare and few), fixed
+  for correctness-of-pattern.
 - **Wide-then-slice reads** (`queries.ts`, network session logs `.limit(400)` then cap 15/AP in
   memory; transactions similar). Works and is bounded, but order by the grouping key and tighten
   the limit, or paginate, if AP/transaction counts grow.
@@ -145,9 +165,9 @@ Bind a pending state to the period form and show the skeleton while the new rang
 ## 8. Component architecture
 
 Solid shared `ui/` + `feature/` libraries and a reused `sortable.svelte.ts`. Two consolidations:
-- **`BaseDialog.svelte`** — `PromoteDialog`/`OwnerChangeDialog`/`WipeDialog` share ~250 lines of
-  open-effect/reset/enhance boilerplate. Extract a base taking title/body/action snippets — and
-  fix the modal a11y (#3) **once**, in the base.
+- **`BaseDialog.svelte`** — ✅ **Resolved (2026-07-06)** — extracted; `PromoteDialog`/
+  `OwnerChangeDialog`/`WipeDialog`/`AddStaffForm` now render through `ui/BaseDialog.svelte`, which also
+  carries the modal a11y fix (#3) in one place.
 - **`TableToolbar.svelte`** — Users/Staff/Transactions repeat ~50 lines each of search + mobile
   sort `<select>` + filters.
 
@@ -163,6 +183,32 @@ Solid shared `ui/` + `feature/` libraries and a reused `sortable.svelte.ts`. Two
 ---
 
 # OUTPUT 2 — Sentry Implementation Guide (whole system)
+
+> **Status (2026-07-06): IMPLEMENTED in `apps/admin` and `apps/customer`** (error capture + tracing +
+> PII scrub). What shipped, and where it deviates from the plan below:
+> - **Init is inline, not via `instrument.server.ts`.** Each app's `src/hooks.server.ts` calls
+>   `Sentry.init(sentryOptions({ app }))` (guarded by `PUBLIC_SENTRY_DSN && !building`), then
+>   `handle = sequence(Sentry.sentryHandle(), handleBetterAuth)` and
+>   `handleError = Sentry.handleErrorWithSentry()`. `setUser({ id })` + `setTag('staff_role')` (id/role
+>   only). The planned separate `instrument.server.ts` file was **not** created.
+> - **`src/hooks.client.ts` now exists** in both apps (`Sentry.init` + `browserTracingIntegration` +
+>   `handleErrorWithSentry`).
+> - **PII scrub lives in `packages/core/src/observability.ts`** (`scrubEvent`, wired via
+>   `sentryOptions().beforeSend`/`beforeSendTransaction`, `sendDefaultPii:false`) — masks email/MAC/
+>   phone (incl. percent-encoded), drops secret-keyed values, strips cookies/authorization/body/IP.
+> - **Tracing at the core factory seams** via `traceMethods()` (same file) on the Maya payment,
+>   MikroTik network, and Resend email providers. `captureHandled()` is available for caught errors.
+> - **Source-map upload** is wired in each `vite.config.ts` (`sentrySvelteKit`, `autoInstrument:false`),
+>   active only when `SENTRY_AUTH_TOKEN` + `SENTRY_ORG_SLUG` + `SENTRY_PROJECT_ID` are all set.
+> - **Env** (`validateEnv.ts` warns if `!dev && !PUBLIC_SENTRY_DSN`; documented in `.env.example`):
+>   `PUBLIC_SENTRY_DSN`, `SENTRY_ENVIRONMENT`, `SENTRY_RELEASE`, `SENTRY_AUTH_TOKEN`,
+>   `SENTRY_TRACES_SAMPLE_RATE`, `SENTRY_ORG_SLUG`, `SENTRY_PROJECT_ID`, `SENTRY_API_BASE`.
+> - **Not yet done:** `apps/locator` wiring; DB (OpenTelemetry) auto-instrumentation.
+>
+> The guide below is retained as the original design rationale (note it predates the shared
+> `packages/core/src/observability.ts` factory that the implementation actually uses). It is **not** the
+> in-app `/sentry` dashboard feature (`apps/admin/src/lib/server/sentry/*`), which is a separate
+> Sentry-API client for viewing issues.
 
 Goal: error capture + light performance tracing, with **strict PII scrubbing** (this system holds
 phone numbers, emails, MAC addresses, and payment data). Applies to `apps/admin`, `apps/customer`,

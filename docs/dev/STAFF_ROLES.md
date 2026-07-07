@@ -43,8 +43,8 @@ owner-only sections are **Content Management** and **Staff**.
 - **Promotion:** an owner promotes an `admin` to `owner` on `/staff`.
 - **Owner change / step-down:** demoting or removing an owner (incl. an owner stepping down) needs
   **unanimous approval from every *other* owner** — a request/approve flow
-  (`requestOwnerChange` → `approveOwnerChange`, `OwnerChangeDialog.svelte`), so no single owner can
-  unilaterally remove another.
+  (`createRequest` → `recordApproval` → `evaluate` in `owner-change.ts`, `OwnerChangeDialog.svelte`),
+  so no single owner can unilaterally remove another.
 
 ## Enforcement
 

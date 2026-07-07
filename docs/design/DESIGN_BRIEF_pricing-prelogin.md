@@ -1,7 +1,7 @@
-# Design Brief: Veent WiFi Portal — Customer Captive Portal Refresh
+# Design Brief: Parafiber WiFi — Customer Captive Portal Refresh
 
 ## What I'm building
-Veent is a **WiFi captive portal** for guests on a public/venue network in the
+Parafiber WiFi is a **WiFi captive portal** for guests on a public/venue network in the
 Philippines. A guest connects to the WiFi, lands on this portal in their phone's
 captive browser, and uses it to get online — either via a free time allowance or
 by buying internet access with credits. It's paired with an operator admin
@@ -38,22 +38,22 @@ Do not invent a new visual identity. Refine layout, hierarchy, and components
 within this system:
 
 - **Font:** Plus Jakarta Sans (400/500/600/700), system-ui fallback.
-- **Color tokens (OKLCH), use these semantically — don't hardcode new colors:**
+- **Color tokens (OKLCH / RGB), use these semantically — don't hardcode new colors:**
   | Token | Value | Role |
   |---|---|---|
-  | `--color-brand` | `oklch(0.38 0.13 185)` | Teal — primary accent |
-  | `--color-brand-hover` | `oklch(0.32 0.13 185)` | Teal hover |
-  | `--color-cta` | `oklch(0.62 0.18 28)` | Coral — call-to-action buttons |
-  | `--color-cta-hover` | `oklch(0.56 0.18 28)` | Coral hover |
+  | `--color-brand` | `rgb(0, 18, 107)` | Navy — primary accent |
+  | `--color-brand-hover` | `rgb(0, 12, 78)` | Navy hover |
+  | `--color-cta` | `rgb(10, 98, 169)` | Blue — call-to-action buttons |
+  | `--color-cta-hover` | `rgb(7, 75, 135)` | Blue hover |
   | `--color-bg` | `oklch(1 0 0)` | White page bg |
-  | `--color-surface` | `oklch(0.975 0.008 185)` | Off-white card bg |
-  | `--color-border` | `oklch(0.92 0.008 185)` | Light borders |
-  | `--color-ink` | `oklch(0.14 0.02 190)` | Primary text |
-  | `--color-muted` | `oklch(0.52 0.01 190)` | Secondary text |
+  | `--color-surface` | `rgb(244, 249, 255)` | Off-white card bg |
+  | `--color-border` | `rgb(223, 234, 247)` | Light borders |
+  | `--color-ink` | `rgb(12, 34, 58)` | Primary text |
+  | `--color-muted` | `rgb(92, 112, 138)` | Secondary text |
   | `--color-online` | `oklch(0.5 0.15 155)` | Green — online/success |
   | `--color-warning` | `oklch(0.65 0.15 72)` | Amber — badges/warnings |
   | `--color-blocked` | `oklch(0.55 0.18 22)` | Red — blocked/errors |
-- **CTA = coral, brand accent = teal.** Coral is reserved for the primary
+- **CTA = blue, brand accent = navy.** The blue CTA is reserved for the primary
   action on a screen; don't dilute it.
 - Clean, calm, trustworthy. This is a payment-adjacent utility, not a flashy
   marketing site. Whitespace over decoration. No emojis as icons (icon set is
@@ -85,7 +85,7 @@ within this system:
 
 ### 1. Landing `/` (logged-out) — the priority screen
 Public, no auth. Must:
-- Lead with the **Free Time hook** and a prominent **login/connect** CTA (coral).
+- Lead with the **Free Time hook** and a prominent **login/connect** CTA (blue).
 - Present the **full pricing scheme** (Free Time, bundles, tiers) as view-only
   context — clear, scannable, with the ₱100 bundle flagged as best value.
 - Convey the money→credits→time model simply.
@@ -142,6 +142,6 @@ For each screen, show the important states, not just the happy path:
 
 ## Hard constraints recap
 Mobile-first single column · max ~28rem width · 44px min tap targets · Plus
-Jakarta Sans · teal brand / coral CTA / the OKLCH tokens above · pricing on
+Jakarta Sans · navy brand / blue CTA / the tokens above · pricing on
 landing is view-only and routes to login · Free Time is the conversion hook ·
 calm, trustworthy, utility-grade — not a flashy marketing page.

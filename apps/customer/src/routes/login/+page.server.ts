@@ -9,6 +9,7 @@ import {
 	serializePending
 } from '$lib/server/otp';
 import { enforceOtpSendLimit, RateLimitError, retryAfterMessage } from '$lib/server/otpRateLimit';
+import { clientIp } from '$lib/server/rateLimit';
 import { getDeviceMac, getPortalContext } from '$lib/server/portal';
 
 export const load: PageServerLoad = (event) => {
@@ -41,7 +42,7 @@ export const actions: Actions = {
 		// MAC into the pending cookie → the grant after verify can target this device.
 		const mac = getPortalContext(event)?.mac ?? getDeviceMac(event) ?? undefined;
 		try {
-			await enforceOtpSendLimit(phone, mac);
+			await enforceOtpSendLimit(phone, mac, clientIp(event));
 		} catch (error) {
 			if (error instanceof RateLimitError) {
 				return fail(429, { phone: phoneRaw, message: retryAfterMessage(error.retryAfterSec) });

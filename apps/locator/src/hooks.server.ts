@@ -1,3 +1,5 @@
+import type { Handle } from '@sveltejs/kit';
+import { sequence } from '@sveltejs/kit/hooks';
 import { building, dev } from '$app/environment';
 import * as Sentry from '@sentry/sveltekit';
 // Import from the browser-safe subpath (also server-safe: it only pulls in @sentry/core), NOT the
@@ -22,8 +24,25 @@ if (SENTRY_DSN && !building) {
 	);
 }
 
-// Wrap requests in the Sentry request transaction (no-op passthrough when Sentry isn't initialised).
-export const handle = Sentry.sentryHandle();
+// Baseline security headers, matching the admin/customer apps (L-6). The locator is public and
+// read-only, but framing (clickjacking) + MIME-sniffing protection should be consistent across all
+// three apps. `frame-ancestors 'self'` / SAMEORIGIN blocks cross-origin framing; a full script/style
+// CSP is out of scope here (needs nonce wiring), same as the other two apps. HSTS only over HTTPS.
+const securityHeaders: Handle = async ({ event, resolve }) => {
+	const response = await resolve(event);
+	const h = response.headers;
+	h.set('X-Frame-Options', 'SAMEORIGIN');
+	h.set('Content-Security-Policy', "frame-ancestors 'self'");
+	h.set('X-Content-Type-Options', 'nosniff');
+	h.set('Referrer-Policy', 'same-origin');
+	if (event.url.protocol === 'https:') {
+		h.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+	}
+	return response;
+};
+
+// sentryHandle FIRST so it wraps the request transaction; security headers set on the way out.
+export const handle = sequence(Sentry.sentryHandle(), securityHeaders);
 
 // Report server-side (load/render) errors to Sentry, then fall through to SvelteKit's default.
 export const handleError = Sentry.handleErrorWithSentry();

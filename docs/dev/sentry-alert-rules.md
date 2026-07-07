@@ -21,8 +21,8 @@ Two discriminators the rules lean on:
 
 | area · scope | level | meaning | source |
 |---|---|---|---|
-| `payment` · `attribution` | error | **unattributed PAID event** — buyer charged, not credited (needs manual refund/credit) | `webhooks/payment/+server.ts` |
-| `payment` · `webhook` | error | webhook verify failed — spoofed/garbled event OR gateway lookup outage | `webhooks/payment/+server.ts` |
+| `payment` · `attribution` | error | **unattributed PAID event** — buyer charged, not credited (needs manual refund/credit) | `lib/server/paymentWebhook.ts` |
+| `payment` · `webhook` | error | webhook verify failed — spoofed/garbled event OR gateway lookup outage | `lib/server/paymentWebhook.ts` |
 | `payment` · `createCheckout` | error | checkout creation failed — a purchase was blocked | `top-up/+page.server.ts` |
 | `payment` · `attribution-miss` | warning | AP unresolved — payment unattributed by location (funnel-data gap, not money loss) | `network-location.ts` |
 | `payment` · `buyer-persist` | warning | best-effort buyer-details write failed (Maya Kount) | `top-up/+page.server.ts` |
