@@ -21,6 +21,14 @@
 	const mac = $derived(data.mac ?? '');
 	const hasMac = $derived(!!data.mac);
 
+	// If another account currently holds LIVE time on THIS device (same MAC), the server sends that
+	// window's end time so we can warn before a buy — a second account on a shared device would
+	// otherwise unknowingly pay for internet the device already has. Null when there's no such co-tenant.
+	const deviceBusyUntil = $derived(data.deviceBusyUntil ? new Date(data.deviceBusyUntil) : null);
+	const deviceBusyLabel = $derived(
+		deviceBusyUntil?.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) ?? null
+	);
+
 	// Live per-account view over SSE (pause/resume, purchases, bind/unbind, balance — pushed
 	// from ANY of the account's devices). Until the first frame lands, fall back to `load` data.
 	$effect(() => connectAccountLive(mac));
@@ -766,6 +774,18 @@
 													</div>
 												</div>
 											</div>
+											{#if deviceBusyLabel}
+												<div
+													class="mb-4 flex items-start gap-2.5 rounded-xl border border-warning/30 bg-warning/[0.12] px-3.5 py-3 text-[12.5px] font-medium text-warning"
+													role="alert"
+												>
+													<Icon name="alert-triangle" size={16} class="mt-0.5 shrink-0 text-warning" />
+													<span>
+														This device already has active internet under another account until {deviceBusyLabel}.
+														Buying now adds your own time on top — it won't replace or extend theirs.
+													</span>
+												</div>
+											{/if}
 											<!-- Pay with credits (primary). Disabled when the credit balance cannot cover it. -->
 											<form
 												method="post"

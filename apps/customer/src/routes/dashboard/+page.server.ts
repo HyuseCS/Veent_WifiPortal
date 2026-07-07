@@ -12,7 +12,8 @@ import {
 	unbindDevice,
 	unbindAllDevices,
 	getSessionLimits,
-	captureHandled
+	captureHandled,
+	otherAccountAccessUntilForMac
 } from '@veent/core';
 import { db } from '$lib/server/db';
 import { network } from '$lib/server/network';
@@ -47,6 +48,11 @@ export const load: PageServerLoad = async (event) => {
 	// the router's address, not the device). Without this fallback the dashboard shows the
 	// "device not detected" warning on every return-to-dashboard in those setups.
 	const mac = await resolveMacForUser(event, user.id);
+
+	// If another account currently holds a LIVE window on this same device (MAC), surface its end
+	// time so a second account on a shared device is warned before double-buying — the device is
+	// already online, and buying stacks a redundant window (never a hard block; see mac-guard).
+	const deviceBusyUntil = mac ? await otherAccountAccessUntilForMac(db, mac, user.id) : null;
 
 	const tiers = await db
 		.select()
@@ -110,6 +116,7 @@ export const load: PageServerLoad = async (event) => {
 		maskedPhone: phone ? maskPhone(phone) : null,
 		mac,
 		hasMac: !!mac,
+		deviceBusyUntil,
 		tiers,
 		handoffUrl,
 		...view

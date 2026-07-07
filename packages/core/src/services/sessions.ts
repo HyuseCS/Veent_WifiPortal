@@ -909,6 +909,35 @@ export async function hasLiveAccessForMacExcludingUser(
 }
 
 /**
+ * The latest window end among OTHER accounts currently live on `macAddress` — i.e. "another account
+ * already has active internet on this device, until when?" Returns null when no other account is live
+ * on the MAC. Powers the dashboard "this device already has time under another account" notice so a
+ * second account on a shared device doesn't unknowingly double-buy. Same shape as
+ * hasLiveAccessForMacExcludingUser, but surfaces the end time instead of a boolean.
+ */
+export async function otherAccountAccessUntilForMac(
+	db: DB,
+	macAddress: string,
+	excludeUserId: string
+): Promise<Date | null> {
+	const [row] = await db
+		.select({ until: customerProfile.accessExpiresAt })
+		.from(networkSessions)
+		.innerJoin(customerProfile, eq(customerProfile.userId, networkSessions.userId))
+		.where(
+			and(
+				sql`lower(${networkSessions.macAddress}) = ${macAddress.toLowerCase()}`,
+				eq(networkSessions.status, SESSION_STATUS.active),
+				gt(customerProfile.accessExpiresAt, new Date()),
+				ne(networkSessions.userId, excludeUserId)
+			)
+		)
+		.orderBy(desc(customerProfile.accessExpiresAt))
+		.limit(1);
+	return row?.until ?? null;
+}
+
+/**
  * Revoke the guest bypass for `mac` on the router UNLESS another account still holds a live window on
  * the same MAC (shared device / NAT-collapsed) — M-2. Only the ROUTER binding is gated here; callers
  * must already have marked the DB row revoked/expired ("DB is truth"). A kept binding is logged so the
