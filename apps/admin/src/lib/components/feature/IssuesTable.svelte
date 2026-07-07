@@ -9,6 +9,7 @@
 	import Trash2 from 'lucide-svelte/icons/trash-2';
 	import X from 'lucide-svelte/icons/x';
 	import type { Component } from 'svelte';
+	import { SvelteSet } from 'svelte/reactivity';
 	import { enhance } from '$app/forms';
 	import { Button, EmptyState, IconButton, SearchInput, StatusBadge, Table } from '$lib/components/ui';
 	import type { AdminIssueRow } from '$lib/server/issues';
@@ -30,13 +31,11 @@
 
 	let query = $state('');
 	let confirmingId = $state<number | null>(null); // delete confirm
-	let expanded = $state<Set<number>>(new Set()); // rows showing full detail
+	const expanded = new SvelteSet<number>(); // rows showing full detail (reactive on mutation)
 
 	function toggleExpand(id: number) {
-		const next = new Set(expanded);
-		if (next.has(id)) next.delete(id);
-		else next.add(id);
-		expanded = next;
+		if (expanded.has(id)) expanded.delete(id);
+		else expanded.add(id);
 	}
 
 	const filtered = $derived.by(() => {
