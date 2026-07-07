@@ -11,7 +11,7 @@ import { getDeviceMac, getPortalContext, persistResolvedMac } from '$lib/server/
 // Device MAC and client IP are PII. observability.ts scrubs them from Sentry events, but that hook
 // doesn't touch console.* — so mask them here before they reach stdout/log files (L-8). Keep enough
 // tail/head to correlate a session without persisting the full identifier.
-function maskMac(mac: string | null | undefined): string | null {
+export function maskMac(mac: string | null | undefined): string | null {
 	if (!mac) return mac ?? null;
 	return mac.replace(/^(?:[0-9A-Fa-f]{2}:){4}/, '**:**:**:**:'); // keep the last two octets
 }
@@ -60,6 +60,39 @@ export async function resolveMac(event: RequestEvent): Promise<string | null> {
 		captureHandled(e, { level: 'warning', tags: { area: 'network', scope: 'ip-mac-lookup' } });
 		return null;
 	}
+}
+
+/** A real device MAC: six colon-separated hex octets. */
+const MAC_RE = /^[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}$/;
+
+/**
+ * Server-authoritative MAC resolution + tamper tripwire (M-1/L-1). Returns only the MAC the server
+ * resolves for `userId`; a `claimedMac` (posted body/form field) is diagnostic-only — if it's a valid
+ * MAC that DIFFERS from the resolved one, it's logged (masked, userId only) to stdout AND Sentry
+ * (captureHandled no-ops when Sentry is off, e.g. dev) and otherwise ignored. Callers keep their own
+ * validity gate on the returned value. Shared by the grant endpoint and the dashboard grant actions so
+ * the tamper-signal behaviour stays identical across all sites.
+ */
+export async function resolveMacTrusted(
+	event: RequestEvent,
+	userId: string,
+	claimedMac?: string | null
+): Promise<string | null> {
+	const mac = await resolveMacForUser(event, userId);
+	const claimed = String(claimedMac ?? '').toUpperCase();
+	if (claimed && MAC_RE.test(claimed) && mac && claimed !== mac.toUpperCase()) {
+		console.warn('[mac-trust] posted MAC differs from server-resolved — using server', {
+			userId,
+			posted: maskMac(claimed),
+			resolved: maskMac(mac)
+		});
+		captureHandled('MAC mismatch — using server-resolved', {
+			level: 'warning',
+			tags: { area: 'network', scope: 'mac-trust' },
+			extra: { userId }
+		});
+	}
+	return mac;
 }
 
 /**

@@ -40,8 +40,10 @@ describe('unbindAllDevices DB-first ordering (B3.1)', () => {
 			{ id: 1, macAddress: 'AA:BB:CC:DD:EE:01' },
 			{ id: 2, macAddress: 'AA:BB:CC:DD:EE:02' }
 		];
-		// Awaited statements in order: the initial select (→active), then one update per row.
-		const { db, setCalls } = fakeDb([active, undefined, undefined]);
+		// Awaited statements in order, per row: the initial select (→active), then [update, guard-select].
+		// The M-2 guard (hasLiveAccessForMacExcludingUser) does one select per MAC — an empty result
+		// means "no other account holds this MAC live", so the router revoke proceeds as before.
+		const { db, setCalls } = fakeDb([active, undefined, [], undefined, []]);
 		const network = { revoke: vi.fn().mockRejectedValue(new Error('router unreachable')) } as never;
 
 		const count = await unbindAllDevices(db, network, 'u1');
@@ -56,6 +58,25 @@ describe('unbindAllDevices DB-first ordering (B3.1)', () => {
 		// Every row was marked revoked in the DB (the update ran before each failing revoke).
 		expect(setCalls).toHaveLength(2);
 		expect(setCalls.every((c) => c.status === SESSION_STATUS.revoked)).toBe(true);
+	});
+
+	// M-2: two accounts can legitimately share one physical MAC (shared device, or a hotspot NAT that
+	// collapses clients to one address). Unbinding one account's device must NOT strip the router
+	// binding the OTHER live account still needs — but the DB row is still marked revoked (DB is truth).
+	it('skips the router revoke when another account still holds the MAC live, but still marks the row revoked', async () => {
+		const active = [{ id: 1, macAddress: 'AA:BB:CC:DD:EE:01' }];
+		// Queue: initial select → active; row update → undefined; guard select → a co-tenant's live row.
+		const { db, setCalls } = fakeDb([active, undefined, [{ id: 99 }]]);
+		const revoke = vi.fn().mockResolvedValue(undefined);
+		const network = { revoke } as never;
+
+		const count = await unbindAllDevices(db, network, 'u1');
+
+		expect(count).toBe(1); // the device is still unbound for this account
+		expect(revoke).not.toHaveBeenCalled(); // co-tenant protected — router binding left intact
+		// DB is truth: the row is revoked regardless of the router decision.
+		expect(setCalls).toHaveLength(1);
+		expect(setCalls[0].status).toBe(SESSION_STATUS.revoked);
 	});
 });
 

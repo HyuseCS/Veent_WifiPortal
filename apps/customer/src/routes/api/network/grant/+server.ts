@@ -10,6 +10,7 @@ import {
 import { db } from '$lib/server/db';
 import { network } from '$lib/server/network';
 import { rateLimit } from '$lib/server/rateLimit';
+import { resolveMacTrusted } from '$lib/server/network-location';
 import { logger } from '$lib/server/logger';
 import type { RequestHandler } from './$types';
 
@@ -19,9 +20,13 @@ const log = logger('grant');
  * POST /api/network/grant — start an access session for the authenticated user
  * and drop the firewall for their device.
  *
- * Body: { macAddress: string, packageId?: number }
+ * Body: { macAddress?: string, packageId?: number }
  *   - no packageId  → Free Time session (15 min, subject to the 12h cooldown)
  *   - with packageId → spend the tier's credit cost, then grant for its duration
+ *
+ * The device MAC is resolved SERVER-SIDE (M-1/L-1): a body `macAddress` is only a diagnostic hint,
+ * never authoritative — trusting it would let an authenticated caller grant internet to an arbitrary
+ * device. A body MAC that disagrees with the server-resolved one is logged as a tamper signal.
  *
  * Thin wrapper over @veent/core services (same logic the dashboard form actions
  * use); exists for the captive-portal / programmatic path.
@@ -34,16 +39,20 @@ export const POST: RequestHandler = async (event) => {
 		macAddress?: string;
 		packageId?: number;
 	};
-	// Validate the MAC shape (six hex octets) — same guard the dashboard action applies.
-	// An unchecked value would let a caller grant access for an arbitrary device and would
-	// flow junk/oversized input into the DB and the router controller (500 / binding-table
-	// pollution). Format-validating here doesn't bind the MAC to the caller's own device,
-	// but it closes the malformed-input vector and matches the captive-portal path.
-	if (!isValidMac(body.macAddress)) error(400, 'A valid macAddress is required');
-
-	// Throttle grant attempts per user so a client can't hammer the spend→grant path.
+	// Throttle FIRST — before the expensive/side-effectful MAC resolution (router IP→MAC lookup +
+	// durable fallback persistence in resolveMacForUser) — so a client can't hammer that path or the
+	// spend→grant behind it.
 	const rl = await rateLimit('grant_user', user.id, 20);
 	if (!rl.allowed) error(429, 'Too many access requests. Please wait a moment and try again.');
+
+	// Resolve the device MAC SERVER-SIDE — never trust `body.macAddress` (M-1/L-1). resolveMacTrusted
+	// layers portal cookie → router IP→MAC → durable per-account fallbacks (so a legit caller resolves
+	// without supplying a MAC) and logs a masked tamper signal if the body MAC disagrees. A null result
+	// means we genuinely can't identify the device.
+	const mac = await resolveMacTrusted(event, user.id, body.macAddress);
+	if (!isValidMac(mac)) {
+		error(400, 'Could not detect your device. Reconnect through the WiFi portal and try again.');
+	}
 
 	const account = await getAccount(db, user.id);
 	if (account?.blocked) error(403, 'Account is blocked');
@@ -52,7 +61,7 @@ export const POST: RequestHandler = async (event) => {
 	if (!body.packageId) {
 		const result = await startFreeAccessAndBindDevice(db, network, {
 			userId: user.id,
-			macAddress: body.macAddress
+			macAddress: mac
 		});
 		if (!result.ok) error(429, `Free time not available. Next eligible: ${result.nextEligibleAt}`);
 		return json({ ok: true, mode: 'free', accessExpiresAt: result.accessExpiresAt });
@@ -68,7 +77,7 @@ export const POST: RequestHandler = async (event) => {
 	try {
 		result = await startPaidAccessAndBindDevice(db, network, {
 			userId: user.id,
-			macAddress: body.macAddress,
+			macAddress: mac,
 			packageId: pkg.id,
 			amount: pkg.creditCost ?? 0,
 			durationMinutes: pkg.durationMinutes ?? 0

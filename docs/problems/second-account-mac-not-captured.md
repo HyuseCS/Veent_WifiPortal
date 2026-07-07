@@ -28,7 +28,10 @@ logged-in account, plus a logout→login re-thread. Concretely:
 **Security note:** no new attack surface. The `veent_device` MAC is client-assertable in the same
 way `?mac=` already is (captive-portal MAC is inherently client-supplied), and the grant remains
 MAC-only. Setting the cookie to a victim's MAC would only bind (and grant, at the attacker's own
-credit cost) the *victim's* device — not the attacker's — so there is no hijack incentive.
+credit cost) the *victim's* device — not the attacker's — so there is no hijack incentive. (The
+one real escalation this client-MAC assertion used to enable — bind a victim's MAC, then unbind to
+cut the *shared* router bypass and knock them offline — is now blocked by the M-2 cross-user revoke
+guard; see `docs/SECURITY_RISKS.md` → R12.)
 
 **Not implemented:** true cross-*browser* second-account logins (device cookie lives in one
 browser's jar) still rely on IP→MAC, which the hotspot NAT defeats — same residual gap the doc

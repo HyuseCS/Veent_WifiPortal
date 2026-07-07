@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gt, inArray, isNotNull, isNull, lte, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, inArray, isNotNull, isNull, lte, ne, or, sql } from 'drizzle-orm';
 import { type DB, customerProfile, networkSessions, packages } from '@veent/db';
 import { GUEST_BYPASS_TAG, type NetworkController } from '../integrations/network';
 import { SESSION_STATUS } from '../config';
@@ -195,7 +195,9 @@ async function afterBind(
 ): Promise<void> {
 	for (const mac of evicted) {
 		try {
-			await network.revoke(mac, { tag: GUEST_BYPASS_TAG });
+			// The evicted rows were already marked revoked in bindMacTx; drop their router binding unless
+			// another account still shares the MAC live (M-2). reconcileGuestBindings sweeps any orphan.
+			await revokeGuestUnlessShared(db, network, mac, userId);
 		} catch {
 			// reconcileGuestBindings will drop an orphaned binding on the next cron.
 		}
@@ -838,7 +840,9 @@ export async function expireDueAccounts(
 		// reconcileGuestBindings, which drops router bindings no longer backed by an active row.
 		for (const mac of toRevoke) {
 			try {
-				await network.revoke(mac, { tag: GUEST_BYPASS_TAG });
+				// This account's rows are already marked expired above; drop the router binding unless a
+				// co-tenant still holds a live window on the MAC (M-2).
+				await revokeGuestUnlessShared(db, network, mac, userId);
 			} catch {
 				// reconcileGuestBindings drops the orphaned router binding on the next cron.
 			}
@@ -874,6 +878,83 @@ export async function hasLiveAccessForMac(db: DB, macAddress: string): Promise<b
 		)
 		.limit(1);
 	return rows.length > 0;
+}
+
+/**
+ * Like `hasLiveAccessForMac`, but ignores rows owned by `excludeUserId` — answers "does ANOTHER
+ * account still hold a live guest window on this MAC?" Guards a device revoke from cutting a second
+ * account that shares the same physical MAC (two accounts behind one device, or NAT-collapsed to one
+ * MAC) — M-2. `bindMacTx` upserts exactly one active row per (user, MAC), so excluding by userId can't
+ * hide a same-user duplicate — the exclusion is exact. Case-insensitive to match `hasLiveAccessForMac`.
+ */
+/** The shared predicate behind the two "another account live on this MAC?" helpers below — keeps their
+ * live-window/exclude-user semantics identical (case-insensitive MAC, active status, unexpired window,
+ * not `excludeUserId`). Both join `customerProfile` on `userId`. */
+function liveOnMacExcludingUser(macAddress: string, excludeUserId: string) {
+	return and(
+		sql`lower(${networkSessions.macAddress}) = ${macAddress.toLowerCase()}`,
+		eq(networkSessions.status, SESSION_STATUS.active),
+		gt(customerProfile.accessExpiresAt, new Date()),
+		ne(networkSessions.userId, excludeUserId)
+	);
+}
+
+export async function hasLiveAccessForMacExcludingUser(
+	db: DB,
+	macAddress: string,
+	excludeUserId: string
+): Promise<boolean> {
+	const rows = await db
+		.select({ id: networkSessions.id })
+		.from(networkSessions)
+		.innerJoin(customerProfile, eq(customerProfile.userId, networkSessions.userId))
+		.where(liveOnMacExcludingUser(macAddress, excludeUserId))
+		.limit(1);
+	return rows.length > 0;
+}
+
+/**
+ * The latest window end among OTHER accounts currently live on `macAddress` — i.e. "another account
+ * already has active internet on this device, until when?" Returns null when no other account is live
+ * on the MAC. Powers the dashboard "this device already has time under another account" notice so a
+ * second account on a shared device doesn't unknowingly double-buy. Same shape as
+ * hasLiveAccessForMacExcludingUser, but surfaces the end time instead of a boolean.
+ */
+export async function otherAccountAccessUntilForMac(
+	db: DB,
+	macAddress: string,
+	excludeUserId: string
+): Promise<Date | null> {
+	const [row] = await db
+		.select({ until: customerProfile.accessExpiresAt })
+		.from(networkSessions)
+		.innerJoin(customerProfile, eq(customerProfile.userId, networkSessions.userId))
+		.where(liveOnMacExcludingUser(macAddress, excludeUserId))
+		.orderBy(desc(customerProfile.accessExpiresAt))
+		.limit(1);
+	return row?.until ?? null;
+}
+
+/**
+ * Revoke the guest bypass for `mac` on the router UNLESS another account still holds a live window on
+ * the same MAC (shared device / NAT-collapsed) — M-2. Only the ROUTER binding is gated here; callers
+ * must already have marked the DB row revoked/expired ("DB is truth"). A kept binding is logged so the
+ * skip is diagnosable (why a MAC is still bound after an unbind/expire) and swept later if it becomes a
+ * real orphan. `excludeUserId` is the account being revoked — its own rows never count as the co-tenant.
+ */
+async function revokeGuestUnlessShared(
+	db: DB,
+	network: NetworkController,
+	mac: string,
+	excludeUserId: string
+): Promise<void> {
+	if (await hasLiveAccessForMacExcludingUser(db, mac, excludeUserId)) {
+		console.info('[mac-guard] kept router binding — MAC still live for another account', {
+			excludingUser: excludeUserId
+		});
+		return;
+	}
+	await network.revoke(mac, { tag: GUEST_BYPASS_TAG });
 }
 
 export async function reconcileGuestBindings(
@@ -982,11 +1063,22 @@ export async function unbindDevice(
 		.limit(1);
 	if (!row) return { ok: false };
 
-	if (row.macAddress) await network.revoke(row.macAddress, { tag: GUEST_BYPASS_TAG });
+	// DB-first ("DB is truth"), same ordering as unbindAllDevices/afterBind/expireDueAccounts: mark the
+	// row revoked BEFORE touching the router, so a router error can't strand the row `active` and leave
+	// the device with free internet forever.
 	await db
 		.update(networkSessions)
 		.set({ status: SESSION_STATUS.revoked })
 		.where(eq(networkSessions.id, row.id));
+	if (row.macAddress) {
+		try {
+			// Best-effort: drop the router binding unless a co-tenant still holds a live window on the MAC
+			// (M-2). The row is already revoked; reconcileGuestBindings sweeps an orphaned binding next cron.
+			await revokeGuestUnlessShared(db, network, row.macAddress, input.userId);
+		} catch (err) {
+			captureHandled(err, { level: 'warning', tags: { area: 'network', scope: 'unbind' } });
+		}
+	}
 	return { ok: true, macAddress: row.macAddress };
 }
 
@@ -1020,7 +1112,9 @@ export async function unbindAllDevices(
 		revoked++;
 		if (s.macAddress) {
 			try {
-				await network.revoke(s.macAddress, { tag: GUEST_BYPASS_TAG });
+				// Row already marked revoked above (DB-first); drop the router binding unless a co-tenant
+				// still holds a live window on the MAC (M-2).
+				await revokeGuestUnlessShared(db, network, s.macAddress, userId);
 			} catch (err) {
 				// Swallow + continue: the row is already revoked, and reconcileGuestBindings drops
 				// the orphaned router binding on the next cron. Capture so a spike in stranded

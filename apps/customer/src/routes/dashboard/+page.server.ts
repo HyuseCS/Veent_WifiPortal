@@ -11,13 +11,14 @@ import {
 	bindDevice,
 	unbindDevice,
 	unbindAllDevices,
-	getSessionLimits
+	getSessionLimits,
+	otherAccountAccessUntilForMac
 } from '@veent/core';
 import { db } from '$lib/server/db';
 import { network } from '$lib/server/network';
 import { rateLimit } from '$lib/server/rateLimit';
 import { buildAccountView } from '$lib/server/account-view';
-import { resolveMacForUser } from '$lib/server/network-location';
+import { resolveMacForUser, resolveMacTrusted, maskMac } from '$lib/server/network-location';
 import { maskPhone } from '$lib/server/otp';
 import { logger } from '$lib/server/logger';
 import type { Actions, PageServerLoad } from './$types';
@@ -46,6 +47,11 @@ export const load: PageServerLoad = async (event) => {
 	// the router's address, not the device). Without this fallback the dashboard shows the
 	// "device not detected" warning on every return-to-dashboard in those setups.
 	const mac = await resolveMacForUser(event, user.id);
+
+	// If another account currently holds a LIVE window on this same device (MAC), surface its end
+	// time so a second account on a shared device is warned before double-buying — the device is
+	// already online, and buying stacks a redundant window (never a hard block; see mac-guard).
+	const deviceBusyUntil = mac ? await otherAccountAccessUntilForMac(db, mac, user.id) : null;
 
 	const tiers = await db
 		.select()
@@ -87,7 +93,7 @@ export const load: PageServerLoad = async (event) => {
 	// `update()` should re-run this load and log a SECOND line with thisBound=true. Remove once
 	// the "needs a refresh to show connected" bug is understood.
 	console.info(
-		`[dash-load] mac=${mac ?? 'null'} active=${view.access.active} thisBound=${view.devices.thisDeviceBound} devices=${view.devices.count}`
+		`[dash-load] mac=${mac ? maskMac(mac) : 'null'} active=${view.access.active} thisBound=${view.devices.thisDeviceBound} devices=${view.devices.count}`
 	);
 
 	// Issue 2b/B: mint a CNA→browser handoff token for THIS session so the page can offer an
@@ -109,6 +115,7 @@ export const load: PageServerLoad = async (event) => {
 		maskedPhone: phone ? maskPhone(phone) : null,
 		mac,
 		hasMac: !!mac,
+		deviceBusyUntil,
 		tiers,
 		handoffUrl,
 		...view
@@ -134,7 +141,10 @@ export const actions: Actions = {
 		if (!(await rateLimit('grant_user', user.id, 20)).allowed) return TOO_MANY;
 
 		const form = await event.request.formData();
-		const mac = String(form.get('mac') ?? '') || (await resolveMacForUser(event, user.id)) || '';
+		// Server-authoritative device identity (M-1/L-1): trust only the server-resolved MAC, never the
+		// posted `mac` (a diagnostic echo of the server-resolved `data.mac`). resolveMacTrusted logs a
+		// masked tamper signal when the client MAC disagrees.
+		const mac = (await resolveMacTrusted(event, user.id, String(form.get('mac') ?? ''))) || '';
 		if (!MAC_RE.test(mac)) return fail(400, { error: NO_DEVICE });
 
 		const account = await getAccount(db, user.id);
@@ -159,7 +169,10 @@ export const actions: Actions = {
 		if (!(await rateLimit('grant_user', user.id, 20)).allowed) return TOO_MANY;
 
 		const form = await event.request.formData();
-		const mac = String(form.get('mac') ?? '') || (await resolveMacForUser(event, user.id)) || '';
+		// Server-authoritative device identity (M-1/L-1): trust only the server-resolved MAC, never the
+		// posted `mac` (a diagnostic echo of the server-resolved `data.mac`). resolveMacTrusted logs a
+		// masked tamper signal when the client MAC disagrees.
+		const mac = (await resolveMacTrusted(event, user.id, String(form.get('mac') ?? ''))) || '';
 		const packageId = Number(form.get('packageId'));
 		// Which wallet to pay from — the buy sheet offers both. Default credits (back-compat).
 		const currency = form.get('currency') === 'points' ? 'points' : 'credits';
@@ -216,7 +229,10 @@ export const actions: Actions = {
 		if (!(await rateLimit('grant_user', user.id, 20)).allowed) return TOO_MANY;
 
 		const form = await event.request.formData();
-		const mac = String(form.get('mac') ?? '') || (await resolveMacForUser(event, user.id)) || '';
+		// Server-authoritative device identity (M-1/L-1): trust only the server-resolved MAC, never the
+		// posted `mac` (a diagnostic echo of the server-resolved `data.mac`). resolveMacTrusted logs a
+		// masked tamper signal when the client MAC disagrees.
+		const mac = (await resolveMacTrusted(event, user.id, String(form.get('mac') ?? ''))) || '';
 		if (!MAC_RE.test(mac)) return fail(400, { error: NO_DEVICE });
 
 		const account = await getAccount(db, user.id);
