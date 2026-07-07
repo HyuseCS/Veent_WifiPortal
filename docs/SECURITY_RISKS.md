@@ -27,7 +27,7 @@
 | R9  | Router management plane (Winbox/Dude/API) reachable from the internet                                              | High            | 🟡 Mitigated                 | —     |
 | R10 | Portal↔router API runs in cleartext (port 8728, no TLS)                                                            | Medium          | ✅ Resolved                  | —     |
 | R11 | node-routeros connection timeout crashes the whole app server                                                      | Medium          | ✅ Resolved                  | —     |
-| R12 | Client-supplied device MAC trusted on grant paths (free internet for arbitrary devices / cross-user revoke DoS)    | High            | 🔴 Accepted (deferred)       | —     |
+| R12 | Client-supplied device MAC trusted on grant paths (free internet for arbitrary devices / cross-user revoke DoS)    | High            | 🟡 Mitigated (M-2 resolved)  | —     |
 | R13 | Admin bulk customer-delete not owner-gated (bypasses the owner-only verified wipe)                                 | High            | ✅ Resolved                  | —     |
 | R14 | `consumeRateLimit` TOCTOU race + no unique constraint (burst-bypassable throttles)                                 | High            | ✅ Resolved                  | —     |
 | R15 | Admin `/api/auth/sign-up/email` open (no `disableSignUp`)                                                          | Medium          | ✅ Resolved                  | —     |
@@ -320,37 +320,48 @@ client isolation, so they can't reach or sniff the management segment at all.
 # Security audit 2026-06-29 (R12–R19)
 
 A whole-app, security-critical-paths audit (auth/TOTP, payments, network grant, admin
-authz, injection, secrets/rate-limiting). R13–R19 are fixed; **R12 is a knowingly-accepted
-risk** — recorded here rather than silently dropped.
+authz, injection, secrets/rate-limiting). R13–R19 are fixed; **R12 is now mitigated** —
+the cross-user revoke DoS (M-2) is fully closed and the worst MAC-trust path removed, but a residual
+client-influenceable `?mac=` vector remains (inherent to captive portals — see below).
 
-## R12 — Client-supplied device MAC trusted on grant paths 🔴 Accepted (deferred)
+## R12 — Client-supplied device MAC trusted on grant paths 🟡 Mitigated (M-2 resolved)
 
-**Risk (High):** the grant paths take the device MAC from the request and only validate its
-_shape_, never that it belongs to the caller's device:
+**Was (High):** the grant paths took the device MAC from the request and only validated its
+_shape_, never that it belonged to the caller's device — enabling (1) free internet for an
+arbitrary MAC under the attacker's own window, and (2) a cross-user DoS where binding a paying
+victim's MAC then unbinding it flapped the _shared_ router bypass offline.
 
-- `apps/customer/src/routes/api/network/grant/+server.ts:39` — `isValidMac(body.macAddress)`
-  is a format check only; the value flows straight into bind+grant.
-- `apps/customer/src/routes/dashboard/+page.server.ts:107,131,172` — the actions **prefer the
-  client form `mac`** over the server-resolved one (`resolveMac`).
+**M-2 — cross-user revoke DoS: FULLY RESOLVED (2026-07-06 MAC-trust phase).**
+`hasLiveAccessForMacExcludingUser` + `revokeGuestUnlessShared`
+(`packages/core/src/services/sessions.ts`) gate every guest-tagged router revoke (eviction, expiry
+cron, unbind-device, unbind-all): the router revoke is **skipped** when another account still holds a
+live window on the same MAC, while the DB row is **always** marked revoked ("DB is truth"; the
+reconcile sweep is the backstop). A shared binding is therefore never cut out from under a co-tenant,
+regardless of _how_ the colliding MAC was bound — so attack (2) is closed even though the underlying
+MAC-binding is still influenceable (below). Block/kick (`{all:true}`) and account-delete deliberately
+stay full-cut; a `[mac-guard]` line logs each kept binding.
 
-Two attacks: **(1) free internet for arbitrary devices** — an authenticated user binds any MAC
-they choose (e.g. a sniffed nearby device) under their own free-time/paid window; **(2)
-cross-user DoS** — bind a paying victim's MAC under the attacker's account, then `unbindDevice`
-revokes the _shared_ router bypass and flaps the victim offline. Bounded: attack 1 spends the
-attacker's own credits/free-time and is capped by the device limit + phone-OTP-gated signup;
-attack 2 self-heals on the ~60s dashboard auto-rebind.
+**M-1 / L-1 — bind an arbitrary MAC: MITIGATED, not fully closed.** The grant endpoint and the three
+dashboard actions (`startFreeTime` / `buyTier` / `bindThisDevice`) now resolve the MAC via
+`resolveMacForUser` and treat a **body/form `macAddress` as advisory only** — a mismatch is logged
+(`scope:mac-trust`) and ignored. That removes the worst path (the POST-body override) and gives a
+tamper tripwire. **Residual:** `resolveMacForUser` still reads the MAC from the captive-portal
+`?mac=` **query param** (and portal / `veent_device` cookies) first, and that is client-visible — it
+_has_ to be, because the router delivers a real device's MAC through that same redirect param, and
+server-side IP→MAC resolution returns null behind the hotspot NAT. So a determined authenticated
+caller who knows the mechanism can still bind an arbitrary MAC via `POST …/grant?mac=<MAC>` (or
+`?/buyTier&mac=<MAC>`) at **their own credit/free-time cost**, bounded by the device cap. This is the
+same "inherent to captive portals" limitation noted when R12 was first accepted; the cross-user
+_damage_ it used to enable is now contained by the M-2 guard.
 
-**Why accepted (2026-06-29):** the MAC-from-client is partly inherent to captive portals — the
-redirect carries `?mac=` precisely because server-side IP→MAC resolution (`resolveMac`,
-`network-location.ts`) is documented-unreliable (CNA cookie-jar, IP→MAC gaps, returns null on
-stub/dev). A correct fix must enforce a match **only** when the router IP→MAC lookup gives a
-high-confidence result and fall back to the client value otherwise, applied consistently across
-the grant endpoint + 3 dashboard actions — so it's its own careful pass, and its strength is
-bounded by detection reliability anyway. The **remove-device** control does _not_ mitigate this
-(the rogue binding lives under the _attacker's_ account, invisible to the victim).
+**Not attempted (why):** forcing a match against router IP→MAC would break legitimate first-time
+grants behind NAT (the lookup returns null there, leaving `?mac=` as the only device signal), so it
+can't be closed without breaking the portal. Left as a bounded, own-cost residual.
 
-**Deferred fix:** shared resolve-and-compare helper, gated strictly on `resolveDeviceMac`
-(router IP→MAC), `403` on mismatch, null/dev paths unchanged. See the audit discussion.
+Verified on a real MikroTik: server-resolved grant under NAT, the `scope:mac-trust` tripwire on a
+body-injected MAC, and a two-account same-MAC unbind leaving the co-tenant online (M-2). A companion
+shared-device notice on the buy sheet (`otherAccountAccessUntilForMac`) warns a second account that
+the device already has active time before it double-buys.
 
 ## R13 — Admin bulk customer-delete not owner-gated ✅ Resolved
 

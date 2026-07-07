@@ -37,6 +37,18 @@ A multi-agent audit was run per security dimension (authn-authz, payments, grant
 
 > **Follow-up pass (2026-07-07).** A second read-only pass extended coverage to vectors the first pass did not reach: OTP *verification* brute-force, payment-webhook authenticity, OTP randomness, SQL injection, RouterOS command injection / SSRF, money arithmetic, concurrency double-spend, CSRF, session-cookie flags, open redirect, and admin role/IDOR. It added one **High** (H-1, OTP-verify brute-force), one **Low** (L-10, map-action privilege asymmetry), and one **Info** (I-3, admin cookie flags rely on library defaults). Everything else on that list was verified **safe** — see *Additionally Verified Safe* below.
 
+> **Remediation status (2026-07-07).** This report is preserved as the point-in-time, read-only audit
+> (the engagement itself changed no code). Remediation shipped separately in two phases: everything
+> except MAC-trust in commit `dc8b115` (Phase 1), and the MAC-trust phase on branch `system-audit-p2`.
+> **M-2 is fully resolved** (cross-user revoke guard `revokeGuestUnlessShared` — verified on a real
+> MikroTik). **M-1 / L-1 are _mitigated_, not fully closed:** the body/form MAC override was removed
+> and a `scope:mac-trust` tripwire added, but `resolveMacForUser` still reads the captive-portal
+> `?mac=` query param first, and that is client-influenceable **by design** (the router delivers a real
+> device's MAC through it, and IP→MAC resolution returns null behind the hotspot NAT). So binding an
+> arbitrary MAC at one's own credit cost remains a bounded residual — the cross-user _damage_ it used
+> to enable is now contained by M-2. Per-risk status is tracked in `docs/SECURITY_RISKS.md` (see
+> **R12**).
+
 ### Key takeaways
 
 1. **One high-severity vulnerability was confirmed on the follow-up pass:** OTP *verification* is brute-forceable (H-1) — the verify action has no throttle and its only guard, better-auth's 3-attempt counter, is a non-atomic read-check-write that a concurrency race defeats, enabling customer account takeover (session + wallet). The next most consequential defects are the customer-side grant/network-authorization gaps, both rated **medium**.

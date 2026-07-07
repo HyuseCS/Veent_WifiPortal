@@ -30,6 +30,8 @@ apps/admin   ──┼─→ @veent/core services ─┤
 | Credits added only on verified webhook, exactly once | `addCredits` idempotent on `external_transaction_id` (unique) |
 | Free Time = 15 min / 12 h cooldown | `getFreeTimeStatus`, `startFreeSession` (atomic claim) |
 | Access granted only after session logged + firewall dropped | `startSession` (DB row first, then `network.grant`) |
+| Body `macAddress` is advisory, not authoritative | `resolveMacForUser` (M-1/L-1) logs + ignores a mismatched body MAC. NB: the captive-portal `?mac=` param is still client-visible by design — see R12 |
+| A revoke never cuts another account still live on the same MAC | `revokeGuestUnlessShared` / `hasLiveAccessForMacExcludingUser` (M-2, fully closes the cross-user DoS) |
 | SSE for connected users, never poll-per-second | `GET /api/connected` (admin), `GET /api/account/stream` (customer) |
 | Payment gateways reachable via Walled Garden whitelist (no payment grace period) | Router-level allowlist of Maya/PayMaya/GCash hosts (+ PayMongo/Xendit), plus per-device checkout hosts opened at checkout time (`setup:router`) |
 
@@ -38,7 +40,15 @@ apps/admin   ──┼─→ @veent/core services ─┤
 ## Customer endpoints (`apps/customer`)
 
 ### `POST /api/network/grant` — start access (authenticated)
-Body `{ macAddress: string, packageId?: number }`
+Body `{ macAddress?: string, packageId?: number }`
+- The device MAC is resolved **server-side** (`resolveMacForUser`: portal `?mac=` → router IP→MAC →
+  durable `last_known_mac` fallbacks). `macAddress` in the body is **advisory only** — if it disagrees
+  with the resolved MAC it's logged (`scope:mac-trust`) and ignored (M-1). `400` if the device can't be
+  detected. **Caveat:** the resolved MAC can still originate from the client-visible captive-portal
+  `?mac=` query param (inherent to captive portals — that's how a real device's MAC reaches us), so a
+  determined authenticated caller can still bind an arbitrary MAC at their own credit cost; the
+  cross-user damage that would enable is contained by the **M-2** revoke guard, not by rejecting the
+  param. See `docs/SECURITY_RISKS.md` → R12.
 - no `packageId` → Free Time session (429 if in cooldown)
 - with `packageId` → spends the tier's `creditCost`, then grants (402 if short)
 - 403 if the account is blocked.
@@ -46,7 +56,9 @@ Body `{ macAddress: string, packageId?: number }`
 
 ### `POST /api/network/revoke` — expire due access (cron)
 Header `x-cron-secret: <CRON_SECRET>` (optionally IP-gated by `CRON_IP_ALLOWLIST`). Expires every
-account whose access window has passed and re-blocks its MAC, and in the same pass sweeps expired
+account whose access window has passed and re-blocks its MAC — **unless another account still holds a
+live window on that same MAC** (shared device / NAT), in which case the DB row is marked expired but
+the router binding is kept so the co-tenant isn't cut (M-2). In the same pass it sweeps expired
 per-device checkout/admin walled-garden entries and folds in a reconcile pass.
 → `{ ok, outage, revoked, reconciled, sweptCheckoutAccess, sweptAdminAccess }`. Run every minute.
 
