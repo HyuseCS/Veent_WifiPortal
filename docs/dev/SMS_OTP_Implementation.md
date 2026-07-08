@@ -57,6 +57,41 @@ UniSMS (`POST unismsapi.com/api/sms`) takes the recipient in **E.164** (`+63…`
 `normalizePhone` already produces); iTexMo takes the **local** `09…` form. The fail-safe and 10s
 timeout behavior below applies to whichever provider is active.
 
+## SMS Gate — temporary cloud provider (`SMS_PROVIDER=smsgate`)
+
+A stopgap used **while iTexMo account approval is pending**. An Android phone runs
+[SMS Gate](https://sms-gate.app) in **Cloud mode**: the phone and this server both talk **outbound**
+to `api.sms-gate.app`, so it works even when the site's AP **isolates Wi-Fi clients** or we don't
+control the router (Local Server mode needs a LAN path between the two, which client isolation blocks).
+Delete this branch once iTexMo is live (just flip `SMS_PROVIDER` back).
+
+Phone setup: install SMS Gate, enable **Cloud Server**, and copy the **username/password** it
+registers. The phone just needs internet — no LAN reachability from the server.
+
+It POSTs to the cloud 3rd-party API over HTTPS (recipient in **E.164**, `+63…` as-is):
+
+```
+POST https://api.sms-gate.app/3rdparty/v1/messages    (application/json)
+Authorization: Basic base64(SMSGATE_USERNAME:SMSGATE_PASSWORD)
+{
+  "textMessage":  { "text": "Your Parafiber code is 123456. It expires in 5 minutes." },
+  "phoneNumbers": ["+639171234567"]
+}
+```
+
+Note the endpoint is `/3rdparty/v1/messages` (plural) and the body uses `textMessage.text` — the flat
+`message` string field is **deprecated** in the SMS Gate API. Success is `202 Accepted` with
+`{ id, state, recipients }`; a non-2xx, an unparseable body, or `state === "Failed"` is a send failure.
+
+| Env var | Required | Notes |
+| --- | --- | --- |
+| `SMSGATE_BASE_URL` | no | Defaults to `https://api.sms-gate.app`; override only for a self-hosted private server. |
+| `SMSGATE_USERNAME` | yes | Basic-auth username from the app's Cloud Server registration. |
+| `SMSGATE_PASSWORD` | yes | Basic-auth password from the app's Cloud Server registration. |
+
+Verify the credentials + round-trip first with the probe:
+`bun run scripts/test-smsgate.ts +639XXXXXXXXX` (prints the raw HTTP status + response).
+
 ## Behavior when not configured
 
 `sendOtp` is deliberately fail-safe-by-environment:
