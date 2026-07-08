@@ -1,31 +1,17 @@
 <script lang="ts">
-	import Ban from 'lucide-svelte/icons/ban';
-	import Check from 'lucide-svelte/icons/check';
 	import ChevronDown from 'lucide-svelte/icons/chevron-down';
 	import ChevronUp from 'lucide-svelte/icons/chevron-up';
 	import ChevronsUpDown from 'lucide-svelte/icons/chevrons-up-down';
-	import Crown from 'lucide-svelte/icons/crown';
-	import RotateCcw from 'lucide-svelte/icons/rotate-ccw';
 	import Search from 'lucide-svelte/icons/search';
-	import ShieldCheck from 'lucide-svelte/icons/shield-check';
-	import ShieldOff from 'lucide-svelte/icons/shield-off';
-	import Trash2 from 'lucide-svelte/icons/trash-2';
-	import UserCog from 'lucide-svelte/icons/user-cog';
 	import UserPlus from 'lucide-svelte/icons/user-plus';
-	import X from 'lucide-svelte/icons/x';
 	import type { Component } from 'svelte';
-	import { enhance } from '$app/forms';
 	import type { StaffMember, StaffStatus, StatusTone } from '$lib/types';
-	import {
-		Button,
-		EmptyState,
-		IconButton,
-		SearchInput,
-		StatusBadge,
-		Table
-	} from '$lib/components/ui';
+	import { Avatar, Button, EmptyState, SearchInput, StatusBadge, Table } from '$lib/components/ui';
 	import PromoteDialog from './PromoteDialog.svelte';
 	import OwnerChangeDialog from './OwnerChangeDialog.svelte';
+	import StaffMemberActions from './StaffMemberActions.svelte';
+	import StaffProfileModal from './StaffProfileModal.svelte';
+	import StaffRoleBadge from './StaffRoleBadge.svelte';
 	import TableSortControl from './TableSortControl.svelte';
 
 	// Presentational table for the owner-only Staff page. Row actions post directly to
@@ -47,9 +33,9 @@
 		currentUserId?: string;
 	} = $props();
 
-	// Inline two-step confirm for remove. Promotion (the highest-privilege grant) uses the
-	// stronger <PromoteDialog> step-up (type-the-name + TOTP) instead of an inline confirm.
-	let confirmingId = $state<string | null>(null); // remove
+	// Promotion (the highest-privilege grant) uses the stronger <PromoteDialog> step-up
+	// (type-the-name + TOTP) instead of an inline confirm. The inline remove two-step now
+	// lives inside <StaffMemberActions> (shared by the row and the profile modal).
 	let promoteOpen = $state(false);
 	let promoteMember = $state<StaffMember | null>(null);
 
@@ -57,6 +43,18 @@
 	let ownerChangeOpen = $state(false);
 	let ownerChangeMember = $state<StaffMember | null>(null);
 	let ownerChangeIsSelf = $state(false);
+
+	// Profile detail modal. profileMemberId indexes into the LIVE `staff` list so any
+	// mutation (via the shared actions) reflects immediately — the member is re-derived,
+	// and the modal auto-closes if that member is removed.
+	let profileMemberId = $state<string | null>(null);
+	let profileOpen = $state(false);
+	const profileMember = $derived(
+		profileMemberId ? (staff.find((m) => m.id === profileMemberId) ?? null) : null
+	);
+	$effect(() => {
+		if (profileOpen && profileMemberId && !profileMember) profileOpen = false;
+	});
 
 	// Only meaningful with ≥2 owners (a sole owner can't be demoted/removed — last-owner
 	// guard), so the owner-row action is hidden otherwise.
@@ -66,6 +64,23 @@
 		ownerChangeMember = member;
 		ownerChangeIsSelf = member.id === currentUserId;
 		ownerChangeOpen = true;
+	}
+
+	function openProfile(member: StaffMember) {
+		profileMemberId = member.id;
+		profileOpen = true;
+	}
+
+	// Shared step-up launchers — used by BOTH the row actions and the profile modal.
+	// Close the profile modal first so only one native <dialog> sits in the top layer.
+	function handlePromote(member: StaffMember) {
+		profileOpen = false;
+		promoteMember = member;
+		promoteOpen = true;
+	}
+	function handleOwnerChange(member: StaffMember) {
+		profileOpen = false;
+		openOwnerChange(member);
 	}
 
 	// Client-side text search over the loaded rows (status is reachable via the Status column
@@ -114,15 +129,6 @@
 			return cmp * dir;
 		});
 	});
-
-	// First two letters of the name, for the avatar chip (shared visual with <UsersTable>).
-	const initials = (name: string) =>
-		name
-			.split(' ')
-			.map((w) => w[0])
-			.slice(0, 2)
-			.join('')
-			.toUpperCase();
 
 	// Header config: `key` makes a column a clickable sort toggle; Actions stays static.
 	const headers: { label: string; key?: SortKey; srOnly?: boolean }[] = [
@@ -220,32 +226,24 @@
 	{#each sorted as member (member.id)}
 		<tr class="hover:bg-surface" class:opacity-60={member.status === 'disabled'}>
 			<td class="tc-full px-4 py-3">
-				<div class="flex items-center gap-3">
-					<span
-						class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand/10 text-xs font-bold text-brand"
-						aria-hidden="true">{initials(member.name)}</span
-					>
-					<div class="min-w-0">
-						<div class="truncate font-medium text-ink">{member.name}</div>
-						<div class="truncate font-mono text-xs text-muted">{member.email}</div>
-					</div>
-				</div>
+				<!-- Identity is the trigger for the profile modal. A single <button> (not the
+				     whole row) keeps it free of nested interactive elements — the action buttons
+				     stay independently focusable. -->
+				<button
+					type="button"
+					onclick={() => openProfile(member)}
+					title="View {member.name}'s profile"
+					class="tc-trigger group -m-1 flex w-full items-center gap-3 rounded-md p-1 text-left outline-none transition-colors hover:bg-surface focus-visible:ring-2 focus-visible:ring-brand/40"
+				>
+					<Avatar src={member.image} name={member.name} class="h-9 w-9 text-xs" />
+					<span class="min-w-0">
+						<span class="block truncate font-medium text-ink group-hover:text-brand">{member.name}</span>
+						<span class="block truncate font-mono text-xs text-muted">{member.email}</span>
+					</span>
+				</button>
 			</td>
 			<td data-label="Role" class="px-4 py-3">
-				{#if member.role === 'owner'}
-					<span
-						class="inline-flex items-center gap-1.5 rounded-full bg-brand/10 px-2.5 py-1 text-xs font-medium text-brand"
-					>
-						<Crown class="h-3.5 w-3.5" aria-hidden="true" />
-						{member.roleLabel}
-					</span>
-				{:else}
-					<span
-						class="inline-flex items-center rounded-full bg-surface px-2.5 py-1 text-xs font-medium text-ink"
-					>
-						{member.roleLabel}
-					</span>
-				{/if}
+				<StaffRoleBadge role={member.role} label={member.roleLabel} />
 			</td>
 			<td data-label="Status" class="px-4 py-3">
 				<StatusBadge
@@ -254,112 +252,15 @@
 				/>
 			</td>
 			<td data-label="Last active" class="px-4 py-3 font-mono text-muted">{member.lastActive}</td>
-			<td class="tc-full px-4 py-3">
-				{#if member.role !== 'owner'}
-					{#if confirmingId === member.id}
-						<div class="flex items-center justify-end gap-1">
-							<span class="text-xs text-muted">Remove {member.name}?</span>
-							<form
-								method="post"
-								action="?/remove"
-								use:enhance={() =>
-									async ({ update }) => {
-										confirmingId = null;
-										await update();
-									}}
-							>
-								<input type="hidden" name="userId" value={member.id} />
-								<IconButton
-									type="submit"
-									icon={Check as unknown as Component}
-									label="Confirm removing {member.name}"
-									tone="danger"
-								/>
-							</form>
-							<IconButton
-								icon={X as unknown as Component}
-								label="Cancel"
-								onclick={() => (confirmingId = null)}
-							/>
-						</div>
-					{:else}
-						<div class="flex items-center justify-end gap-1">
-							{#if member.role === 'admin' && member.status === 'active'}
-								<IconButton
-									icon={Crown as unknown as Component}
-									label="Give {member.name} the owner role"
-									onclick={() => {
-										promoteMember = member;
-										promoteOpen = true;
-									}}
-								/>
-							{/if}
-							<!-- Grant/revoke the System Admin role (Issues + Content, not Staff). Active,
-							     non-owner members only; the owner role is untouched by this control. -->
-							{#if member.status === 'active' && member.role === 'admin'}
-								<form method="post" action="?/setStaffRole" use:enhance>
-									<input type="hidden" name="userId" value={member.id} />
-									<input type="hidden" name="role" value="system_admin" />
-									<IconButton
-										type="submit"
-										icon={ShieldCheck as unknown as Component}
-										label="Make {member.name} a System Admin"
-									/>
-								</form>
-							{:else if member.status === 'active' && member.role === 'system_admin'}
-								<form method="post" action="?/setStaffRole" use:enhance>
-									<input type="hidden" name="userId" value={member.id} />
-									<input type="hidden" name="role" value="admin" />
-									<IconButton
-										type="submit"
-										icon={ShieldOff as unknown as Component}
-										label="Remove {member.name}'s System Admin role"
-									/>
-								</form>
-							{/if}
-							{#if member.status === 'disabled'}
-								<form method="post" action="?/setStatus" use:enhance>
-									<input type="hidden" name="userId" value={member.id} />
-									<input type="hidden" name="status" value="active" />
-									<IconButton
-										type="submit"
-										icon={RotateCcw as unknown as Component}
-										label="Reactivate {member.name}"
-									/>
-								</form>
-							{:else}
-								<form method="post" action="?/setStatus" use:enhance>
-									<input type="hidden" name="userId" value={member.id} />
-									<input type="hidden" name="status" value="disabled" />
-									<IconButton
-										type="submit"
-										icon={Ban as unknown as Component}
-										label="Suspend {member.name}"
-										tone="danger"
-									/>
-								</form>
-							{/if}
-							<IconButton
-								icon={Trash2 as unknown as Component}
-								label="Remove {member.name}"
-								tone="danger"
-								onclick={() => (confirmingId = member.id)}
-							/>
-						</div>
-					{/if}
-				{:else if ownerCount >= 2}
-					<!-- Owner row: demote/remove needs unanimous other-owner approval. -->
-					<div class="flex items-center justify-end gap-1">
-						<IconButton
-							icon={UserCog as unknown as Component}
-							label={member.id === currentUserId
-								? 'Step down as owner'
-								: `Demote or remove ${member.name}`}
-							tone="danger"
-							onclick={() => openOwnerChange(member)}
-						/>
-					</div>
-				{/if}
+			<td class="tc-full tc-above px-4 py-3">
+				<StaffMemberActions
+					{member}
+					{currentUserId}
+					{ownerCount}
+					layout="row"
+					onPromote={handlePromote}
+					onOwnerChange={handleOwnerChange}
+				/>
 			</td>
 		</tr>
 	{/each}
@@ -394,4 +295,15 @@
 	member={ownerChangeMember}
 	isSelf={ownerChangeIsSelf}
 	{form}
+/>
+
+<!-- Full profile detail (opened from a member's identity cell). Hosts the same actions as
+     the row; promote / owner-change launch the step-up dialogs above. -->
+<StaffProfileModal
+	bind:open={profileOpen}
+	member={profileMember}
+	{currentUserId}
+	{ownerCount}
+	onPromote={handlePromote}
+	onOwnerChange={handleOwnerChange}
 />

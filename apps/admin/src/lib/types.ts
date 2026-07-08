@@ -175,6 +175,20 @@ export interface StaffMember {
 	lastActive: string;
 	/** Raw last-active time (epoch ms) for sorting; null if never active. */
 	lastActiveAt: number | null;
+	/** Avatar image URL, or null (falls back to initials). */
+	image: string | null;
+	/** Account-created label, pre-formatted (e.g. "12 Jun 2026"). */
+	joined: string;
+	/** Raw created time (epoch ms); null only if unset. */
+	joinedAt: number | null;
+	/** Whether the member has verified their email. */
+	emailVerified: boolean;
+	/** Whether the member has enrolled a TOTP authenticator. */
+	twoFactorEnabled: boolean;
+	/** Optional profile contact fields (unset until an edit UI exists). */
+	phone: string | null;
+	jobTitle: string | null;
+	contactEmail: string | null;
 }
 
 /** One slice of the Finance "revenue by payment method" donut. */

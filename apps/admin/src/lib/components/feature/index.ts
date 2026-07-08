@@ -14,6 +14,10 @@ export { default as NetworkHeaderControls } from './NetworkHeaderControls.svelte
 export { default as SentryHeaderControls } from './SentryHeaderControls.svelte';
 export { default as AddStaffForm } from './AddStaffForm.svelte';
 export { default as StaffTable } from './StaffTable.svelte';
+export { default as StaffMemberActions } from './StaffMemberActions.svelte';
+export { default as StaffProfileModal } from './StaffProfileModal.svelte';
+export { default as StaffRoleBadge } from './StaffRoleBadge.svelte';
+export { default as StaffProfileField } from './StaffProfileField.svelte';
 export { default as NetworkMap } from './NetworkMap.svelte';
 export { default as CoverageMap } from './CoverageMap.svelte';
 export { default as RouterLogPanel } from './RouterLogPanel.svelte';

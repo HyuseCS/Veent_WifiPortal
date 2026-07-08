@@ -261,6 +261,20 @@
 	.table-cards td.tc-skip {
 		display: none;
 	}
+	/* Whole-card click target: the `.tc-trigger` control's ::after stretches over the entire
+	   card (the tr is position:relative above), so tapping anywhere on the card activates it
+	   — e.g. opening a detail modal. Sibling interactive cells must carry `.tc-above` to stay
+	   clickable over the overlay. Card-mode only; desktop keeps the trigger to its own cell. */
+	.table-cards td .tc-trigger::after {
+		content: '';
+		position: absolute;
+		inset: 0;
+		border-radius: 0.5rem;
+	}
+	.table-cards td.tc-above {
+		position: relative;
+		z-index: 1;
+	}
 	.table-cards tbody tr.tc-detail {
 		border: 0;
 		background: transparent;

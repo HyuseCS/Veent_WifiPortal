@@ -268,6 +268,12 @@ function formatLastActive(at: Date | null, now: Date = new Date()): string {
 	return `${Math.floor(days / 7)}w ago`;
 }
 
+/** Absolute join date, e.g. "12 Jun 2026" (en-GB day-month order for PH). */
+function formatJoined(at: Date | null): string {
+	if (!at) return '—';
+	return at.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
 /** Display name for one staff member, or null if no such user. Used by the promote
  *  step-up to enforce the type-to-confirm gate server-side (not just in the UI). */
 export async function getStaffName(db: DB, userId: string): Promise<string | null> {
@@ -289,7 +295,16 @@ export async function listStaff(db: DB): Promise<StaffMember[]> {
 			role: adminProfile.role,
 			roleLabel: adminRole.label,
 			status: adminProfile.status,
-			lastActiveAt: adminProfile.lastActiveAt
+			lastActiveAt: adminProfile.lastActiveAt,
+			// Profile-detail fields (surfaced in the member profile modal). All live on the
+			// two tables already joined below — no extra joins, no new data exposure.
+			image: adminUser.image,
+			createdAt: adminUser.createdAt,
+			emailVerified: adminUser.emailVerified,
+			twoFactorEnabled: adminUser.twoFactorEnabled,
+			phone: adminProfile.phone,
+			jobTitle: adminProfile.jobTitle,
+			contactEmail: adminProfile.contactEmail
 		})
 		.from(adminUser)
 		.innerJoin(adminProfile, eq(adminProfile.userId, adminUser.id))
@@ -306,7 +321,16 @@ export async function listStaff(db: DB): Promise<StaffMember[]> {
 		roleLabel: r.roleLabel,
 		status: r.status as StaffStatus,
 		lastActive: formatLastActive(r.lastActiveAt),
-		lastActiveAt: r.lastActiveAt ? r.lastActiveAt.getTime() : null
+		lastActiveAt: r.lastActiveAt ? r.lastActiveAt.getTime() : null,
+		image: r.image,
+		joined: formatJoined(r.createdAt),
+		joinedAt: r.createdAt ? r.createdAt.getTime() : null,
+		emailVerified: r.emailVerified,
+		// two_factor_enabled is nullable (defaults false) → normalise to a real boolean.
+		twoFactorEnabled: r.twoFactorEnabled ?? false,
+		phone: r.phone,
+		jobTitle: r.jobTitle,
+		contactEmail: r.contactEmail
 	}));
 }
 
