@@ -16,7 +16,7 @@ import {
 	isIssueStatus,
 	type IssueInput
 } from '$lib/server/issues';
-import { listNotifications, markNotificationsRead } from '$lib/server/notifications';
+import { markAllNotificationsRead, markNotificationRead } from '$lib/server/notifications';
 import { mailer } from '$lib/server/email';
 import { checkAdminEmailLimit } from '$lib/server/emailRateLimit';
 import { issueAssignedEmail } from '$lib/server/emails/issue-assigned';
@@ -82,7 +82,6 @@ export const load: PageServerLoad = async (event) => {
 			issues,
 			// Timelines for the expanded-row preview, grouped by issue (one query, no N+1).
 			events: await listIssueEventsByIssue(db, issues.map((i) => i.id)),
-			notifications: await listNotifications(db, user.id),
 			assignableStaff: staff
 				.filter((s) => s.status === STAFF_STATUS.active)
 				.map((s) => ({ id: s.id, name: s.name, roleLabel: s.roleLabel })),
@@ -95,7 +94,6 @@ export const load: PageServerLoad = async (event) => {
 		currentUserId: user.id,
 		issues: await listIssuesForAssignee(db, user.id),
 		events: {} as Record<number, import('$lib/server/issues').IssueEventRow[]>,
-		notifications: await listNotifications(db, user.id),
 		assignableStaff: [] as { id: string; name: string; roleLabel: string }[],
 		networks: [] as { id: string; name: string }[]
 	};
@@ -218,12 +216,25 @@ export const actions: Actions = {
 		return { ok: true, action: 'updateStatus', id };
 	},
 
-	/** Mark the current user's incident notifications read (bumps their watermark). Any signed-in
-	 *  staff member may clear their OWN feed — no manager gate; the watermark is per-user. */
-	markRead: async (event) => {
+	/** Mark ALL of the current user's incident notifications read. Any signed-in staff member may
+	 *  clear their OWN feed — no manager gate; read state is per-user. */
+	markAllRead: async (event) => {
 		const userId = event.locals.user?.id;
-		if (!userId) return fail(401, { action: 'markRead', error: 'Not signed in.' });
-		await markNotificationsRead(db, userId);
-		return { ok: true, action: 'markRead' };
+		if (!userId) return fail(401, { action: 'markAllRead', error: 'Not signed in.' });
+		await markAllNotificationsRead(db, userId);
+		return { ok: true, action: 'markAllRead' };
+	},
+
+	/** Mark ONE notification (by its event id) read for the current user. */
+	markOne: async (event) => {
+		const userId = event.locals.user?.id;
+		if (!userId) return fail(401, { action: 'markOne', error: 'Not signed in.' });
+		const form = await event.request.formData();
+		const eventId = Number(form.get('eventId'));
+		if (!Number.isInteger(eventId) || eventId <= 0) {
+			return fail(400, { action: 'markOne', error: 'Invalid notification.' });
+		}
+		await markNotificationRead(db, userId, eventId);
+		return { ok: true, action: 'markOne' };
 	}
 };

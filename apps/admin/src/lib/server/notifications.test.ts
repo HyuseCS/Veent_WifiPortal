@@ -1,13 +1,13 @@
 import { describe, it, expect, vi } from 'vitest';
 
 // Mock @veent/db so importing the module (and its ./issues dependency) doesn't spin up the real
-// client. The filter itself is SQL — that's covered by the e2e; here we pin the parts that live in
-// JS: the notifiable-type set and the row→NotificationRow mapping (title passthrough + summary).
+// client. The filter/read-join is SQL — covered by the e2e; here we pin the JS parts: the
+// notifiable-type set and the row→NotificationRow mapping (title, summary, read/unread flag).
 vi.mock('@veent/db', () => ({
 	adminIssue: { __t: 'issue' },
 	adminIssueAssignee: { __t: 'assignee' },
 	adminIssueEvent: { __t: 'event' },
-	adminProfile: { __t: 'profile' },
+	adminNotificationRead: { __t: 'read' },
 	adminUser: { __t: 'user' }
 }));
 vi.mock('drizzle-orm/pg-core', () => ({ alias: (t: unknown) => t }));
@@ -49,7 +49,8 @@ describe('unreadCount', () => {
 });
 
 describe('listNotifications', () => {
-	it('maps rows to issue title + human summary', async () => {
+	it('maps rows to title + summary and flags read/unread', async () => {
+		const readAt = new Date('2026-07-08T01:00:00Z');
 		const db = fakeDb('limit', [
 			{
 				id: 10,
@@ -59,7 +60,8 @@ describe('listNotifications', () => {
 				fromValue: null,
 				toValue: 'u2',
 				createdAt: new Date('2026-07-08T00:00:00Z'),
-				targetName: 'Bea Reyes'
+				targetName: 'Bea Reyes',
+				readAt: null // unread
 			},
 			{
 				id: 9,
@@ -69,13 +71,30 @@ describe('listNotifications', () => {
 				fromValue: 'open',
 				toValue: 'in_progress',
 				createdAt: new Date('2026-07-07T00:00:00Z'),
-				targetName: null
+				targetName: null,
+				readAt // read
 			}
 		]);
-		const rows = await listNotifications(db, 'u1');
+		const rows = await listNotifications(db, 'u1', { unreadOnly: false });
 		expect(rows).toEqual([
-			{ id: 10, issueId: 5, issueTitle: 'AP offline', summary: 'Assigned Bea Reyes', createdAt: new Date('2026-07-08T00:00:00Z').getTime() },
-			{ id: 9, issueId: 5, issueTitle: 'AP offline', summary: 'Status: Open → In Progress', createdAt: new Date('2026-07-07T00:00:00Z').getTime() }
+			{
+				id: 10,
+				issueId: 5,
+				issueTitle: 'AP offline',
+				summary: 'Assigned Bea Reyes',
+				createdAt: new Date('2026-07-08T00:00:00Z').getTime(),
+				read: false,
+				readAt: null
+			},
+			{
+				id: 9,
+				issueId: 5,
+				issueTitle: 'AP offline',
+				summary: 'Status: Open → In Progress',
+				createdAt: new Date('2026-07-07T00:00:00Z').getTime(),
+				read: true,
+				readAt: readAt.getTime()
+			}
 		]);
 	});
 });

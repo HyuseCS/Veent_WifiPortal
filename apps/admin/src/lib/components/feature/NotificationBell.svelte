@@ -6,10 +6,11 @@
 	import type { NotificationRow } from '$lib/server/notifications';
 
 	/**
-	 * Incident notification bell — rendered only on /issues (in the Topbar actions slot). Reads the
-	 * page's own load data (notifications list + global unread count), shows a dropdown of recent
-	 * activity on incidents assigned to the user, and clears them via the ?/markRead action. Mirrors
-	 * the sidebar account menu's a11y (outside-click + Esc close, focus moves into the panel).
+	 * Incident notification bell — rendered on every /issues* route (in the Topbar actions slot).
+	 * Reads the shared load data (unread list + global unread count), shows a dropdown of recent
+	 * activity on the user's incidents, with per-entry + bulk mark-read (?/markOne, ?/markAllRead)
+	 * and a link to the full history. Mirrors the sidebar account menu's a11y (outside-click + Esc
+	 * close, focus moves into the panel).
 	 */
 	const notifications = $derived((page.data.notifications ?? []) as NotificationRow[]);
 	const unread = $derived((page.data.issuesUnread as number | undefined) ?? 0);
@@ -87,16 +88,19 @@
 	</button>
 
 	{#if open}
+		<!-- `fixed` (not absolute): the Topbar sits inside the layout's overflow-hidden scroll column,
+		     which would clip an absolutely-positioned panel. Anchored just below the h-16 top bar,
+		     right-aligned to its padding, with a high z so it overlays the page content. -->
 		<div
 			bind:this={panelEl}
 			role="menu"
 			aria-label="Notifications"
-			class="absolute right-0 z-50 mt-2 w-80 max-w-[calc(100vw-2rem)] overflow-hidden rounded-lg border border-border bg-bg shadow-xl shadow-black/10"
+			class="fixed top-[4.25rem] right-4 z-[60] w-80 max-w-[calc(100vw-2rem)] overflow-hidden rounded-lg border border-border bg-bg shadow-xl shadow-black/10 sm:right-6"
 		>
 			<div class="flex items-center justify-between gap-2 border-b border-border px-3 py-2.5">
 				<span class="text-sm font-semibold text-ink">Notifications</span>
 				{#if notifications.length > 0}
-					<form method="post" action="/issues?/markRead" use:enhance={() => async ({ update }) => {
+					<form method="post" action="/issues?/markAllRead" use:enhance={() => async ({ update }) => {
 						open = false;
 						await update(); // invalidates → sidebar badge + list refresh
 					}}>
@@ -116,21 +120,48 @@
 			{:else}
 				<ul class="max-h-80 overflow-y-auto py-1" aria-live="polite">
 					{#each notifications as n (n.id)}
-						<li>
+						<li class="flex items-start gap-1 transition-colors hover:bg-surface">
 							<a
 								href="/issues/{n.issueId}"
 								role="menuitem"
 								onclick={() => (open = false)}
-								class="flex flex-col gap-0.5 px-3 py-2 outline-none transition-colors hover:bg-surface focus-visible:bg-surface"
+								class="flex min-w-0 flex-1 flex-col gap-0.5 px-3 py-2 outline-none focus-visible:bg-surface"
 							>
 								<span class="truncate text-sm font-medium text-ink">{n.issueTitle}</span>
 								<span class="truncate text-xs text-muted">{n.summary}</span>
 								<span class="text-[11px] text-muted">{relTime(n.createdAt)}</span>
 							</a>
+							<!-- Mark THIS one done (doesn't close the dropdown, so several can be cleared). -->
+							<form
+								method="post"
+								action="/issues?/markOne"
+								class="shrink-0 p-1.5"
+								use:enhance={() => async ({ update }) => {
+									await update();
+								}}
+							>
+								<input type="hidden" name="eventId" value={n.id} />
+								<button
+									type="submit"
+									aria-label="Mark this notification as read"
+									title="Mark as read"
+									class="flex h-8 w-8 items-center justify-center rounded-md text-muted outline-none transition-colors hover:bg-bg hover:text-brand focus-visible:ring-2 focus-visible:ring-brand/40"
+								>
+									<Check class="h-4 w-4" aria-hidden="true" />
+								</button>
+							</form>
 						</li>
 					{/each}
 				</ul>
 			{/if}
+
+			<a
+				href="/issues/notifications"
+				onclick={() => (open = false)}
+				class="block border-t border-border px-3 py-2.5 text-center text-xs font-medium text-brand outline-none transition-colors hover:bg-surface focus-visible:bg-surface"
+			>
+				View all notifications
+			</a>
 		</div>
 	{/if}
 </div>

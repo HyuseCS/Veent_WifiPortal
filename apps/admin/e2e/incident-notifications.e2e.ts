@@ -77,7 +77,53 @@ test('assignee is notified of others’ activity; own action is silent; mark-all
 	await page.getByRole('button', { name: 'Notifications (1 unread)' }).click();
 	await expect(page.getByRole('menuitem', { name: new RegExp(TITLE) })).toBeVisible();
 
-	// Mark all read bumps the watermark → count clears.
+	// Following the item deep-links to the detail page — and the bell must still work there
+	// (its list comes from the shared /issues layout load, not the index page).
+	await page.getByRole('menuitem', { name: new RegExp(TITLE) }).click();
+	await expect(page).toHaveURL(/\/issues\/\d+$/);
+	await expect(page.getByRole('button', { name: 'Notifications (1 unread)' })).toBeVisible();
+	await page.getByRole('button', { name: 'Notifications (1 unread)' }).click();
+	await expect(page.getByRole('menuitem', { name: new RegExp(TITLE) })).toBeVisible();
+
+	// Mark all read records read rows for every unread item → count clears (from the detail page too).
 	await page.getByRole('button', { name: 'Mark all read' }).click();
+	await expect(page.getByRole('button', { name: 'Notifications', exact: true })).toBeVisible();
+});
+
+test('mark a single notification done, and browse read + unread in the history', async ({ page }) => {
+	const ownerId = (await userIdByEmail(OWNER_EMAIL))!;
+	const adrianId = (await userIdByEmail(ADRIAN_EMAIL))!;
+	const TITLE2 = `Notif entry ${Date.now()}`;
+
+	await page.goto('/issues');
+	await page.getByRole('button', { name: 'New incident' }).click();
+	const dlg = page.locator('dialog[open]');
+	await dlg.getByLabel('Title').fill(TITLE2);
+	await dlg.locator(`input[name="assigneeId"][value="${ownerId}"]`).check();
+	await dlg.getByRole('button', { name: 'Create issue' }).click();
+	await expect.poll(() => issueIdByTitle(TITLE2)).not.toBeNull();
+	const id = (await issueIdByTitle(TITLE2))!;
+
+	// Two events by another admin → two unread for the owner.
+	await insertEvent(id, adrianId, 'status_changed', 'open', 'in_progress');
+	await insertEvent(id, adrianId, 'priority_changed', 'medium', 'high');
+	await page.reload();
+	await expect(page.getByRole('button', { name: 'Notifications (2 unread)' })).toBeVisible();
+
+	// Mark ONE done from the dropdown (the button doesn't close it) → count drops to 1.
+	await page.getByRole('button', { name: 'Notifications (2 unread)' }).click();
+	await page.getByRole('button', { name: 'Mark this notification as read' }).first().click();
+	await expect(page.getByRole('button', { name: 'Notifications (1 unread)' })).toBeVisible();
+
+	// History shows read + unread — at least one Read label, and the remaining unread is markable.
+	// (The history spans all the owner's incidents, so earlier read items appear too — hence .first().)
+	await page.goto('/issues/notifications');
+	await expect(page.getByRole('heading', { name: 'Notifications' })).toBeVisible();
+	await expect(page.getByText('Read', { exact: true }).first()).toBeVisible();
+	await expect(page.getByRole('button', { name: 'Mark this notification as read' })).toHaveCount(1);
+
+	// Mark all read from the history → nothing left to mark, bell clears.
+	await page.getByRole('button', { name: 'Mark all read' }).click();
+	await expect(page.getByRole('button', { name: 'Mark this notification as read' })).toHaveCount(0);
 	await expect(page.getByRole('button', { name: 'Notifications', exact: true })).toBeVisible();
 });

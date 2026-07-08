@@ -32,7 +32,7 @@
 </script>
 
 {#if issues.length === 0}
-	<div class="rounded-xl border border-border bg-surface">
+	<div class="rounded-xl border border-border bg-bg">
 		<EmptyState
 			icon={icon(ClipboardList)}
 			title="No incidents assigned to you"
@@ -42,7 +42,7 @@
 {:else}
 	<div class="space-y-3">
 		{#each issues as issue (issue.id)}
-			<div class="rounded-xl border border-border bg-surface p-4">
+			<div class="rounded-xl border border-border bg-bg p-4">
 				<div class="flex flex-wrap items-start gap-3">
 					<div class="min-w-0 flex-1">
 						<div class="flex flex-wrap items-center gap-2">

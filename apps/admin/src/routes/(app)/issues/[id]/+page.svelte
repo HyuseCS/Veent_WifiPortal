@@ -36,7 +36,7 @@
 	</a>
 
 	<!-- Header -->
-	<div class="rounded-xl border border-border bg-surface p-4 sm:p-5">
+	<div class="rounded-xl border border-border bg-bg p-4 sm:p-5">
 		<div class="flex flex-wrap items-start gap-x-3 gap-y-2">
 			<h1 class="min-w-0 flex-1 text-lg font-semibold break-words text-ink sm:text-xl">
 				{issue.title}
@@ -53,7 +53,7 @@
 
 		<!-- Source-aware section: human → the linked access point / field context; sentry → its
 		     origin (the Sentry snapshot + permalink land in Phase 4). -->
-		<div class="mt-4 rounded-lg border border-border bg-bg p-3">
+		<div class="mt-4 rounded-lg border border-border bg-surface p-3">
 			{#if issue.source === 'sentry'}
 				<div class="flex items-center gap-2 text-sm text-ink">
 					<Activity class="h-4 w-4 shrink-0 text-brand" aria-hidden="true" />
@@ -97,7 +97,7 @@
 	</div>
 
 	<!-- Comment composer -->
-	<div class="rounded-xl border border-border bg-surface p-4 sm:p-5">
+	<div class="rounded-xl border border-border bg-bg p-4 sm:p-5">
 		<h2 class="text-sm font-semibold text-ink">Add a comment</h2>
 		<form
 			class="mt-2 space-y-2"
@@ -140,7 +140,7 @@
 	</div>
 
 	<!-- Timeline -->
-	<div class="rounded-xl border border-border bg-surface p-4 sm:p-5">
+	<div class="rounded-xl border border-border bg-bg p-4 sm:p-5">
 		<h2 class="mb-3 text-sm font-semibold text-ink">History</h2>
 		<Timeline events={data.events} />
 	</div>

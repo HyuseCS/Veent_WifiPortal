@@ -1,5 +1,14 @@
 import { sql } from 'drizzle-orm';
-import { pgTable, serial, integer, text, timestamp, index, check } from 'drizzle-orm/pg-core';
+import {
+	pgTable,
+	serial,
+	integer,
+	text,
+	timestamp,
+	index,
+	check,
+	primaryKey
+} from 'drizzle-orm/pg-core';
 import { adminUser } from './auth-admin';
 import { adminIssue } from './admin-issue';
 
@@ -37,4 +46,25 @@ export const adminIssueEvent = pgTable(
 			sql`${t.type} in ('created', 'status_changed', 'assigned', 'unassigned', 'priority_changed', 'comment')`
 		)
 	]
+);
+
+/**
+ * Per-user notification read state. One row = "this user has marked this event read". The
+ * notification feed is still derived (notifiable events on the user's incidents), but read/unread
+ * is now tracked per entry here — so a user can mark individual notifications done and still see a
+ * history of read ones. Composite PK → idempotent mark-read; both FKs CASCADE so a removed user or
+ * a deleted incident's events clean up their read rows automatically.
+ */
+export const adminNotificationRead = pgTable(
+	'admin_notification_read',
+	{
+		userId: text('user_id')
+			.notNull()
+			.references(() => adminUser.id, { onDelete: 'cascade' }),
+		eventId: integer('event_id')
+			.notNull()
+			.references(() => adminIssueEvent.id, { onDelete: 'cascade' }),
+		readAt: timestamp('read_at').notNull().defaultNow()
+	},
+	(t) => [primaryKey({ columns: [t.userId, t.eventId] })]
 );
