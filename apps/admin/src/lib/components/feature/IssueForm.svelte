@@ -59,6 +59,12 @@
 	function toggleAssignee(id: string, checked: boolean) {
 		assignees = checked ? [...assignees, id] : assignees.filter((a) => a !== id);
 	}
+
+	// Today as YYYY-MM-DD, so the date picker can't select a past deadline. When editing an
+	// incident whose due date is already in the past, keep that value selectable (don't clamp
+	// the min above it) — the server grandfathers an unchanged past date.
+	const today = new Date().toLocaleDateString('en-CA'); // en-CA → ISO-ish YYYY-MM-DD
+	const minDue = $derived(dueDate && dueDate < today ? dueDate : today);
 </script>
 
 <BaseDialog bind:open reset={seed} class="max-w-lg">
@@ -136,6 +142,7 @@
 				id="issue-dueDate"
 				name="issue-dueDate"
 				type="date"
+				min={minDue}
 				bind:value={dueDate}
 				class={inputClass}
 			/>
