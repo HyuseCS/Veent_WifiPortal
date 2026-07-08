@@ -35,8 +35,8 @@
 	<div class="rounded-xl border border-border bg-surface">
 		<EmptyState
 			icon={icon(ClipboardList)}
-			title="No issues assigned to you"
-			description="When a manager assigns you an issue, it shows up here."
+			title="No incidents assigned to you"
+			description="When a manager assigns you an incident, it shows up here."
 		/>
 	</div>
 {:else}
@@ -83,7 +83,7 @@
 								// Drop the optimistic draft so statusOf() falls back to the (unchanged)
 								// server status, and surface the error like IssueForm does.
 								delete draft[issue.id];
-								errors[issue.id] = (result.data?.error as string) ?? 'Could not update the issue.';
+								errors[issue.id] = (result.data?.error as string) ?? 'Could not update the incident.';
 								await update({ reset: false });
 							} else {
 								if (result.type === 'success') {

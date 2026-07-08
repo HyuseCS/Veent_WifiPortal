@@ -7,15 +7,38 @@
  * admin tables — the Svelte side never re-derives tone from raw status.
  */
 import { and, eq, inArray, desc } from 'drizzle-orm';
+import { alias } from 'drizzle-orm/pg-core';
 import {
 	type DB,
 	adminIssue,
 	adminIssueAssignee,
+	adminIssueEvent,
 	adminUser,
 	networkHealth
 } from '@veent/db';
-import { ISSUE_STATUS, ISSUE_PRIORITY, type IssueStatus, type IssuePriority } from '@veent/core';
+import {
+	ISSUE_STATUS,
+	ISSUE_PRIORITY,
+	ISSUE_SOURCE,
+	type IssueStatus,
+	type IssuePriority,
+	type IssueSource
+} from '@veent/core';
 import type { StatusTone } from '$lib/types';
+
+/** A transaction handle (same query surface as DB), so event writes join the caller's tx. */
+type Tx = Parameters<Parameters<DB['transaction']>[0]>[0];
+
+/** Timeline event types. Mirrors the `admin_issue_event_type_ck` CHECK constraint. */
+export const ISSUE_EVENT = {
+	created: 'created',
+	statusChanged: 'status_changed',
+	assigned: 'assigned',
+	unassigned: 'unassigned',
+	priorityChanged: 'priority_changed',
+	comment: 'comment'
+} as const;
+export type IssueEventType = (typeof ISSUE_EVENT)[keyof typeof ISSUE_EVENT];
 
 /** One staff member an issue is assigned to. */
 export interface IssueAssignee {
@@ -34,6 +57,7 @@ export interface AdminIssueRow {
 	priority: IssuePriority;
 	priorityLabel: string;
 	priorityTone: StatusTone;
+	source: IssueSource;
 	networkId: number | null;
 	networkName: string | null;
 	/** Due date as epoch ms (for sorting/display), null if none. */
@@ -95,6 +119,7 @@ function mapRow(r: typeof adminIssue.$inferSelect, assignees: IssueAssignee[]): 
 		priority,
 		priorityLabel: PRIORITY_LABEL[priority] ?? r.priority,
 		priorityTone: PRIORITY_TONE[priority] ?? 'warning',
+		source: r.source as IssueSource,
 		networkId: r.networkId,
 		networkName: r.networkName,
 		dueDate: r.dueDate ? r.dueDate.getTime() : null,
@@ -176,6 +201,108 @@ export async function isAssignee(db: DB, issueId: number, userId: string): Promi
 	return !!row;
 }
 
+/** One timeline entry, fully server-derived (actor name + human summary) for rendering. */
+export interface IssueEventRow {
+	id: number;
+	type: IssueEventType;
+	/** Actor's display name, or 'System' when the actor row was removed. */
+	actor: string;
+	/** Human sentence describing the change (labels resolved here, never in Svelte). */
+	summary: string;
+	/** Free-text body: resolution note or (Phase 2) comment. Null for structural events. */
+	note: string | null;
+	createdAt: number;
+}
+
+/** Shared select for timeline reads: joins actor + (for assign events) the target user name. */
+function selectEvents(db: DB) {
+	const actor = alias(adminUser, 'evt_actor');
+	const target = alias(adminUser, 'evt_target'); // for assigned/unassigned, toValue is a user id
+	return db
+		.select({
+			id: adminIssueEvent.id,
+			issueId: adminIssueEvent.issueId,
+			type: adminIssueEvent.type,
+			fromValue: adminIssueEvent.fromValue,
+			toValue: adminIssueEvent.toValue,
+			note: adminIssueEvent.note,
+			createdAt: adminIssueEvent.createdAt,
+			actorName: actor.name,
+			targetName: target.name
+		})
+		.from(adminIssueEvent)
+		.leftJoin(actor, eq(actor.id, adminIssueEvent.actorId))
+		.leftJoin(target, eq(target.id, adminIssueEvent.toValue));
+}
+
+type EventQueryRow = Awaited<ReturnType<ReturnType<typeof selectEvents>['where']>>[number];
+
+function mapEventRow(r: EventQueryRow): IssueEventRow {
+	return {
+		id: r.id,
+		type: r.type as IssueEventType,
+		actor: r.actorName ?? 'System',
+		summary: eventSummary(r.type as IssueEventType, r.fromValue, r.toValue, r.targetName),
+		note: r.note,
+		createdAt: r.createdAt.getTime()
+	};
+}
+
+/** Newest-first audit timeline for one incident, with actor + assignee names resolved. */
+export async function listIssueEvents(db: DB, issueId: number): Promise<IssueEventRow[]> {
+	const rows = await selectEvents(db)
+		.where(eq(adminIssueEvent.issueId, issueId))
+		.orderBy(desc(adminIssueEvent.createdAt), desc(adminIssueEvent.id));
+	return rows.map(mapEventRow);
+}
+
+/**
+ * Timelines for many incidents in one query, grouped by issue id (newest-first per issue).
+ * Backs the manager board's expanded-row preview without an N+1 per row.
+ */
+export async function listIssueEventsByIssue(
+	db: DB,
+	issueIds: number[]
+): Promise<Record<number, IssueEventRow[]>> {
+	const grouped: Record<number, IssueEventRow[]> = {};
+	if (issueIds.length === 0) return grouped;
+	const rows = await selectEvents(db)
+		.where(inArray(adminIssueEvent.issueId, issueIds))
+		.orderBy(desc(adminIssueEvent.createdAt), desc(adminIssueEvent.id));
+	for (const r of rows) {
+		(grouped[r.issueId] ??= []).push(mapEventRow(r));
+	}
+	return grouped;
+}
+
+/** Turn a raw event into a human sentence; labels resolved here so Svelte stays dumb. */
+export function eventSummary(
+	type: IssueEventType,
+	from: string | null,
+	to: string | null,
+	targetName: string | null
+): string {
+	const statusLabel = (v: string | null) => (v ? (STATUS_LABEL[v as IssueStatus] ?? v) : '—');
+	const priorityLabel = (v: string | null) => (v ? (PRIORITY_LABEL[v as IssuePriority] ?? v) : '—');
+	const who = targetName ?? 'a former staff member';
+	switch (type) {
+		case ISSUE_EVENT.created:
+			return 'Created this incident';
+		case ISSUE_EVENT.statusChanged:
+			return `Status: ${statusLabel(from)} → ${statusLabel(to)}`;
+		case ISSUE_EVENT.priorityChanged:
+			return `Priority: ${priorityLabel(from)} → ${priorityLabel(to)}`;
+		case ISSUE_EVENT.assigned:
+			return `Assigned ${who}`;
+		case ISSUE_EVENT.unassigned:
+			return `Unassigned ${who}`;
+		case ISSUE_EVENT.comment:
+			return 'Commented';
+		default:
+			return type;
+	}
+}
+
 /** Look up the current display name of an AP, to snapshot onto the issue. */
 async function apName(db: DB, networkId: number | null): Promise<string | null> {
 	if (networkId == null) return null;
@@ -185,6 +312,31 @@ async function apName(db: DB, networkId: number | null): Promise<string | null> 
 		.where(eq(networkHealth.id, networkId))
 		.limit(1);
 	return row?.name ?? null;
+}
+
+/**
+ * Append one timeline event. Always called with the mutation's own `tx` so the event
+ * commits atomically with the change it records (regression contract #3).
+ */
+async function recordEvent(
+	tx: Tx,
+	e: {
+		issueId: number;
+		actorId: string;
+		type: IssueEventType;
+		fromValue?: string | null;
+		toValue?: string | null;
+		note?: string | null;
+	}
+): Promise<void> {
+	await tx.insert(adminIssueEvent).values({
+		issueId: e.issueId,
+		actorId: e.actorId,
+		type: e.type,
+		fromValue: e.fromValue ?? null,
+		toValue: e.toValue ?? null,
+		note: e.note ?? null
+	});
 }
 
 /** Create an issue + its assignment rows in one transaction. Returns the new id. */
@@ -197,12 +349,14 @@ export async function createIssue(db: DB, input: IssueInput, createdBy: string):
 				title: input.title,
 				description: input.description,
 				priority: input.priority,
+				source: ISSUE_SOURCE.human, // manual filing; Sentry-tracked incidents use createIssueFromSentry (Phase 4)
 				networkId: input.networkId,
 				networkName,
 				dueDate: input.dueDate,
 				createdBy
 			})
 			.returning({ id: adminIssue.id });
+		await recordEvent(tx, { issueId: issue.id, actorId: createdBy, type: ISSUE_EVENT.created });
 		if (input.assigneeIds.length > 0) {
 			await tx.insert(adminIssueAssignee).values(
 				input.assigneeIds.map((adminUserId) => ({
@@ -211,6 +365,14 @@ export async function createIssue(db: DB, input: IssueInput, createdBy: string):
 					assignedBy: createdBy
 				}))
 			);
+			for (const adminUserId of input.assigneeIds) {
+				await recordEvent(tx, {
+					issueId: issue.id,
+					actorId: createdBy,
+					type: ISSUE_EVENT.assigned,
+					toValue: adminUserId
+				});
+			}
 		}
 		return issue.id;
 	});
@@ -225,6 +387,13 @@ export async function updateIssue(
 ): Promise<void> {
 	const networkName = await apName(db, input.networkId);
 	await db.transaction(async (tx) => {
+		// Read the pre-update priority so we can record a diff event if it changed.
+		const [before] = await tx
+			.select({ priority: adminIssue.priority })
+			.from(adminIssue)
+			.where(eq(adminIssue.id, id))
+			.limit(1);
+
 		await tx
 			.update(adminIssue)
 			.set({
@@ -237,6 +406,16 @@ export async function updateIssue(
 				updatedAt: new Date()
 			})
 			.where(eq(adminIssue.id, id));
+
+		if (before && before.priority !== input.priority) {
+			await recordEvent(tx, {
+				issueId: id,
+				actorId,
+				type: ISSUE_EVENT.priorityChanged,
+				fromValue: before.priority,
+				toValue: input.priority
+			});
+		}
 
 		const existing = await tx
 			.select({ adminUserId: adminIssueAssignee.adminUserId })
@@ -257,11 +436,27 @@ export async function updateIssue(
 						inArray(adminIssueAssignee.adminUserId, toRemove)
 					)
 				);
+			for (const adminUserId of toRemove) {
+				await recordEvent(tx, {
+					issueId: id,
+					actorId,
+					type: ISSUE_EVENT.unassigned,
+					toValue: adminUserId
+				});
+			}
 		}
 		if (toAdd.length > 0) {
 			await tx
 				.insert(adminIssueAssignee)
 				.values(toAdd.map((adminUserId) => ({ issueId: id, adminUserId, assignedBy: actorId })));
+			for (const adminUserId of toAdd) {
+				await recordEvent(tx, {
+					issueId: id,
+					actorId,
+					type: ISSUE_EVENT.assigned,
+					toValue: adminUserId
+				});
+			}
 		}
 	});
 }
@@ -277,18 +472,38 @@ export async function setIssueStatus(
 	opts: { resolutionNote?: string | null; actorId: string }
 ): Promise<boolean> {
 	const resolving = status === ISSUE_STATUS.resolved;
-	const updated = await db
-		.update(adminIssue)
-		.set({
-			status,
-			resolutionNote: resolving ? (opts.resolutionNote ?? null) : null,
-			resolvedBy: resolving ? opts.actorId : null,
-			resolvedAt: resolving ? new Date() : null,
-			updatedAt: new Date()
-		})
-		.where(eq(adminIssue.id, id))
-		.returning({ id: adminIssue.id });
-	return updated.length > 0;
+	return db.transaction(async (tx) => {
+		const [before] = await tx
+			.select({ status: adminIssue.status })
+			.from(adminIssue)
+			.where(eq(adminIssue.id, id))
+			.limit(1);
+		if (!before) return false;
+
+		await tx
+			.update(adminIssue)
+			.set({
+				status,
+				resolutionNote: resolving ? (opts.resolutionNote ?? null) : null,
+				resolvedBy: resolving ? opts.actorId : null,
+				resolvedAt: resolving ? new Date() : null,
+				updatedAt: new Date()
+			})
+			.where(eq(adminIssue.id, id));
+
+		if (before.status !== status) {
+			await recordEvent(tx, {
+				issueId: id,
+				actorId: opts.actorId,
+				type: ISSUE_EVENT.statusChanged,
+				fromValue: before.status,
+				toValue: status,
+				// keep the resolution note on the event so the timeline shows why it resolved
+				note: resolving ? (opts.resolutionNote ?? null) : null
+			});
+		}
+		return true;
+	});
 }
 
 export async function deleteIssue(db: DB, id: number): Promise<void> {
@@ -301,4 +516,7 @@ export function isIssueStatus(v: string): v is IssueStatus {
 }
 export function isIssuePriority(v: string): v is IssuePriority {
 	return v === ISSUE_PRIORITY.low || v === ISSUE_PRIORITY.medium || v === ISSUE_PRIORITY.high;
+}
+export function isIssueSource(v: string): v is IssueSource {
+	return v === ISSUE_SOURCE.human || v === ISSUE_SOURCE.sentry;
 }

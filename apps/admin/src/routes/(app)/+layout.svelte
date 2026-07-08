@@ -37,7 +37,7 @@
 		'/finance': 'Settled revenue & payments',
 		'/content': 'Packages, FAQ & session limits',
 		'/staff': 'Admin access management',
-		'/issues': 'Assign & track operational issues',
+		'/issues': 'Assign & track operational incidents',
 		'/sentry': 'Error monitoring',
 		'/profile': 'Your account & security'
 	};

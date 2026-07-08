@@ -281,6 +281,20 @@
       "when": 1783397438834,
       "tag": "0039_gifted_vampiro",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1783476822929,
+      "tag": "0040_sweet_wolf_cub",
+      "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1783477543585,
+      "tag": "0041_certain_sersi",
+      "breakpoints": true
     }
   ]
 }

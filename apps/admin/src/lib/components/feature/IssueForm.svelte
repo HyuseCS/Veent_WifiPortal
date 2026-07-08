@@ -70,7 +70,7 @@
 			<ClipboardList class="h-5 w-5" />
 		</span>
 		<div class="min-w-0">
-			<h2 class="font-semibold text-ink">{issue ? 'Edit issue' : 'New issue'}</h2>
+			<h2 class="font-semibold text-ink">{issue ? 'Edit incident' : 'New incident'}</h2>
 			<p class="text-xs text-muted">Describe the problem, link an AP, and assign it to staff</p>
 		</div>
 	</div>
@@ -87,7 +87,7 @@
 					await update();
 					open = false;
 				} else if (result.type === 'failure') {
-					error = (result.data?.error as string) ?? 'Could not save the issue.';
+					error = (result.data?.error as string) ?? 'Could not save the incident.';
 					await update({ reset: false });
 				} else {
 					await update();

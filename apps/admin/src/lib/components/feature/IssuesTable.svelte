@@ -12,17 +12,21 @@
 	import { SvelteSet } from 'svelte/reactivity';
 	import { enhance } from '$app/forms';
 	import { Button, EmptyState, IconButton, SearchInput, StatusBadge, Table } from '$lib/components/ui';
-	import type { AdminIssueRow } from '$lib/server/issues';
+	import Timeline from './Timeline.svelte';
+	import type { AdminIssueRow, IssueEventRow } from '$lib/server/issues';
 
 	// Manager board (owner / system_admin). Row actions post to the page's form actions
 	// (?/updateStatus, ?/remove); edit/new open the shared <IssueForm> via callbacks. The
 	// route enforces manager access — this component is only rendered when canManage.
 	let {
 		issues,
+		events,
 		onedit,
 		onnew
 	}: {
 		issues: AdminIssueRow[];
+		/** Audit timeline per issue id (newest-first), for the expanded-row history. */
+		events: Record<number, IssueEventRow[]>;
 		onedit: (issue: AdminIssueRow) => void;
 		onnew: () => void;
 	} = $props();
@@ -69,16 +73,16 @@
 <Table cards class="min-h-0 flex-1">
 	{#snippet toolbar()}
 		<div class="flex flex-wrap items-center gap-3 px-4 py-3">
-			<h2 class="text-base font-semibold text-ink">Issues</h2>
+			<h2 class="text-base font-semibold text-ink">Incidents</h2>
 			<SearchInput
 				bind:value={query}
 				placeholder="Search title, AP or assignee…"
-				label="Search issues"
+				label="Search incidents"
 				class="ml-auto min-w-0 flex-1 sm:max-w-xs"
 			/>
 			<Button onclick={onnew} class="shrink-0">
 				<Plus class="h-4 w-4" aria-hidden="true" />
-				New issue
+				New incident
 			</Button>
 		</div>
 	{/snippet}
@@ -222,6 +226,10 @@
 								<span class="text-muted">{issue.resolutionNote}</span>
 							</div>
 						{/if}
+						<div class="border-t border-border pt-3">
+							<span class="mb-2 block font-medium text-ink">History</span>
+							<Timeline events={events[issue.id] ?? []} />
+						</div>
 					</div>
 				</td>
 			</tr>
@@ -233,8 +241,8 @@
 			<td colspan={headers.length} class="tc-full p-0">
 				<EmptyState
 					icon={icon(query ? Search : ClipboardList)}
-					title={query ? 'No issues match' : 'No issues yet'}
-					description={query ? 'Try a different search term.' : 'Create the first issue to start tracking.'}
+					title={query ? 'No incidents match' : 'No incidents yet'}
+					description={query ? 'Try a different search term.' : 'Create the first incident to start tracking.'}
 					compact
 				/>
 			</td>
@@ -242,6 +250,6 @@
 	{/if}
 
 	{#snippet footer()}
-		<p class="px-4 py-3 text-xs text-muted">Showing {filtered.length} of {issues.length} issues</p>
+		<p class="px-4 py-3 text-xs text-muted">Showing {filtered.length} of {issues.length} incidents</p>
 	{/snippet}
 </Table>

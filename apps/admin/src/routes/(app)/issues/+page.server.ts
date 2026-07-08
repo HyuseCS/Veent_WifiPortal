@@ -6,6 +6,7 @@ import { listStaff, listNetworkHealth } from '$lib/server/queries';
 import {
 	listIssues,
 	listIssuesForAssignee,
+	listIssueEventsByIssue,
 	isAssignee,
 	createIssue,
 	updateIssue,
@@ -37,6 +38,8 @@ export const load: PageServerLoad = async (event) => {
 			canManage,
 			currentUserId: user.id,
 			issues,
+			// Timelines for the expanded-row preview, grouped by issue (one query, no N+1).
+			events: await listIssueEventsByIssue(db, issues.map((i) => i.id)),
 			assignableStaff: staff
 				.filter((s) => s.status === STAFF_STATUS.active)
 				.map((s) => ({ id: s.id, name: s.name, roleLabel: s.roleLabel })),
@@ -48,6 +51,7 @@ export const load: PageServerLoad = async (event) => {
 		canManage,
 		currentUserId: user.id,
 		issues: await listIssuesForAssignee(db, user.id),
+		events: {} as Record<number, import('$lib/server/issues').IssueEventRow[]>,
 		assignableStaff: [] as { id: string; name: string; roleLabel: string }[],
 		networks: [] as { id: string; name: string }[]
 	};

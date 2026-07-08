@@ -34,7 +34,8 @@ export const nav: NavItem[] = [
 	},
 	{ href: '/staff', label: 'Staff', icon: UserCog as unknown as Component, ownerOnly: true },
 	// Visible to all staff: managers (owner/system_admin) see the full board; other admins
-	// see only the issues assigned to them. Access is enforced in the route's load, not here.
-	{ href: '/issues', label: 'Issues', icon: ClipboardList as unknown as Component },
+	// see only the incidents assigned to them. Access is enforced in the route's load, not here.
+	// Route stays /issues (table is admin_issue); "Incidents" is the user-facing label only.
+	{ href: '/issues', label: 'Incidents', icon: ClipboardList as unknown as Component },
 	{ href: '/sentry', label: 'Sentry', icon: Activity as unknown as Component }
 ];
