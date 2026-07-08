@@ -102,7 +102,7 @@
 
 	{#each filtered as issue (issue.id)}
 		<tr class="align-top hover:bg-surface" class:opacity-60={issue.status === 'resolved'}>
-			<td class="tc-full px-4 py-3">
+			<td class="tc-full max-w-[16rem] px-4 py-3 sm:max-w-[24rem]">
 				<div class="flex items-start gap-2">
 					<button
 						type="button"
@@ -120,7 +120,8 @@
 					<div class="min-w-0">
 						<a
 							href="/issues/{issue.id}"
-							class="truncate font-medium text-ink underline-offset-2 hover:text-brand hover:underline"
+							title={issue.title}
+							class="block truncate font-medium text-ink underline-offset-2 hover:text-brand hover:underline"
 						>
 							{issue.title}
 						</a>
