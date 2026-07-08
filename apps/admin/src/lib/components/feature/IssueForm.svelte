@@ -83,11 +83,11 @@
 		error = '';
 	}
 
-	// Picking a Sentry issue from the in-modal table: snapshot it, prefill the title (still
-	// editable), and return to the form.
+	// Picking a Sentry issue from the in-modal table: record it and return to the form. The
+	// incident title IS the Sentry title (posted as a hidden issue-title below), so there's no
+	// separate title field to seed in this mode.
 	function onPickSentry(picked: SentryIssue) {
 		sentryIssueId = picked.id;
-		title = picked.title;
 		picking = false;
 	}
 
@@ -109,10 +109,17 @@
 		issue ? 'Save changes' : mode === 'sentry' ? 'Track as incident' : 'Create incident'
 	);
 	const isSentry = $derived(!issue && mode === 'sentry');
+	// When the picker is up it becomes a full-bleed "page": wider panel, no p-6 so the table fills.
+	const pickerActive = $derived(isSentry && picking);
 </script>
 
-<BaseDialog bind:open reset={seed} class="max-w-3xl">
-	{#if isSentry && picking}
+<BaseDialog
+	bind:open
+	reset={seed}
+	padded={!pickerActive}
+	class={pickerActive ? 'max-w-4xl' : 'max-w-3xl'}
+>
+	{#if pickerActive}
 		<!-- The picker takes over the whole modal as its own "page"; onselect returns to the form. -->
 		<SentryIssuePicker
 			issues={sentryIssues}
@@ -186,7 +193,9 @@
 				<input type="hidden" name="id" value={issue.id} />
 			{/if}
 			{#if isSentry && selectedSentry}
-				<!-- Snapshot fields read by createIssueFromSentry (id is the sentryIssueId input below). -->
+				<!-- Snapshot fields read by createIssueFromSentry (id is the sentryIssueId input below).
+				     The incident title IS the Sentry title — no separate field in this mode. -->
+				<input type="hidden" name="issue-title" value={selectedSentry.title} />
 				<input type="hidden" name="sentryShortId" value={selectedSentry.shortId} />
 				<input type="hidden" name="sentryPermalink" value={selectedSentry.permalink} />
 				<input type="hidden" name="sentryTitle" value={selectedSentry.title} />
@@ -239,19 +248,6 @@
 									Select a Sentry issue…
 								</button>
 							{/if}
-						</div>
-
-						<div class="space-y-1.5">
-							<label for="issue-title" class="block text-sm font-medium text-ink">Incident title</label>
-							<input
-								id="issue-title"
-								name="issue-title"
-								bind:value={title}
-								required
-								maxlength={200}
-								placeholder="Short summary for the incident"
-								class={inputClass}
-							/>
 						</div>
 					{:else}
 						<div class="space-y-1.5">

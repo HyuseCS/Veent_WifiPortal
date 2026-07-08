@@ -9,16 +9,20 @@
 	 * the open/close boilerplate the admin dialogs each hand-rolled.
 	 *
 	 * `class` overrides only the width (default max-w-sm); the rest of the chrome is shared.
+	 * `padded` (default true) is the inner p-6; pass false for a full-bleed body that fills the
+	 * panel edge-to-edge (e.g. a table that IS the modal).
 	 */
 	let {
 		open = $bindable(false),
 		reset,
 		class: klass = 'max-w-sm',
+		padded = true,
 		children
 	}: {
 		open?: boolean;
 		reset?: () => void;
 		class?: string;
+		padded?: boolean;
 		children: Snippet;
 	} = $props();
 
@@ -58,7 +62,9 @@
 	bind:this={el}
 	onclose={handleClose}
 	onclick={handleBackdropClick}
-	class="m-auto w-full {klass} rounded-lg border border-border bg-bg p-6 text-ink backdrop:bg-black/50"
+	class="m-auto w-full {klass} overflow-hidden rounded-lg border border-border bg-bg text-ink backdrop:bg-black/50 {padded
+		? 'p-6'
+		: ''}"
 >
 	{@render children()}
 </dialog>
