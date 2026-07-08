@@ -65,12 +65,6 @@
 
 	const headers = ['Issue', 'Access point', 'Priority', 'Status', 'Assignees', 'Due', 'Actions'];
 
-	const statusOptions = [
-		{ value: 'open', label: 'Open' },
-		{ value: 'in_progress', label: 'In Progress' },
-		{ value: 'resolved', label: 'Resolved' }
-	];
-
 	function dueLabel(ms: number | null): string {
 		return ms ? new Date(ms).toLocaleDateString() : '—';
 	}
@@ -150,22 +144,8 @@
 				<StatusBadge tone={issue.priorityTone} label={issue.priorityLabel} />
 			</td>
 			<td data-label="Status" class="px-4 py-3">
-				<!-- Inline status change (auto-submits on change). Resolving here leaves the note
-				     empty; assignees add a note from their My Issues view. -->
-				<form method="post" action="?/updateStatus" use:enhance>
-					<input type="hidden" name="id" value={issue.id} />
-					<select
-						name="status"
-						value={issue.status}
-						aria-label="Status for {issue.title}"
-						onchange={(e) => e.currentTarget.form?.requestSubmit()}
-						class="min-h-11 cursor-pointer rounded-lg border border-border bg-bg px-2.5 py-1.5 text-xs text-ink hover:border-brand/40 focus:border-brand focus:ring-2 focus:ring-brand/20 focus:outline-none"
-					>
-						{#each statusOptions as o (o.value)}
-							<option value={o.value}>{o.label}</option>
-						{/each}
-					</select>
-				</form>
+				<!-- Read-only here — status is changed from the incident detail page (open the row). -->
+				<StatusBadge tone={issue.statusTone} label={issue.statusLabel} />
 			</td>
 			<td data-label="Assignees" class="px-4 py-3 text-sm text-ink">
 				{#if issue.assignees.length === 0}

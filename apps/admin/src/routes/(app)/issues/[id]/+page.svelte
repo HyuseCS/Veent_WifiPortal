@@ -20,6 +20,20 @@
 	let error = $state('');
 	let submitting = $state(false);
 
+	// Status change (moved here from the board — status is now only editable on the detail page).
+	// `statusDraft` is the pending selection (null → falls back to the server value), mirroring
+	// MyIssuesList; it drives the resolution-note reveal and is cleared after each successful save.
+	// Access is already manager-OR-assignee (enforced in the load + the action).
+	const statusOptions = [
+		{ value: 'open', label: 'Open' },
+		{ value: 'in_progress', label: 'In Progress' },
+		{ value: 'resolved', label: 'Resolved' }
+	];
+	let statusDraft = $state<string | null>(null);
+	let statusError = $state('');
+	let statusSubmitting = $state(false);
+	const curStatus = $derived(statusDraft ?? issue.status);
+
 	const fmtDate = (ms: number | null) => (ms ? new Date(ms).toLocaleDateString() : '—');
 	const fmtDateTime = (ms: number) => new Date(ms).toLocaleString();
 	const isOverdue = $derived(
@@ -118,6 +132,76 @@
 						<p class="text-xs font-medium text-muted">Resolution</p>
 						<p class="mt-0.5 text-sm whitespace-pre-wrap text-ink">{issue.resolutionNote}</p>
 					</div>
+				{/if}
+			</div>
+
+			<!-- Status change -->
+			<div class="rounded-xl border border-border bg-bg p-4 sm:p-5">
+				<h2 class="text-sm font-semibold text-ink">Status</h2>
+				<form
+					class="mt-2 flex flex-wrap items-end gap-2"
+					method="post"
+					action="?/updateStatus"
+					use:enhance={() => {
+						statusSubmitting = true;
+						return async ({ result, update }) => {
+							if (result.type === 'failure') {
+								// Drop the optimistic draft so curStatus falls back to the unchanged server value.
+								statusDraft = null;
+								statusError = (result.data?.error as string) ?? 'Could not update the status.';
+								await update({ reset: false });
+							} else {
+								if (result.type === 'success') {
+									statusDraft = null; // re-sync to the saved (reloaded) value
+									statusError = '';
+								}
+								await update(); // reload → badges + timeline reflect the change
+							}
+							statusSubmitting = false;
+						};
+					}}
+				>
+					<div class="space-y-1">
+						<label for="status" class="block text-xs font-medium text-muted">Set status</label>
+						<select
+							id="status"
+							name="status"
+							value={curStatus}
+							onchange={(e) => (statusDraft = e.currentTarget.value)}
+							class="min-h-11 cursor-pointer rounded-lg border border-border bg-bg px-2.5 py-1.5 text-sm text-ink hover:border-brand/40 focus:border-brand focus:ring-2 focus:ring-brand/20 focus:outline-none"
+						>
+							{#each statusOptions as o (o.value)}
+								<option value={o.value}>{o.label}</option>
+							{/each}
+						</select>
+					</div>
+
+					{#if curStatus === 'resolved'}
+						<div class="min-w-0 flex-1 space-y-1">
+							<label for="resolutionNote" class="block text-xs font-medium text-muted">
+								Resolution note (optional)
+							</label>
+							<input
+								id="resolutionNote"
+								name="resolutionNote"
+								value={issue.resolutionNote ?? ''}
+								placeholder="What fixed it?"
+								class="min-h-11 w-full rounded-lg border border-border bg-bg px-2.5 py-1.5 text-sm text-ink hover:border-brand/40 focus:border-brand focus:ring-2 focus:ring-brand/20 focus:outline-none"
+							/>
+						</div>
+					{/if}
+
+					<!-- Enabled when the status differs, or when it's resolved (so the note can be edited). -->
+					<Button
+						type="submit"
+						loading={statusSubmitting}
+						disabled={curStatus === issue.status && curStatus !== 'resolved'}
+					>
+						Update
+					</Button>
+				</form>
+				{#if statusError}
+					<p class="mt-2 text-sm text-blocked" role="alert">{statusError}</p>
 				{/if}
 			</div>
 

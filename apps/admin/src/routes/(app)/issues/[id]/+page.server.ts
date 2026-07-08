@@ -2,7 +2,14 @@ import { error, fail } from '@sveltejs/kit';
 import { MANAGER_ROLES, type StaffRole } from '@veent/core';
 import { db } from '$lib/server/db';
 import { requireManager } from '$lib/server/auth-guard';
-import { getIssue, listIssueEvents, isAssignee, addComment } from '$lib/server/issues';
+import {
+	getIssue,
+	listIssueEvents,
+	isAssignee,
+	addComment,
+	setIssueStatus,
+	isIssueStatus
+} from '$lib/server/issues';
 import type { Actions, PageServerLoad } from './$types';
 
 /**
@@ -42,6 +49,27 @@ export const actions: Actions = {
 		if (body.length > 2000) return fail(400, { error: 'Comment is too long (2000 characters max).' });
 
 		await addComment(db, id, userId, body);
+		return { ok: true };
+	},
+
+	/** Change status. Same manager-OR-assignee-of-this-incident gate as `comment`. Resolving may
+	 *  carry an optional resolution note; setIssueStatus records the change on the timeline. */
+	updateStatus: async (event) => {
+		const userId = event.locals.user?.id;
+		const id = Number(event.params.id);
+		if (!userId || !Number.isInteger(id)) return fail(400, { error: 'Invalid request.' });
+
+		const notManager = await requireManager(userId, '');
+		if (notManager && !(await isAssignee(db, id, userId))) {
+			return fail(403, { error: 'You can only update incidents assigned to you.' });
+		}
+
+		const form = await event.request.formData();
+		const status = String(form.get('status') ?? '');
+		if (!isIssueStatus(status)) return fail(400, { error: 'Invalid status.' });
+
+		const resolutionNote = String(form.get('resolutionNote') ?? '').trim() || null;
+		await setIssueStatus(db, id, status, { resolutionNote, actorId: userId });
 		return { ok: true };
 	}
 };
