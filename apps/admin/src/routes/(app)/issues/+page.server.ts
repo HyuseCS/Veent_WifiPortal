@@ -6,16 +6,19 @@ import { listStaff, listNetworkHealth } from '$lib/server/queries';
 import {
 	listIssues,
 	listIssuesForAssignee,
+	listOpenPool,
 	listIssueEventsByIssue,
 	isAssignee,
 	getIssue,
 	createIssue,
 	updateIssue,
 	setIssueStatus,
+	takeIssue,
 	deleteIssue,
 	isIssuePriority,
 	isIssueStatus,
-	type IssueInput
+	type IssueInput,
+	type AdminIssueRow
 } from '$lib/server/issues';
 import { markAllNotificationsRead, markNotificationRead } from '$lib/server/notifications';
 import { notifyAssignees } from '$lib/server/issueNotify';
@@ -48,6 +51,8 @@ export const load: PageServerLoad = async (event) => {
 			canManage,
 			currentUserId: user.id,
 			issues,
+			// Managers work the full board (which already lists the pool as "Open"); no separate pool feed.
+			pool: [] as AdminIssueRow[],
 			// Timelines for the expanded-row preview, grouped by issue (one query, no N+1).
 			events: await listIssueEventsByIssue(db, issues.map((i) => i.id)),
 			assignableStaff: staff
@@ -61,10 +66,15 @@ export const load: PageServerLoad = async (event) => {
 		};
 	}
 
+	const [issues, pool] = await Promise.all([
+		listIssuesForAssignee(db, user.id),
+		listOpenPool(db) // the shared self-serve pool — every staff member can see + take from it
+	]);
 	return {
 		canManage,
 		currentUserId: user.id,
-		issues: await listIssuesForAssignee(db, user.id),
+		issues,
+		pool,
 		events: {} as Record<number, import('$lib/server/issues').IssueEventRow[]>,
 		assignableStaff: [] as { id: string; name: string; roleLabel: string }[],
 		networks: [] as { id: string; name: string }[],
@@ -206,6 +216,19 @@ export const actions: Actions = {
 		const resolutionNote = String(form.get('resolutionNote') ?? '').trim() || null;
 		await setIssueStatus(db, id, status, { resolutionNote, actorId: userId! });
 		return { ok: true, action: 'updateStatus', id };
+	},
+
+	/** Take an unassigned open incident from the pool (self-assign). Any signed-in staff member may
+	 *  — the pool is shared; `takeIssue` re-checks the still-open/still-unassigned invariant in-tx. */
+	take: async (event) => {
+		const userId = event.locals.user?.id;
+		if (!userId) return fail(401, { action: 'take', error: 'Not signed in.' });
+		const form = await event.request.formData();
+		const id = issueId(form);
+		if (id == null) return fail(400, { action: 'take', error: 'Invalid issue.' });
+		const claimed = await takeIssue(db, id, userId);
+		if (!claimed) return fail(409, { action: 'take', error: 'This incident was already taken.', id });
+		return { ok: true, action: 'take', id };
 	},
 
 	/** Mark ALL of the current user's incident notifications read. Any signed-in staff member may

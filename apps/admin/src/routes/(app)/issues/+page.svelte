@@ -34,5 +34,5 @@
 		sentryConfigured={data.sentryConfigured}
 	/>
 {:else}
-	<MyIssuesList issues={data.issues} />
+	<MyIssuesList issues={data.issues} pool={data.pool} />
 {/if}

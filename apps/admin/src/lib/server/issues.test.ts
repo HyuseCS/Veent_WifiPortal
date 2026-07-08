@@ -19,6 +19,7 @@ import {
 	createIssueFromSentry,
 	setIssueStatus,
 	updateIssue,
+	takeIssue,
 	ISSUE_EVENT
 } from './issues';
 
@@ -158,6 +159,63 @@ describe('createIssueFromSentry', () => {
 			sentryPermalink: 'https://sentry.io/x',
 			sentryTitle: 'Boom'
 		});
+	});
+});
+
+/**
+ * takeIssue makes TWO distinct reads (status, then existing-assignee count), so the shared
+ * fakeDb's single reused `before` can't model it. This bespoke fake returns a queued value per
+ * successive select() call, letting us drive each branch of the pool invariant independently.
+ */
+function seqDb(reads: unknown[][]) {
+	const inserts: { table: string; rows: unknown }[] = [];
+	let call = 0;
+	const db = {
+		insert: (table: { __t: string }) => ({
+			values: (rows: unknown) => {
+				inserts.push({ table: table.__t, rows });
+				return Promise.resolve(undefined);
+			}
+		}),
+		select: () => {
+			const val = reads[call++] ?? [];
+			return {
+				from: () => ({
+					where: () => {
+						const r = Promise.resolve(val) as Promise<unknown> & { limit: () => unknown };
+						r.limit = () => Promise.resolve(val);
+						return r;
+					}
+				})
+			};
+		},
+		transaction: (fn: (tx: unknown) => unknown) => fn(db)
+	};
+	return { db: db as unknown as DB, inserts };
+}
+
+describe('takeIssue', () => {
+	it('claims an unassigned open incident: inserts an assignee + an assigned event', async () => {
+		// read 0 = status row (open); read 1 = existing assignees (none)
+		const { db, inserts } = seqDb([[{ status: 'open' }], []]);
+		const ok = await takeIssue(db, 1, 'u9');
+		expect(ok).toBe(true);
+		expect(inserts.map((i) => i.table)).toEqual(['assignee', 'event']);
+		const event = inserts.find((i) => i.table === 'event')!.rows as { type: string; toValue: string };
+		expect(event.type).toBe(ISSUE_EVENT.assigned);
+		expect(event.toValue).toBe('u9'); // self-assign
+	});
+
+	it('refuses (no writes) when the incident already has an assignee', async () => {
+		const { db, inserts } = seqDb([[{ status: 'open' }], [{ adminUserId: 'someoneElse' }]]);
+		expect(await takeIssue(db, 1, 'u9')).toBe(false);
+		expect(inserts).toEqual([]);
+	});
+
+	it('refuses (no writes) when the incident is not open', async () => {
+		const { db, inserts } = seqDb([[{ status: 'in_progress' }]]);
+		expect(await takeIssue(db, 1, 'u9')).toBe(false);
+		expect(inserts).toEqual([]);
 	});
 });
 

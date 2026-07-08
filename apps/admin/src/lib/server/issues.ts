@@ -91,11 +91,26 @@ const STATUS_LABEL: Record<IssueStatus, string> = {
 	in_progress: 'In Progress',
 	resolved: 'Resolved'
 };
-const STATUS_TONE: Record<IssueStatus, StatusTone> = {
-	open: 'blocked', // unresolved — draws the eye
-	in_progress: 'warning', // in flight
-	resolved: 'online' // done
-};
+
+/**
+ * Assignment-aware display of the raw status. "Open" means *unowned* (in the self-serve pool);
+ * the moment anyone is assigned it reads "Assigned". The raw enum stays open→in_progress→resolved —
+ * ownership is derived from the assignee join, never a fourth status value (can't drift). This is
+ * the ONE place badge label/tone is decided, for every view (board, detail, My-incidents).
+ */
+function deriveStatusDisplay(
+	status: IssueStatus,
+	hasAssignee: boolean
+): { label: string; tone: StatusTone } {
+	if (status === ISSUE_STATUS.resolved) return { label: 'Resolved', tone: 'online' };
+	if (status === ISSUE_STATUS.inProgress) {
+		return { label: hasAssignee ? 'Assigned · In Progress' : 'In Progress', tone: 'warning' };
+	}
+	// open
+	return hasAssignee
+		? { label: 'Assigned', tone: 'warning' } // owned, not yet started
+		: { label: 'Open', tone: 'blocked' }; // unowned — the pool; draws the eye
+}
 const PRIORITY_LABEL: Record<IssuePriority, string> = { low: 'Low', medium: 'Medium', high: 'High' };
 const PRIORITY_TONE: Record<IssuePriority, StatusTone> = {
 	high: 'blocked',
@@ -114,13 +129,14 @@ function toDateInput(d: Date | null): string {
 function mapRow(r: typeof adminIssue.$inferSelect, assignees: IssueAssignee[]): AdminIssueRow {
 	const status = r.status as IssueStatus;
 	const priority = r.priority as IssuePriority;
+	const display = deriveStatusDisplay(status, assignees.length > 0);
 	return {
 		id: r.id,
 		title: r.title,
 		description: r.description,
 		status,
-		statusLabel: STATUS_LABEL[status] ?? r.status,
-		statusTone: STATUS_TONE[status] ?? 'warning',
+		statusLabel: display.label,
+		statusTone: display.tone,
 		priority,
 		priorityLabel: PRIORITY_LABEL[priority] ?? r.priority,
 		priorityTone: PRIORITY_TONE[priority] ?? 'warning',
@@ -205,6 +221,52 @@ export async function listIssuesForAssignee(db: DB, userId: string): Promise<Adm
 	if (ids.length === 0) return [];
 	const rows = await db.select().from(adminIssue).where(inArray(adminIssue.id, ids));
 	return hydrate(db, rows);
+}
+
+/**
+ * The self-serve "Open pool": open incidents nobody has taken yet, visible to ALL staff so a free
+ * responder can pick one up. `// ponytail:` filter after hydrate — the open set is small, so a
+ * NOT-EXISTS subquery is premature; reuse the same hydrate the other reads use.
+ */
+export async function listOpenPool(db: DB): Promise<AdminIssueRow[]> {
+	const rows = await db.select().from(adminIssue).where(eq(adminIssue.status, ISSUE_STATUS.open));
+	const hydrated = await hydrate(db, rows);
+	return hydrated.filter((r) => r.assignees.length === 0);
+}
+
+/**
+ * Self-assign an unassigned open incident ("take it from the pool"). Re-checks the pool invariant
+ * INSIDE the tx — status still `open` AND still zero assignees — so two simultaneous takers can't
+ * both win; the loser gets `false`. Records the `assigned` event atomically. Self-take, so no
+ * notification (actor == assignee). Returns true iff this call claimed it.
+ */
+export async function takeIssue(db: DB, issueId: number, userId: string): Promise<boolean> {
+	return db.transaction(async (tx) => {
+		const [issue] = await tx
+			.select({ status: adminIssue.status })
+			.from(adminIssue)
+			.where(eq(adminIssue.id, issueId))
+			.limit(1);
+		if (!issue || issue.status !== ISSUE_STATUS.open) return false;
+
+		const existing = await tx
+			.select({ adminUserId: adminIssueAssignee.adminUserId })
+			.from(adminIssueAssignee)
+			.where(eq(adminIssueAssignee.issueId, issueId))
+			.limit(1);
+		if (existing.length > 0) return false; // already taken
+
+		await tx
+			.insert(adminIssueAssignee)
+			.values({ issueId, adminUserId: userId, assignedBy: userId });
+		await recordEvent(tx, {
+			issueId,
+			actorId: userId,
+			type: ISSUE_EVENT.assigned,
+			toValue: userId
+		});
+		return true;
+	});
 }
 
 /** True if `userId` is assigned to `issueId`. Backs the assignee-scoped status guard. */
