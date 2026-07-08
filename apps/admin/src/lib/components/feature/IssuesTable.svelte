@@ -11,6 +11,7 @@
 	import type { Component } from 'svelte';
 	import { SvelteSet } from 'svelte/reactivity';
 	import { enhance } from '$app/forms';
+	import { goto } from '$app/navigation';
 	import { Button, EmptyState, IconButton, SearchInput, StatusBadge, Table } from '$lib/components/ui';
 	import Timeline from './Timeline.svelte';
 	import type { AdminIssueRow, IssueEventRow } from '$lib/server/issues';
@@ -40,6 +41,14 @@
 	function toggleExpand(id: number) {
 		if (expanded.has(id)) expanded.delete(id);
 		else expanded.add(id);
+	}
+
+	// Whole-row navigation to the detail page. Clicks that land on an interactive control (the
+	// expand chevron, the status <select>, the edit/delete buttons, or the title link itself) are
+	// left alone — those keep their own behaviour. The title <a> stays the keyboard/right-click path.
+	function openIssue(e: MouseEvent, id: number) {
+		if ((e.target as HTMLElement).closest('a, button, select, input, form, label')) return;
+		goto(`/issues/${id}`);
 	}
 
 	const filtered = $derived.by(() => {
@@ -101,7 +110,13 @@
 	{/snippet}
 
 	{#each filtered as issue (issue.id)}
-		<tr class="align-top hover:bg-surface" class:opacity-60={issue.status === 'resolved'}>
+		<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+		<!-- Row-wide click opens the incident (see openIssue); the title <a> is the keyboard path. -->
+		<tr
+			class="cursor-pointer align-top hover:bg-surface"
+			class:opacity-60={issue.status === 'resolved'}
+			onclick={(e) => openIssue(e, issue.id)}
+		>
 			<td class="tc-full max-w-[16rem] px-4 py-3 sm:max-w-[24rem]">
 				<div class="flex items-start gap-2">
 					<button
