@@ -16,6 +16,7 @@ import {
 	isIssueSource,
 	eventSummary,
 	createIssue,
+	createIssueFromSentry,
 	setIssueStatus,
 	updateIssue,
 	ISSUE_EVENT
@@ -136,6 +137,27 @@ describe('setIssueStatus events', () => {
 		const { db, inserts } = fakeDb([{ status: 'open' }]);
 		await setIssueStatus(db, 1, 'open', { actorId: 'mgr' });
 		expect(eventTypes(inserts)).toEqual([]);
+	});
+});
+
+describe('createIssueFromSentry', () => {
+	it('creates a sentry-sourced incident with the snapshot + created/assigned events', async () => {
+		const { db, inserts } = fakeDb();
+		await createIssueFromSentry(
+			db,
+			{ issueId: 'S1', shortId: 'RADIUS-ADMIN-3F', permalink: 'https://sentry.io/x', title: 'Boom' },
+			{ title: 'Track boom', description: null, priority: 'high', networkId: null, dueDate: null, assigneeIds: ['u1'] },
+			'mgr'
+		);
+		expect(eventTypes(inserts)).toEqual([ISSUE_EVENT.created, ISSUE_EVENT.assigned]);
+		const issueInsert = inserts.find((i) => i.table === 'issue');
+		expect(issueInsert?.rows).toMatchObject({
+			source: 'sentry',
+			sentryIssueId: 'S1',
+			sentryShortId: 'RADIUS-ADMIN-3F',
+			sentryPermalink: 'https://sentry.io/x',
+			sentryTitle: 'Boom'
+		});
 	});
 });
 

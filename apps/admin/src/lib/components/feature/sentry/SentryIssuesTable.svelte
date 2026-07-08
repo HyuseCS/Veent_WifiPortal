@@ -22,8 +22,17 @@
 	let {
 		issues,
 		degraded = false,
-		fill = false
-	}: { issues: SentryIssue[]; degraded?: boolean; fill?: boolean } = $props();
+		fill = false,
+		canManage = false,
+		assignableStaff = []
+	}: {
+		issues: SentryIssue[];
+		degraded?: boolean;
+		fill?: boolean;
+		/** Managers get the "Track as incident" action in the row-detail dialog. */
+		canManage?: boolean;
+		assignableStaff?: { id: string; name: string; roleLabel: string }[];
+	} = $props();
 
 	type SortKey = 'title' | 'level' | 'count' | 'userCount' | 'lastSeen';
 	const columns: { label: string; key?: SortKey; srOnly?: boolean }[] = [
@@ -305,4 +314,4 @@
 	{/if}
 </Table>
 
-<SentryIssueDialog issue={selected} bind:open={dialogOpen} {levelTone} {seenAgo} />
+<SentryIssueDialog issue={selected} bind:open={dialogOpen} {levelTone} {seenAgo} {canManage} {assignableStaff} />

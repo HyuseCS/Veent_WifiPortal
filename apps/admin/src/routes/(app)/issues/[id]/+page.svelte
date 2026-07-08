@@ -1,6 +1,7 @@
 <script lang="ts">
 	import ArrowLeft from 'lucide-svelte/icons/arrow-left';
 	import Activity from 'lucide-svelte/icons/activity';
+	import ExternalLink from 'lucide-svelte/icons/external-link';
 	import MapPin from 'lucide-svelte/icons/map-pin';
 	import { enhance } from '$app/forms';
 	import { Button, StatusBadge } from '$lib/components/ui';
@@ -55,11 +56,30 @@
 		     origin (the Sentry snapshot + permalink land in Phase 4). -->
 		<div class="mt-4 rounded-lg border border-border bg-surface p-3">
 			{#if issue.source === 'sentry'}
-				<div class="flex items-center gap-2 text-sm text-ink">
+				<div class="flex flex-wrap items-center gap-2 text-sm text-ink">
 					<Activity class="h-4 w-4 shrink-0 text-brand" aria-hidden="true" />
 					<span class="font-medium">Tracked from Sentry</span>
+					{#if issue.sentryShortId}
+						<span class="font-mono text-xs text-muted">{issue.sentryShortId}</span>
+					{/if}
 				</div>
-				<p class="mt-1 text-xs text-muted">A code error a manager promoted to an incident.</p>
+				{#if issue.sentryTitle}
+					<p class="mt-1 font-mono text-xs break-words text-muted">{issue.sentryTitle}</p>
+				{/if}
+				{#if issue.sentryPermalink}
+					<!-- Absolute external Sentry URL — not an internal route. -->
+					<!-- eslint-disable svelte/no-navigation-without-resolve -->
+					<a
+						href={issue.sentryPermalink}
+						target="_blank"
+						rel="noopener noreferrer"
+						class="mt-2 inline-flex items-center gap-1.5 text-xs font-medium text-brand hover:underline"
+					>
+						Open in Sentry
+						<ExternalLink class="h-3.5 w-3.5" aria-hidden="true" />
+					</a>
+					<!-- eslint-enable svelte/no-navigation-without-resolve -->
+				{/if}
 			{:else}
 				<div class="flex items-center gap-2 text-sm text-ink">
 					<MapPin class="h-4 w-4 shrink-0 text-brand" aria-hidden="true" />

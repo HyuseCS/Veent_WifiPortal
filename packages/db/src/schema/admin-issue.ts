@@ -27,6 +27,12 @@ export const adminIssue = pgTable(
 		source: text('source').notNull().default('human'), // 'human' | 'sentry' — where the incident came from
 		networkId: integer('network_id'), // loose link to network_health.id (nullable = general issue)
 		networkName: text('network_name'), // snapshot of the AP name at creation
+		// Sentry origin snapshot (source='sentry' only, else null). Snapshotted at track time so the
+		// incident still links back + reads correctly even after Sentry ages the error out of its feed.
+		sentryIssueId: text('sentry_issue_id'),
+		sentryShortId: text('sentry_short_id'),
+		sentryPermalink: text('sentry_permalink'),
+		sentryTitle: text('sentry_title'),
 		dueDate: timestamp('due_date'),
 		resolutionNote: text('resolution_note'),
 		createdBy: text('created_by').references(() => adminUser.id, { onDelete: 'set null' }),

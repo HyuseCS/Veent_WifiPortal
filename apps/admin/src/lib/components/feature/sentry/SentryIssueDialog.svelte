@@ -1,12 +1,13 @@
 <script lang="ts">
 	import BellOff from 'lucide-svelte/icons/bell-off';
 	import Check from 'lucide-svelte/icons/check';
+	import ClipboardPlus from 'lucide-svelte/icons/clipboard-plus';
 	import ExternalLink from 'lucide-svelte/icons/external-link';
 	import LoaderCircle from 'lucide-svelte/icons/loader-circle';
 	import TriangleAlert from 'lucide-svelte/icons/triangle-alert';
 	import X from 'lucide-svelte/icons/x';
 	import { enhance } from '$app/forms';
-	import { BaseDialog, IconButton, StatusBadge } from '$lib/components/ui';
+	import { BaseDialog, Button, IconButton, Select, StatusBadge } from '$lib/components/ui';
 	import type { StatusTone } from '$lib/types';
 	import type { Component } from 'svelte';
 	import type { SentryEventDetail, SentryIssue } from '$lib/server/sentry/types';
@@ -14,17 +15,52 @@
 	// Detail modal for one issue. The summary (`issue`) is already in hand; the latest event's
 	// exception + stacktrace ("which file/line, how & why") is fetched on open from /sentry/event.
 	// `levelTone`/`seenAgo` are passed in so the table stays the single source of those helpers.
+	// Managers additionally get a "Track as incident" form (source='sentry'), posted to ?/track.
 	let {
 		issue,
 		open = $bindable(false),
 		levelTone,
-		seenAgo
+		seenAgo,
+		canManage = false,
+		assignableStaff = []
 	}: {
 		issue: SentryIssue | null;
 		open?: boolean;
 		levelTone: (level: string) => StatusTone;
 		seenAgo: (iso: string) => string;
+		canManage?: boolean;
+		assignableStaff?: { id: string; name: string; roleLabel: string }[];
 	} = $props();
+
+	const inputClass =
+		'min-h-11 w-full rounded-lg border border-border bg-bg px-3 py-2 text-sm text-ink transition-[border-color,box-shadow] duration-150 hover:border-brand/40 focus:border-brand focus:ring-2 focus:ring-brand/20 focus:outline-none';
+	const priorityOptions = [
+		{ value: 'low', label: 'Low' },
+		{ value: 'medium', label: 'Medium' },
+		{ value: 'high', label: 'High' }
+	];
+
+	// "Track as incident" sub-form state. Re-seeded by BaseDialog's reset on every open (title
+	// prefilled from the Sentry title, editable). `tracking` toggles the form open.
+	let tracking = $state(false);
+	let trackTitle = $state('');
+	let trackPriority = $state('medium');
+	let trackDue = $state('');
+	let trackAssignees = $state<string[]>([]);
+	let trackError = $state('');
+	let trackSubmitting = $state(false);
+
+	function seedTrack() {
+		tracking = false;
+		trackTitle = issue?.title ?? '';
+		trackPriority = 'medium';
+		trackDue = '';
+		trackAssignees = [];
+		trackError = '';
+	}
+	function toggleTrackAssignee(id: string, checked: boolean) {
+		trackAssignees = checked ? [...trackAssignees, id] : trackAssignees.filter((a) => a !== id);
+	}
 
 	let detail = $state<SentryEventDetail | null>(null);
 	let loading = $state(false);
@@ -52,7 +88,7 @@
 	const frames = $derived(detail ? [...detail.frames].reverse() : []);
 </script>
 
-<BaseDialog bind:open class="max-w-2xl">
+<BaseDialog bind:open reset={seedTrack} class="max-w-2xl">
 	{#if issue}
 		<div class="flex items-start gap-3">
 			<div class="min-w-0 flex-1">
@@ -139,7 +175,106 @@
 			</div>
 		</div>
 
-		<div class="mt-5 flex items-center justify-end gap-2 border-t border-border pt-4">
+		<!-- Track as incident (managers only): snapshot this Sentry error into an assigned incident.
+		     Does NOT resolve/ignore it in Sentry — it stays in the feed. -->
+		{#if canManage && tracking}
+			<section class="mt-4 rounded-lg border border-border bg-surface p-3">
+				<h3 class="text-[11px] font-semibold tracking-wider text-muted uppercase">
+					Track as incident
+				</h3>
+				<form
+					class="mt-2 space-y-3"
+					method="post"
+					action="?/track"
+					use:enhance={() => {
+						trackSubmitting = true;
+						return async ({ result, update }) => {
+							if (result.type === 'success') {
+								tracking = false;
+								open = false;
+								await update();
+							} else if (result.type === 'failure') {
+								trackError = (result.data?.error as string) ?? 'Could not create the incident.';
+								await update({ reset: false });
+							} else {
+								await update();
+							}
+							trackSubmitting = false;
+						};
+					}}
+				>
+					<!-- Snapshot fields — read by createIssueFromSentry. -->
+					<input type="hidden" name="sentryIssueId" value={issue.id} />
+					<input type="hidden" name="sentryShortId" value={issue.shortId} />
+					<input type="hidden" name="sentryPermalink" value={issue.permalink} />
+					<input type="hidden" name="sentryTitle" value={issue.title} />
+
+					<div class="space-y-1.5">
+						<label for="track-title" class="block text-xs font-medium text-ink">Title</label>
+						<input
+							id="track-title"
+							name="issue-title"
+							bind:value={trackTitle}
+							required
+							maxlength={200}
+							class={inputClass}
+						/>
+					</div>
+
+					<div class="grid gap-3 sm:grid-cols-2">
+						<Select id="issue-priority" label="Priority" options={priorityOptions} bind:value={trackPriority} />
+						<div class="space-y-1.5">
+							<label for="track-due" class="block text-xs font-medium text-ink">Due date (optional)</label>
+							<input id="track-due" name="issue-dueDate" type="date" bind:value={trackDue} class={inputClass} />
+						</div>
+					</div>
+
+					<fieldset class="space-y-1.5">
+						<legend class="block text-xs font-medium text-ink">Assign to</legend>
+						{#if assignableStaff.length === 0}
+							<p class="text-xs text-muted">No active staff to assign.</p>
+						{:else}
+							<div class="max-h-32 space-y-1 overflow-y-auto rounded-lg border border-border p-2">
+								{#each assignableStaff as s (s.id)}
+									<label class="flex min-h-9 items-center gap-2 rounded-md px-2 py-1 hover:bg-bg">
+										<input
+											type="checkbox"
+											name="assigneeId"
+											value={s.id}
+											checked={trackAssignees.includes(s.id)}
+											onchange={(e) => toggleTrackAssignee(s.id, e.currentTarget.checked)}
+											class="h-4 w-4 rounded border-border text-brand focus:ring-brand/30"
+										/>
+										<span class="text-sm text-ink">{s.name}</span>
+										<span class="ml-auto text-xs text-muted">{s.roleLabel}</span>
+									</label>
+								{/each}
+							</div>
+						{/if}
+					</fieldset>
+
+					{#if trackError}
+						<p class="text-sm text-blocked" role="alert">{trackError}</p>
+					{/if}
+
+					<div class="flex justify-end gap-2">
+						<Button type="button" variant="secondary" onclick={() => (tracking = false)}>Cancel</Button>
+						<Button type="submit" loading={trackSubmitting}>Create incident</Button>
+					</div>
+				</form>
+			</section>
+		{/if}
+
+		<div class="mt-5 flex flex-wrap items-center justify-end gap-2 border-t border-border pt-4">
+			{#if canManage && !tracking}
+				<button
+					type="button"
+					onclick={() => (tracking = true)}
+					class="mr-auto inline-flex min-h-11 items-center gap-1.5 rounded-lg bg-brand px-3 text-sm font-medium text-white transition-colors hover:bg-brand-hover focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:outline-none"
+				>
+					<ClipboardPlus class="h-4 w-4" aria-hidden="true" /> Track as incident
+				</button>
+			{/if}
 			<form method="post" action="?/resolve" use:enhance={() => async ({ result, update }) => { if (result.type === 'success') open = false; await update(); }}>
 				<input type="hidden" name="id" value={issue.id} />
 				<button

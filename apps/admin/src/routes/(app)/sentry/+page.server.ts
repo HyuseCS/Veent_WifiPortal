@@ -1,15 +1,38 @@
 import { fail, type RequestEvent } from '@sveltejs/kit';
+import { MANAGER_ROLES, STAFF_STATUS, type StaffRole } from '@veent/core';
+import { db } from '$lib/server/db';
 import { logger } from '$lib/server/logger';
+import { requireManager } from '$lib/server/auth-guard';
 import { clientIp, rateLimit } from '$lib/server/rateLimit';
+import { listStaff } from '$lib/server/queries';
+import { createIssueFromSentry, isIssuePriority, type IssueInput } from '$lib/server/issues';
+import { notifyAssignees } from '$lib/server/issueNotify';
 import { getDashboard, ignoreIssue, isSentryConfigured, resolveIssue } from '$lib/server/sentry';
 import type { Actions, PageServerLoad } from './$types';
 
 const log = logger('sentry');
 
-/** Thin: delegate to the facade. Unconfigured → an EmptyState on the page, never a 500. */
-export const load: PageServerLoad = async () => {
-	if (!isSentryConfigured()) return { configured: false as const };
-	return getDashboard();
+/**
+ * Whether the viewer may "Track as incident" (managers only) + the staff they can assign. Shared by
+ * the dashboard load AND the mobile /sentry/issues load so both render the track form consistently.
+ */
+export async function _managerContext(user: { role?: string | null }) {
+	const canManage = MANAGER_ROLES.includes(user.role as StaffRole);
+	const assignableStaff = canManage
+		? (await listStaff(db))
+				.filter((s) => s.status === STAFF_STATUS.active)
+				.map((s) => ({ id: s.id, name: s.name, roleLabel: s.roleLabel }))
+		: [];
+	return { canManage, assignableStaff };
+}
+
+/** Delegate to the facade for the dashboard; layer on the track-form context. Unconfigured → an
+ *  EmptyState on the page, never a 500. */
+export const load: PageServerLoad = async (event) => {
+	const { user } = await event.parent();
+	const ctx = await _managerContext(user);
+	if (!isSentryConfigured()) return { configured: false as const, ...ctx };
+	return { ...(await getDashboard()), ...ctx };
 };
 
 /** Shared staff-auth + rate-limit + id-parse guard for both mutations; runs the given Sentry call. */
@@ -35,7 +58,65 @@ async function mutate(event: RequestEvent, action: string, run: (id: string) => 
 	}
 }
 
+/** Keep only ids that are currently ACTIVE staff — never trust the posted assignee list. */
+async function validAssignees(ids: string[]): Promise<string[]> {
+	if (ids.length === 0) return [];
+	const active = new Set(
+		(await listStaff(db)).filter((s) => s.status === STAFF_STATUS.active).map((s) => s.id)
+	);
+	return ids.filter((id) => active.has(id));
+}
+
 export const actions: Actions = {
 	resolve: (event) => mutate(event, 'resolve', resolveIssue),
-	ignore: (event) => mutate(event, 'ignore', ignoreIssue)
+	ignore: (event) => mutate(event, 'ignore', ignoreIssue),
+
+	/**
+	 * Track a Sentry error as an assigned incident (managers only). Snapshots the Sentry fields onto
+	 * a source='sentry' incident and notifies the assignees — but does NOT change the error's status
+	 * in Sentry, so it stays in the feed (dismissal via ?/ignore is a separate, explicit action).
+	 */
+	track: async (event) => {
+		const userId = event.locals.user?.id;
+		const denied = await requireManager(userId, 'You do not have permission to track incidents.');
+		if (denied) return denied;
+
+		const form = await event.request.formData();
+		const sentryIssueId = String(form.get('sentryIssueId') ?? '').trim();
+		const shortId = String(form.get('sentryShortId') ?? '').trim();
+		const permalink = String(form.get('sentryPermalink') ?? '').trim();
+		const sentryTitle = String(form.get('sentryTitle') ?? '').trim();
+		if (!sentryIssueId) return fail(400, { action: 'track', error: 'Missing Sentry issue.' });
+
+		const title = String(form.get('issue-title') ?? '').trim();
+		if (!title) return fail(400, { action: 'track', error: 'Title is required.' });
+		const description = String(form.get('issue-description') ?? '').trim() || null;
+
+		const priority = String(form.get('issue-priority') ?? 'medium');
+		if (!isIssuePriority(priority)) return fail(400, { action: 'track', error: 'Invalid priority.' });
+
+		const rawDue = String(form.get('issue-dueDate') ?? '').trim();
+		let dueDate: Date | null = null;
+		if (rawDue) {
+			// UTC midnight, matching the incident form parser (round-trips with toDateInput).
+			const d = new Date(`${rawDue}T00:00:00Z`);
+			if (Number.isNaN(d.getTime())) return fail(400, { action: 'track', error: 'Invalid due date.' });
+			dueDate = d;
+		}
+
+		const assigneeIds = await validAssignees([
+			...new Set(form.getAll('assigneeId').map((v) => String(v)).filter(Boolean))
+		]);
+
+		const input: IssueInput = { title, description, priority, networkId: null, dueDate, assigneeIds };
+		const id = await createIssueFromSentry(
+			db,
+			{ issueId: sentryIssueId, shortId, permalink, title: sentryTitle },
+			input,
+			userId!
+		);
+		// Notify assignees (email + in-app), same as a manual incident. Post-commit, best-effort.
+		await notifyAssignees(assigneeIds, event.locals.user!, { id, title }, event.url.origin);
+		return { action: 'track', ok: true, id };
+	}
 };

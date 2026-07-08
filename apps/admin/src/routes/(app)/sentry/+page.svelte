@@ -22,7 +22,12 @@
 		<SentryKpis kpis={data.kpis} dashboardUrl={data.dashboardUrl} />
 		<!-- Desktop: the full issues table (with per-row trend sparklines) sits inline. -->
 		<div class="hidden md:block">
-			<SentryIssuesTable issues={data.issues} degraded={data.degraded.issues} />
+			<SentryIssuesTable
+				issues={data.issues}
+				degraded={data.degraded.issues}
+				canManage={data.canManage}
+				assignableStaff={data.assignableStaff}
+			/>
 		</div>
 		<!-- Mobile: the table lives on its own page, so peek at the issues worth attention here. -->
 		<div class="md:hidden">

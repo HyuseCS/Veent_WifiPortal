@@ -58,6 +58,11 @@ export interface AdminIssueRow {
 	priorityLabel: string;
 	priorityTone: StatusTone;
 	source: IssueSource;
+	/** Sentry origin snapshot — null for human incidents. */
+	sentryIssueId: string | null;
+	sentryShortId: string | null;
+	sentryPermalink: string | null;
+	sentryTitle: string | null;
 	networkId: number | null;
 	networkName: string | null;
 	/** Due date as epoch ms (for sorting/display), null if none. */
@@ -120,6 +125,10 @@ function mapRow(r: typeof adminIssue.$inferSelect, assignees: IssueAssignee[]): 
 		priorityLabel: PRIORITY_LABEL[priority] ?? r.priority,
 		priorityTone: PRIORITY_TONE[priority] ?? 'warning',
 		source: r.source as IssueSource,
+		sentryIssueId: r.sentryIssueId,
+		sentryShortId: r.sentryShortId,
+		sentryPermalink: r.sentryPermalink,
+		sentryTitle: r.sentryTitle,
 		networkId: r.networkId,
 		networkName: r.networkName,
 		dueDate: r.dueDate ? r.dueDate.getTime() : null,
@@ -366,6 +375,70 @@ export async function createIssue(db: DB, input: IssueInput, createdBy: string):
 			})
 			.returning({ id: adminIssue.id });
 		await recordEvent(tx, { issueId: issue.id, actorId: createdBy, type: ISSUE_EVENT.created });
+		if (input.assigneeIds.length > 0) {
+			await tx.insert(adminIssueAssignee).values(
+				input.assigneeIds.map((adminUserId) => ({
+					issueId: issue.id,
+					adminUserId,
+					assignedBy: createdBy
+				}))
+			);
+			for (const adminUserId of input.assigneeIds) {
+				await recordEvent(tx, {
+					issueId: issue.id,
+					actorId: createdBy,
+					type: ISSUE_EVENT.assigned,
+					toValue: adminUserId
+				});
+			}
+		}
+		return issue.id;
+	});
+}
+
+/** The four Sentry fields snapshotted onto a tracked incident. */
+export interface SentrySnapshot {
+	issueId: string;
+	shortId: string;
+	permalink: string;
+	title: string;
+}
+
+/**
+ * Track a Sentry error as an assigned incident. Snapshots the four Sentry fields so the incident
+ * still links back + reads correctly after the error ages out of Sentry's feed. source='sentry',
+ * no AP link. Deliberately does NOT change the error's status in Sentry — it stays in the feed
+ * (dismissal is a separate, explicit triage action). Returns the new incident id.
+ */
+export async function createIssueFromSentry(
+	db: DB,
+	snapshot: SentrySnapshot,
+	input: IssueInput,
+	createdBy: string
+): Promise<number> {
+	return db.transaction(async (tx) => {
+		const [issue] = await tx
+			.insert(adminIssue)
+			.values({
+				title: input.title,
+				description: input.description,
+				priority: input.priority,
+				source: ISSUE_SOURCE.sentry,
+				sentryIssueId: snapshot.issueId,
+				sentryShortId: snapshot.shortId,
+				sentryPermalink: snapshot.permalink,
+				sentryTitle: snapshot.title,
+				dueDate: input.dueDate,
+				createdBy
+			})
+			.returning({ id: adminIssue.id });
+		// The origin is on the created event's note so it reads in the timeline.
+		await recordEvent(tx, {
+			issueId: issue.id,
+			actorId: createdBy,
+			type: ISSUE_EVENT.created,
+			note: `Tracked from Sentry ${snapshot.shortId}`
+		});
 		if (input.assigneeIds.length > 0) {
 			await tx.insert(adminIssueAssignee).values(
 				input.assigneeIds.map((adminUserId) => ({
