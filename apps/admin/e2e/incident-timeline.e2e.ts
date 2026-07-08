@@ -2,9 +2,9 @@
  * Phase 1 — incident audit timeline.
  *
  * Exercises the append-only history end-to-end as the seeded owner (a manager): creating an
- * incident writes a `created` event, an inline status change writes a `status_changed` event,
- * and both surface in the expanded row's Timeline. Deleting the incident CASCADES its events
- * away (asserted straight against the test DB, since the row is gone from the UI).
+ * incident writes a `created` event, a status change (made from the detail page) writes a
+ * `status_changed` event, and both surface in the Timeline. Deleting the incident CASCADES its
+ * events away (asserted straight against the test DB, since the row is gone from the UI).
  */
 import { test, expect } from '@playwright/test';
 import postgres from 'postgres';
@@ -56,11 +56,15 @@ test('incident timeline records create + status change, and cascades on delete',
 	await row.getByRole('button', { name: 'Expand issue details' }).click();
 	await expect(page.getByText('Created this incident')).toBeVisible();
 
-	// Inline status change → a status_changed entry appears (newest-first, above "created").
-	await row.getByLabel(`Status for ${TITLE}`).selectOption('in_progress');
+	// Status is changed from the detail page now (not inline on the board). Open the incident,
+	// set In Progress → a status_changed entry appears in its History (newest-first, above "created").
+	await page.goto(`/issues/${id}`);
+	await page.getByLabel('Set status').selectOption('in_progress');
+	await page.getByRole('button', { name: 'Update' }).click();
 	await expect(page.getByText(/Status:.*In Progress/)).toBeVisible();
 
-	// Delete the incident → confirm → its events cascade away.
+	// Back to the board to delete the incident → confirm → its events cascade away.
+	await page.goto('/issues');
 	await row.getByRole('button', { name: `Delete ${TITLE}` }).click();
 	await page.getByRole('button', { name: `Confirm deleting ${TITLE}` }).click();
 	await expect.poll(() => issueIdByTitle(TITLE)).toBeNull();

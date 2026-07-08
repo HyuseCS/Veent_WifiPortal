@@ -11,6 +11,7 @@
 	import type { Component } from 'svelte';
 	import { SvelteSet } from 'svelte/reactivity';
 	import { enhance } from '$app/forms';
+	import { goto } from '$app/navigation';
 	import { Button, EmptyState, IconButton, SearchInput, StatusBadge, Table } from '$lib/components/ui';
 	import Timeline from './Timeline.svelte';
 	import type { AdminIssueRow, IssueEventRow } from '$lib/server/issues';
@@ -42,6 +43,14 @@
 		else expanded.add(id);
 	}
 
+	// Whole-row navigation to the detail page. Clicks that land on an interactive control (the
+	// expand chevron, the status <select>, the edit/delete buttons, or the title link itself) are
+	// left alone — those keep their own behaviour. The title <a> stays the keyboard/right-click path.
+	function openIssue(e: MouseEvent, id: number) {
+		if ((e.target as HTMLElement).closest('a, button, select, input, form, label')) return;
+		goto(`/issues/${id}`);
+	}
+
 	const filtered = $derived.by(() => {
 		const q = query.trim().toLowerCase();
 		if (!q) return issues;
@@ -55,12 +64,6 @@
 	});
 
 	const headers = ['Issue', 'Access point', 'Priority', 'Status', 'Assignees', 'Due', 'Actions'];
-
-	const statusOptions = [
-		{ value: 'open', label: 'Open' },
-		{ value: 'in_progress', label: 'In Progress' },
-		{ value: 'resolved', label: 'Resolved' }
-	];
 
 	function dueLabel(ms: number | null): string {
 		return ms ? new Date(ms).toLocaleDateString() : '—';
@@ -101,7 +104,13 @@
 	{/snippet}
 
 	{#each filtered as issue (issue.id)}
-		<tr class="align-top hover:bg-surface" class:opacity-60={issue.status === 'resolved'}>
+		<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+		<!-- Row-wide click opens the incident (see openIssue); the title <a> is the keyboard path. -->
+		<tr
+			class="cursor-pointer align-top hover:bg-surface"
+			class:opacity-60={issue.status === 'resolved'}
+			onclick={(e) => openIssue(e, issue.id)}
+		>
 			<td class="tc-full max-w-[16rem] px-4 py-3 sm:max-w-[24rem]">
 				<div class="flex items-start gap-2">
 					<button
@@ -135,22 +144,8 @@
 				<StatusBadge tone={issue.priorityTone} label={issue.priorityLabel} />
 			</td>
 			<td data-label="Status" class="px-4 py-3">
-				<!-- Inline status change (auto-submits on change). Resolving here leaves the note
-				     empty; assignees add a note from their My Issues view. -->
-				<form method="post" action="?/updateStatus" use:enhance>
-					<input type="hidden" name="id" value={issue.id} />
-					<select
-						name="status"
-						value={issue.status}
-						aria-label="Status for {issue.title}"
-						onchange={(e) => e.currentTarget.form?.requestSubmit()}
-						class="min-h-11 cursor-pointer rounded-lg border border-border bg-bg px-2.5 py-1.5 text-xs text-ink hover:border-brand/40 focus:border-brand focus:ring-2 focus:ring-brand/20 focus:outline-none"
-					>
-						{#each statusOptions as o (o.value)}
-							<option value={o.value}>{o.label}</option>
-						{/each}
-					</select>
-				</form>
+				<!-- Read-only here — status is changed from the incident detail page (open the row). -->
+				<StatusBadge tone={issue.statusTone} label={issue.statusLabel} />
 			</td>
 			<td data-label="Assignees" class="px-4 py-3 text-sm text-ink">
 				{#if issue.assignees.length === 0}
