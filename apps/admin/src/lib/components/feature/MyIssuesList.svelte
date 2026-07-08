@@ -46,7 +46,14 @@
 				<div class="flex flex-wrap items-start gap-3">
 					<div class="min-w-0 flex-1">
 						<div class="flex flex-wrap items-center gap-2">
-							<h3 class="font-medium text-ink">{issue.title}</h3>
+							<h3 class="font-medium text-ink">
+								<a
+									href="/issues/{issue.id}"
+									class="underline-offset-2 hover:text-brand hover:underline"
+								>
+									{issue.title}
+								</a>
+							</h3>
 							<StatusBadge tone={issue.priorityTone} label={issue.priorityLabel} />
 							<StatusBadge tone={issue.statusTone} label={issue.statusLabel} />
 						</div>

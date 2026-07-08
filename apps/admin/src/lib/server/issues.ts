@@ -177,6 +177,15 @@ export async function listIssues(db: DB): Promise<AdminIssueRow[]> {
 	return hydrate(db, rows);
 }
 
+/** One issue by id, fully hydrated (badges + assignees). Null if it doesn't exist. Backs the
+ *  detail route; role-scoping is enforced by the caller (manager: any, assignee: own only). */
+export async function getIssue(db: DB, id: number): Promise<AdminIssueRow | null> {
+	const rows = await db.select().from(adminIssue).where(eq(adminIssue.id, id)).limit(1);
+	if (rows.length === 0) return null;
+	const [row] = await hydrate(db, rows);
+	return row ?? null;
+}
+
 /** Issues assigned to one staff member (assignee "My Issues" view). */
 export async function listIssuesForAssignee(db: DB, userId: string): Promise<AdminIssueRow[]> {
 	const mine = await db
@@ -513,6 +522,22 @@ export async function setIssueStatus(
 
 export async function deleteIssue(db: DB, id: number): Promise<void> {
 	await db.delete(adminIssue).where(eq(adminIssue.id, id));
+}
+
+/**
+ * Append a comment to an incident's timeline (a `comment` event whose `note` is the body).
+ * Single insert — no tx needed. Comments are notifiable, so assignees pick them up in the feed
+ * automatically (no email — that's assignment-only). Returns nothing.
+ */
+export async function addComment(
+	db: DB,
+	issueId: number,
+	actorId: string,
+	body: string
+): Promise<void> {
+	await db
+		.insert(adminIssueEvent)
+		.values({ issueId, actorId, type: ISSUE_EVENT.comment, note: body });
 }
 
 /** Whitelist guards for the hand-written form parsers. */

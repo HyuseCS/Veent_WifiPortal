@@ -33,13 +33,13 @@ const log = logger('issues');
 async function notifyAssignees(
 	assigneeIds: string[],
 	actor: { id: string; name?: string | null },
-	issueTitle: string,
+	issue: { id: number; title: string },
 	origin: string
 ): Promise<void> {
 	const recipients = assigneeIds.filter((id) => id !== actor.id);
 	if (recipients.length === 0) return;
 	const byId = new Map((await listStaff(db)).map((s) => [s.id, s]));
-	const url = `${origin}/issues`; // Phase 2 will deep-link to /issues/[id]
+	const url = `${origin}/issues/${issue.id}`; // deep-link to the incident detail page
 	for (const id of recipients) {
 		const staff = byId.get(id);
 		if (!staff?.email) continue;
@@ -50,7 +50,7 @@ async function notifyAssignees(
 				...issueAssignedEmail({
 					recipientName: staff.name,
 					actorName: actor.name ?? 'A manager',
-					issueTitle,
+					issueTitle: issue.title,
 					url
 				})
 			});
@@ -159,7 +159,12 @@ export const actions: Actions = {
 		parsed.input.assigneeIds = await validAssignees(parsed.input.assigneeIds);
 		const id = await createIssue(db, parsed.input, event.locals.user!.id);
 		// Every assignee on a fresh incident is newly-assigned → notify them all (minus self).
-		await notifyAssignees(parsed.input.assigneeIds, event.locals.user!, parsed.input.title, event.url.origin);
+		await notifyAssignees(
+			parsed.input.assigneeIds,
+			event.locals.user!,
+			{ id, title: parsed.input.title },
+			event.url.origin
+		);
 		return { ok: true, action: 'create', id };
 	},
 
@@ -174,7 +179,7 @@ export const actions: Actions = {
 		parsed.input.assigneeIds = await validAssignees(parsed.input.assigneeIds);
 		const added = await updateIssue(db, id, parsed.input, event.locals.user!.id);
 		// Only NEW assignees get an email (updateIssue returns the diff), never on every edit.
-		await notifyAssignees(added, event.locals.user!, parsed.input.title, event.url.origin);
+		await notifyAssignees(added, event.locals.user!, { id, title: parsed.input.title }, event.url.origin);
 		return { ok: true, action: 'update', id };
 	},
 

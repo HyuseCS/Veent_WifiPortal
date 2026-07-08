@@ -118,7 +118,7 @@
 					{#each notifications as n (n.id)}
 						<li>
 							<a
-								href="/issues"
+								href="/issues/{n.issueId}"
 								role="menuitem"
 								onclick={() => (open = false)}
 								class="flex flex-col gap-0.5 px-3 py-2 outline-none transition-colors hover:bg-surface focus-visible:bg-surface"

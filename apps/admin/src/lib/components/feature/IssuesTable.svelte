@@ -118,7 +118,12 @@
 						{/if}
 					</button>
 					<div class="min-w-0">
-						<div class="truncate font-medium text-ink">{issue.title}</div>
+						<a
+							href="/issues/{issue.id}"
+							class="truncate font-medium text-ink underline-offset-2 hover:text-brand hover:underline"
+						>
+							{issue.title}
+						</a>
 					</div>
 				</div>
 			</td>
