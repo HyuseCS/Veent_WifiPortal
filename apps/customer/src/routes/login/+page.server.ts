@@ -2,10 +2,15 @@ import { fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { auth } from '$lib/server/auth';
 import { normalizePhone } from '$lib/phone';
-import { PENDING_COOKIE, PENDING_MAX_AGE, serializePending } from '$lib/server/otp';
+import {
+	PENDING_COOKIE,
+	PENDING_COOKIE_SECURE,
+	PENDING_MAX_AGE,
+	serializePending
+} from '$lib/server/otp';
 import { enforceOtpSendLimit, RateLimitError, retryAfterMessage } from '$lib/server/otpRateLimit';
-import { getPortalContext } from '$lib/server/portal';
-import { dev } from '$app/environment';
+import { clientIp } from '$lib/server/rateLimit';
+import { getDeviceMac, getPortalContext } from '$lib/server/portal';
 
 export const load: PageServerLoad = (event) => {
 	if (event.locals.user) {
@@ -32,10 +37,12 @@ export const actions: Actions = {
 		}
 
 		// Throttle sends per phone + device MAC BEFORE hitting the SMS gateway, so a
-		// number can't be spammed and operator credits can't be drained.
-		const mac = getPortalContext(event)?.mac;
+		// number can't be spammed and operator credits can't be drained. Fall back to the
+		// device cookie so a second account (whose portal cookie is gone) still carries the
+		// MAC into the pending cookie → the grant after verify can target this device.
+		const mac = getPortalContext(event)?.mac ?? getDeviceMac(event) ?? undefined;
 		try {
-			await enforceOtpSendLimit(phone, mac);
+			await enforceOtpSendLimit(phone, mac, clientIp(event));
 		} catch (error) {
 			if (error instanceof RateLimitError) {
 				return fail(429, { phone: phoneRaw, message: retryAfterMessage(error.retryAfterSec) });
@@ -45,7 +52,18 @@ export const actions: Actions = {
 		// Already charged above — tell the auth sendOTP callback not to charge it again.
 		event.locals.otpLimitEnforced = true;
 
-		await auth.api.sendPhoneNumberOTP({ body: { phoneNumber: phone } });
+		// A slow/failing SMS gateway must not blow up into a full-page 500 — keep the guest on the
+		// form with their number intact so they can retry. (The send itself is timeout-bounded in
+		// $lib/server/otp, so this can't hang either.)
+		try {
+			await auth.api.sendPhoneNumberOTP({ body: { phoneNumber: phone } });
+		} catch (error) {
+			console.warn('[login] OTP send failed:', error instanceof Error ? error.message : error);
+			return fail(502, {
+				phone: phoneRaw,
+				message: "We couldn't send your code right now. Please try again in a moment."
+			});
+		}
 
 		// Stash the captive-portal device MAC alongside the pending verification, so
 		// the dashboard can grant access after verify regardless of cookie survival.
@@ -53,7 +71,7 @@ export const actions: Actions = {
 			path: '/',
 			httpOnly: true,
 			sameSite: 'lax',
-			secure: !dev,
+			secure: PENDING_COOKIE_SECURE,
 			maxAge: PENDING_MAX_AGE
 		});
 

@@ -9,13 +9,8 @@
 	let { data, form }: { data: PageServerData; form: ActionData } = $props();
 
 	const LENGTH = 6;
-	let digits = $state<string[]>(Array(LENGTH).fill(''));
-	let inputs = $state<HTMLInputElement[]>([]);
 	let submitting = $state(false);
 	let resent = $state(false);
-
-	const code = $derived(digits.join(''));
-	const complete = $derived(/^\d{6}$/.test(code));
 
 	// Resend gate: a single always-running tick counts the cooldown down to 0,
 	// after which the resend control becomes tappable. Resending resets it.
@@ -27,35 +22,16 @@
 		return () => clearInterval(id);
 	});
 
-	$effect(() => {
-		inputs[0]?.focus();
-	});
-
 	const timer = $derived(
 		`${Math.floor(secondsLeft / 60)}:${String(secondsLeft % 60).padStart(2, '0')}`
 	);
 
-	function handleInput(i: number, event: Event) {
+	// Strip any non-digits as they're typed so the field only ever holds the code.
+	// This is a nicety when hydrated; the server re-strips and re-validates regardless.
+	function sanitize(event: Event) {
 		const el = event.target as HTMLInputElement;
-		const v = el.value.replace(/\D/g, '');
-		digits[i] = v.slice(-1);
-		el.value = digits[i];
-		if (digits[i] && i < LENGTH - 1) inputs[i + 1]?.focus();
-	}
-
-	function handleKeydown(i: number, event: KeyboardEvent) {
-		if (event.key === 'Backspace' && !digits[i] && i > 0) {
-			inputs[i - 1]?.focus();
-		}
-	}
-
-	function handlePaste(event: ClipboardEvent) {
-		event.preventDefault();
-		const text = (event.clipboardData?.getData('text') ?? '').replace(/\D/g, '').slice(0, LENGTH);
-		if (!text) return;
-		const chars = text.split('');
-		for (let j = 0; j < LENGTH; j++) digits[j] = chars[j] ?? '';
-		inputs[Math.min(chars.length, LENGTH - 1)]?.focus();
+		const cleaned = el.value.replace(/\D/g, '').slice(0, LENGTH);
+		if (el.value !== cleaned) el.value = cleaned;
 	}
 
 	const onVerify: SubmitFunction = () => {
@@ -82,7 +58,7 @@
 </script>
 
 <svelte:head>
-	<title>Enter code · Veent WiFi</title>
+	<title>Enter code · Parafiber WiFi</title>
 </svelte:head>
 
 <main class="flex min-h-screen flex-col lg:bg-surface">
@@ -107,10 +83,9 @@
 			</p>
 
 			<!-- `group` + data-pending drive the button spinner via CSS the instant it's tapped,
-			pre-hydration (app.html inline script) and hydrated (`submitting`) alike. NOTE: the
-			6-box OTP aggregates digits into the hidden `code` field via JS, so a valid submit
-			needs hydration — the button is correctly `disabled` until `complete`. This just makes
-			the pending feedback immediate once it IS submittable. -->
+			pre-hydration (app.html inline script) and hydrated (`submitting`) alike. The code is a
+			single native <input>, so the form is fully submittable with zero JS on slow networks:
+			the browser enforces `pattern`/`required`, and the server re-strips + re-validates. -->
 			<form
 				method="post"
 				action="?/verify"
@@ -119,29 +94,25 @@
 				data-pending={submitting ? '' : null}
 				use:enhance={onVerify}
 			>
-				<input type="hidden" name="code" value={code} />
-
-				<div class="mb-3 flex gap-2.5">
-					{#each digits as digit, i (i)}
-						<input
-							bind:this={inputs[i]}
-							value={digit}
-							oninput={(e) => handleInput(i, e)}
-							onkeydown={(e) => handleKeydown(i, e)}
-							onpaste={handlePaste}
-							type="text"
-							inputmode="numeric"
-							autocomplete={i === 0 ? 'one-time-code' : 'off'}
-							maxlength="1"
-							aria-label={`Digit ${i + 1}`}
-							aria-invalid={form?.message ? 'true' : undefined}
-							class="aspect-[1/1.15] max-h-[60px] min-w-0 flex-1 rounded-xl border-[1.5px] text-center font-mono text-2xl font-semibold text-ink transition-colors focus:outline-none focus:ring-[3px] focus:ring-brand/20 {form?.message
-								? 'border-blocked bg-blocked/5'
-								: digit
-									? 'border-brand bg-brand-tint-2'
-									: 'border-border bg-bg focus:border-brand'}"
-						/>
-					{/each}
+				<div class="mb-3">
+					<!-- svelte-ignore a11y_autofocus -->
+					<input
+						name="code"
+						oninput={sanitize}
+						type="text"
+						inputmode="numeric"
+						pattern="\d{'{'}{LENGTH}{'}'}"
+						maxlength={LENGTH}
+						required
+						autofocus
+						autocomplete="one-time-code"
+						aria-label="6-digit code"
+						aria-invalid={form?.message ? 'true' : undefined}
+						placeholder="••••••"
+						class="h-[60px] w-full rounded-xl border-[1.5px] text-center font-mono text-3xl font-semibold tracking-[0.4em] text-ink transition-colors focus:outline-none focus:ring-[3px] focus:ring-brand/20 {form?.message
+							? 'border-blocked bg-blocked/5'
+							: 'border-border bg-bg focus:border-brand'}"
+					/>
 				</div>
 
 				{#if form?.message}
@@ -155,7 +126,7 @@
 
 				<button
 					type="submit"
-					disabled={!complete || submitting}
+					disabled={submitting}
 					class="flex h-[54px] w-full items-center justify-center gap-2 rounded-xl bg-cta text-base font-bold text-white transition-colors hover:bg-cta-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cta disabled:cursor-not-allowed disabled:opacity-40 group-data-[pending]:pointer-events-none group-data-[pending]:opacity-80"
 				>
 					<span class="hidden items-center gap-2 group-data-[pending]:inline-flex">

@@ -1,6 +1,8 @@
 import { dev, building } from '$app/environment';
 import { env } from '$env/dynamic/private';
+import { env as pub } from '$env/dynamic/public';
 import { logger } from '$lib/server/logger';
+import { SENTRY_CREDENTIAL_KEYS } from '$lib/server/sentry';
 
 const log = logger('env');
 
@@ -32,8 +34,43 @@ export function validateEnv(): void {
 		log.warn(`${msg} — required before production.`);
 	}
 
+	// BETTER_AUTH_SECRET signs admin session cookies AND encrypts staff 2FA seeds/backup codes, so a
+	// short/low-entropy value is a real weakness (L-5). Enforce the length the .env.example demands
+	// ("32+ chars in prod") — presence alone isn't enough. Loud in prod, forgiving in dev.
+	const MIN_SECRET_LEN = 32;
+	const secret = env.BETTER_AUTH_SECRET;
+	if (secret && secret.length < MIN_SECRET_LEN) {
+		const msg = `BETTER_AUTH_SECRET is too short (${secret.length} chars; need ${MIN_SECRET_LEN}+)`;
+		if (!dev) throw new Error(msg);
+		log.warn(`${msg} — use a 32+ char random secret before production.`);
+	}
+
+	// Per-IP rate limits (login, 2FA, forgot-password) are only sound if the client IP is trustworthy.
+	// adapter-node derives it from ADDRESS_HEADER, and a wrong/absent XFF_DEPTH makes that header
+	// attacker-spoofable (NC-1). Warn when the header is trusted without an explicit hop count.
+	if (!dev && env.ADDRESS_HEADER && !env.XFF_DEPTH) {
+		log.warn(
+			'ADDRESS_HEADER is set without XFF_DEPTH — the client IP may be spoofable; set XFF_DEPTH to your proxy hop count.'
+		);
+	}
+
 	// Email is degrade-to-stub, so warn (don't fail) when unconfigured in production.
 	if (!dev && (!env.RESEND_API_KEY || !env.EMAIL_FROM)) {
 		log.warn('RESEND_API_KEY / EMAIL_FROM unset — staff invites & wipe codes will not send real email.');
+	}
+
+	// Observability degrades to off, so warn (don't fail) when the Sentry DSN is unset in prod.
+	if (!dev && !pub.PUBLIC_SENTRY_DSN) {
+		log.warn('PUBLIC_SENTRY_DSN unset — error tracking & performance tracing are disabled.');
+	}
+
+	// The in-app /sentry dashboard needs an API token + org/project on top of the DSN. Missing →
+	// the page shows an empty state (never a crash), so warn rather than fail. Only nag when the
+	// DSN is set (i.e. Sentry is meant to be on).
+	if (!dev && pub.PUBLIC_SENTRY_DSN) {
+		const missingApi = SENTRY_CREDENTIAL_KEYS.filter((k) => !env[k]);
+		if (missingApi.length > 0) {
+			log.warn(`${missingApi.join(', ')} unset — the /sentry dashboard page will be empty.`);
+		}
 	}
 }

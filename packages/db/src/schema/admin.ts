@@ -22,7 +22,7 @@ import {
 	check
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
-import { adminUser } from './auth-admin';
+import { adminUser, adminSession } from './auth-admin';
 
 /**
  * Lookup table of staff roles — the single source of truth for what a role *is*.
@@ -49,6 +49,11 @@ export const adminRole = pgTable('admin_role', {
  * Staff-domain extension of the better-auth admin user (1:1).
  *   role   — FK into admin_role: 'owner' (bootstrap/promotion) | 'admin' (invited)
  *   status — 'pending' (invited, awaiting activation) | 'active' | 'disabled'
+ *
+ * Self-service contact fields (edited from the staff member's own Profile page):
+ *   phone / jobTitle / contactEmail — optional display/contact details. `contactEmail`
+ *   is a separate reach-me address; the LOGIN email stays on admin_user (the auth
+ *   identity). The avatar lives in the better-auth `admin_user.image` column.
  */
 export const adminProfile = pgTable('admin_profile', {
 	userId: text('user_id')
@@ -59,7 +64,10 @@ export const adminProfile = pgTable('admin_profile', {
 		.default('admin')
 		.references(() => adminRole.key),
 	status: text('status').notNull().default('pending'),
-	lastActiveAt: timestamp('last_active_at')
+	lastActiveAt: timestamp('last_active_at'),
+	phone: text('phone'),
+	jobTitle: text('job_title'),
+	contactEmail: text('contact_email')
 });
 
 /**
@@ -99,6 +107,19 @@ export const networkHealth = pgTable('network_health', {
 	id: serial('id').primaryKey(),
 	name: text('name').notNull(),
 	online: boolean('online').notNull().default(true),
+	// Whether the router's uplink/WAN was reachable at the last sample (shared across a router's
+	// interfaces). `online` is the raw per-AP LINK state; an AP with `online=true` but `wan_ok=false`
+	// (radio up, internet dead) is NOT serving guests, so the outage sweep treats it as down. Defaults
+	// true so a never-sampled/legacy row is never mistaken for a WAN outage.
+	wanOk: boolean('wan_ok').notNull().default(true),
+	// When the AP most recently transitioned online→offline (cleared on recovery). Drives the
+	// outage sweep's PAUSE debounce: guests on the AP are auto-paused only after it has been down for
+	// a sustained period, not on a brief blip.
+	offlineSince: timestamp('offline_since'),
+	// Mirror of offline_since for the RESUME side (cleared while offline). The outage sweep resumes a
+	// held guest only after their AP has been confirmed back UP for a sustained period — so a flapping
+	// AP can't un-freeze paid time on the first "online" sample and burn it while service is unstable.
+	onlineSince: timestamp('online_since'),
 	uptimePct: numeric('uptime_pct', { precision: 5, scale: 2 }).notNull().default('0'),
 	latencyMs: integer('latency_ms'),
 	users: integer('users').notNull().default(0),
@@ -123,10 +144,43 @@ export const networkHealth = pgTable('network_health', {
 	// from coverage overlap (no stable id), so the name rides on the members: renaming a
 	// cluster mirrors this value across all its current members. Null = unnamed (shown as
 	// "Cluster N" in the UI).
-	clusterName: text('cluster_name')
+	clusterName: text('cluster_name'),
+	// Aggregate per-AP bandwidth caps, enforced on the router as a `/queue/simple` on this
+	// hotspot's client subnet (so all guests on the AP share the cap, bypass bindings and
+	// all). Kilobits/s; null = uncapped. Operator-set from the admin Networks card and
+	// preserved across the health sweep (see refreshNetworkHealth — telemetry-only upsert).
+	maxDownKbps: integer('max_down_kbps'),
+	maxUpKbps: integer('max_up_kbps')
 }, (t) => [
 	// `name` is the natural key the health sweep upserts on (one row per router interface /
 	// map pin). Unique so concurrent sweeps can't race two rows for the same AP, and so the
 	// service can use onConflictDoUpdate instead of select-then-insert.
-	uniqueIndex('network_health_name_key').on(t.name)
+	uniqueIndex('network_health_name_key').on(t.name),
+	// A cap is either unset or a positive rate — a zero/negative Kbps is always corrupt.
+	// Mirrors the router_model range check; guards direct inserts and future migrations.
+	check('network_health_max_down_kbps_positive', sql`${t.maxDownKbps} IS NULL OR ${t.maxDownKbps} > 0`),
+	check('network_health_max_up_kbps_positive', sql`${t.maxUpKbps} IS NULL OR ${t.maxUpKbps} > 0`)
 ]);
+
+/**
+ * The device MAC that got an admin internet bypass (B3.2), stashed at login so the sliding
+ * renewal and logout revoke can find it without re-doing the flaky live IP→MAC lookup — replacing
+ * the old signed cookie, which didn't reliably survive the login form-action to logout.
+ *
+ * Keyed to the better-auth session (its unique `token`), so each device/login owns its own row:
+ * a staff member on two devices has two rows, and each logout revokes only its own binding. The
+ * FK cascades the row away when the session is deleted (logout) or expires — the router revoke on
+ * logout is what makes sign-out instant; the cascade is just cleanup. `updated_at` records the last
+ * slide for debugging (the renewal throttle itself is in-memory in the app).
+ *
+ * ponytail: keyed by `token` (in hand at both login `res.token` and later `locals.session.token`)
+ * so no session-id lookup is needed; better-auth doesn't rotate session tokens, so the FK is stable
+ * for the session's life. Switch the key to `session.id` if token rotation is ever enabled.
+ */
+export const adminBypassDevice = pgTable('admin_bypass_device', {
+	sessionToken: text('session_token')
+		.primaryKey()
+		.references(() => adminSession.token, { onDelete: 'cascade' }),
+	mac: text('mac').notNull(),
+	updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow()
+});

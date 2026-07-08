@@ -16,7 +16,7 @@
  *
  * ponytail: all rows are inserted STRAIGHT to the DB via Drizzle. We deliberately
  * never call startSession()/addCredits()/network.grant() — apps/admin/.env points
- * NETWORK_CONTROLLER at a real MikroTik (10.0.0.1), and a seed must never fire real
+ * NETWORK_CONTROLLER at a real MikroTik (10.210.0.1), and a seed must never fire real
  * firewall grants. The trade-off: we hand-maintain row consistency (balances ==
  * ledger sum) instead of leaning on the services. The self-check at the bottom
  * guards that invariant.
@@ -263,7 +263,10 @@ async function main() {
 			fundSourceType: fund,
 			fundSourceMasked: fund === 'card' ? `**** ${randInt(1000, 9999)}` : null,
 			receiptNo: success ? `RCPT-${randInt(100000, 999999)}` : null,
-			referenceNo: cust ? `ref_${cust.id.slice(0, 8)}` : null,
+			// One checkout = one reference (the R18 partial unique index on reference_no enforces
+			// it) — so the reference must be unique per PAYMENT, not per customer, or a repeat
+			// buyer collides on payment_transactions_reference_no_key and the seed aborts.
+			referenceNo: cust ? `ref_${i.toString().padStart(5, '0')}_${cust.id.slice(0, 8)}` : null,
 			errorCode: success ? null : status === PAYMENT_STATUS.failed ? 'PAYMENT_DECLINED' : null,
 			errorMessage: status === PAYMENT_STATUS.failed ? 'Card was declined by issuer.' : null,
 			// Buyer is the customer's phone — accounts are phone-only (matches the Users table's

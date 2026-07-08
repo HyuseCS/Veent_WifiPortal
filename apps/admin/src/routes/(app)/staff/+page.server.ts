@@ -2,6 +2,7 @@ import { error, fail, type RequestEvent } from '@sveltejs/kit';
 import { env } from '$env/dynamic/private';
 import {
 	setStaffStatus,
+	setStaffRole,
 	removeStaff,
 	promoteToOwner,
 	STAFF_ROLE,
@@ -30,7 +31,10 @@ import {
 	ownerChangeRequestedEmail,
 	ownerChangeExecutedEmail
 } from '$lib/server/emails/owner-change';
+import { logger } from '$lib/server/logger';
 import type { Actions, PageServerLoad } from './$types';
+
+const log = logger('staff');
 
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 /** Upper bound on a single mass-invite batch — kept under the per-actor email cap (20/hr)
@@ -72,6 +76,7 @@ async function ownerStepUp(event: RequestEvent, code: string, action: string) {
 		await auth.api.verifyTOTP({ body: { code }, headers: event.request.headers });
 	} catch (err) {
 		if (err instanceof APIError) return fail(400, { action, error: 'Invalid authenticator code.' });
+		log.error('step-up TOTP verify unexpected error:', err);
 		return fail(500, { action, error: 'Unexpected error' });
 	}
 	return null;
@@ -82,7 +87,7 @@ async function sendOwnerEmail(to: string, msg: { subject: string; html: string; 
 	try {
 		await mailer.send({ to, ...msg });
 	} catch (err) {
-		console.warn('[email] owner-change send failed:', (err as Error)?.message);
+		log.error('owner-change notify send failed:', err);
 	}
 }
 
@@ -195,7 +200,9 @@ async function inviteOne(
 		// better-auth awaits the callback but swallows a thrown error, so the send outcome is
 		// surfaced via inviteSendFailures (keyed by email) instead.
 		await auth.api.requestPasswordReset({ body: { email, redirectTo: '/activate' } });
-	} catch {
+	} catch (err) {
+		// Invite create/send failed (e.g. email integration down) → capture, then roll back.
+		log.error('invite create/send failed:', err);
 		await removeStaff(db, userId);
 		return { error: `Couldn't create the invitation for ${email}.` };
 	}
@@ -266,6 +273,30 @@ export const actions: Actions = {
 		return { ok: changed, action: 'setStatus' };
 	},
 
+	/**
+	 * Grant/revoke the `system_admin` role (Issues + Content management). Owner-only.
+	 * Scoped to `admin` ⇄ `system_admin`; the service never touches an `owner` row, so
+	 * this can't be used to demote the owner (that's the governed owner-change flow).
+	 */
+	setStaffRole: async (event) => {
+		const denied = await requireOwner(event.locals.user?.id);
+		if (denied) return denied;
+
+		const form = await event.request.formData();
+		const userId = String(form.get('userId') ?? '');
+		const role = String(form.get('role') ?? '');
+		if (!userId) return fail(400, { action: 'setStaffRole', error: 'Missing userId' });
+		if (role !== STAFF_ROLE.admin && role !== STAFF_ROLE.systemAdmin) {
+			return fail(400, { action: 'setStaffRole', error: 'Invalid role' });
+		}
+		const changed = await setStaffRole(db, userId, role);
+		// Audit trail for privilege changes (mirrors the owner-change flow's visibility).
+		if (changed) {
+			log.info('staff role changed', { actor: event.locals.user?.id, target: userId, role });
+		}
+		return { ok: changed, action: 'setStaffRole' };
+	},
+
 	/** Permanently remove a staff member (owner protected in the service). */
 	remove: async (event) => {
 		const denied = await requireOwner(event.locals.user?.id);
@@ -322,6 +353,7 @@ export const actions: Actions = {
 			if (error instanceof APIError) {
 				return fail(400, { action: 'promote', error: 'Invalid authenticator code.' });
 			}
+			log.error('promote TOTP verify unexpected error:', error);
 			return fail(500, { action: 'promote', error: 'Unexpected error' });
 		}
 

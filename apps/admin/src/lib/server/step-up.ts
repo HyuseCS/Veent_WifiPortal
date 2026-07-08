@@ -3,6 +3,9 @@ import { APIError } from 'better-auth/api';
 import { auth } from '$lib/server/auth';
 import { rateLimit, clientIp } from '$lib/server/rateLimit';
 import { isTotpCode } from '$lib/server/twoFactor';
+import { logger } from '$lib/server/logger';
+
+const log = logger('step-up');
 
 /**
  * TOTP step-up verification, shared by the high-stakes actions that re-prompt for the
@@ -35,6 +38,7 @@ export async function verifyStepUp(
 		if (err instanceof APIError) {
 			return fail(400, { action: opts.action, error: 'Invalid authenticator code.' });
 		}
+		log.error('step-up TOTP verify unexpected error:', err);
 		return fail(500, { action: opts.action, error: 'Unexpected error' });
 	}
 	return null;

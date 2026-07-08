@@ -13,7 +13,7 @@
 		"check": "bun run --filter './apps/*' check",
 		"lint": "prettier --check . && eslint .",
 		"format": "prettier --write .",
-		"test": "bun run --filter './apps/*' test",
+		"test": "bun run --filter './apps/*' --filter '@veent/core' test",
 		"db:start": "docker compose up",
 		"db:push": "bun run --filter @veent/db db:push",
 		"db:generate": "bun run --filter @veent/db db:generate",

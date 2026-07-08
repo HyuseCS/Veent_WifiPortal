@@ -16,6 +16,7 @@
 	import Trash2 from 'lucide-svelte/icons/trash-2';
 	import type { NetworkAp, StatusTone } from '$lib/types';
 	import { live, connectLive } from '$lib/live.svelte';
+	import { editLock } from '$lib/edit-lock.svelte';
 	import type { PageData, ActionData } from './$types';
 
 	// lucide types don't match Svelte's `Component` structurally; cast as dashboard/nav do.
@@ -48,7 +49,15 @@
 			cancelled = true;
 		};
 	});
-	const networks = $derived(live.snapshot?.networks ?? streamedNetworks);
+	const liveNetworks = $derived(live.snapshot?.networks ?? streamedNetworks);
+	// Freeze the AP list while an inline editor is open (editLock): a live SSE frame landing
+	// mid-edit would reflow the grid and reset the fields the user is typing into. We keep the
+	// last idle snapshot until they close the editor, then resume following live.
+	let frozenNetworks = $state<NetworkAp[]>([]);
+	$effect(() => {
+		if (!editLock.active) frozenNetworks = liveNetworks;
+	});
+	const networks = $derived(editLock.active ? frozenNetworks : liveNetworks);
 	// Skeleton until data arrives from EITHER source (live frame or the streamed seed).
 	const ready = $derived(streamResolved || live.snapshot != null);
 
@@ -223,6 +232,19 @@
 	     is desktop-only — on mobile the map/log are gone, so let this shrink to content and the
 	     access points pull up right under it instead of sitting a screen-height below. -->
 	<div class="snap-start space-y-5 pt-5 pb-5 md:min-h-full">
+		{#if data.outagePausedGuests > 0}
+			<div class="flex items-center gap-3 rounded-xl border border-warning/30 bg-warning/10 px-4 py-3">
+				<TriangleAlert class="h-5 w-5 shrink-0 text-warning" aria-hidden="true" />
+				<p class="text-sm">
+					<span class="font-semibold text-ink">Outage auto-pause active.</span>
+					<span class="text-muted">
+						{data.outagePausedGuests}
+						{data.outagePausedGuests === 1 ? 'guest is' : 'guests are'} auto-paused — their paid time
+						is frozen and resumes automatically when their AP recovers.
+					</span>
+				</p>
+			</div>
+		{/if}
 		<!-- KPI STRIP -->
 		<KpiCarousel items={kpis}>
 			{#snippet card(k)}
@@ -343,6 +365,7 @@
 					{ap}
 					selected={ap.id === selectedId}
 					canDelete={data.isOwner}
+					canConfigure={data.isOwner}
 					onfocus={focusAp}
 				/>
 			{/each}

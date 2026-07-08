@@ -16,6 +16,11 @@
 	let userPick = $state<number | null>(null);
 	const selectedId = $derived(userPick ?? data.bundles[0]?.id ?? null);
 
+	// Loyalty points previewed per bundle: floor(pesos × rate%). Mirrors the server's earn formula
+	// in reconcilePayments (points are actually awarded there, on the verified webhook).
+	const earnedPoints = (fiatCost: number | null) =>
+		Math.floor(((fiatCost ?? 0) * data.pointsEarnRate) / 100);
+
 	let pending = $state(false);
 
 	// Selecting a bundle creates a Maya checkout server-side and 303-redirects to
@@ -36,7 +41,7 @@
 </script>
 
 <svelte:head>
-	<title>Top up · Veent WiFi</title>
+	<title>Top up · Parafiber WiFi</title>
 </svelte:head>
 
 <main class="flex min-h-screen flex-col p-5 lg:items-center lg:justify-center lg:bg-surface lg:p-8">
@@ -108,13 +113,81 @@
 								aria-hidden="true"
 							></span>
 							<span class="flex flex-1 items-center gap-2">
-								<span class="font-mono text-lg font-bold text-ink">₱{bundle.fiatCost}</span>
+								<span class="font-mono text-lg font-bold text-ink"
+									><span class="font-sans">₱</span>{bundle.fiatCost}</span
+								>
 							</span>
-							<span class="font-mono text-[13px] font-semibold text-muted peer-checked:text-brand">
-								{bundle.creditsProvided} credits
+							<span class="flex flex-col items-end gap-0.5">
+								<span
+									class="font-mono text-[13px] font-semibold text-muted peer-checked:text-brand"
+								>
+									{bundle.creditsProvided} credits
+								</span>
+								{#if earnedPoints(bundle.fiatCost) > 0}
+									<span class="flex items-center gap-1 text-[11px] font-semibold text-points">
+										<Icon name="star" size={11} />
+										earn {earnedPoints(bundle.fiatCost)} pts
+									</span>
+								{/if}
 							</span>
 						</label>
 					{/each}
+				</fieldset>
+
+				<!-- Buyer details required by the payment provider (Maya's Kount fraud protection needs
+				a name + email on every checkout). Pre-filled from saved details; Maya's page then uses
+				these to pre-fill its own form, so the buyer only enters card details there. -->
+				<fieldset class="mb-6 flex flex-col gap-2.5" disabled={pending}>
+					<legend class="mb-0.5 text-[15px] font-semibold text-ink">Your details</legend>
+					<p class="-mt-1 mb-1.5 text-[11.5px] font-medium text-muted">
+						Required by our payment provider to process your payment.
+					</p>
+					<!-- `defaultValue`/`defaultChecked` (Svelte 5.6+) render as the value/checked attribute
+					in SSR so the prefill shows, but on hydration set the element DEFAULT rather than the
+					live value — so anything the user typed BEFORE hydration isn't wiped. -->
+					<!-- Placeholders vanish on input and aren't reliably announced — aria-label gives each
+					field a persistent accessible name without changing the label-less visual design. -->
+					<div class="flex gap-2.5">
+						<input
+							name="firstName"
+							type="text"
+							autocomplete="given-name"
+							placeholder="First name"
+							aria-label="First name"
+							required
+							defaultValue={form?.values?.firstName ?? data.buyer.firstName}
+							class="h-[48px] w-full rounded-xl border-[1.5px] border-border bg-bg px-4 text-[15px] text-ink transition-colors placeholder:text-muted focus:border-brand focus:outline-none"
+						/>
+						<input
+							name="lastName"
+							type="text"
+							autocomplete="family-name"
+							placeholder="Last name"
+							aria-label="Last name"
+							required
+							defaultValue={form?.values?.lastName ?? data.buyer.lastName}
+							class="h-[48px] w-full rounded-xl border-[1.5px] border-border bg-bg px-4 text-[15px] text-ink transition-colors placeholder:text-muted focus:border-brand focus:outline-none"
+						/>
+					</div>
+					<input
+						name="email"
+						type="email"
+						autocomplete="email"
+						placeholder="Email address"
+						aria-label="Email address"
+						required
+						defaultValue={form?.values?.email ?? data.buyer.email}
+						class="h-[48px] w-full rounded-xl border-[1.5px] border-border bg-bg px-4 text-[15px] text-ink transition-colors placeholder:text-muted focus:border-brand focus:outline-none"
+					/>
+					<label class="mt-0.5 flex min-h-[44px] cursor-pointer items-center gap-2.5 text-[13px] text-ink">
+						<input
+							type="checkbox"
+							name="saveDetails"
+							defaultChecked={form?.values?.saveDetails ?? data.savedDetails}
+							class="h-[18px] w-[18px] shrink-0 rounded border-[1.5px] border-border text-brand accent-brand focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+						/>
+						Save my details for next time
+					</label>
 				</fieldset>
 
 				<!-- `selectedId` defaults to the cheapest bundle, so the button is enabled and

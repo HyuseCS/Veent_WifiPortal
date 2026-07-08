@@ -3,6 +3,8 @@
 
 	// Labeled text input. `name` defaults to `id`; any input attribute (type, autocomplete…) passes
 	// through. `class` is appended to the base input classes for per-field tweaks (e.g. font-mono).
+	// A `required` field gets a red asterisk on its label (the input's `required` attr conveys it to
+	// assistive tech, so the asterisk is aria-hidden).
 	let {
 		id,
 		label,
@@ -13,7 +15,9 @@
 </script>
 
 <div class="space-y-1.5">
-	<label for={id} class="block text-sm font-medium text-ink">{label}</label>
+	<label for={id} class="block text-sm font-medium text-ink"
+		>{label}{#if rest.required}<span class="text-blocked" aria-hidden="true"> *</span>{/if}</label
+	>
 	<input
 		{id}
 		{name}

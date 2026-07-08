@@ -18,7 +18,8 @@ import {
 	adminProfile,
 	adminRole,
 	networkHealth,
-	routerModel
+	routerModel,
+	isNetworkHealthStale
 } from '@veent/db';
 import { SESSION_STATUS, LEDGER_TYPE } from '@veent/core';
 import type {
@@ -58,6 +59,7 @@ export async function listUsers(db: DB, now: Date = new Date()): Promise<AdminUs
 			// Customers register by phone only — the canonical identity for the table.
 			phone: customerUser.phoneNumber,
 			balance: customerProfile.creditBalance,
+			points: customerProfile.pointsBalance,
 			blocked: customerProfile.blocked,
 			// Account-owned access window (source of truth for online + time-left).
 			accessExpiresAt: customerProfile.accessExpiresAt,
@@ -113,6 +115,11 @@ export async function listUsers(db: DB, now: Date = new Date()): Promise<AdminUs
 		if (r.blocked) {
 			tone = 'blocked';
 			status = 'Blocked';
+		} else if (balance <= 0) {
+			// Empty wallet — can't buy any paid access (Free Time still works). Amber like Low
+			// Balance, but a distinct label so staff can spot fully-drained accounts at a glance.
+			tone = 'warning';
+			status = 'No credits';
 		} else if (balance < 10) {
 			tone = 'warning';
 			status = 'Low Balance';
@@ -123,6 +130,7 @@ export async function listUsers(db: DB, now: Date = new Date()): Promise<AdminUs
 			id: r.id,
 			phone: r.phone ?? '—',
 			balance,
+			points: Number(r.points ?? 0),
 			usage: '—', // byte-level usage isn't tracked yet (needs accounting feed)
 			tone,
 			status,
@@ -260,6 +268,12 @@ function formatLastActive(at: Date | null, now: Date = new Date()): string {
 	return `${Math.floor(days / 7)}w ago`;
 }
 
+/** Absolute join date, e.g. "12 Jun 2026" (en-GB day-month order for PH). */
+function formatJoined(at: Date | null): string {
+	if (!at) return '—';
+	return at.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
 /** Display name for one staff member, or null if no such user. Used by the promote
  *  step-up to enforce the type-to-confirm gate server-side (not just in the UI). */
 export async function getStaffName(db: DB, userId: string): Promise<string | null> {
@@ -281,7 +295,16 @@ export async function listStaff(db: DB): Promise<StaffMember[]> {
 			role: adminProfile.role,
 			roleLabel: adminRole.label,
 			status: adminProfile.status,
-			lastActiveAt: adminProfile.lastActiveAt
+			lastActiveAt: adminProfile.lastActiveAt,
+			// Profile-detail fields (surfaced in the member profile modal). All live on the
+			// two tables already joined below — no extra joins, no new data exposure.
+			image: adminUser.image,
+			createdAt: adminUser.createdAt,
+			emailVerified: adminUser.emailVerified,
+			twoFactorEnabled: adminUser.twoFactorEnabled,
+			phone: adminProfile.phone,
+			jobTitle: adminProfile.jobTitle,
+			contactEmail: adminProfile.contactEmail
 		})
 		.from(adminUser)
 		.innerJoin(adminProfile, eq(adminProfile.userId, adminUser.id))
@@ -298,7 +321,16 @@ export async function listStaff(db: DB): Promise<StaffMember[]> {
 		roleLabel: r.roleLabel,
 		status: r.status as StaffStatus,
 		lastActive: formatLastActive(r.lastActiveAt),
-		lastActiveAt: r.lastActiveAt ? r.lastActiveAt.getTime() : null
+		lastActiveAt: r.lastActiveAt ? r.lastActiveAt.getTime() : null,
+		image: r.image,
+		joined: formatJoined(r.createdAt),
+		joinedAt: r.createdAt ? r.createdAt.getTime() : null,
+		emailVerified: r.emailVerified,
+		// two_factor_enabled is nullable (defaults false) → normalise to a real boolean.
+		twoFactorEnabled: r.twoFactorEnabled ?? false,
+		phone: r.phone,
+		jobTitle: r.jobTitle,
+		contactEmail: r.contactEmail
 	}));
 }
 
@@ -361,9 +393,16 @@ export async function listNetworkHealth(db: DB, now: Date = new Date()): Promise
 
 	return rows.map((r) => {
 		const uptime = Number(r.uptimePct);
+		// B3.5: if no fresh sample has landed within the ceiling, the stored online/uptime is no
+		// longer trustworthy — surface "Stale" rather than a confidently-wrong "Healthy". Checked
+		// first so it overrides the metric-based tones below.
+		const stale = isNetworkHealthStale(r.lastSampleAt, now);
 		let tone: StatusTone = 'online';
 		let status = 'Healthy';
-		if (!r.online) {
+		if (stale) {
+			tone = 'warning';
+			status = 'Stale';
+		} else if (!r.online) {
 			tone = 'blocked';
 			status = 'Offline';
 		} else if (uptime < 99 || (r.latencyMs ?? 0) > LATENCY_DEGRADED_MS) {
@@ -375,6 +414,7 @@ export async function listNetworkHealth(db: DB, now: Date = new Date()): Promise
 			name: r.name,
 			tone,
 			status,
+			stale,
 			uptime: `${uptime.toFixed(1)}%`,
 			latency: r.latencyMs == null ? '—' : `${r.latencyMs}ms`,
 			users: activeByNetwork.get(r.id) ?? 0,
@@ -386,6 +426,8 @@ export async function listNetworkHealth(db: DB, now: Date = new Date()): Promise
 			model: r.model,
 			rangeMeters: r.rangeMeters,
 			clusterName: r.clusterName,
+			maxDownKbps: r.maxDownKbps,
+			maxUpKbps: r.maxUpKbps,
 			logs: logsByNetwork.get(r.id) ?? []
 		};
 	});
@@ -399,6 +441,25 @@ export async function setNetworkInterface(
 	interfaceName: string | null
 ): Promise<void> {
 	await db.update(networkHealth).set({ interfaceName }).where(eq(networkHealth.id, id));
+}
+
+/**
+ * Set an AP's router-side config from the Networks card in one write: the interface binding
+ * plus the aggregate up/down bandwidth caps (Kbps; null = uncapped). Returns the row's
+ * canonical `name` so the caller can enforce the caps against the resolved interface
+ * (`interfaceName ?? name`), or null if the AP no longer exists.
+ */
+export async function setApRouterConfig(
+	db: DB,
+	id: number,
+	config: { interfaceName: string | null; maxDownKbps: number | null; maxUpKbps: number | null }
+): Promise<{ name: string } | null> {
+	const [row] = await db
+		.update(networkHealth)
+		.set(config)
+		.where(eq(networkHealth.id, id))
+		.returning({ name: networkHealth.name });
+	return row ?? null;
 }
 
 /** Placed members of a named cluster (for the coverage-reach assignment check), excluding the

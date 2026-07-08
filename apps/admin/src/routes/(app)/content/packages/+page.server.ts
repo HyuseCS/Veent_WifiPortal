@@ -1,7 +1,7 @@
 import { error, fail, type RequestEvent } from '@sveltejs/kit';
-import { STAFF_ROLE } from '@veent/core';
+import { MANAGER_ROLES, type StaffRole } from '@veent/core';
 import { db } from '$lib/server/db';
-import { requireOwner as ownerGate } from '$lib/server/auth-guard';
+import { requireManager as managerGate } from '$lib/server/auth-guard';
 import { verifyStepUp } from '$lib/server/step-up';
 import {
 	listPackages,
@@ -15,18 +15,18 @@ import {
 } from '$lib/server/packages';
 import type { Actions, PageServerLoad } from './$types';
 
-/** Owner-only page: manage purchasable packages — the CMS "Package Control". */
+/** Manager page (owner + system_admin): manage purchasable packages — the CMS "Package Control". */
 export const load: PageServerLoad = async (event) => {
 	const { user } = await event.parent();
-	if (user.role !== STAFF_ROLE.owner) {
-		throw error(403, 'Only the owner can manage packages.');
+	if (!MANAGER_ROLES.includes(user.role as StaffRole)) {
+		throw error(403, 'You do not have permission to manage packages.');
 	}
 	return { packages: await listPackages(db) };
 };
 
-/** Re-assert owner from the DB (never trust client state) on every mutation. */
-const requireOwner = (userId: string | undefined) =>
-	ownerGate(userId, 'Only the owner can manage packages.');
+/** Re-assert the role from the DB (never trust client state) on every mutation. */
+const requireManager = (userId: string | undefined) =>
+	managerGate(userId, 'You do not have permission to manage packages.');
 
 const isType = (v: string): v is PackageType => (PACKAGE_TYPES as readonly string[]).includes(v);
 
@@ -51,19 +51,42 @@ function parsePackage(form: FormData): { input: PackageInput } | { error: string
 	const fiatCost = num('fiatCost');
 	const creditsProvided = num('creditsProvided');
 	const creditCost = num('creditCost');
+	const pointsCost = num('pointsCost');
 	const durationMinutes = num('durationMinutes');
-	if ([fiatCost, creditsProvided, creditCost, durationMinutes].some((v) => Number.isNaN(v))) {
+	if (
+		[fiatCost, creditsProvided, creditCost, pointsCost, durationMinutes].some((v) =>
+			Number.isNaN(v)
+		)
+	) {
 		return { error: 'Numeric fields must be non-negative numbers.' };
 	}
 
 	if (type === 'bundle' && (fiatCost == null || creditsProvided == null)) {
 		return { error: 'A bundle needs a peso price and the credits it provides.' };
 	}
-	if (type === 'tier' && (creditCost == null || durationMinutes == null)) {
-		return { error: 'A tier needs a credit cost and a duration (minutes).' };
+	if (type === 'tier') {
+		if (creditCost == null || pointsCost == null || durationMinutes == null) {
+			return { error: 'A tier needs a credit cost, a points cost, and a duration (minutes).' };
+		}
+		// Zero is saveable by `num` (>= 0) but unbuyable: `spend*Tx` rejects a non-positive amount,
+		// which the buy action can only surface as a misleading "grant failed" 502. Require > 0.
+		if (creditCost <= 0 || pointsCost <= 0 || durationMinutes <= 0) {
+			return { error: 'A tier’s credit cost, points cost, and duration must be greater than zero.' };
+		}
 	}
-	if (type === 'free' && durationMinutes == null) {
-		return { error: 'Free Time needs a duration (minutes).' };
+	if (type === 'free') {
+		if (durationMinutes == null) {
+			return { error: 'Free Time needs a duration (minutes).' };
+		}
+		if (durationMinutes <= 0) {
+			return { error: 'Free Time’s duration must be greater than zero.' };
+		}
+	}
+	// B3.4: a zero-length window is never a real package. `< 1` also catches fractional entries
+	// (e.g. 0.5) that would truncate to 0 minutes below. num() already accepts >= 0, so 0 slips
+	// past the null checks above without this.
+	if ((type === 'tier' || type === 'free') && durationMinutes != null && durationMinutes < 1) {
+		return { error: 'Duration must be at least 1 minute.' };
 	}
 
 	const int = (v: number | null) => (v == null ? null : Math.trunc(v));
@@ -74,6 +97,7 @@ function parsePackage(form: FormData): { input: PackageInput } | { error: string
 			fiatCost,
 			creditsProvided: int(creditsProvided),
 			creditCost: int(creditCost),
+			pointsCost: int(pointsCost),
 			durationMinutes: int(durationMinutes),
 			isActive: form.get('isActive') === 'on' || form.get('isActive') === 'true'
 		}
@@ -85,15 +109,16 @@ function packageId(form: FormData): number | null {
 	return Number.isInteger(id) && id > 0 ? id : null;
 }
 
-// Every content write is owner-only AND TOTP step-up-gated (a deliberate code per save, so a
-// fat-fingered change can't land without re-confirming identity). The code is the LAST gate —
-// checked after field validation so a rotating code isn't wasted on an unrelated form error.
+// Every content write requires manager access (owner or system_admin, via requireManager) AND is
+// TOTP step-up-gated (a deliberate code per save, so a fat-fingered change can't land without
+// re-confirming identity). The code is the LAST gate — checked after field validation so a
+// rotating code isn't wasted on an unrelated form error.
 const stepUp = (event: RequestEvent, code: FormDataEntryValue | null, action: string) =>
 	verifyStepUp(event, String(code ?? ''), { scope: 'admin_content_step_up', action });
 
 export const actions: Actions = {
 	create: async (event) => {
-		const denied = await requireOwner(event.locals.user?.id);
+		const denied = await requireManager(event.locals.user?.id);
 		if (denied) return denied;
 		const form = await event.request.formData();
 		const parsed = parsePackage(form);
@@ -105,7 +130,7 @@ export const actions: Actions = {
 	},
 
 	update: async (event) => {
-		const denied = await requireOwner(event.locals.user?.id);
+		const denied = await requireManager(event.locals.user?.id);
 		if (denied) return denied;
 		const form = await event.request.formData();
 		const id = packageId(form);
@@ -119,7 +144,7 @@ export const actions: Actions = {
 	},
 
 	toggleActive: async (event) => {
-		const denied = await requireOwner(event.locals.user?.id);
+		const denied = await requireManager(event.locals.user?.id);
 		if (denied) return denied;
 		const form = await event.request.formData();
 		const id = packageId(form);
@@ -131,7 +156,7 @@ export const actions: Actions = {
 	},
 
 	remove: async (event) => {
-		const denied = await requireOwner(event.locals.user?.id);
+		const denied = await requireManager(event.locals.user?.id);
 		if (denied) return denied;
 		const form = await event.request.formData();
 		const id = packageId(form);

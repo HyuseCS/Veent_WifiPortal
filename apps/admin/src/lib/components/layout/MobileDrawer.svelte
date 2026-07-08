@@ -1,28 +1,63 @@
 <script lang="ts">
-	import { page } from '$app/state';
+	import { page, navigating } from '$app/state';
 	import { afterNavigate } from '$app/navigation';
 	import X from 'lucide-svelte/icons/x';
 	import LogOut from 'lucide-svelte/icons/log-out';
+	import ChevronsUpDown from 'lucide-svelte/icons/chevrons-up-down';
+	import Settings from 'lucide-svelte/icons/settings';
 	import { nav } from '$lib/nav';
 	import { mobileNav } from '$lib/uiState.svelte';
+	import { Avatar } from '$lib/components/ui';
 	import ModeToggle from './ModeToggle.svelte';
 
 	// Mobile-only off-canvas nav. Deliberately a SEPARATE component from Sidebar.svelte so the
 	// desktop sidebar stays untouched (it only gains `hidden md:flex`). The ~nav markup is
 	// duplicated here on purpose — the cost of a provably-unchanged desktop path.
 	// ponytail: dup over a shared child that would force edits into the frozen desktop sidebar.
-	let { user }: { user?: { name?: string; email?: string; role?: string | null } } = $props();
+	let {
+		user
+	}: { user?: { name?: string; email?: string; image?: string | null; role?: string | null } } =
+		$props();
 	const items = $derived(nav.filter((item) => !item.ownerOnly || user?.role === 'owner'));
-	const initials = $derived(
-		(user?.name ?? user?.email ?? '?')
-			.trim()
-			.split(/\s+/)
-			.slice(0, 2)
-			.map((w) => w[0]?.toUpperCase() ?? '')
-			.join('')
-	);
+
+	// Highlight the destination tab as soon as navigation starts (mirrors Sidebar) so a slow page
+	// switch feels immediate; falls back to the committed path when idle.
+	const activePath = $derived(navigating.to?.url.pathname ?? page.url.pathname);
 
 	let closeBtn = $state<HTMLButtonElement>();
+
+	// Account menu (avatar trigger → pop-up holding profile, Mode toggle, Sign out) — mirrors Sidebar.
+	let accountOpen = $state(false);
+	let triggerEl = $state<HTMLButtonElement>();
+	let menuEl = $state<HTMLDivElement>();
+
+	function closeAccount() {
+		accountOpen = false;
+		triggerEl?.focus();
+	}
+
+	// Reset the account menu whenever the drawer closes, so it never reopens mid-flight.
+	$effect(() => {
+		if (!mobileNav.open) accountOpen = false;
+	});
+
+	// Close the account menu on an outside tap (within the drawer) while it's open.
+	$effect(() => {
+		if (!accountOpen) return;
+		const onDown = (e: PointerEvent) => {
+			const t = e.target as Node;
+			if (!menuEl?.contains(t) && !triggerEl?.contains(t)) accountOpen = false;
+		};
+		document.addEventListener('pointerdown', onDown, true);
+		return () => document.removeEventListener('pointerdown', onDown, true);
+	});
+
+	// On open, move focus into the menu's first control.
+	$effect(() => {
+		if (accountOpen && menuEl) {
+			menuEl.querySelector<HTMLElement>('button, [href]')?.focus();
+		}
+	});
 
 	// Tapping a nav link navigates — dismiss the drawer once the destination loads.
 	afterNavigate(() => (mobileNav.open = false));
@@ -37,7 +72,10 @@
 		const prevOverflow = document.body.style.overflow;
 		document.body.style.overflow = 'hidden';
 		const onKey = (e: KeyboardEvent) => {
-			if (e.key === 'Escape') mobileNav.open = false;
+			if (e.key !== 'Escape') return;
+			// Esc closes the account menu first (if open), otherwise dismisses the whole drawer.
+			if (accountOpen) closeAccount();
+			else mobileNav.open = false;
 		};
 		window.addEventListener('keydown', onKey);
 		return () => {
@@ -104,8 +142,7 @@
 		<div class="space-y-1">
 			{#each items as item (item.href)}
 				{@const Icon = item.icon}
-				{@const active =
-					page.url.pathname === item.href || page.url.pathname.startsWith(item.href + '/')}
+				{@const active = activePath === item.href || activePath.startsWith(item.href + '/')}
 				<a
 					href={item.href}
 					aria-current={active ? 'page' : undefined}
@@ -130,51 +167,90 @@
 		</div>
 	</nav>
 
-	<div class="border-t border-white/10 p-3">
-		<ModeToggle />
-
-		{#if user}
-			<div class="mt-3 flex items-center gap-3 rounded-md bg-white/5 px-2.5 py-2">
-				<div
-					class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-cta text-xs font-semibold text-white"
-					aria-hidden="true"
-				>
-					{initials}
-				</div>
-				<div class="min-w-0 flex-1">
-					<div class="flex items-center gap-1.5">
-						{#if user.name}
-							<p class="truncate text-sm font-medium text-white">{user.name}</p>
-						{/if}
-						{#if user.role}
-							{@const isOwner = user.role === 'owner'}
-							<span
-								class="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold tracking-wide uppercase {isOwner
-									? 'bg-highlight/15 text-highlight'
-									: 'bg-white/10 text-sidebar-text'}"
-							>
-								{user.role}
-							</span>
-						{/if}
+	<div class="relative border-t border-white/10 p-3">
+		{#if accountOpen}
+			<!-- Pop-up menu: opens upward from the trigger. Holds profile + Mode + Sign out. -->
+			<div
+				bind:this={menuEl}
+				role="menu"
+				aria-label="Account"
+				class="absolute bottom-full left-3 right-3 z-10 mb-2 rounded-lg border border-white/10 bg-sidebar p-2 shadow-xl shadow-black/50"
+			>
+				{#if user}
+					<div class="flex items-center gap-3 rounded-md px-2 py-2">
+						<Avatar src={user.image} name={user.name} email={user.email} class="h-9 w-9 text-xs" />
+						<div class="min-w-0 flex-1">
+							<div class="flex items-center gap-1.5">
+								{#if user.name}
+									<p class="truncate text-sm font-medium text-white">{user.name}</p>
+								{/if}
+								{#if user.role}
+									{@const isOwner = user.role === 'owner'}
+									<span
+										class="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold tracking-wide uppercase {isOwner
+											? 'bg-highlight/15 text-highlight'
+											: 'bg-white/10 text-sidebar-text'}"
+									>
+										{user.role}
+									</span>
+								{/if}
+							</div>
+							{#if user.email}
+								<p class="truncate text-xs text-sidebar-muted" title={user.email}>{user.email}</p>
+							{/if}
+						</div>
 					</div>
-					{#if user.email}
-						<p class="truncate text-xs text-sidebar-muted" title={user.email}>{user.email}</p>
-					{/if}
+					<div class="my-1.5 h-px bg-white/10"></div>
+				{/if}
+
+				<a
+					href="/profile"
+					role="menuitem"
+					class="group flex min-h-[44px] w-full cursor-pointer items-center gap-3 rounded-md px-3 text-sm font-medium text-sidebar-text transition-all duration-150 outline-none hover:bg-white/5 hover:text-white focus-visible:ring-2 focus-visible:ring-cta/60"
+				>
+					<Settings
+						class="h-5 w-5 shrink-0 text-sidebar-muted transition-colors duration-150 group-hover:text-white"
+						aria-hidden="true"
+					/>
+					Profile settings
+				</a>
+				<div class="my-1.5 h-px bg-white/10"></div>
+
+				<div class="px-1 py-1">
+					<ModeToggle />
 				</div>
+				<div class="my-1.5 h-px bg-white/10"></div>
+
+				<form method="POST" action="/logout">
+					<button
+						type="submit"
+						role="menuitem"
+						class="group flex min-h-[44px] w-full cursor-pointer items-center gap-3 rounded-md px-3 text-sm font-medium text-sidebar-text transition-all duration-150 outline-none hover:bg-white/5 hover:text-white focus-visible:ring-2 focus-visible:ring-cta/60 active:scale-[0.98]"
+					>
+						<LogOut
+							class="h-5 w-5 shrink-0 text-sidebar-muted transition-colors duration-150 group-hover:text-white"
+							aria-hidden="true"
+						/>
+						Sign out
+					</button>
+				</form>
 			</div>
 		{/if}
 
-		<form method="POST" action="/logout" class="mt-2">
-			<button
-				type="submit"
-				class="group flex min-h-[44px] w-full cursor-pointer items-center gap-3 rounded-md px-3 text-sm font-medium text-sidebar-text transition-all duration-150 outline-none hover:bg-white/5 hover:text-white focus-visible:ring-2 focus-visible:ring-cta/60 active:scale-[0.98]"
-			>
-				<LogOut
-					class="h-5 w-5 shrink-0 text-sidebar-muted transition-colors duration-150 group-hover:text-white"
-					aria-hidden="true"
-				/>
-				Sign out
-			</button>
-		</form>
+		<!-- Trigger: avatar + name + chevron. Everything else lives in the menu above. -->
+		<button
+			bind:this={triggerEl}
+			type="button"
+			onclick={() => (accountOpen = !accountOpen)}
+			aria-haspopup="menu"
+			aria-expanded={accountOpen}
+			class="group flex min-h-[44px] w-full cursor-pointer items-center gap-3 rounded-md px-2 text-sm font-medium text-sidebar-text transition-all duration-150 outline-none hover:bg-white/5 hover:text-white focus-visible:ring-2 focus-visible:ring-cta/60 {accountOpen
+				? 'bg-white/5 text-white'
+				: ''}"
+		>
+			<Avatar src={user?.image} name={user?.name} email={user?.email} class="h-9 w-9 text-xs" />
+			<span class="min-w-0 flex-1 truncate text-left">{user?.name ?? 'Account'}</span>
+			<ChevronsUpDown class="h-4 w-4 shrink-0 text-sidebar-muted" aria-hidden="true" />
+		</button>
 	</div>
 </div>

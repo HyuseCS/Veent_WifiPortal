@@ -4,6 +4,21 @@
  * the call sites.
  */
 
+/**
+ * Thrown by a provider's read paths (webhook verify / reconcile lookups) when the failure is
+ * TRANSIENT — a gateway 5xx/429, a request timeout, or a network error — as opposed to a
+ * malformed/spoofed payload or a permanent 4xx (bad key, unknown payment). The webhook route maps
+ * this to a 5xx so the gateway RETRIES delivery, rather than a 400 that tells it to give up on a
+ * payment that may well be real. `instanceof` survives the `traceMethods` wrapper (it re-throws the
+ * original error unchanged).
+ */
+export class RetryablePaymentError extends Error {
+	constructor(message: string, options?: ErrorOptions) {
+		super(message, options);
+		this.name = 'RetryablePaymentError';
+	}
+}
+
 export interface CreateCheckoutInput {
 	/** Our internal reference (e.g. `${userId}:${packageId}`). Echoed back on the webhook. */
 	referenceId: string;
@@ -14,8 +29,30 @@ export interface CreateCheckoutInput {
 	/** Where the gateway sends the user after paying / cancelling. */
 	successUrl: string;
 	cancelUrl: string;
-	/** Optional contact info to prefill the checkout. */
-	buyer?: { name?: string; email?: string; phone?: string };
+	/**
+	 * This site's public origin (e.g. `https://<site>.ngrok-free.app`), carried into the
+	 * gateway's metadata so the central Veent DO relay can route the server-to-server webhook
+	 * back to THIS server. One shared Maya account fans out to many NAT'd sites: Maya notifies
+	 * the DO (its single registered webhook URL), the DO reads `metadata.originUrl` off the
+	 * echoed event and forwards it verbatim to `${originUrl}/api/webhooks/maya/payment-status`.
+	 * Bare origin, no path — the DO appends the webhook path. Optional at this layer: providers
+	 * / direct-webhook deployments without a relay simply ignore it.
+	 */
+	originUrl?: string;
+	/**
+	 * Buyer info for the checkout / fraud scoring. Maya's Kount fraud protection requires
+	 * firstName + lastName + email — collected on the top-up form. Split into firstName/lastName
+	 * because Kount validates them separately. All optional at this layer so non-Kount providers
+	 * can ignore them; the Maya checkout path is responsible for ensuring they're present.
+	 */
+	buyer?: {
+		firstName?: string;
+		lastName?: string;
+		email?: string;
+		phone?: string;
+		/** ISO 3166 two-letter country code for the billing address (e.g. 'PH'). */
+		billingAddressCountryCode?: string;
+	};
 }
 
 export interface CreateCheckoutResult {
@@ -64,4 +101,13 @@ export interface PaymentProvider {
 	 * no payment for it yet. Optional: providers that can't poll omit it.
 	 */
 	getCheckoutStatus?(checkoutId: string): Promise<PaymentEvent | null>;
+	/**
+	 * Reconciliation by OUR reference id (requestReferenceNumber). Resolves the authoritative
+	 * payment straight from the reference we set at checkout — needing neither an inbound webhook
+	 * NOR the gateway's checkout→payment mapping — so a missed webhook still credits even if the
+	 * relay/tunnel never recovers. Preferred over getCheckoutStatus by the reconcile safety nets.
+	 * Returns a normalized event, or null if the gateway has no payment for the reference yet.
+	 * Optional: providers without a by-reference lookup omit it.
+	 */
+	getPaymentByReference?(referenceId: string): Promise<PaymentEvent | null>;
 }

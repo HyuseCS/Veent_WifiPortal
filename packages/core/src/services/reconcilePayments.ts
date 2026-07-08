@@ -1,8 +1,11 @@
-import { and, eq, gt, isNull, lte, or } from 'drizzle-orm';
+import { and, eq, gt, inArray, isNull, lte, or, sql } from 'drizzle-orm';
 import { type DB, paymentCheckouts, paymentTransactions, packages } from '@veent/db';
-import { LEDGER_TYPE } from '../config';
+import { LEDGER_TYPE, SETTLEMENT_CURRENCY } from '../config';
 import type { PaymentEvent, PaymentProvider } from '../integrations/payments';
 import { addCreditsTx } from './credits';
+import { earnPointsTx } from './points';
+import { getSessionLimits } from './settings';
+import { captureHandled } from '../observability';
 
 /** Normalized PaymentEvent.status → the raw gateway status we persist for Finance. */
 const STATUS_DB: Record<string, string> = {
@@ -77,6 +80,13 @@ export async function recordPaymentTransaction(
 	// partial unique index on reference_no (payment_transactions_reference_no_key) lets Postgres
 	// reject the divergent duplicate atomically — closing the simultaneous-insert race a prior
 	// select-then-update couldn't. (One Maya checkout = one referenceNo = one terminal payment.)
+	// NEVER downgrade a terminal SUCCESS. Maya issues MULTIPLE payment ids under one RRN (a card
+	// fails, the buyer retries, it succeeds — see fetchPaymentByRrn's [fail, ok] handling), and
+	// webhook delivery isn't ordered, so a late FAILED event can arrive after the SUCCESS is already
+	// recorded. Guard both write paths: skip the update when it would overwrite a PAYMENT_SUCCESS row
+	// with a non-success status. (The buyer is credited via the independent claim regardless; this
+	// protects Finance reporting from a paid txn flipping to "failed".)
+	const noDowngrade = sql`NOT (${paymentTransactions.status} = ${STATUS_DB.paid} AND ${row.status} <> ${STATUS_DB.paid})`;
 	try {
 		await db
 			.insert(paymentTransactions)
@@ -87,18 +97,23 @@ export async function recordPaymentTransaction(
 				// PENDING→SUCCESS) enriches a row a reconcile pass recorded first. networkId and
 				// the userId/packageId attribution stay INSERT-only (fixed at first record); the
 				// gateway-supplied detail is what a transition can legitimately backfill.
-				set: detail
+				set: detail,
+				setWhere: noDowngrade
 			});
 	} catch (e) {
 		// 23505 = unique_violation: the same payment arrived under a DIFFERENT id and tripped the
 		// reference_no index (the id-conflict clause above only catches same-id resends). Collapse
 		// onto the existing row instead of writing a divergent duplicate. All callers pass `db`
 		// (never a tx), so the failed INSERT doesn't poison a surrounding transaction.
-		if (row.referenceNo && (e as { code?: string }).code === '23505') {
+		// drizzle-orm wraps driver errors in DrizzleQueryError, so the SQLSTATE lives on the
+		// cause chain — walk it (bounded), keeping the bare .code shape for driver-direct errors.
+		const err = e as { code?: string; cause?: { code?: string; cause?: { code?: string } } };
+		const pgCode = err.code ?? err.cause?.code ?? err.cause?.cause?.code;
+		if (row.referenceNo && pgCode === '23505') {
 			await db
 				.update(paymentTransactions)
 				.set(detail)
-				.where(eq(paymentTransactions.referenceNo, row.referenceNo));
+				.where(and(eq(paymentTransactions.referenceNo, row.referenceNo), noDowngrade));
 			return;
 		}
 		throw e;
@@ -108,7 +123,7 @@ export async function recordPaymentTransaction(
 /**
  * Payment reconciliation — the SAFETY NET behind the webhook.
  *
- * Crediting is gated by an ATOMIC claim on payment_checkouts.status (pending→settled):
+ * Crediting is gated by an ATOMIC claim on payment_checkouts.status ({pending,expired}→settled):
  * whichever path wins the claim credits, the other no-ops. So the webhook and these
  * reconcile paths can race freely without ever double-crediting (addCredits idempotency
  * on external_transaction_id is the second line of defence). The claim AND the credit run
@@ -117,7 +132,37 @@ export async function recordPaymentTransaction(
  */
 
 /** Why a credit attempt did not result in a new ledger entry (for the caller / logs). */
-export type CreditSkipReason = 'no_checkout' | 'already_settled' | 'amount_mismatch' | 'unknown_package';
+export type CreditSkipReason =
+	| 'no_checkout'
+	| 'already_settled'
+	| 'amount_mismatch'
+	| 'currency_mismatch'
+	| 'unknown_package';
+
+/**
+ * A settled-but-uncredited money mismatch (I-1). Buyer paid the gateway but the charge doesn't
+ * match the checkout (wrong amount or wrong currency), so we keep the claim to stop retries but
+ * do NOT credit. These strand funds and need manual remediation, so alert (not just log): a Sentry
+ * issue tagged area=payment scope=credit drives the refund runbook
+ * (docs/runbooks/payment-credit-mismatch.md). All fields are non-PII.
+ */
+function reportCreditMismatch(
+	reason: 'amount_mismatch' | 'currency_mismatch',
+	ctx: {
+		checkoutId: string;
+		externalTransactionId: string;
+		expectedMinor: number;
+		gotMinor: number;
+		currency: string;
+	}
+): void {
+	console.warn(`[credit] ${reason} — refusing to credit`, ctx);
+	captureHandled(new Error(`credit ${reason}`), {
+		level: 'error',
+		tags: { area: 'payment', scope: 'credit', reason },
+		extra: ctx
+	});
+}
 
 interface CreditArgs {
 	/** Match the checkout by gateway id (reconcile) or by referenceId (webhook). */
@@ -132,10 +177,15 @@ interface CreditArgs {
 	 * edited under a stale checkout) must NOT credit.
 	 */
 	amountMinor: number;
+	/**
+	 * The currency the gateway charged in. Asserted == SETTLEMENT_CURRENCY before crediting (L-3):
+	 * checkouts are PHP-only, so a non-PHP charge can't be credited even if its minor amount matches.
+	 */
+	currency: string;
 }
 
 /**
- * Claim the matching pending checkout and credit the buyer exactly once.
+ * Claim the matching unsettled checkout and credit the buyer exactly once.
  *
  * Crediting now REQUIRES a matching payment_checkouts row whose recorded amount equals the
  * amount the gateway charged. A reference with no checkout row is NOT credited (the per-attempt
@@ -146,18 +196,37 @@ export async function creditCheckoutIfUnsettled(
 	db: DB,
 	args: CreditArgs
 ): Promise<{ credited: boolean; balance?: number; reason?: CreditSkipReason }> {
+	// A non-finite gateway amount means we couldn't determine what was charged (a parse/transient
+	// issue — e.g. Maya returned no amount), NOT a real underpayment. Refuse to touch the checkout
+	// at all: do NOT claim/settle it, so it stays `pending` and a later reconcile pass or the
+	// webhook can retry with a good amount — instead of trapping it settled-but-uncredited (which
+	// would make the recovered webhook return `already_settled` and lose the credit forever). Throw
+	// so the caller retries: reconcile catches + leaves pending; the webhook 500s → Maya re-delivers.
+	if (!Number.isFinite(args.amountMinor)) {
+		throw new Error(
+			`credit: refusing to settle checkout with a non-finite gateway amount (ref=${args.referenceId ?? args.checkoutId ?? 'unknown'})`
+		);
+	}
+
 	const match = args.checkoutId
 		? eq(paymentCheckouts.id, args.checkoutId)
 		: eq(paymentCheckouts.referenceId, args.referenceId ?? '');
 
+	// Admin-tunable points earn rate (cached, non-throwing). Read before the tx so the credit path
+	// never blocks on it; 0 disables earning.
+	const { pointsEarnRate } = await getSessionLimits(db);
+
 	return db.transaction(async (tx) => {
-		// Atomic claim: flip pending→settled, returning the checkout's recorded amount so we
-		// can assert the gateway charged what we asked. Postgres serializes the UPDATE, so under
-		// a webhook/reconcile race exactly one caller gets a row back — only it credits.
+		// Atomic claim: flip {pending,expired}→settled, returning the checkout's recorded amount
+		// so we can assert the gateway charged what we asked. Postgres serializes the UPDATE, so
+		// under a webhook/reconcile race exactly one caller gets a row back — only it credits.
+		// 'expired' is claimable because the cron blind-expires aged pendings without asking the
+		// gateway — it's an administrative stop-polling state, not a money state. A late paid
+		// event carries the same gateway-verified proof as pending→settled and must still credit.
 		const [claimed] = await tx
 			.update(paymentCheckouts)
 			.set({ status: 'settled', settledAt: new Date(), externalTransactionId: args.externalTransactionId })
-			.where(and(match, eq(paymentCheckouts.status, 'pending')))
+			.where(and(match, inArray(paymentCheckouts.status, ['pending', 'expired'])))
 			.returning({ id: paymentCheckouts.id, amount: paymentCheckouts.amount });
 
 		if (!claimed) {
@@ -172,17 +241,28 @@ export async function creditCheckoutIfUnsettled(
 			return { credited: false, reason: exists ? 'already_settled' : 'no_checkout' };
 		}
 
-		// Amount integrity (currency is PHP-only and not stored per-checkout, so amount is the
-		// authoritative check). A mismatch keeps the claim (settled) to stop retries, but does
-		// not credit — surfaced so a spike is alertable.
+		// Amount + currency integrity. A GENUINE terminal mismatch keeps the claim (settled) to stop
+		// retries but does NOT credit, and is alerted for manual remediation. This differs from the
+		// non-finite-amount case (rejected BEFORE the claim, stays `pending` -> auto-retried): that is
+		// indeterminate (we don't know what was charged), whereas a wrong-but-known amount/currency is
+		// determinate (we know it's wrong) -- re-polling reads the same value, so leaving it pending
+		// would just re-alert every pass.
 		const expectedMinor = Math.round(Number(claimed.amount) * 100);
-		if (!Number.isFinite(args.amountMinor) || args.amountMinor !== expectedMinor) {
-			console.warn('[credit] amount mismatch — refusing to credit', {
-				checkoutId: claimed.id,
-				externalTransactionId: args.externalTransactionId,
-				expectedMinor,
-				gotMinor: args.amountMinor
-			});
+		const mismatchCtx = {
+			checkoutId: claimed.id,
+			externalTransactionId: args.externalTransactionId,
+			expectedMinor,
+			gotMinor: args.amountMinor,
+			currency: args.currency
+		};
+		// Currency first (L-3): a foreign-currency amount could numerically coincide with expectedMinor
+		// and slip the amount check, so reject a non-PHP settlement before comparing amounts.
+		if (args.currency.toUpperCase() !== SETTLEMENT_CURRENCY) {
+			reportCreditMismatch('currency_mismatch', mismatchCtx);
+			return { credited: false, reason: 'currency_mismatch' };
+		}
+		if (args.amountMinor !== expectedMinor) {
+			reportCreditMismatch('amount_mismatch', mismatchCtx);
 			return { credited: false, reason: 'amount_mismatch' };
 		}
 
@@ -206,6 +286,21 @@ export async function creditCheckoutIfUnsettled(
 			packageId: args.packageId,
 			externalTransactionId: args.externalTransactionId
 		});
+
+		// Award loyalty points in the SAME transaction as the credit — points are earned ONLY on a
+		// verified, credited top-up, and if this throws the whole claim rolls back. Idempotent on
+		// externalTransactionId (its own unique guard), so a retried webhook can't double-earn.
+		// Based on the validated charged amount (expectedMinor), not the package's credit count.
+		const points = Math.floor((expectedMinor / 100) * (pointsEarnRate / 100));
+		if (points > 0) {
+			await earnPointsTx(tx, {
+				userId: args.userId,
+				packageId: args.packageId,
+				amount: points,
+				externalTransactionId: args.externalTransactionId
+			});
+		}
+
 		return { credited: result.credited, balance: result.balance };
 	});
 }
@@ -219,6 +314,22 @@ async function markUnpaid(db: DB, checkoutId: string, status: 'failed' | 'expire
 }
 
 /**
+ * Resolve a checkout's authoritative gateway status, PREFERRING the by-reference (RRN) lookup: it
+ * resolves the payment from the reference WE set at checkout, needing neither an inbound webhook
+ * nor the gateway's checkout→payment mapping — so it credits even if the relay/tunnel never
+ * recovers. Falls back to the by-checkout-id status for providers that only offer that.
+ */
+function resolvePaymentStatus(
+	payments: PaymentProvider,
+	checkoutId: string,
+	referenceId: string | null | undefined
+): Promise<PaymentEvent | null> {
+	if (payments.getPaymentByReference && referenceId) return payments.getPaymentByReference(referenceId);
+	if (payments.getCheckoutStatus) return payments.getCheckoutStatus(checkoutId);
+	return Promise.resolve(null);
+}
+
+/**
  * Cron pass: poll the gateway for every pending checkout old enough that the webhook
  * has had its chance, and credit any that are actually paid. Catches missed webhooks
  * even when the buyer never returned to the processing page. Bounded both ways: skips
@@ -229,7 +340,7 @@ export async function reconcilePendingPayments(
 	payments: PaymentProvider,
 	opts: { minAgeMs?: number; maxAgeMs?: number } = {}
 ): Promise<{ checked: number; credited: number }> {
-	if (!payments.getCheckoutStatus) return { checked: 0, credited: 0 };
+	if (!payments.getPaymentByReference && !payments.getCheckoutStatus) return { checked: 0, credited: 0 };
 	const now = Date.now();
 	const minAge = new Date(now - (opts.minAgeMs ?? 90_000)); // webhook head start
 	const maxAge = new Date(now - (opts.maxAgeMs ?? 24 * 60 * 60 * 1000)); // stop after a day
@@ -237,6 +348,7 @@ export async function reconcilePendingPayments(
 	const pending = await db
 		.select({
 			id: paymentCheckouts.id,
+			referenceId: paymentCheckouts.referenceId,
 			userId: paymentCheckouts.userId,
 			packageId: paymentCheckouts.packageId,
 			networkId: paymentCheckouts.networkId
@@ -253,7 +365,7 @@ export async function reconcilePendingPayments(
 	let credited = 0;
 	for (const c of pending) {
 		try {
-			const evt = await payments.getCheckoutStatus!(c.id);
+			const evt = await resolvePaymentStatus(payments, c.id, c.referenceId);
 			if (!evt || evt.status === 'pending') continue;
 			// Record into payment_transactions like the webhook does, so a reconcile-settled
 			// payment still shows in Finance (with its checkout-time AP). Idempotent upsert.
@@ -268,7 +380,8 @@ export async function reconcilePendingPayments(
 					userId: c.userId,
 					packageId: c.packageId,
 					externalTransactionId: evt.externalTransactionId,
-					amountMinor: evt.amountMinor
+					amountMinor: evt.amountMinor,
+					currency: evt.currency
 				});
 				if (r.credited) credited++;
 			} else if (evt.status === 'failed' || evt.status === 'cancelled') {
@@ -276,8 +389,10 @@ export async function reconcilePendingPayments(
 			} else if (evt.status === 'expired') {
 				await markUnpaid(db, c.id, 'expired');
 			}
-		} catch {
-			// transient (gateway/network) — leave pending, retry next pass
+		} catch (err) {
+			// transient (gateway/network) — leave pending, retry next pass. Capture so a Maya outage
+			// blocking reconcile is visible (grouped into one Issue across the pending set).
+			captureHandled(err, { level: 'error', tags: { area: 'reconcile', scope: 'cron' } });
 		}
 	}
 
@@ -304,7 +419,7 @@ export async function reconcileCheckout(
 	referenceId: string,
 	opts: { throttleMs?: number } = {}
 ): Promise<{ credited: boolean }> {
-	if (!payments.getCheckoutStatus) return { credited: false };
+	if (!payments.getPaymentByReference && !payments.getCheckoutStatus) return { credited: false };
 	const throttleBefore = new Date(Date.now() - (opts.throttleMs ?? 4000));
 
 	const [claimed] = await db
@@ -326,7 +441,7 @@ export async function reconcileCheckout(
 	if (!claimed) return { credited: false }; // settled already, or polled too recently
 
 	try {
-		const evt = await payments.getCheckoutStatus(claimed.id);
+		const evt = await resolvePaymentStatus(payments, claimed.id, referenceId);
 		// Record into payment_transactions like the webhook does, so a payment that settles
 		// via this poll (the usual path in local dev, where Maya can't reach localhost) still
 		// shows in Finance with its checkout-time AP. Idempotent upsert.
@@ -343,14 +458,17 @@ export async function reconcileCheckout(
 				userId: claimed.userId,
 				packageId: claimed.packageId,
 				externalTransactionId: evt.externalTransactionId,
-				amountMinor: evt.amountMinor
+				amountMinor: evt.amountMinor,
+				currency: evt.currency
 			});
 			return { credited: r.credited };
 		}
 		if (evt && (evt.status === 'failed' || evt.status === 'cancelled')) await markUnpaid(db, claimed.id, 'failed');
 		else if (evt?.status === 'expired') await markUnpaid(db, claimed.id, 'expired');
-	} catch {
-		// transient — the cron/webhook will still catch it
+	} catch (err) {
+		// transient — the cron/webhook will still catch it. Capture so a persistent Maya-verify
+		// failure on the return path is visible (grouped into one Issue).
+		captureHandled(err, { level: 'error', tags: { area: 'reconcile', scope: 'on-return' } });
 	}
 	return { credited: false };
 }

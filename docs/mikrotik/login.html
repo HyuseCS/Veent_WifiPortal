@@ -22,14 +22,139 @@
     - point the redirect below at https://<portal-domain>,
     - walled-garden the HTTPS portal origin (see docs/mikrotik/walled-garden.md).
   Rationale + threat model: docs/SECURITY_2b_session-continuity.md (control C1).
+
+  AUTO-FORWARD (so non-technical guests never have to tap anything): the router serves this
+  page whenever it traps an un-authed device — both when the phone's captive-portal check (the
+  "Sign in to network" pop-up / CNA mini-browser) probes, and when the guest manually opens an
+  HTTP site. We forward THREE ways, most-reliable first, so at least one always fires:
+    1. JS location.replace() — instant, and not throttled the way meta-refresh can be inside
+       the OS captive mini-browser, so guests land on the portal without touching anything.
+    2. <meta refresh> — the no-JS fallback.
+    3. a visible "tap here" link — the last resort if both are blocked.
+  NOTE: this can only auto-forward requests the router can actually TRAP — plain HTTP and the
+  OS captive probe. A guest typing an https:// address can't be redirected (the router can't
+  break TLS); that connection just fails. The OS captive pop-up is what covers that case, and
+  it only fires if the probe hosts stay INTERCEPTED (see setup-router.ts PROBE_DENIES) rather
+  than allowed through the walled garden.
+
+  setup:prod rewrites the scheme+host+port of every redirect URL below (it matches on the `/?`
+  that follows the host), so all three forwards stay in sync — keep the `/?` right after the
+  host on each.
 -->
-<html>
+<!DOCTYPE html>
+<html lang="en">
 <head>
-	<meta http-equiv="refresh" content="0; url=http://10.210.0.9:5173/?mac=$(mac)&ip=$(ip)&link-login-only=$(link-login-only)&link-orig=$(link-orig)&ssid=$(ssid)" />
-	<title>Connecting…</title>
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1" />
+	<meta http-equiv="refresh" content="0; url=http://10.210.62.191:5173/?mac=$(mac)&ip=$(ip)&link-login-only=$(link-login-only)&link-orig=$(link-orig)&ssid=$(ssid)" />
+	<title>Connecting to Veent WiFi…</title>
+	<script>
+		// Forward immediately — fires before the <meta> fallback in most engines. The styled page
+		// below is only seen if this + the meta refresh are both blocked (some locked-down CNAs).
+		location.replace("http://10.210.62.191:5173/?mac=$(mac)&ip=$(ip)&link-login-only=$(link-login-only)&link-orig=$(link-orig)&ssid=$(ssid)");
+	</script>
+	<!--
+	  Fully self-contained: NO external CSS/fonts/images. A trapped device can only reach
+	  walled-garden hosts, so Google Fonts / app assets won't load — we use a system font stack
+	  and inline SVG, and rgb/hex colours (not oklch) for old captive mini-browsers. Palette
+	  mirrors the customer portal tokens (navy brand #00126B, blue CTA #0A62A9): apps/customer
+	  src/routes/layout.css.
+	-->
+	<style>
+		* { box-sizing: border-box; }
+		html { -webkit-text-size-adjust: 100%; }
+		body {
+			margin: 0;
+			min-height: 100vh;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			padding: 24px;
+			background: #ffffff;
+			color: #0c223a;
+			font-family: 'Plus Jakarta Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+			-webkit-font-smoothing: antialiased;
+		}
+		.card { width: 100%; max-width: 360px; text-align: center; }
+		.badge {
+			width: 68px;
+			height: 68px;
+			margin: 0 auto 22px;
+			border-radius: 20px;
+			background: #00126b;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			box-shadow: 0 10px 24px rgba(0, 18, 107, 0.22);
+		}
+		.badge svg { width: 34px; height: 34px; color: #ffffff; }
+		h1 { margin: 0 0 8px; font-size: 22px; line-height: 1.25; font-weight: 700; letter-spacing: -0.01em; }
+		.sub { margin: 0 0 22px; font-size: 15px; line-height: 1.5; color: #5c708a; }
+		.status {
+			display: inline-flex;
+			align-items: center;
+			gap: 9px;
+			margin: 0 0 26px;
+			padding: 8px 14px;
+			border: 1px solid #dfeaf7;
+			background: #f4f9ff;
+			border-radius: 999px;
+			font-size: 13px;
+			font-weight: 500;
+			color: #5c708a;
+		}
+		.spinner {
+			width: 16px;
+			height: 16px;
+			border: 2.5px solid #dfeaf7;
+			border-top-color: #0a62a9;
+			border-radius: 50%;
+			animation: spin 0.7s linear infinite;
+		}
+		@keyframes spin { to { transform: rotate(360deg); } }
+		.btn {
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			gap: 8px;
+			width: 100%;
+			height: 52px;
+			border-radius: 14px;
+			background: #0a62a9;
+			color: #ffffff;
+			font-size: 16px;
+			font-weight: 700;
+			text-decoration: none;
+		}
+		.btn:hover { background: #074b87; }
+		.btn:active { background: #074b87; }
+		.btn svg { width: 18px; height: 18px; }
+		.foot { margin-top: 20px; font-size: 12px; letter-spacing: 0.02em; color: #98a8be; }
+		@media (prefers-reduced-motion: reduce) { .spinner { animation: none; } }
+	</style>
 </head>
 <body>
-	<p>Redirecting to the WiFi portal…</p>
-	<p>If nothing happens, <a href="http://10.210.0.9:5173/?mac=$(mac)&link-orig=$(link-orig)">tap here</a>.</p>
+	<div class="card">
+		<div class="badge" aria-hidden="true">
+			<!-- wifi glyph -->
+			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+				<path d="M5 12.55a11 11 0 0 1 14.08 0" />
+				<path d="M1.42 9a16 16 0 0 1 21.16 0" />
+				<path d="M8.53 16.11a6 6 0 0 1 6.95 0" />
+				<line x1="12" y1="20" x2="12.01" y2="20" />
+			</svg>
+		</div>
+		<h1>Connecting to Veent WiFi</h1>
+		<p class="sub">Hang tight — we're taking you to the guest portal to get you online.</p>
+		<div class="status"><span class="spinner" aria-hidden="true"></span> Opening the portal…</div>
+		<a class="btn" href="http://10.210.43.200:5173/?mac=$(mac)&ip=$(ip)&link-login-only=$(link-login-only)&link-orig=$(link-orig)&ssid=$(ssid)">
+			Continue
+			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+				<line x1="5" y1="12" x2="19" y2="12" />
+				<polyline points="12 5 19 12 12 19" />
+			</svg>
+		</a>
+		<p class="foot">Veent WiFi · Guest access</p>
+	</div>
 </body>
 </html>

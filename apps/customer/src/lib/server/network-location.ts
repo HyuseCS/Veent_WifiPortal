@@ -3,10 +3,23 @@ import { dev } from '$app/environment';
 import { env } from '$env/dynamic/private';
 import { and, asc, desc, eq, isNotNull, isNull, ne, or } from 'drizzle-orm';
 import { customerProfile, networkHealth, networkSessions } from '@veent/db';
-import { SESSION_STATUS, resolveDeviceMac, resolveNetworkIdByApName } from '@veent/core';
+import { SESSION_STATUS, resolveDeviceMac, resolveNetworkIdByApName, captureHandled } from '@veent/core';
 import { db } from '$lib/server/db';
 import { network } from '$lib/server/network';
-import { getPortalContext, persistResolvedMac } from '$lib/server/portal';
+import { getDeviceMac, getPortalContext, persistResolvedMac } from '$lib/server/portal';
+
+// Device MAC and client IP are PII. observability.ts scrubs them from Sentry events, but that hook
+// doesn't touch console.* — so mask them here before they reach stdout/log files (L-8). Keep enough
+// tail/head to correlate a session without persisting the full identifier.
+export function maskMac(mac: string | null | undefined): string | null {
+	if (!mac) return mac ?? null;
+	return mac.replace(/^(?:[0-9A-Fa-f]{2}:){4}/, '**:**:**:**:'); // keep the last two octets
+}
+function maskIp(ip: string | null | undefined): string | null {
+	if (!ip) return ip ?? null;
+	const v4 = ip.match(/^(\d{1,3})\.(\d{1,3})\.\d{1,3}\.\d{1,3}$/);
+	return v4 ? `${v4[1]}.${v4[2]}.*.*` : ip.replace(/[^:]+(?=:[^:]*$)/, '*'); // v4: keep /16; else mask tail
+}
 
 /**
  * Resolve the device MAC. The captive-portal redirect (`?mac=`) is preferred, but the OS
@@ -35,13 +48,51 @@ export async function resolveMac(event: RequestEvent): Promise<string | null> {
 			// after the Maya hop) AND the router couldn't map this client IP → MAC. The IP it
 			// saw is the key clue — if it isn't the device's LAN IP (e.g. it's the router/NAT
 			// address, or the phone fell back to cellular so it's a WAN IP), the lookup can't win.
-			console.warn('[mac] unresolved — no portal cookie; router IP→MAC returned null', { ip });
+			console.warn('[mac] unresolved — no portal cookie; router IP→MAC returned null', {
+				ip: maskIp(ip)
+			});
 		}
 		return mac;
 	} catch (e) {
 		console.warn('[mac] IP→MAC lookup threw', { msg: (e as Error).message });
+		// Warning, not error: resolution degrades gracefully (returns null → last-resort fallbacks).
+		// Actionable at VOLUME only — a router that starts throwing on every lookup shows as a spike.
+		captureHandled(e, { level: 'warning', tags: { area: 'network', scope: 'ip-mac-lookup' } });
 		return null;
 	}
+}
+
+/** A real device MAC: six colon-separated hex octets. */
+const MAC_RE = /^[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}$/;
+
+/**
+ * Server-authoritative MAC resolution + tamper tripwire (M-1/L-1). Returns only the MAC the server
+ * resolves for `userId`; a `claimedMac` (posted body/form field) is diagnostic-only — if it's a valid
+ * MAC that DIFFERS from the resolved one, it's logged (masked, userId only) to stdout AND Sentry
+ * (captureHandled no-ops when Sentry is off, e.g. dev) and otherwise ignored. Callers keep their own
+ * validity gate on the returned value. Shared by the grant endpoint and the dashboard grant actions so
+ * the tamper-signal behaviour stays identical across all sites.
+ */
+export async function resolveMacTrusted(
+	event: RequestEvent,
+	userId: string,
+	claimedMac?: string | null
+): Promise<string | null> {
+	const mac = await resolveMacForUser(event, userId);
+	const claimed = String(claimedMac ?? '').toUpperCase();
+	if (claimed && MAC_RE.test(claimed) && mac && claimed !== mac.toUpperCase()) {
+		console.warn('[mac-trust] posted MAC differs from server-resolved — using server', {
+			userId,
+			posted: maskMac(claimed),
+			resolved: maskMac(mac)
+		});
+		captureHandled('MAC mismatch — using server-resolved', {
+			level: 'warning',
+			tags: { area: 'network', scope: 'mac-trust' },
+			extra: { userId }
+		});
+	}
+	return mac;
 }
 
 /**
@@ -67,7 +118,7 @@ export async function lastKnownMac(userId: string): Promise<string | null> {
  * the system browser have separate cookie jars — so it's absent after the Maya hop, or whenever
  * the buyer isn't in the browser that hit the `?mac=` redirect), AND the IP→MAC lookup can't
  * help because the hotspot NATs client traffic to its OWN address (we then see the router's IP,
- * e.g. 10.0.0.1, not the device). A fresh portal entry (new `?mac=` cookie) always wins, so the
+ * e.g. 10.210.0.1, not the device). A fresh portal entry (new `?mac=` cookie) always wins, so the
  * fallback only fills the gap; a user who genuinely switched devices reconnects through the
  * portal to refresh it.
  */
@@ -80,9 +131,18 @@ export async function resolveMacForUser(event: RequestEvent, userId: string): Pr
 		await rememberAccountMac(userId, live);
 		return live;
 	}
-	// Live detection missed (no portal cookie + IP→MAC defeated by the hotspot NAT). Fall back to
-	// the durable account MAC first — it covers a buyer who was seen earlier but has no session row
-	// yet (e.g. topped up before ever binding a device) — then the most-recent session's MAC.
+	// Live detection missed (no portal cookie + IP→MAC defeated by the hotspot NAT). Try the
+	// device-scoped cookie next: it's account-independent and survives sign-out, so a SECOND account
+	// logging in on the same browser recovers this device's MAC even though its per-user fallbacks
+	// are empty (docs/problems/second-account-mac-not-captured.md). Seed it onto the new account so
+	// subsequent cross-browser hops (e.g. the Maya return) have the durable per-user signal too.
+	const device = getDeviceMac(event);
+	if (device) {
+		await rememberAccountMac(userId, device);
+		return device;
+	}
+	// Last resort: the durable account MAC — covers a buyer seen earlier but with no session row yet
+	// (e.g. topped up before ever binding a device) — then the most-recent session's MAC.
 	return (await accountMac(userId)) ?? (await lastKnownMac(userId));
 }
 
@@ -114,6 +174,8 @@ async function rememberAccountMac(userId: string, mac: string): Promise<void> {
 			);
 	} catch (e) {
 		console.warn('[mac] failed to persist account MAC', { msg: (e as Error).message });
+		// Low-priority: best-effort write, self-heals on the next resolution. Watch the rate, not the event.
+		captureHandled(e, { level: 'warning', tags: { area: 'network', scope: 'mac-persist' } });
 	}
 }
 
@@ -165,8 +227,8 @@ export async function resolveCheckoutNetworkId(
 			apName = null;
 		}
 		const byMac = apName ? await resolveNetworkIdByApName(db, apName) : null;
-		if (byMac !== null) return logResolved('device-mac', { mac, apName }, byMac);
-		console.warn('[topup] MAC→AP unresolved', { mac, apName });
+		if (byMac !== null) return logResolved('device-mac', { mac: maskMac(mac), apName }, byMac);
+		console.warn('[topup] MAC→AP unresolved', { mac: maskMac(mac), apName });
 	}
 
 	const [active] = await db
@@ -200,5 +262,12 @@ export async function resolveCheckoutNetworkId(
 	}
 
 	console.warn('[topup] AP unresolved — payment will be unattributed by location', { userId });
+	// Warning, not error: expected for foreign devices. The COUNT is the signal — a sustained spike
+	// means location attribution is broken (Finance-by-location goes blind), not any single miss.
+	captureHandled('checkout AP unresolved — payment unattributed by location', {
+		level: 'warning',
+		tags: { area: 'payment', scope: 'attribution-miss' },
+		extra: { userId }
+	});
 	return null;
 }

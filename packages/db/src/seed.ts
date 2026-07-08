@@ -39,10 +39,11 @@ const seedPackages: SeedPackage[] = [
 		isActive: true
 	},
 
-	// Tiers: spend credits for access time.
-	{ name: '5 Minutes', type: 'tier', creditCost: 1, durationMinutes: 5, isActive: true },
-	{ name: '30 Minutes', type: 'tier', creditCost: 5, durationMinutes: 30, isActive: true },
-	{ name: '1 Hour', type: 'tier', creditCost: 10, durationMinutes: 60, isActive: true }
+	// Tiers: spend credits OR loyalty points for access time. pointsCost is set a little above
+	// creditCost so points (earned, not bought) feel like a reward rather than free credits.
+	{ name: '5 Minutes', type: 'tier', creditCost: 1, pointsCost: 2, durationMinutes: 5, isActive: true },
+	{ name: '30 Minutes', type: 'tier', creditCost: 5, pointsCost: 8, durationMinutes: 30, isActive: true },
+	{ name: '1 Hour', type: 'tier', creditCost: 10, pointsCost: 15, durationMinutes: 60, isActive: true }
 ];
 
 // SAMPLE per-AP health for the Networks page. Synthetic until a real router /

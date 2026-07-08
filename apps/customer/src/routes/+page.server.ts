@@ -1,9 +1,10 @@
 import { and, eq } from 'drizzle-orm';
 import { packages } from '@veent/db';
-import { getAccount } from '@veent/core';
 import { db } from '$lib/server/db';
 import { maskPhone } from '$lib/server/otp';
 import { getPortalContext } from '$lib/server/portal';
+import { buildAccountView } from '$lib/server/account-view';
+import { resolveMacForUser } from '$lib/server/network-location';
 import type { PageServerLoad } from './$types';
 
 /**
@@ -35,13 +36,18 @@ export const load: PageServerLoad = async (event) => {
 		return { loggedIn: false as const, bundles, tiers, portalQuery };
 	}
 
-	const account = await getAccount(db, user.id);
+	// Compute the SAME "this device online" state the dashboard shows, so the good-to-go badge
+	// can't claim Online while the dashboard says Offline. Online = the account has live access
+	// AND this device is actually bound on the router (unbound/paused/expired ⇒ Offline).
+	const mac = await resolveMacForUser(event, user.id);
+	const view = await buildAccountView(db, user.id, mac);
 	const phone = (user as { phoneNumber?: string | null }).phoneNumber ?? null;
 
 	return {
 		loggedIn: true as const,
 		maskedPhone: phone ? maskPhone(phone) : null,
-		balance: account?.balance ?? 0,
+		balance: view.balance,
+		online: view.access.active && view.devices.thisDeviceBound,
 		bundles,
 		tiers,
 		portalQuery

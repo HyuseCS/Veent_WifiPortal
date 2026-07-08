@@ -6,6 +6,20 @@ export const FREE_TIME_MINUTES = 15;
 export const FREE_TIME_COOLDOWN_HOURS = 12;
 
 /**
+ * The only currency the portal settles in. Checkouts are created in PHP and `payment_checkouts`
+ * has no per-row currency column, so a non-PHP settlement can't be credited — the credit path
+ * asserts against this (L-3) and the top-up route stamps checkouts with it (single source of truth).
+ */
+export const SETTLEMENT_CURRENCY = 'PHP';
+
+/**
+ * Default loyalty-points earn rate as a WHOLE-NUMBER percent of each verified top-up's peso
+ * amount (10 = 10%). Admin-tunable via `app_settings.points_earn_rate`; this is the fallback
+ * when the settings row/read is unavailable. Earned points are floored: floor(pesos * rate / 100).
+ */
+export const POINTS_EARN_RATE = 10;
+
+/**
  * Max simultaneously-bound device MACs per ACCOUNT. Access time belongs to the
  * account; devices bind under it. A new bind beyond this cap evicts the
  * least-recently-seen device, so Apple per-SSID MAC rotation can't lock a user out.
@@ -34,12 +48,35 @@ export const SESSION_STATUS = {
 export type SessionStatus = (typeof SESSION_STATUS)[keyof typeof SESSION_STATUS];
 
 /** Staff access levels (stored in admin_profile.role). `owner` is the singular
- * bootstrap account; everyone invited is an `admin`. */
+ * bootstrap account; everyone invited starts as an `admin`. `system_admin` is an
+ * elevated role the owner can grant: it manages Issues + Content, but NOT the Staff
+ * page (owner-only). */
 export const STAFF_ROLE = {
 	owner: 'owner',
+	systemAdmin: 'system_admin',
 	admin: 'admin'
 } as const;
 export type StaffRole = (typeof STAFF_ROLE)[keyof typeof STAFF_ROLE];
+
+/** Roles that may manage Issues and Content (owner + system_admin). Used by the
+ * `requireManager` guard and the role-aware Issues load. */
+export const MANAGER_ROLES: readonly StaffRole[] = [STAFF_ROLE.owner, STAFF_ROLE.systemAdmin];
+
+/** admin_issue.status lifecycle. */
+export const ISSUE_STATUS = {
+	open: 'open',
+	inProgress: 'in_progress',
+	resolved: 'resolved'
+} as const;
+export type IssueStatus = (typeof ISSUE_STATUS)[keyof typeof ISSUE_STATUS];
+
+/** admin_issue.priority levels. */
+export const ISSUE_PRIORITY = {
+	low: 'low',
+	medium: 'medium',
+	high: 'high'
+} as const;
+export type IssuePriority = (typeof ISSUE_PRIORITY)[keyof typeof ISSUE_PRIORITY];
 
 /** Staff lifecycle (stored in admin_profile.status). Only `active` may sign in. */
 export const STAFF_STATUS = {
@@ -57,3 +94,10 @@ export const LEDGER_TYPE = {
 	refund: 'refund'
 } as const;
 export type LedgerType = (typeof LEDGER_TYPE)[keyof typeof LEDGER_TYPE];
+
+/** points_ledger.type values. Positive amounts earn, negative amounts spend. */
+export const POINTS_LEDGER_TYPE = {
+	earn: 'earn', // points awarded as a % of a verified top-up
+	spend: 'spend' // points redeemed to buy an access tier
+} as const;
+export type PointsLedgerType = (typeof POINTS_LEDGER_TYPE)[keyof typeof POINTS_LEDGER_TYPE];

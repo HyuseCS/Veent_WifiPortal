@@ -218,6 +218,69 @@
       "when": 1782799221808,
       "tag": "0030_dizzy_the_phantom",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1782872129257,
+      "tag": "0031_cultured_kree",
+      "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1782962603043,
+      "tag": "0032_breezy_blockbuster",
+      "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1783065639320,
+      "tag": "0033_clear_wendell_vaughn",
+      "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1783296254415,
+      "tag": "0034_harsh_kylun",
+      "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1783300877952,
+      "tag": "0035_aromatic_shape",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1783302158443,
+      "tag": "0036_parched_sway",
+      "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1783324745944,
+      "tag": "0037_condemned_ronan",
+      "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1783391759470,
+      "tag": "0038_motionless_ultragirl",
+      "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1783397438834,
+      "tag": "0039_gifted_vampiro",
+      "breakpoints": true
     }
   ]
 }

@@ -6,6 +6,7 @@
  * against the shapes below. When real `load()` functions land, they return the
  * same shapes and pages switch from `import { … } from '$lib/mocks'` to props.
  */
+import type { StaffRole } from '@veent/core';
 
 /** Semantic tone for a status badge — maps to a `--color-*` token. */
 export type StatusTone = 'online' | 'warning' | 'blocked';
@@ -68,6 +69,9 @@ export interface NetworkAp {
 	name: string;
 	tone: StatusTone;
 	status: string;
+	/** True when no fresh router sample has landed within the staleness ceiling — the metrics
+	 * shown are last-known, not live. Drives a "Stale" chip instead of a misleading "Healthy". */
+	stale: boolean;
 	uptime: string;
 	latency: string;
 	users: number;
@@ -88,6 +92,10 @@ export interface NetworkAp {
 	/** Operator label for the overlap cluster this AP belongs to (mirrored across the
 	 * cluster's members on rename). Null = unnamed; the UI shows "Cluster N". */
 	clusterName: string | null;
+	/** Aggregate download/upload caps enforced on the router for this AP, in Kbps.
+	 * Null = uncapped. The card presents these as Mbps. */
+	maxDownKbps: number | null;
+	maxUpKbps: number | null;
 	/** Recent connections attributed to this AP (newest first), for the card's log. */
 	logs: ConnectionLog[];
 }
@@ -112,6 +120,8 @@ export interface AdminUserRow {
 	phone: string;
 	/** Credit balance in pesos. */
 	balance: number;
+	/** Loyalty-points balance (separate wallet, earned on top-ups). */
+	points: number;
 	/** Lifetime/period usage, pre-formatted (e.g. "4.2 GB"). */
 	usage: string;
 	tone: StatusTone;
@@ -137,10 +147,12 @@ export interface AdminUserRow {
 /**
  * Access level of an admin-side staff member.
  * `owner` holds full control and is never disabled or removed. Everyone provisioned
- * by the owner starts as an `admin`; an active admin can be promoted to `owner`.
- * Role *values* are DB-driven (admin_role); this union names the ones with behaviour.
+ * by the owner starts as an `admin`; an active admin can be promoted to `owner`, or
+ * granted `system_admin` (manages Issues + Content, but not Staff).
+ * Role *values* are DB-driven (admin_role). Sourced from @veent/core (derived from
+ * STAFF_ROLE) so the admin and core definitions can never drift.
  */
-export type StaffRole = 'owner' | 'admin';
+export type { StaffRole };
 
 /**
  * Lifecycle state of a staff member.
@@ -163,6 +175,20 @@ export interface StaffMember {
 	lastActive: string;
 	/** Raw last-active time (epoch ms) for sorting; null if never active. */
 	lastActiveAt: number | null;
+	/** Avatar image URL, or null (falls back to initials). */
+	image: string | null;
+	/** Account-created label, pre-formatted (e.g. "12 Jun 2026"). */
+	joined: string;
+	/** Raw created time (epoch ms); null only if unset. */
+	joinedAt: number | null;
+	/** Whether the member has verified their email. */
+	emailVerified: boolean;
+	/** Whether the member has enrolled a TOTP authenticator. */
+	twoFactorEnabled: boolean;
+	/** Optional profile contact fields (unset until an edit UI exists). */
+	phone: string | null;
+	jobTitle: string | null;
+	contactEmail: string | null;
 }
 
 /** One slice of the Finance "revenue by payment method" donut. */

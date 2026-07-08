@@ -1,6 +1,6 @@
 import { fail } from '@sveltejs/kit';
 import { dev } from '$app/environment';
-import { refreshNetworkHealth, STAFF_ROLE } from '@veent/core';
+import { refreshNetworkHealth, countOutagePausedAccounts, STAFF_ROLE } from '@veent/core';
 import { db } from '$lib/server/db';
 import { requireOwner as ownerGate } from '$lib/server/auth-guard';
 import { network } from '$lib/server/network';
@@ -8,13 +8,17 @@ import { mailer } from '$lib/server/email';
 import { checkAdminEmailLimit } from '$lib/server/emailRateLimit';
 import { wipeCodeEmail } from '$lib/server/emails/wipe-code';
 import { issueWipeCode, consumeWipeCode } from '$lib/server/wipe-verification';
+import { logger } from '$lib/server/logger';
 import {
 	listNetworkHealth,
 	setNetworkInterface,
+	setApRouterConfig,
 	wipeNetworks,
 	deleteNetworkPlace
 } from '$lib/server/queries';
 import type { Actions, PageServerLoad } from './$types';
+
+const log = logger('networks');
 
 /** Step-up key namespace: keeps the network-wipe code from clobbering the customer-wipe
  * code for the same owner (both share the in-memory wipe-verification store, keyed by id). */
@@ -23,6 +27,18 @@ const wipeKey = (userId: string) => `network:${userId}`;
 /** Re-asserts owner from the DB (never trust client state) for the destructive actions. */
 const requireOwner = (userId: string | undefined) =>
 	ownerGate(userId, 'Only the owner can modify the network database.');
+
+/** Parse an optional Mbps speed-cap field into integer Kbps for storage. Blank/missing →
+ * null (uncapped). Rejects non-numeric, non-positive, or absurd values. 10 Gbps ceiling is
+ * a sanity bound — well above any real AP uplink. */
+function parseCapMbps(raw: FormDataEntryValue | null): { kbps: number | null } | { error: string } {
+	const s = String(raw ?? '').trim();
+	if (!s) return { kbps: null };
+	const mbps = Number(s);
+	if (!Number.isFinite(mbps) || mbps <= 0) return { error: 'Speed caps must be positive numbers.' };
+	if (mbps > 10_000) return { error: 'Speed cap is unrealistically high (max 10000 Mbps).' };
+	return { kbps: Math.round(mbps * 1000) };
+}
 
 /** Per-interface health for the Networks page. Pulls a live sample from the router
  * (link/users/throughput) into `network_health` on view, then reads it back. The
@@ -38,23 +54,83 @@ export const load: PageServerLoad = async (event) => {
 		try {
 			await refreshNetworkHealth(db, network);
 		} catch (err) {
-			console.error('[admin] network health refresh failed:', err);
+			// Router/controller down → capture (grouped) and fall back to last-known rows.
+			log.error('network health refresh failed:', err);
 		}
 		return listNetworkHealth(db);
 	})();
-	return { networks, isOwner: user.role === STAFF_ROLE.owner };
+	// Guests whose paid time is currently frozen because their AP is down (the outage auto-pause).
+	// Cheap count — awaited directly so the outage banner renders with the page shell.
+	const outagePausedGuests = await countOutagePausedAccounts(db);
+	return { networks, outagePausedGuests, isOwner: user.role === STAFF_ROLE.owner };
 };
 
 export const actions: Actions = {
-	/** Bind this pin to a router AP/interface (or clear it) for user attribution. */
-	setInterface: async ({ request }) => {
-		const form = await request.formData();
+	/** Bind this pin to a router AP/interface (or clear it) for user attribution.
+	 *  Owner-only, like every other network-config mutation — the `(app)` layout guards only
+	 *  auth + 2FA, not role, so this must assert `requireOwner` itself. (Superseded in the UI by
+	 *  `setApConfig`; the gate closes the leftover direct-POST path.) */
+	setInterface: async (event) => {
+		const denied = await requireOwner(event.locals.user?.id);
+		if (denied) return denied;
+
+		const form = await event.request.formData();
 		const id = Number(form.get('id'));
 		if (!Number.isInteger(id)) return fail(400, { error: 'Invalid access point.' });
 
 		const interfaceName = String(form.get('interfaceName') ?? '').trim() || null;
 		await setNetworkInterface(db, id, interfaceName);
 		return { id, boundInterface: true };
+	},
+
+	/** Owner-only: set an AP's router-side config — the interface binding and the aggregate
+	 *  up/down bandwidth caps — then push the caps to the router. Caps are entered in Mbps
+	 *  and stored as Kbps; blank = uncapped. Enforcement is best-effort: the DB is the source
+	 *  of truth and a router hiccup surfaces as a warning without losing the saved config. */
+	setApConfig: async (event) => {
+		const denied = await requireOwner(event.locals.user?.id);
+		if (denied) return denied;
+
+		const form = await event.request.formData();
+		const raw = form.get('id');
+		const id = Number(raw);
+		if (typeof raw !== 'string' || !Number.isInteger(id) || id <= 0) {
+			return fail(400, { action: 'setApConfig', error: 'Invalid access point.' });
+		}
+
+		const interfaceName = String(form.get('interfaceName') ?? '').trim() || null;
+		const down = parseCapMbps(form.get('maxDownMbps'));
+		const up = parseCapMbps(form.get('maxUpMbps'));
+		if ('error' in down) return fail(400, { action: 'setApConfig', id, error: down.error });
+		if ('error' in up) return fail(400, { action: 'setApConfig', id, error: up.error });
+
+		const row = await setApRouterConfig(db, id, {
+			interfaceName,
+			maxDownKbps: down.kbps,
+			maxUpKbps: up.kbps
+		});
+		if (!row) return fail(404, { action: 'setApConfig', id, error: 'Access point not found.' });
+
+		// Enforce on the router (best-effort — config is already persisted). Target the bound
+		// interface, or the AP's own name when unbound (auto-discovered rows are named after
+		// their interface). A failure here must not fail the save.
+		const iface = interfaceName ?? row.name;
+		let warning: string | undefined;
+		if (network.applyInterfaceLimit && iface) {
+			try {
+				await network.applyInterfaceLimit({
+					apName: row.name,
+					interfaceName: iface,
+					downKbps: down.kbps,
+					upKbps: up.kbps
+				});
+			} catch (err) {
+				log.error('applyInterfaceLimit failed:', err);
+				warning =
+					'Caps saved, but the router did not accept them — check the interface binding, then re-save to retry.';
+			}
+		}
+		return { ok: true, action: 'setApConfig', id, warning };
 	},
 
 	/** Delete a single access point. Owner-only (a stray-pin cleanup is still destructive —
@@ -104,7 +180,7 @@ export const actions: Actions = {
 		try {
 			await mailer.send({ to: owner.email, subject, html, text });
 		} catch (err) {
-			console.warn('[email] network wipe code send failed:', (err as Error)?.message);
+			log.error('network wipe code send failed:', err);
 			return fail(502, {
 				action: 'requestWipeCode',
 				error: "Couldn't send the verification code. Please try again."

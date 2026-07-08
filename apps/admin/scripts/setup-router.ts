@@ -90,26 +90,19 @@ const isIp = (h: string): boolean => /^[0-9.]+(\/\d{1,2})?$/.test(h) || h.includ
  * which can't be predicted here — e-wallet/Maya-wallet checkout is fully covered;
  * card payments may still need the bank's domain added per deployment.
  *
- * The Maya checkout page renders a Google reCAPTCHA, which loads from SEPARATE
- * domains (NOT under *.maya.ph, so the payment wildcards don't cover them). Without
- * them the captcha never appears on a device behind the portal, the page looks
- * broken, and the phone may flip to cellular ("no internet"), which then breaks our
- * IP→MAC device detection. Symptom: "captcha doesn't show on phone but works on a
- * device with full internet".
+ * The Maya checkout page also renders a Google reCAPTCHA served from google.com/gstatic.com.
+ * Those are DELIBERATELY NOT global here anymore. A global `*.google.com` / `*.gstatic.com`
+ * allow lets Android's captive-portal probe (`.../generate_204`) return a real 204 pre-auth,
+ * so every connecting guest briefly flashes "connected" then reverts to "Sign in to network"
+ * (MikroTik can't path-filter HTTPS, so the probe can't be blocked while google.com is open).
+ * Instead they're opened PER-DEVICE, scoped to the paying device's IP, at checkout time — see
+ * `openCheckoutAccess` (packages/core services/checkoutAccess.ts), swept on a TTL by the
+ * customer app's revoke cron. Keep them OUT of this global list.
  *
- * This list mirrors EXACTLY what is live on the router's walled garden — re-running
+ * This list mirrors EXACTLY what is live on the router's global walled garden — re-running
  * is a no-op (idempotency matches on `dst-host`, so a mismatched host here would add
- * a redundant entry). The captcha hosts are whitelisted as wildcards to match the
- * router:
- *   - `*.gstatic.com`   — static asset CDN (reCAPTCHA JS/images); serves no browsable
- *     services, so opening it leaks no real internet.
- *   - `*.recaptcha.net` — Google's dedicated reCAPTCHA host; serves nothing else.
- *   - `*.google.com`    — REQUIRED: Maya's checkout embeds the google.com variant of
- *     reCAPTCHA. The walled garden can only match the TLS SNI (host), not the path, so
- *     this also exposes Google search to UNAUTHENTICATED devices. That's an accepted,
- *     bounded trade-off: without it the captcha can't render and mobile Maya payments
- *     dead-end. Pre-auth devices reach google.com only — other domains stay blocked,
- *     so it isn't open internet.
+ * a redundant entry). These are payment-gateway hosts only; none is a captive-portal probe
+ * host, so opening them globally doesn't trigger the flash.
  */
 const PAYMENT_HOSTS = [
 	'maya.ph',
@@ -120,13 +113,51 @@ const PAYMENT_HOSTS = [
 	// (payments.gcash.com). Wildcard covers the auth/redirect subdomains.
 	'gcash.com',
 	'*.gcash.com',
-	// Google reCAPTCHA (Maya checkout). *.google.com is required + a deliberate leak — see note above.
-	'*.google.com',
-	'*.gstatic.com',
-	'*.recaptcha.net',
 	// Other gateways named in Rule #2; harmless if unused.
 	'*.paymongo.com',
 	'*.xendit.co'
+];
+
+/**
+ * OS connectivity-check probe hosts to explicitly DENY pre-auth. The broad reCAPTCHA allows above
+ * (`*.google.com` / `*.gstatic.com`) would otherwise let Android's captive probe through to a real
+ * HTTP 204, so the phone flashes "Connected" and then reverts to "Sign in to network" while still
+ * un-granted (docs/problems/captive-connected-flap-on-free-time.md). These denies sit ABOVE the
+ * allows (walled-garden is first-match top-to-bottom) so the probe is intercepted again — while
+ * reCAPTCHA, which lives on different hosts/paths (`www.gstatic.com/recaptcha`,
+ * `www.google.com/recaptcha`), keeps loading. Each host below is NOT a reCAPTCHA resource:
+ *   - connectivitycheck.gstatic.com — Android probe host; reCAPTCHA never uses this subdomain.
+ *   - clients1..4.google.com        — Android/Chrome connectivity + client hosts; not reCAPTCHA
+ *                                     resources. Matches the set already present on the live router.
+ *   - connectivitycheck.android.com — Android's fallback probe (already not in the allowlist; the
+ *                                     explicit deny documents intent and covers a manual allow).
+ *   - www.google.com PATH /generate_204 — www.google.com IS needed by reCAPTCHA, so deny only the
+ *                                     probe PATH (HTTP-only match; reCAPTCHA uses /recaptcha, not this).
+ *
+ * Apple / Windows / Firefox probe hosts are added below too. Unlike the Google set, these aren't
+ * covered by any allow, so they're already intercepted by default — but the explicit deny keeps
+ * the OS "Sign in to network" popup firing even if someone later adds a broad allow (e.g.
+ * `*.apple.com`), documents intent, and gives every platform the same treatment. None are reCAPTCHA
+ * or payment resources, so denying them is pure upside:
+ *   - captive.apple.com          — iOS/iPadOS/macOS CNA probe (http://captive.apple.com/hotspot-detect.html).
+ *   - www.msftconnecttest.com    — Windows 10/11 NCSI probe (/connecttest.txt).
+ *   - www.msftncsi.com           — legacy Windows NCSI probe.
+ *   - detectportal.firefox.com   — Firefox's own captive-portal detector.
+ */
+const PROBE_DENIES = [
+	// Android / Google
+	{ host: 'connectivitycheck.gstatic.com' },
+	{ host: 'clients1.google.com' },
+	{ host: 'clients2.google.com' },
+	{ host: 'clients3.google.com' },
+	{ host: 'clients4.google.com' },
+	{ host: 'connectivitycheck.android.com' },
+	{ host: 'www.google.com', path: '/generate_204' },
+	// Apple (iOS/macOS), Windows, Firefox
+	{ host: 'captive.apple.com' },
+	{ host: 'www.msftconnecttest.com' },
+	{ host: 'www.msftncsi.com' },
+	{ host: 'detectportal.firefox.com' }
 ];
 
 const hosts = new Set([...splitList(ADMIN_WG_HOSTS), ...PAYMENT_HOSTS]);
@@ -159,12 +190,17 @@ if (hosts.size === 0 && ips.size === 0) {
 console.log(`Provisioning walled garden on ${config.host}:${config.port ?? (config.tls ? 8729 : 8728)}`);
 if (hosts.size) console.log(`  hosts: ${[...hosts].join(', ')}`);
 if (ips.size) console.log(`  ips:   ${[...ips].join(', ')}`);
+if (PROBE_DENIES.length)
+	console.log(`  denies: ${PROBE_DENIES.map((d) => d.host + (d.path ?? '')).join(', ')}`);
 
 try {
 	const result = await provisionWalledGarden(config, {
 		hosts: [...hosts],
-		ips: [...ips]
+		ips: [...ips],
+		denies: PROBE_DENIES
 	});
+	for (const d of result.denies)
+		console.log(`  deny ${d.value}: ${d.created ? 'added' : 'already present'}`);
 	for (const h of result.hosts) console.log(`  host ${h.value}: ${h.created ? 'added' : 'already present'}`);
 	for (const i of result.ips) console.log(`  ip   ${i.value}: ${i.created ? 'added' : 'already present'}`);
 	console.log('\nDone. Guest devices can now reach the admin dashboard before authenticating.');

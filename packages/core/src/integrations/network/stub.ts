@@ -1,4 +1,10 @@
-import type { NetworkController, GrantInput } from './types';
+import type {
+	NetworkController,
+	GrantInput,
+	InterfaceLimitInput,
+	DeviceHostAccessInput,
+	RevokeScope
+} from './types';
 
 /**
  * No-op network controller for local dev / until the real integration strategy
@@ -19,13 +25,31 @@ export function createStubNetworkController(
 					(input.tag ? ` (${input.tag})` : '')
 			);
 		},
-		async revoke(macAddress: string): Promise<void> {
-			log(`[network:stub] REVOKE ${macAddress}`);
+		async revoke(macAddress: string, scope: RevokeScope): Promise<void> {
+			log(`[network:stub] REVOKE ${macAddress} (${'all' in scope ? 'all' : scope.tag})`);
+		},
+		async applyInterfaceLimit(input: InterfaceLimitInput): Promise<void> {
+			const cap = (k: number | null) => (k == null ? '∞' : `${k}kbps`);
+			log(
+				`[network:stub] LIMIT ${input.apName} (${input.interfaceName}) ` +
+					`↓${cap(input.downKbps)} ↑${cap(input.upKbps)}`
+			);
 		},
 		async resolveMacByIp(ipAddress: string): Promise<string | null> {
 			// No router to query in dev — the admin-grant path no-ops gracefully.
 			log(`[network:stub] RESOLVE-MAC ${ipAddress} → null`);
 			return null;
+		},
+		async openHostAccessForDevice(input: DeviceHostAccessInput): Promise<{ ipAddress: string | null }> {
+			// No router / no device IP in dev — log intent so the checkout flow is traceable.
+			log(`[network:stub] OPEN-HOST-ACCESS ${input.macAddress} → ${input.hosts.join(', ')}`);
+			return { ipAddress: null };
+		},
+		async sweepHostAccess(): Promise<number> {
+			return 0;
+		},
+		async sweepAdminBindings(): Promise<string[]> {
+			return [];
 		}
 	};
 }

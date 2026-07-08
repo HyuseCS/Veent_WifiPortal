@@ -9,8 +9,12 @@ import { recordPaymentTransaction } from '@veent/core';
  * duplicate; `recordPaymentTransaction` catches that unique violation (23505) and UPDATEs the
  * existing row instead of writing a second PAYMENT_SUCCESS (which would double-count settled
  * revenue). No DB — a fake records which path was taken and can simulate the index raising 23505.
+ *
+ * Error shape matters: drizzle-orm wraps driver errors (DrizzleQueryError), putting the
+ * SQLSTATE on the CAUSE chain, not `.code` — the wrapped-shape cases below are what the
+ * webhook path actually sees in production; the bare `.code` case pins driver-direct errors.
  */
-function fakeDb(insertError?: { code?: string }) {
+function fakeDb(insertError?: unknown) {
 	const calls = { updates: 0, inserts: 0 };
 	const db = {
 		update: () => ({
@@ -56,9 +60,29 @@ describe('recordPaymentTransaction — referenceNo dedupe (R18)', () => {
 	it('collapses onto the existing row when the reference_no index rejects a different id', async () => {
 		// Webhook already recorded this payment under its payment id; the poll now arrives keyed on
 		// the checkout id → the partial unique index raises 23505 → update the existing row, no dupe.
+		// Bare `.code` shape: what a driver-direct error (and the older drizzle) carries.
 		const { db, calls } = fakeDb({ code: '23505' });
 		await recordPaymentTransaction(db, evt({ externalTransactionId: 'chk_999' }), attribution);
 		expect(calls.updates).toBe(1); // collapsed — no divergent duplicate, no revenue double-count
+	});
+
+	it('collapses when the 23505 arrives wrapped drizzle-style (SQLSTATE on error.cause)', async () => {
+		// Production shape: drizzle-orm wraps the postgres error in DrizzleQueryError, so the
+		// SQLSTATE is on .cause.code, NOT .code. With only the bare-.code check, this branch was
+		// dead in production — the webhook rethrew, 500'd, and Maya retried in a loop.
+		const wrapped = Object.assign(new Error('duplicate key value violates unique constraint'), {
+			cause: { code: '23505' }
+		});
+		const { db, calls } = fakeDb(wrapped);
+		await recordPaymentTransaction(db, evt({ externalTransactionId: 'chk_999' }), attribution);
+		expect(calls.updates).toBe(1);
+	});
+
+	it('collapses when the SQLSTATE sits two causes deep (bounded cause-chain walk)', async () => {
+		const doublyWrapped = { cause: { cause: { code: '23505' } } };
+		const { db, calls } = fakeDb(doublyWrapped);
+		await recordPaymentTransaction(db, evt({ externalTransactionId: 'chk_999' }), attribution);
+		expect(calls.updates).toBe(1);
 	});
 
 	it('rethrows a unique violation when the event has no referenceNo to collapse on', async () => {

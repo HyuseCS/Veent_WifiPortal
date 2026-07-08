@@ -6,6 +6,8 @@ import { SESSION_STATUS } from '../config';
 export interface Account {
 	userId: string;
 	balance: number;
+	/** Loyalty-points balance (separate wallet from credits). */
+	points: number;
 	blocked: boolean;
 	lastFreeSessionAt: Date | null;
 }
@@ -15,6 +17,7 @@ export async function getAccount(db: DB, userId: string): Promise<Account | null
 	const [row] = await db
 		.select({
 			balance: customerProfile.creditBalance,
+			points: customerProfile.pointsBalance,
 			blocked: customerProfile.blocked,
 			lastFreeSessionAt: customerProfile.lastFreeSessionAt
 		})
@@ -25,6 +28,7 @@ export async function getAccount(db: DB, userId: string): Promise<Account | null
 	return {
 		userId,
 		balance: Number(row.balance),
+		points: Number(row.points),
 		blocked: row.blocked,
 		lastFreeSessionAt: row.lastFreeSessionAt
 	};
@@ -51,7 +55,9 @@ async function revokeActiveMacs(db: DB, network: NetworkController, ids: string[
 	for (const { mac } of active) {
 		if (!mac) continue;
 		try {
-			await network.revoke(mac);
+			// Hard delete: cut the device fully (any tag) — a deleted account must leave no binding,
+			// and a spoofer riding an admin bypass on this MAC shouldn't survive the delete.
+			await network.revoke(mac, { all: true });
 		} catch {
 			// reconcileGuestBindings sweeps the orphaned router binding on the next cron.
 		}

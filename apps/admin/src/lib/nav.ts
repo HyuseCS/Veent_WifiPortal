@@ -5,8 +5,10 @@ import Router from 'lucide-svelte/icons/router';
 import MapPin from 'lucide-svelte/icons/map-pin';
 import UserCog from 'lucide-svelte/icons/user-cog';
 import Users from 'lucide-svelte/icons/users';
+import ClipboardList from 'lucide-svelte/icons/clipboard-list';
 import TrendingUp from 'lucide-svelte/icons/trending-up';
 import FileCog from 'lucide-svelte/icons/file-cog';
+import Activity from 'lucide-svelte/icons/activity';
 
 /** A sidebar navigation entry. */
 export interface NavItem {
@@ -30,5 +32,9 @@ export const nav: NavItem[] = [
 		icon: FileCog as unknown as Component,
 		ownerOnly: true
 	},
-	{ href: '/staff', label: 'Staff', icon: UserCog as unknown as Component, ownerOnly: true }
+	{ href: '/staff', label: 'Staff', icon: UserCog as unknown as Component, ownerOnly: true },
+	// Visible to all staff: managers (owner/system_admin) see the full board; other admins
+	// see only the issues assigned to them. Access is enforced in the route's load, not here.
+	{ href: '/issues', label: 'Issues', icon: ClipboardList as unknown as Component },
+	{ href: '/sentry', label: 'Sentry', icon: Activity as unknown as Component }
 ];

@@ -1,5 +1,5 @@
 import { redirect, fail } from '@sveltejs/kit';
-import { and, eq } from 'drizzle-orm';
+import { and, asc, eq } from 'drizzle-orm';
 import { packages } from '@veent/db';
 import {
 	getAccount,
@@ -11,15 +11,20 @@ import {
 	bindDevice,
 	unbindDevice,
 	unbindAllDevices,
-	getSessionLimits
+	getSessionLimits,
+	otherAccountAccessUntilForMac
 } from '@veent/core';
 import { db } from '$lib/server/db';
 import { network } from '$lib/server/network';
+import { rateLimit } from '$lib/server/rateLimit';
 import { buildAccountView } from '$lib/server/account-view';
-import { resolveMacForUser } from '$lib/server/network-location';
+import { resolveMacForUser, resolveMacTrusted, maskMac } from '$lib/server/network-location';
 import { maskPhone } from '$lib/server/otp';
+import { logger } from '$lib/server/logger';
 import type { Actions, PageServerLoad } from './$types';
 import { auth } from '$lib/server/auth';
+
+const log = logger('dashboard');
 
 /** Re-grant a known device on the router at most this often during dashboard loads. */
 const REBIND_REFRESH_MS = 60 * 1000;
@@ -43,10 +48,18 @@ export const load: PageServerLoad = async (event) => {
 	// "device not detected" warning on every return-to-dashboard in those setups.
 	const mac = await resolveMacForUser(event, user.id);
 
+	// If another account currently holds a LIVE window on this same device (MAC), surface its end
+	// time so a second account on a shared device is warned before double-buying — the device is
+	// already online, and buying stacks a redundant window (never a hard block; see mac-guard).
+	const deviceBusyUntil = mac ? await otherAccountAccessUntilForMac(db, mac, user.id) : null;
+
 	const tiers = await db
 		.select()
 		.from(packages)
-		.where(and(eq(packages.type, 'tier'), eq(packages.isActive, true)));
+		.where(and(eq(packages.type, 'tier'), eq(packages.isActive, true)))
+		// Ascending by access length so the shortest tier shows first (5 min → 30 min → 1 hour).
+		// Without an explicit order Postgres returns heap order, which shifts after any row UPDATE.
+		.orderBy(asc(packages.durationMinutes));
 
 	let access = await getActiveAccess(db, user.id);
 
@@ -65,7 +78,7 @@ export const load: PageServerLoad = async (event) => {
 				const r = await bindDevice(db, network, { userId: user.id, macAddress: mac });
 				if (r.ok) access = await getActiveAccess(db, user.id);
 			} catch (err) {
-				console.error('[customer] auto-bind failed:', err);
+				log.error('auto-bind failed:', err);
 			}
 		}
 		// !bound && at cap → leave the device unbound; the UI offers "replace oldest".
@@ -80,7 +93,7 @@ export const load: PageServerLoad = async (event) => {
 	// `update()` should re-run this load and log a SECOND line with thisBound=true. Remove once
 	// the "needs a refresh to show connected" bug is understood.
 	console.info(
-		`[dash-load] mac=${mac ?? 'null'} active=${view.access.active} thisBound=${view.devices.thisDeviceBound} devices=${view.devices.count}`
+		`[dash-load] mac=${mac ? maskMac(mac) : 'null'} active=${view.access.active} thisBound=${view.devices.thisDeviceBound} devices=${view.devices.count}`
 	);
 
 	// Issue 2b/B: mint a CNA→browser handoff token for THIS session so the page can offer an
@@ -93,13 +106,16 @@ export const load: PageServerLoad = async (event) => {
 		const r = await auth.api.generateOneTimeToken({ headers: event.request.headers });
 		if (r?.token) handoffUrl = `${event.url.origin}/auth/handoff?token=${encodeURIComponent(r.token)}`;
 	} catch (err) {
-		console.warn('[handoff] token generation failed:', (err as Error).message);
+		// Low-priority: the link is simply omitted; the dashboard still renders. log.error routes
+		// through the seam → Sentry at warning level, so it's the rate that matters, not one miss.
+		log.error('[handoff] token generation failed:', err);
 	}
 
 	return {
 		maskedPhone: phone ? maskPhone(phone) : null,
 		mac,
 		hasMac: !!mac,
+		deviceBusyUntil,
 		tiers,
 		handoffUrl,
 		...view
@@ -113,13 +129,22 @@ const MAC_RE = /^[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}$/;
 const NO_DEVICE =
 	'Could not detect your device. Reconnect through the WiFi portal and try again.';
 
+// Per-user grant throttle (L-4): the grant/bind actions share the JSON endpoint's `grant_user`
+// budget so a user can't sidestep it via the dashboard form. `bindThisDevice` in particular can
+// churn arbitrary MAC binds/unbinds against the router, so it must be throttled like the rest.
+const TOO_MANY = fail(429, { error: 'Too many requests. Please slow down and try again.' });
+
 export const actions: Actions = {
 	startFreeTime: async (event) => {
 		const user = event.locals.user;
 		if (!user) return redirect(302, '/login');
+		if (!(await rateLimit('grant_user', user.id, 20)).allowed) return TOO_MANY;
 
 		const form = await event.request.formData();
-		const mac = String(form.get('mac') ?? '') || (await resolveMacForUser(event, user.id)) || '';
+		// Server-authoritative device identity (M-1/L-1): trust only the server-resolved MAC, never the
+		// posted `mac` (a diagnostic echo of the server-resolved `data.mac`). resolveMacTrusted logs a
+		// masked tamper signal when the client MAC disagrees.
+		const mac = (await resolveMacTrusted(event, user.id, String(form.get('mac') ?? ''))) || '';
 		if (!MAC_RE.test(mac)) return fail(400, { error: NO_DEVICE });
 
 		const account = await getAccount(db, user.id);
@@ -129,7 +154,7 @@ export const actions: Actions = {
 		try {
 			result = await startFreeAccessAndBindDevice(db, network, { userId: user.id, macAddress: mac });
 		} catch (err) {
-			console.error('[customer] startFreeTime grant failed:', err);
+			log.error('startFreeTime grant failed:', err);
 			return fail(502, { error: 'Could not reach the network controller. Please try again.' });
 		}
 		if (!result.ok) {
@@ -141,13 +166,19 @@ export const actions: Actions = {
 	buyTier: async (event) => {
 		const user = event.locals.user;
 		if (!user) return redirect(302, '/login');
+		if (!(await rateLimit('grant_user', user.id, 20)).allowed) return TOO_MANY;
 
 		const form = await event.request.formData();
-		const mac = String(form.get('mac') ?? '') || (await resolveMacForUser(event, user.id)) || '';
+		// Server-authoritative device identity (M-1/L-1): trust only the server-resolved MAC, never the
+		// posted `mac` (a diagnostic echo of the server-resolved `data.mac`). resolveMacTrusted logs a
+		// masked tamper signal when the client MAC disagrees.
+		const mac = (await resolveMacTrusted(event, user.id, String(form.get('mac') ?? ''))) || '';
 		const packageId = Number(form.get('packageId'));
+		// Which wallet to pay from — the buy sheet offers both. Default credits (back-compat).
+		const currency = form.get('currency') === 'points' ? 'points' : 'credits';
 		if (!Number.isFinite(packageId)) return fail(400, { error: 'Missing package' });
-		// Validate the device BEFORE spending credits — otherwise a bad MAC debits the
-		// user and then fails to grant, leaving them charged with no access.
+		// Validate the device BEFORE spending — otherwise a bad MAC debits the user and then
+		// fails to grant, leaving them charged with no access.
 		if (!MAC_RE.test(mac)) return fail(400, { error: NO_DEVICE });
 
 		const account = await getAccount(db, user.id);
@@ -155,6 +186,12 @@ export const actions: Actions = {
 
 		const [pkg] = await db.select().from(packages).where(eq(packages.id, packageId)).limit(1);
 		if (!pkg || !pkg.isActive) return fail(404, { error: 'Package not found' });
+
+		// A tier is redeemable with points only if the admin set a points price.
+		if (currency === 'points' && pkg.pointsCost == null) {
+			return fail(400, { error: 'This tier can’t be redeemed with points.' });
+		}
+		const amount = currency === 'points' ? (pkg.pointsCost ?? 0) : (pkg.creditCost ?? 0);
 
 		// Spend + grant atomically: a failed grant rolls back the spend, so a failed grant
 		// never leaves the user charged without access (business rule #1).
@@ -164,16 +201,23 @@ export const actions: Actions = {
 				userId: user.id,
 				macAddress: mac,
 				packageId: pkg.id,
-				amount: pkg.creditCost ?? 0,
-				durationMinutes: pkg.durationMinutes ?? 0
+				amount,
+				durationMinutes: pkg.durationMinutes ?? 0,
+				currency
 			});
 		} catch (err) {
-			console.error('[customer] buyTier grant failed (rolled back, not charged):', err);
+			log.error('buyTier grant failed (rolled back, not charged):', err);
+			const w = currency === 'points' ? 'points were' : 'credits were';
 			return fail(502, {
-				error: 'The network grant failed — your credits were not charged. Please try again.'
+				error: `The network grant failed — your ${w} not charged. Please try again.`
 			});
 		}
-		if (!result.ok) return fail(402, { error: 'Insufficient credit balance' });
+		if (!result.ok) {
+			return fail(402, {
+				error:
+					currency === 'points' ? 'Insufficient points balance' : 'Insufficient credit balance'
+			});
+		}
 		return { connected: true };
 	},
 
@@ -182,9 +226,13 @@ export const actions: Actions = {
 	bindThisDevice: async (event) => {
 		const user = event.locals.user;
 		if (!user) return redirect(302, '/login');
+		if (!(await rateLimit('grant_user', user.id, 20)).allowed) return TOO_MANY;
 
 		const form = await event.request.formData();
-		const mac = String(form.get('mac') ?? '') || (await resolveMacForUser(event, user.id)) || '';
+		// Server-authoritative device identity (M-1/L-1): trust only the server-resolved MAC, never the
+		// posted `mac` (a diagnostic echo of the server-resolved `data.mac`). resolveMacTrusted logs a
+		// masked tamper signal when the client MAC disagrees.
+		const mac = (await resolveMacTrusted(event, user.id, String(form.get('mac') ?? ''))) || '';
 		if (!MAC_RE.test(mac)) return fail(400, { error: NO_DEVICE });
 
 		const account = await getAccount(db, user.id);
@@ -194,7 +242,7 @@ export const actions: Actions = {
 		try {
 			result = await bindDevice(db, network, { userId: user.id, macAddress: mac });
 		} catch (err) {
-			console.error('[customer] bindThisDevice grant failed:', err);
+			log.error('bindThisDevice grant failed:', err);
 			return fail(502, { error: 'Could not reach the network controller. Please try again.' });
 		}
 		if (!result.ok) return fail(409, { error: 'No active account time to connect to.' });
@@ -214,7 +262,7 @@ export const actions: Actions = {
 			const r = await unbindDevice(db, network, { userId: user.id, sessionId });
 			if (!r.ok) return fail(404, { error: 'Device not found' });
 		} catch (err) {
-			console.error('[customer] unbindDevice failed:', err);
+			log.error('unbindDevice failed:', err);
 			return fail(502, { error: 'Could not reach the network controller. Please try again.' });
 		}
 		return { removed: true };
@@ -228,7 +276,7 @@ export const actions: Actions = {
 		try {
 			await unbindAllDevices(db, network, user.id);
 		} catch (err) {
-			console.error('[customer] unbindAll failed:', err);
+			log.error('unbindAll failed:', err);
 			return fail(502, { error: 'Could not reach the network controller. Please try again.' });
 		}
 		return { removed: true };
@@ -244,7 +292,7 @@ export const actions: Actions = {
 		try {
 			result = await pauseAccountAccess(db, network, user.id);
 		} catch (err) {
-			console.error('[customer] pauseAccess failed:', err);
+			log.error('pauseAccess failed:', err);
 			return fail(502, { error: 'Could not reach the network controller. Please try again.' });
 		}
 		if (!result.ok) {
@@ -265,9 +313,11 @@ export const actions: Actions = {
 
 		let result;
 		try {
-			result = await resumeAccountAccess(db, user.id);
+			// onlyReason:'user' — a guest can resume only their own manual pause; outage pauses are
+			// released by the outage sweep alone (guard is enforced in the service, under lock).
+			result = await resumeAccountAccess(db, user.id, undefined, { onlyReason: 'user' });
 		} catch (err) {
-			console.error('[customer] resumeAccess failed:', err);
+			log.error('resumeAccess failed:', err);
 			return fail(502, { error: 'Could not resume access. Please try again.' });
 		}
 		if (!result.ok) {
@@ -281,7 +331,14 @@ export const actions: Actions = {
 	},
 
 	signOut: async (event) => {
+		// Re-thread this device's MAC across the logout→login boundary so the NEXT account's login
+		// re-captures it (into veent_portal + the pending cookie) even in the same browser. The
+		// device cookie already survives sign-out and covers this, but the explicit ?mac= also
+		// refreshes the short-lived portal cookie for the incoming account. Resolve BEFORE signing
+		// out (needs the user id for the per-user fallbacks); cheap and best-effort.
+		const user = event.locals.user;
+		const mac = user ? await resolveMacForUser(event, user.id) : null;
 		await auth.api.signOut({ headers: event.request.headers });
-		return redirect(302, '/login');
+		return redirect(302, mac ? `/login?mac=${encodeURIComponent(mac)}` : '/login');
 	}
 };

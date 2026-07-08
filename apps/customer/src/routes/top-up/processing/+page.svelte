@@ -18,11 +18,25 @@
 
 	const status = $derived(data.settled ? 'success' : timedOut ? 'failed' : 'pending');
 
-	// On settlement, bounce to the dashboard after a beat.
+	// On settlement, count down out loud, then bounce to the dashboard.
+	const REDIRECT_S = 3;
+	let secondsLeft = $state(REDIRECT_S);
 	$effect(() => {
 		if (!data.settled) return;
-		const t = setTimeout(() => goto(resolve('/dashboard') + data.portalQuery), 3000);
-		return () => clearTimeout(t);
+		secondsLeft = REDIRECT_S;
+		const tick = setInterval(() => {
+			secondsLeft -= 1;
+			if (secondsLeft <= 0) {
+				clearInterval(tick);
+				// Resolve the FULL target (incl. the `?mac=…`/empty portalQuery) so the navigation
+				// passes through resolve() — bare `resolve('/dashboard') + query` trips the
+				// no-navigation-without-resolve lint. portalQuery is a server-built query string that
+				// SvelteKit's PageData widens to `string`, which typed routes can't verify, so assert
+				// the resolvable shape (matches the `{resolve('/dashboard')}{portalQuery}` links below).
+				goto(resolve(`/dashboard${data.portalQuery}` as `/dashboard?${string}`));
+			}
+		}, 1000);
+		return () => clearInterval(tick);
 	});
 
 	// Poll until settled or timed out.
@@ -42,7 +56,7 @@
 </script>
 
 <svelte:head>
-	<title>Confirming payment · Veent WiFi</title>
+	<title>Confirming payment · Parafiber WiFi</title>
 </svelte:head>
 
 <main class="flex min-h-screen flex-col p-5 lg:items-center lg:justify-center lg:bg-surface lg:p-8">
@@ -86,10 +100,18 @@
 				<h1 class="mb-2 text-[23px] leading-tight font-bold tracking-tight text-ink">
 					Payment confirmed
 				</h1>
-				<p class="mb-6 text-sm leading-relaxed text-muted">
+				<p class="mb-4 text-sm leading-relaxed text-muted">
 					<strong class="font-semibold text-online">+{data.creditsAdded} credits</strong> added to your
 					balance.
 				</p>
+				{#if data.pointsEarned > 0}
+					<p
+						class="mb-6 inline-flex items-center gap-1.5 rounded-full border border-points/40 bg-points/15 px-3 py-1.5 text-[12.5px] font-semibold text-ink"
+					>
+						<Icon name="star" size={13} class="text-points" />
+						+{data.pointsEarned} points earned
+					</p>
+				{/if}
 				<div
 					class="mb-7 flex w-full items-center justify-between rounded-2xl border border-border bg-surface px-[18px] py-4"
 				>
@@ -108,7 +130,9 @@
 					Back to dashboard
 					<Icon name="arrow-right" size={18} strokeWidth={2.4} />
 				</a>
-				<p class="mt-3 text-[11.5px] font-medium text-muted">Returning automatically in 3s…</p>
+				<p class="mt-3 text-[11.5px] font-medium text-muted">
+					Returning automatically in {secondsLeft}s…
+				</p>
 			{:else}
 				<div
 					class="mb-6 flex h-[74px] w-[74px] items-center justify-center rounded-full bg-blocked/[0.13]"
@@ -116,11 +140,12 @@
 					<Icon name="alert-circle" size={36} strokeWidth={2.4} class="text-blocked" />
 				</div>
 				<h1 class="mb-2 text-[22px] leading-tight font-bold tracking-tight text-ink">
-					We couldn't confirm your payment
+					Still confirming your payment
 				</h1>
 				<p class="mb-6 max-w-[280px] text-sm leading-relaxed text-muted">
-					No credits were added. If any amount was deducted, Maya refunds it automatically within a
-					few minutes.
+					This is taking longer than usual — no need to pay again. If your payment went through, your
+					credits are added automatically once it clears; just check your balance in a few minutes. If
+					you were charged and nothing appears, Maya refunds it automatically.
 				</p>
 				<div
 					class="mb-7 flex w-full items-center gap-2.5 rounded-xl border border-blocked/20 bg-blocked/[0.06] px-4 py-3 text-left"

@@ -145,6 +145,13 @@
 	animation: fade-in-up 200ms ease-out both;
 }
 
+/* Route-change skeleton (RouteSkeleton): a DELAYED fade-in so fast navigations unmount it
+ * before it's ever visible — only genuinely slow loads flash a placeholder. Kept off the
+ * skeleton's inner element, which owns the `animate-pulse` shimmer (one `animation` each). */
+.route-skeleton {
+	animation: fade-in 160ms ease-out 120ms both;
+}
+
 /* Revenue/line chart entrance: the path "draws" on (length-normalized via pathLength="1"),
  * then the area fill, data dots, and peak callout settle in just behind it. Runs once on
  * mount — Svelte updates the path `d` in place on live data pushes, so it never re-fires. */
@@ -253,6 +260,20 @@
 	   LABEL ···· — row would just be noise (desktop keeps the cell for column alignment). */
 	.table-cards td.tc-skip {
 		display: none;
+	}
+	/* Whole-card click target: the `.tc-trigger` control's ::after stretches over the entire
+	   card (the tr is position:relative above), so tapping anywhere on the card activates it
+	   — e.g. opening a detail modal. Sibling interactive cells must carry `.tc-above` to stay
+	   clickable over the overlay. Card-mode only; desktop keeps the trigger to its own cell. */
+	.table-cards td .tc-trigger::after {
+		content: '';
+		position: absolute;
+		inset: 0;
+		border-radius: 0.5rem;
+	}
+	.table-cards td.tc-above {
+		position: relative;
+		z-index: 1;
 	}
 	.table-cards tbody tr.tc-detail {
 		border: 0;

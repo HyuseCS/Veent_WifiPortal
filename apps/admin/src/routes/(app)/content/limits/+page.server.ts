@@ -1,26 +1,27 @@
 import { fail } from '@sveltejs/kit';
 import { getSessionLimits, updateSessionLimits } from '@veent/core';
 import { db } from '$lib/server/db';
-import { requireOwner as ownerGate } from '$lib/server/auth-guard';
+import { requireManager as managerGate } from '$lib/server/auth-guard';
 import { verifyStepUp } from '$lib/server/step-up';
 import { parseIntField } from '$lib/server/formValidation';
 import type { Actions, PageServerLoad } from './$types';
 
-// Section-level owner gate lives in content/+layout.server.ts; the save action re-asserts it.
+// Section-level manager gate lives in content/+layout.server.ts; the save action re-asserts it.
 export const load: PageServerLoad = async () => ({ limits: await getSessionLimits(db) });
 
-const requireOwner = (userId: string | undefined) =>
-	ownerGate(userId, 'Only the owner can manage content.');
+const requireManager = (userId: string | undefined) =>
+	managerGate(userId, 'You do not have permission to manage content.');
 
 export const actions: Actions = {
 	save: async (event) => {
-		const denied = await requireOwner(event.locals.user?.id);
+		const denied = await requireManager(event.locals.user?.id);
 		if (denied) return denied;
 
 		const form = await event.request.formData();
 		const maxDevicesPerAccount = parseIntField(form, 'maxDevicesPerAccount', { min: 1, max: 20 });
 		const freeTimeMinutes = parseIntField(form, 'freeTimeMinutes', { min: 1, max: 1440 });
 		const freeTimeCooldownHours = parseIntField(form, 'freeTimeCooldownHours', { min: 0, max: 168 });
+		const pointsEarnRate = parseIntField(form, 'pointsEarnRate', { min: 0, max: 100 });
 
 		if (maxDevicesPerAccount === null) {
 			return fail(400, { error: 'Device cap must be a whole number from 1 to 20.' });
@@ -30,6 +31,9 @@ export const actions: Actions = {
 		}
 		if (freeTimeCooldownHours === null) {
 			return fail(400, { error: 'Cooldown hours must be a whole number from 0 to 168.' });
+		}
+		if (pointsEarnRate === null) {
+			return fail(400, { error: 'Points earn rate must be a whole percent from 0 to 100.' });
 		}
 
 		// Step-up last: a valid TOTP code confirms the save (after the values validate).
@@ -42,7 +46,8 @@ export const actions: Actions = {
 		await updateSessionLimits(db, {
 			maxDevicesPerAccount,
 			freeTimeMinutes,
-			freeTimeCooldownHours
+			freeTimeCooldownHours,
+			pointsEarnRate
 		});
 		return { ok: true };
 	}

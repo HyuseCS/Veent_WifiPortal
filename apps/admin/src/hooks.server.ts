@@ -1,6 +1,10 @@
 import type { Handle } from '@sveltejs/kit';
-import { building } from '$app/environment';
-import { getStaffStatus, STAFF_STATUS } from '@veent/core';
+import { building, dev } from '$app/environment';
+import { getStaffStatus, STAFF_STATUS, sentryOptions, nonEmptyEnv } from '@veent/core';
+import * as Sentry from '@sentry/sveltekit';
+import { sequence } from '@sveltejs/kit/hooks';
+import { env as pub } from '$env/dynamic/public';
+import { env as priv } from '$env/dynamic/private';
 import { auth } from '$lib/server/auth';
 import { db } from '$lib/server/db';
 import { svelteKitHandler } from 'better-auth/svelte-kit';
@@ -8,6 +12,25 @@ import { validateEnv } from '$lib/server/validateEnv';
 
 // Fail fast at boot on a misconfigured production deploy (no-op during build; warns in dev).
 validateEnv();
+
+// Sentry (server). Fail-open: no DSN → no init → app runs normally. Errors + sampled performance
+// tracing; PII scrubbed centrally via sentryOptions. Integration latency (Maya/MikroTik/Resend)
+// rides in automatically through the traced provider factories in @veent/core.
+const SENTRY_DSN = pub.PUBLIC_SENTRY_DSN;
+if (SENTRY_DSN && !building) {
+	Sentry.init(
+		sentryOptions({
+			dsn: SENTRY_DSN,
+			app: 'admin',
+			environment:
+				nonEmptyEnv(priv.SENTRY_ENVIRONMENT) ??
+				nonEmptyEnv(pub.PUBLIC_SENTRY_ENVIRONMENT) ??
+				(dev ? 'development' : 'production'),
+			release: nonEmptyEnv(priv.SENTRY_RELEASE),
+			tracesSampleRate: dev ? 1.0 : Number(nonEmptyEnv(priv.SENTRY_TRACES_SAMPLE_RATE) ?? '0.2')
+		})
+	);
+}
 
 /**
  * Baseline security headers for the admin dashboard. It holds owner-privileged, session-cookie'd
@@ -42,6 +65,27 @@ const handleBetterAuth: Handle = async ({ event, resolve }) => {
 		if (status === STAFF_STATUS.active) {
 			event.locals.session = session.session;
 			event.locals.user = session.user;
+			// Identify by id/role ONLY — never email/name (scrubEvent enforces this too).
+			Sentry.setUser({ id: session.user.id });
+			const role = (session.user as { role?: string | null }).role;
+			if (role) Sentry.setTag('staff_role', role);
+		}
+	}
+
+	// Central auth gate for the whole (app) shell — matched via route.id, which includes the
+	// route group. This MUST live in the hook, not just (app)/+layout.server.ts: a SvelteKit
+	// form-action POST runs the action BEFORE any layout `load`, so the layout's redirect can't
+	// protect action POSTs (an unauthenticated POST to /users?/block or /map?/deletePlace would
+	// otherwise execute the mutation). Gating here blocks the request before the action runs, for
+	// every current and future (app) route — pages, actions, and the finance/export + sentry/event
+	// endpoints (which also require enrolled 2FA). Public routes (login, 2fa, enroll-2fa, activate,
+	// reset/forgot-password, /api/auth/*) are outside (app) and pass through untouched.
+	if (event.route.id?.startsWith('/(app)')) {
+		if (!event.locals.user) {
+			return new Response(null, { status: 302, headers: { location: '/login' } });
+		}
+		if (!event.locals.user.twoFactorEnabled) {
+			return new Response(null, { status: 302, headers: { location: '/enroll-2fa' } });
 		}
 	}
 
@@ -50,4 +94,8 @@ const handleBetterAuth: Handle = async ({ event, resolve }) => {
 	return response;
 };
 
-export const handle: Handle = handleBetterAuth;
+// sentryHandle FIRST so it wraps auth + business logic in the request transaction.
+export const handle: Handle = sequence(Sentry.sentryHandle(), handleBetterAuth);
+
+// Report server-side (load/action/render) errors to Sentry, then fall through to SvelteKit's default.
+export const handleError = Sentry.handleErrorWithSentry();

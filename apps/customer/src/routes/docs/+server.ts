@@ -1,3 +1,5 @@
+import { dev } from '$app/environment';
+import { error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 
 /**
@@ -190,5 +192,9 @@ const html = `<!doctype html>
 </html>`;
 
 export const GET: RequestHandler = () => {
+	// Dev-only: the Scalar bundle loads from cdn.jsdelivr.net, which a trapped captive-portal device
+	// can't reach (it's not walled-gardened), so this page is blank on the guest network anyway — and
+	// API docs don't belong on the public portal in prod. Serve it only in development.
+	if (!dev) error(404, 'Not found');
 	return new Response(html, { headers: { 'content-type': 'text/html; charset=utf-8' } });
 };

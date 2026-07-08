@@ -15,7 +15,7 @@
 </script>
 
 <svelte:head>
-	<title>Log in · Veent WiFi</title>
+	<title>Log in · Parafiber WiFi</title>
 </svelte:head>
 
 <main class="flex min-h-screen flex-col lg:bg-surface">

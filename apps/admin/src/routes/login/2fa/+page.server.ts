@@ -5,6 +5,9 @@ import { APIError } from 'better-auth/api';
 import { rateLimit, clientIp } from '$lib/server/rateLimit';
 import { finishStaffSignIn } from '$lib/server/postLogin';
 import { isTotpCode } from '$lib/server/twoFactor';
+import { logger } from '$lib/server/logger';
+
+const log = logger('login-2fa');
 
 export const load: PageServerLoad = (event) => {
 	// Already fully signed in (session established) → no second factor pending.
@@ -38,11 +41,13 @@ export const actions: Actions = {
 			if (error instanceof APIError) {
 				return fail(400, { message: 'Invalid or expired code. Please try again.' });
 			}
+			log.error('2FA verify unexpected error:', error);
 			return fail(500, { message: 'Unexpected error' });
 		}
 
-		// Session is fully established now — safe to run the shared staff gate + device grant.
-		const denied = await finishStaffSignIn(event, res.user.id);
+		// Session is fully established now — a second factor was just proven, so grant the device
+		// bypass. `res.token` is the verified session's token — keys the device MAC we persist.
+		const denied = await finishStaffSignIn(event, res.user.id, res.token, { grantDevice: true });
 		if (denied) return denied;
 
 		return redirect(302, '/dashboard');
