@@ -15,20 +15,21 @@
 	// Detail modal for one issue. The summary (`issue`) is already in hand; the latest event's
 	// exception + stacktrace ("which file/line, how & why") is fetched on open from /sentry/event.
 	// `levelTone`/`seenAgo` are passed in so the table stays the single source of those helpers.
-	// Managers additionally get a "Track as incident" form (source='sentry'), posted to ?/track.
+	// Any viewer can "Track as incident" (source='sentry' form, posted to ?/track). `startTracking`
+	// opens the dialog straight into that form (the inline row action) instead of read mode.
 	let {
 		issue,
 		open = $bindable(false),
 		levelTone,
 		seenAgo,
-		canManage = false,
+		startTracking = false,
 		assignableStaff = []
 	}: {
 		issue: SentryIssue | null;
 		open?: boolean;
 		levelTone: (level: string) => StatusTone;
 		seenAgo: (iso: string) => string;
-		canManage?: boolean;
+		startTracking?: boolean;
 		assignableStaff?: { id: string; name: string; roleLabel: string }[];
 	} = $props();
 
@@ -51,7 +52,7 @@
 	let trackSubmitting = $state(false);
 
 	function seedTrack() {
-		tracking = false;
+		tracking = startTracking;
 		trackTitle = issue?.title ?? '';
 		trackPriority = 'medium';
 		trackDue = '';
@@ -175,9 +176,9 @@
 			</div>
 		</div>
 
-		<!-- Track as incident (managers only): snapshot this Sentry error into an assigned incident.
-		     Does NOT resolve/ignore it in Sentry — it stays in the feed. -->
-		{#if canManage && tracking}
+		<!-- Track as incident: snapshot this Sentry error into an assigned incident. Does NOT
+		     resolve/ignore it in Sentry — it stays in the feed. -->
+		{#if tracking}
 			<section class="mt-4 rounded-lg border border-border bg-surface p-3">
 				<h3 class="text-[11px] font-semibold tracking-wider text-muted uppercase">
 					Track as incident
@@ -266,7 +267,7 @@
 		{/if}
 
 		<div class="mt-5 flex flex-wrap items-center justify-end gap-2 border-t border-border pt-4">
-			{#if canManage && !tracking}
+			{#if !tracking}
 				<button
 					type="button"
 					onclick={() => (tracking = true)}

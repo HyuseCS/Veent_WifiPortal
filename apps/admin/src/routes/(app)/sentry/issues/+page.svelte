@@ -21,7 +21,6 @@
 		<SentryIssuesTable
 			issues={data.issues}
 			degraded={data.degraded.issues}
-			canManage={data.canManage}
 			assignableStaff={data.assignableStaff}
 			fill
 		/>

@@ -1,8 +1,7 @@
 import { fail, type RequestEvent } from '@sveltejs/kit';
-import { MANAGER_ROLES, STAFF_STATUS, type StaffRole } from '@veent/core';
+import { STAFF_STATUS } from '@veent/core';
 import { db } from '$lib/server/db';
 import { logger } from '$lib/server/logger';
-import { requireManager } from '$lib/server/auth-guard';
 import { clientIp, rateLimit } from '$lib/server/rateLimit';
 import { listStaff } from '$lib/server/queries';
 import { createIssueFromSentry, isIssuePriority, type IssueInput } from '$lib/server/issues';
@@ -13,24 +12,21 @@ import type { Actions, PageServerLoad } from './$types';
 const log = logger('sentry');
 
 /**
- * Whether the viewer may "Track as incident" (managers only) + the staff they can assign. Shared by
- * the dashboard load AND the mobile /sentry/issues load so both render the track form consistently.
+ * The staff a viewer can assign when tracking a Sentry error as an incident. Any signed-in staff
+ * member who can reach the Sentry page may track (same auth model as resolve/ignore), so this is
+ * always loaded. Shared by the dashboard load AND the mobile /sentry/issues load.
  */
-export async function _managerContext(user: { role?: string | null }) {
-	const canManage = MANAGER_ROLES.includes(user.role as StaffRole);
-	const assignableStaff = canManage
-		? (await listStaff(db))
-				.filter((s) => s.status === STAFF_STATUS.active)
-				.map((s) => ({ id: s.id, name: s.name, roleLabel: s.roleLabel }))
-		: [];
-	return { canManage, assignableStaff };
+export async function _trackContext() {
+	const assignableStaff = (await listStaff(db))
+		.filter((s) => s.status === STAFF_STATUS.active)
+		.map((s) => ({ id: s.id, name: s.name, roleLabel: s.roleLabel }));
+	return { assignableStaff };
 }
 
 /** Delegate to the facade for the dashboard; layer on the track-form context. Unconfigured → an
  *  EmptyState on the page, never a 500. */
-export const load: PageServerLoad = async (event) => {
-	const { user } = await event.parent();
-	const ctx = await _managerContext(user);
+export const load: PageServerLoad = async () => {
+	const ctx = await _trackContext();
 	if (!isSentryConfigured()) return { configured: false as const, ...ctx };
 	return { ...(await getDashboard()), ...ctx };
 };
@@ -72,14 +68,14 @@ export const actions: Actions = {
 	ignore: (event) => mutate(event, 'ignore', ignoreIssue),
 
 	/**
-	 * Track a Sentry error as an assigned incident (managers only). Snapshots the Sentry fields onto
-	 * a source='sentry' incident and notifies the assignees — but does NOT change the error's status
-	 * in Sentry, so it stays in the feed (dismissal via ?/ignore is a separate, explicit action).
+	 * Track a Sentry error as an assigned incident. Any signed-in active staff member may track (same
+	 * auth model as resolve/ignore — locals.user presence IS the authorization). Snapshots the Sentry
+	 * fields onto a source='sentry' incident and notifies the assignees — but does NOT change the
+	 * error's status in Sentry, so it stays in the feed (dismissal via ?/ignore is separate).
 	 */
 	track: async (event) => {
 		const userId = event.locals.user?.id;
-		const denied = await requireManager(userId, 'You do not have permission to track incidents.');
-		if (denied) return denied;
+		if (!userId) return fail(401, { action: 'track', error: 'Not signed in.' });
 
 		const form = await event.request.formData();
 		const sentryIssueId = String(form.get('sentryIssueId') ?? '').trim();
