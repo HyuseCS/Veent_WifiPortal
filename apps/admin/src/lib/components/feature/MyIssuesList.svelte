@@ -44,15 +44,6 @@
 		resolved: issues.filter((i) => i.status === 'resolved').length
 	});
 	const overdueCount = $derived(issues.filter(isOverdue).length);
-	const unresolvedCount = $derived(counts.open + counts.in_progress);
-
-	// Summary line — only the segments that matter, else an "all clear" note.
-	const summary = $derived.by(() => {
-		const parts: string[] = [];
-		if (unresolvedCount) parts.push(`${unresolvedCount} active`);
-		if (overdueCount) parts.push(`${overdueCount} overdue`);
-		return parts.length ? parts.join(' · ') : 'All caught up';
-	});
 
 	// Prioritised order: unresolved before resolved → overdue first → soonest due (nulls last) →
 	// higher priority.
@@ -84,7 +75,7 @@
 </script>
 
 {#if issues.length === 0}
-	<div class="rounded-lg border border-border bg-bg">
+	<div class="flex min-h-full items-center justify-center rounded-lg border border-border bg-bg">
 		<EmptyState
 			icon={icon(ClipboardList)}
 			title="No incidents assigned to you"
@@ -92,42 +83,49 @@
 		/>
 	</div>
 {:else}
-	<div class="space-y-4">
-		<!-- Section header. The Topbar owns the page <h1> ("Incidents"); this is the scoped <h2>
-		     subheading + at-a-glance summary, then the status filter. -->
-		<div class="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-			<h2 class="text-base font-semibold text-ink">My incidents</h2>
-			<p class="text-sm text-muted">{summary}</p>
-		</div>
+	<div class="flex min-h-full flex-col gap-4">
+		<!-- Section header, one line: the Topbar owns the page <h1> ("Incidents"); this scoped <h2>
+		     (plus an overdue count when any) sits left, the status filter right. Wraps on mobile. -->
+		<div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+			<div class="flex items-baseline gap-2">
+				<h2 class="text-base font-semibold text-ink">My incidents</h2>
+				{#if overdueCount}
+					<span class="text-sm font-medium text-blocked">{overdueCount} overdue</span>
+				{/if}
+			</div>
 
-		<div class="overflow-x-auto pb-1">
-			<FilterTabs
-				tabs={[
-					{ key: 'open', label: 'Open', count: counts.open },
-					{ key: 'in_progress', label: 'In progress', count: counts.in_progress },
-					{ key: 'resolved', label: 'Resolved', count: counts.resolved },
-					{ key: 'all', label: 'All', count: issues.length }
-				]}
-				active={filter}
-				onselect={(k) => (filter = k)}
-				class="w-max"
-			/>
+			<div class="overflow-x-auto pb-1">
+				<FilterTabs
+					tabs={[
+						{ key: 'open', label: 'Open', count: counts.open },
+						{ key: 'in_progress', label: 'In progress', count: counts.in_progress },
+						{ key: 'resolved', label: 'Resolved', count: counts.resolved },
+						{ key: 'all', label: 'All', count: issues.length }
+					]}
+					active={filter}
+					onselect={(k) => (filter = k)}
+					class="w-max"
+				/>
+			</div>
 		</div>
 
 		{#if visible.length === 0}
-			<div class="rounded-lg border border-border bg-bg">
+			<div class="flex flex-1 items-center justify-center rounded-lg border border-border bg-bg">
 				<EmptyState
 					icon={icon(ClipboardCheck)}
 					title="No {filterLabel[filter]} incidents"
 					description="Nothing here under this filter — try another tab."
-					compact
 				/>
 			</div>
 		{:else}
-			<div class="space-y-2.5">
+			<!-- Stacked on mobile; tiled into columns on large screens so cards aren't full-width. -->
+			<div class="grid grid-cols-1 items-start gap-3 lg:grid-cols-2 2xl:grid-cols-3">
 				{#each visible as issue (issue.id)}
-					<div class="rounded-lg border border-border bg-bg p-4">
-						<div class="min-w-0">
+					<!-- Tiled cards get a uniform height band on large screens (min floor + max ceiling);
+					     content flexes/scrolls, the status form stays pinned at the bottom. Mobile is
+					     natural height. -->
+					<div class="flex flex-col rounded-lg border border-border bg-bg p-4 lg:min-h-[15rem] lg:max-h-[21rem]">
+						<div class="min-h-0 min-w-0 flex-1 lg:overflow-y-auto">
 							<div class="flex flex-wrap items-center gap-2">
 								<h3 class="font-medium text-ink">
 									<a
@@ -146,31 +144,33 @@
 							{#if issue.description}
 								<p class="mt-1 line-clamp-2 text-sm text-muted">{issue.description}</p>
 							{/if}
-							<dl class="mt-2 flex flex-wrap gap-x-6 gap-y-1 text-xs text-muted">
-								<div>
-									<dt class="inline font-medium">AP:</dt>
-									<dd class="inline">{issue.networkName ?? 'General'}</dd>
-								</div>
-								<div>
-									<dt class="inline font-medium">Due:</dt>
-									<dd class="inline" class:text-blocked={isOverdue(issue)}>{due(issue.dueDate)}</dd>
-								</div>
-								{#if issue.assignees.length > 1}
-									<div>
-										<dt class="inline font-medium">Also assigned:</dt>
-										<dd class="inline">
-											{issue.assignees
-												.filter((a) => a.name)
-												.map((a) => a.name)
-												.join(', ')}
-										</dd>
-									</div>
-								{/if}
-							</dl>
 						</div>
 
+						<!-- Footer: metadata sits at the bottom, above the divider + status control. -->
+						<dl class="mt-3 flex shrink-0 flex-wrap gap-x-6 gap-y-1 text-xs text-muted">
+							<div>
+								<dt class="inline font-medium">AP:</dt>
+								<dd class="inline">{issue.networkName ?? 'General'}</dd>
+							</div>
+							<div>
+								<dt class="inline font-medium">Due:</dt>
+								<dd class="inline" class:text-blocked={isOverdue(issue)}>{due(issue.dueDate)}</dd>
+							</div>
+							{#if issue.assignees.length > 1}
+								<div>
+									<dt class="inline font-medium">Also assigned:</dt>
+									<dd class="inline">
+										{issue.assignees
+											.filter((a) => a.name)
+											.map((a) => a.name)
+											.join(', ')}
+									</dd>
+								</div>
+							{/if}
+						</dl>
+
 						<form
-							class="mt-3 flex flex-wrap items-end gap-2 border-t border-border pt-3"
+							class="mt-3 flex shrink-0 flex-wrap items-end gap-2 border-t border-border pt-3"
 							method="post"
 							action="?/updateStatus"
 							use:enhance={() => {
