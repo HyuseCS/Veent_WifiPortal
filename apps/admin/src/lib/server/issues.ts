@@ -378,15 +378,19 @@ export async function createIssue(db: DB, input: IssueInput, createdBy: string):
 	});
 }
 
-/** Update issue fields and reconcile the assignee set (diff add/remove) in one transaction. */
+/**
+ * Update issue fields and reconcile the assignee set (diff add/remove) in one transaction.
+ * Returns the newly-added assignee ids so the caller can notify them (email is a post-commit
+ * side-effect, never inside this tx).
+ */
 export async function updateIssue(
 	db: DB,
 	id: number,
 	input: IssueInput,
 	actorId: string
-): Promise<void> {
+): Promise<string[]> {
 	const networkName = await apName(db, input.networkId);
-	await db.transaction(async (tx) => {
+	return db.transaction(async (tx) => {
 		// Read the pre-update priority so we can record a diff event if it changed.
 		const [before] = await tx
 			.select({ priority: adminIssue.priority })
@@ -458,6 +462,7 @@ export async function updateIssue(
 				});
 			}
 		}
+		return toAdd;
 	});
 }
 

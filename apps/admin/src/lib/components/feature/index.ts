@@ -28,3 +28,4 @@ export { default as IssuesTable } from './IssuesTable.svelte';
 export { default as IssueForm } from './IssueForm.svelte';
 export { default as MyIssuesList } from './MyIssuesList.svelte';
 export { default as Timeline } from './Timeline.svelte';
+export { default as NotificationBell } from './NotificationBell.svelte';

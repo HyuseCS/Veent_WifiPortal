@@ -13,10 +13,18 @@
 	// Owner-only entries (e.g. Staff) are hidden for non-owners. This is cosmetic —
 	// the routes themselves enforce access server-side.
 	let {
-		user
-	}: { user?: { name?: string; email?: string; image?: string | null; role?: string | null } } =
-		$props();
+		user,
+		issuesUnread = 0
+	}: {
+		user?: { name?: string; email?: string; image?: string | null; role?: string | null };
+		/** Unread incident-activity count → badge on the Incidents nav item. */
+		issuesUnread?: number;
+	} = $props();
 	const items = $derived(nav.filter((item) => !item.ownerOnly || user?.role === 'owner'));
+
+	// Which nav item (if any) carries the unread badge, and its capped display value.
+	const badgeFor = (href: string) => (href === '/issues' ? issuesUnread : 0);
+	const badgeLabel = (n: number) => (n > 99 ? '99+' : String(n));
 
 	// Highlight the DESTINATION tab the instant a navigation starts, not after its `load` resolves,
 	// so switching to a slow page (networks/sentry) feels immediate. Falls back to the committed
@@ -129,6 +137,7 @@
 			{#each items as item (item.href)}
 				{@const Icon = item.icon}
 				{@const active = activePath === item.href || activePath.startsWith(item.href + '/')}
+				{@const badge = badgeFor(item.href)}
 				<a
 					href={item.href}
 					aria-current={active ? 'page' : undefined}
@@ -145,12 +154,31 @@
 							aria-hidden="true"
 						></span>
 					{/if}
-					<Icon
-						class="h-5 w-5 shrink-0 transition-colors duration-150 {active
-							? 'text-cta'
-							: 'text-sidebar-muted group-hover:text-white'}"
-					/>
-					{#if !collapsed}{item.label}{/if}
+					<span class="relative shrink-0">
+						<Icon
+							class="h-5 w-5 transition-colors duration-150 {active
+								? 'text-cta'
+								: 'text-sidebar-muted group-hover:text-white'}"
+						/>
+						<!-- Collapsed rail: a dot on the icon stands in for the number pill. -->
+						{#if badge > 0 && collapsed}
+							<span
+								class="absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-cta ring-2 ring-sidebar"
+								aria-hidden="true"
+							></span>
+						{/if}
+					</span>
+					{#if !collapsed}
+						<span class="flex-1">{item.label}</span>
+						{#if badge > 0}
+							<span
+								class="ml-auto inline-flex min-w-5 items-center justify-center rounded-full bg-cta px-1.5 py-0.5 text-[11px] font-semibold text-white"
+								aria-label="{badge} unread"
+							>
+								{badgeLabel(badge)}
+							</span>
+						{/if}
+					{/if}
 				</a>
 			{/each}
 		</div>

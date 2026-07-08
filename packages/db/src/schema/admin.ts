@@ -67,7 +67,10 @@ export const adminProfile = pgTable('admin_profile', {
 	lastActiveAt: timestamp('last_active_at'),
 	phone: text('phone'),
 	jobTitle: text('job_title'),
-	contactEmail: text('contact_email')
+	contactEmail: text('contact_email'),
+	// Notification watermark: unread incident-activity is derived as events newer than this
+	// timestamp (no per-notification rows). Null = never opened the feed → everything unread.
+	notificationsSeenAt: timestamp('notifications_seen_at')
 });
 
 /**

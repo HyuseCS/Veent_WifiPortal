@@ -16,7 +16,49 @@ import {
 	isIssueStatus,
 	type IssueInput
 } from '$lib/server/issues';
+import { listNotifications, markNotificationsRead } from '$lib/server/notifications';
+import { mailer } from '$lib/server/email';
+import { checkAdminEmailLimit } from '$lib/server/emailRateLimit';
+import { issueAssignedEmail } from '$lib/server/emails/issue-assigned';
+import { logger } from '$lib/server/logger';
 import type { Actions, PageServerLoad } from './$types';
+
+const log = logger('issues');
+
+/**
+ * Email each newly-assigned staff member that work landed on them. Best-effort + rate-limited:
+ * a failed/slow send never blocks the assignment (the DB row is truth), and the actor is never
+ * emailed for assigning themselves. Runs AFTER the mutation commits — external I/O, never in-tx.
+ */
+async function notifyAssignees(
+	assigneeIds: string[],
+	actor: { id: string; name?: string | null },
+	issueTitle: string,
+	origin: string
+): Promise<void> {
+	const recipients = assigneeIds.filter((id) => id !== actor.id);
+	if (recipients.length === 0) return;
+	const byId = new Map((await listStaff(db)).map((s) => [s.id, s]));
+	const url = `${origin}/issues`; // Phase 2 will deep-link to /issues/[id]
+	for (const id of recipients) {
+		const staff = byId.get(id);
+		if (!staff?.email) continue;
+		if (await checkAdminEmailLimit(staff.email, actor.id)) continue; // capped → skip this send
+		try {
+			await mailer.send({
+				to: staff.email,
+				...issueAssignedEmail({
+					recipientName: staff.name,
+					actorName: actor.name ?? 'A manager',
+					issueTitle,
+					url
+				})
+			});
+		} catch (err) {
+			log.error('issue-assigned notify send failed:', err);
+		}
+	}
+}
 
 /**
  * Role-aware load. Managers (owner / system_admin) get the full board plus the pickers
@@ -40,6 +82,7 @@ export const load: PageServerLoad = async (event) => {
 			issues,
 			// Timelines for the expanded-row preview, grouped by issue (one query, no N+1).
 			events: await listIssueEventsByIssue(db, issues.map((i) => i.id)),
+			notifications: await listNotifications(db, user.id),
 			assignableStaff: staff
 				.filter((s) => s.status === STAFF_STATUS.active)
 				.map((s) => ({ id: s.id, name: s.name, roleLabel: s.roleLabel })),
@@ -52,6 +95,7 @@ export const load: PageServerLoad = async (event) => {
 		currentUserId: user.id,
 		issues: await listIssuesForAssignee(db, user.id),
 		events: {} as Record<number, import('$lib/server/issues').IssueEventRow[]>,
+		notifications: await listNotifications(db, user.id),
 		assignableStaff: [] as { id: string; name: string; roleLabel: string }[],
 		networks: [] as { id: string; name: string }[]
 	};
@@ -114,6 +158,8 @@ export const actions: Actions = {
 		if ('error' in parsed) return fail(400, { action: 'create', error: parsed.error });
 		parsed.input.assigneeIds = await validAssignees(parsed.input.assigneeIds);
 		const id = await createIssue(db, parsed.input, event.locals.user!.id);
+		// Every assignee on a fresh incident is newly-assigned → notify them all (minus self).
+		await notifyAssignees(parsed.input.assigneeIds, event.locals.user!, parsed.input.title, event.url.origin);
 		return { ok: true, action: 'create', id };
 	},
 
@@ -126,7 +172,9 @@ export const actions: Actions = {
 		const parsed = parseIssueInput(form);
 		if ('error' in parsed) return fail(400, { action: 'update', error: parsed.error, id });
 		parsed.input.assigneeIds = await validAssignees(parsed.input.assigneeIds);
-		await updateIssue(db, id, parsed.input, event.locals.user!.id);
+		const added = await updateIssue(db, id, parsed.input, event.locals.user!.id);
+		// Only NEW assignees get an email (updateIssue returns the diff), never on every edit.
+		await notifyAssignees(added, event.locals.user!, parsed.input.title, event.url.origin);
 		return { ok: true, action: 'update', id };
 	},
 
@@ -163,5 +211,14 @@ export const actions: Actions = {
 		const resolutionNote = String(form.get('resolutionNote') ?? '').trim() || null;
 		await setIssueStatus(db, id, status, { resolutionNote, actorId: userId! });
 		return { ok: true, action: 'updateStatus', id };
+	},
+
+	/** Mark the current user's incident notifications read (bumps their watermark). Any signed-in
+	 *  staff member may clear their OWN feed — no manager gate; the watermark is per-user. */
+	markRead: async (event) => {
+		const userId = event.locals.user?.id;
+		if (!userId) return fail(401, { action: 'markRead', error: 'Not signed in.' });
+		await markNotificationsRead(db, userId);
+		return { ok: true, action: 'markRead' };
 	}
 };

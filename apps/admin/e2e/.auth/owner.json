@@ -2,10 +2,10 @@
   "cookies": [
     {
       "name": "radius-admin.session_token",
-      "value": "SSvEbAMtLLRh3cnDVVqMLvHeh8HGS9Sp.%2FKsDYBXlP7NzsiZspdCfJzA9TcQ1Of4Tyj0utVoxPHM%3D",
+      "value": "u0yfzQ9OaOQdQ6DOqA6PogfQlWrzVQGu.nHCvVNAL9VvOrUtQKfraJ2TgbueFXPsyFwpo5AulpEc%3D",
       "domain": "localhost",
       "path": "/",
-      "expires": 1784083218.706665,
+      "expires": 1784085567.307792,
       "httpOnly": true,
       "secure": false,
       "sameSite": "Lax"
