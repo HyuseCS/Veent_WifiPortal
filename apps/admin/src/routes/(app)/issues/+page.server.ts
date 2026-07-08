@@ -8,6 +8,7 @@ import {
 	listIssuesForAssignee,
 	listIssueEventsByIssue,
 	isAssignee,
+	getIssue,
 	createIssue,
 	updateIssue,
 	setIssueStatus,
@@ -67,7 +68,19 @@ function issueId(form: FormData): number | null {
 	return Number.isInteger(id) && id > 0 ? id : null;
 }
 
-function parseIssueInput(form: FormData): { input: IssueInput } | { error: string } {
+// UTC midnight for "today", matching how due dates are parsed below (T00:00:00Z). Due dates on
+// or after this are allowed; earlier ones are in the past.
+function todayUtcMs(): number {
+	const now = new Date();
+	return Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+}
+
+// `existingDueMs` grandfathers an already-set past due date on edit: keeping an overdue incident's
+// original date is fine, only NEWLY setting a past date is rejected.
+function parseIssueInput(
+	form: FormData,
+	existingDueMs?: number | null
+): { input: IssueInput } | { error: string } {
 	const title = String(form.get('issue-title') ?? '').trim();
 	if (!title) return { error: 'Title is required.' };
 	const description = String(form.get('issue-description') ?? '').trim() || null;
@@ -90,6 +103,11 @@ function parseIssueInput(form: FormData): { input: IssueInput } | { error: strin
 		// via toISOString/UTC) — a local parse would drift the date by a day in non-UTC zones.
 		const d = new Date(`${rawDue}T00:00:00Z`);
 		if (Number.isNaN(d.getTime())) return { error: 'Invalid due date.' };
+		// Reject deadlines in the past — unless this exact date was already on the incident (edit of
+		// an existing overdue item), so managers can still edit without being forced to bump the date.
+		if (d.getTime() < todayUtcMs() && d.getTime() !== existingDueMs) {
+			return { error: 'Due date cannot be in the past.' };
+		}
 		dueDate = d;
 	}
 
@@ -132,7 +150,8 @@ export const actions: Actions = {
 		const form = await event.request.formData();
 		const id = issueId(form);
 		if (id == null) return fail(400, { action: 'update', error: 'Invalid issue.' });
-		const parsed = parseIssueInput(form);
+		const existing = await getIssue(db, id);
+		const parsed = parseIssueInput(form, existing?.dueDate ?? null);
 		if ('error' in parsed) return fail(400, { action: 'update', error: parsed.error, id });
 		parsed.input.assigneeIds = await validAssignees(parsed.input.assigneeIds);
 		const added = await updateIssue(db, id, parsed.input, event.locals.user!.id);
