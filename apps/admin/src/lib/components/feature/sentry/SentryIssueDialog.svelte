@@ -89,24 +89,11 @@
 	const frames = $derived(detail ? [...detail.frames].reverse() : []);
 </script>
 
-<BaseDialog bind:open reset={seedTrack} class="max-w-2xl">
+<BaseDialog bind:open reset={seedTrack} class="max-w-3xl">
 	{#if issue}
-		<div class="flex items-start gap-3">
-			<div class="min-w-0 flex-1">
-				<div class="flex items-center gap-2 text-xs text-muted">
-					{#if issue.shortId}<span class="font-mono">{issue.shortId}</span>{/if}
-					<StatusBadge tone={levelTone(issue.level)} label={issue.level} />
-				</div>
-				<h2 class="mt-1 font-semibold break-words text-ink">{issue.title}</h2>
-			</div>
-			<IconButton
-				icon={X as unknown as Component}
-				label="Close"
-				onclick={() => (open = false)}
-			/>
-		</div>
-
-		<div class="mt-4 max-h-[60vh] space-y-4 overflow-y-auto">
+		<!-- The Sentry error detail (exception → stacktrace → tags → counts). Rendered as the whole
+		     body in read mode, and nested inside the track form as context when tracking. -->
+		{#snippet sentryDetail()}
 			{#if loading}
 				<div class="flex items-center gap-2 py-6 text-sm text-muted">
 					<LoaderCircle class="h-4 w-4 animate-spin" aria-hidden="true" />
@@ -174,100 +161,152 @@
 				<span>Users <span class="font-mono text-ink">{issue.userCount.toLocaleString('en-US')}</span></span>
 				<span>Last seen <span class="text-ink">{seenAgo(issue.lastSeen)}</span></span>
 			</div>
+		{/snippet}
+
+		<!-- Header adapts to mode: the incident action in track mode, the Sentry identity in read mode. -->
+		<div class="flex items-start gap-3">
+			<div class="min-w-0 flex-1">
+				{#if tracking}
+					<div class="flex items-center gap-2 text-ink">
+						<ClipboardPlus class="h-4 w-4 shrink-0 text-brand" aria-hidden="true" />
+						<h2 class="font-semibold">Track as incident</h2>
+					</div>
+					<p class="mt-1 text-xs text-muted">
+						Create an assigned incident from this Sentry error. It stays in the Sentry feed.
+					</p>
+				{:else}
+					<div class="flex items-center gap-2 text-xs text-muted">
+						{#if issue.shortId}<span class="font-mono">{issue.shortId}</span>{/if}
+						<StatusBadge tone={levelTone(issue.level)} label={issue.level} />
+					</div>
+					<h2 class="mt-1 font-semibold break-words text-ink">{issue.title}</h2>
+				{/if}
+			</div>
+			<IconButton icon={X as unknown as Component} label="Close" onclick={() => (open = false)} />
 		</div>
 
-		<!-- Track as incident: snapshot this Sentry error into an assigned incident. Does NOT
-		     resolve/ignore it in Sentry — it stays in the feed. -->
 		{#if tracking}
-			<section class="mt-4 rounded-lg border border-border bg-surface p-3">
-				<h3 class="text-[11px] font-semibold tracking-wider text-muted uppercase">
-					Track as incident
-				</h3>
-				<form
-					class="mt-2 space-y-3"
-					method="post"
-					action="?/track"
-					use:enhance={() => {
-						trackSubmitting = true;
-						return async ({ result, update }) => {
-							if (result.type === 'success') {
-								tracking = false;
-								open = false;
-								await update();
-							} else if (result.type === 'failure') {
-								trackError = (result.data?.error as string) ?? 'Could not create the incident.';
-								await update({ reset: false });
-							} else {
-								await update();
-							}
-							trackSubmitting = false;
-						};
-					}}
-				>
-					<!-- Snapshot fields — read by createIssueFromSentry. -->
-					<input type="hidden" name="sentryIssueId" value={issue.id} />
-					<input type="hidden" name="sentryShortId" value={issue.shortId} />
-					<input type="hidden" name="sentryPermalink" value={issue.permalink} />
-					<input type="hidden" name="sentryTitle" value={issue.title} />
+			<!-- Track container: the incident form IS the outer frame; the Sentry issue it snapshots is
+			     nested inside it as context. Creating the incident does NOT resolve/ignore it in Sentry. -->
+			<form
+				class="mt-4 flex max-h-[72vh] flex-col"
+				method="post"
+				action="?/track"
+				use:enhance={() => {
+					trackSubmitting = true;
+					return async ({ result, update }) => {
+						if (result.type === 'success') {
+							tracking = false;
+							open = false;
+							await update();
+						} else if (result.type === 'failure') {
+							trackError = (result.data?.error as string) ?? 'Could not create the incident.';
+							await update({ reset: false });
+						} else {
+							await update();
+						}
+						trackSubmitting = false;
+					};
+				}}
+			>
+				<!-- Snapshot fields — read by createIssueFromSentry. -->
+				<input type="hidden" name="sentryIssueId" value={issue.id} />
+				<input type="hidden" name="sentryShortId" value={issue.shortId} />
+				<input type="hidden" name="sentryPermalink" value={issue.permalink} />
+				<input type="hidden" name="sentryTitle" value={issue.title} />
 
-					<div class="space-y-1.5">
-						<label for="track-title" class="block text-xs font-medium text-ink">Title</label>
-						<input
-							id="track-title"
-							name="issue-title"
-							bind:value={trackTitle}
-							required
-							maxlength={200}
-							class={inputClass}
-						/>
-					</div>
-
-					<div class="grid gap-3 sm:grid-cols-2">
-						<Select id="issue-priority" label="Priority" options={priorityOptions} bind:value={trackPriority} />
+				<div class="min-h-0 flex-1 space-y-5 overflow-y-auto pr-0.5">
+					<!-- Incident fields (the primary task). -->
+					<div class="space-y-3">
 						<div class="space-y-1.5">
-							<label for="track-due" class="block text-xs font-medium text-ink">Due date (optional)</label>
-							<input id="track-due" name="issue-dueDate" type="date" bind:value={trackDue} class={inputClass} />
+							<label for="track-title" class="block text-xs font-medium text-ink">Title</label>
+							<input
+								id="track-title"
+								name="issue-title"
+								bind:value={trackTitle}
+								required
+								maxlength={200}
+								class={inputClass}
+							/>
 						</div>
-					</div>
 
-					<fieldset class="space-y-1.5">
-						<legend class="block text-xs font-medium text-ink">Assign to</legend>
-						{#if assignableStaff.length === 0}
-							<p class="text-xs text-muted">No active staff to assign.</p>
-						{:else}
-							<div class="max-h-32 space-y-1 overflow-y-auto rounded-lg border border-border p-2">
-								{#each assignableStaff as s (s.id)}
-									<label class="flex min-h-9 items-center gap-2 rounded-md px-2 py-1 hover:bg-bg">
-										<input
-											type="checkbox"
-											name="assigneeId"
-											value={s.id}
-											checked={trackAssignees.includes(s.id)}
-											onchange={(e) => toggleTrackAssignee(s.id, e.currentTarget.checked)}
-											class="h-4 w-4 rounded border-border text-brand focus:ring-brand/30"
-										/>
-										<span class="text-sm text-ink">{s.name}</span>
-										<span class="ml-auto text-xs text-muted">{s.roleLabel}</span>
-									</label>
-								{/each}
+						<div class="grid gap-3 sm:grid-cols-2">
+							<Select id="issue-priority" label="Priority" options={priorityOptions} bind:value={trackPriority} />
+							<div class="space-y-1.5">
+								<label for="track-due" class="block text-xs font-medium text-ink">Due date (optional)</label>
+								<input id="track-due" name="issue-dueDate" type="date" bind:value={trackDue} class={inputClass} />
 							</div>
+						</div>
+
+						<fieldset class="space-y-1.5">
+							<legend class="block text-xs font-medium text-ink">Assign to</legend>
+							{#if assignableStaff.length === 0}
+								<p class="text-xs text-muted">No active staff to assign.</p>
+							{:else}
+								<div class="max-h-32 space-y-1 overflow-y-auto rounded-lg border border-border p-2">
+									{#each assignableStaff as s (s.id)}
+										<label class="flex min-h-9 items-center gap-2 rounded-md px-2 py-1 hover:bg-surface">
+											<input
+												type="checkbox"
+												name="assigneeId"
+												value={s.id}
+												checked={trackAssignees.includes(s.id)}
+												onchange={(e) => toggleTrackAssignee(s.id, e.currentTarget.checked)}
+												class="h-4 w-4 rounded border-border text-brand focus:ring-brand/30"
+											/>
+											<span class="text-sm text-ink">{s.name}</span>
+											<span class="ml-auto text-xs text-muted">{s.roleLabel}</span>
+										</label>
+									{/each}
+								</div>
+							{/if}
+						</fieldset>
+
+						{#if trackError}
+							<p class="text-sm text-blocked" role="alert">{trackError}</p>
 						{/if}
-					</fieldset>
-
-					{#if trackError}
-						<p class="text-sm text-blocked" role="alert">{trackError}</p>
-					{/if}
-
-					<div class="flex justify-end gap-2">
-						<Button type="button" variant="secondary" onclick={() => (tracking = false)}>Cancel</Button>
-						<Button type="submit" loading={trackSubmitting}>Create incident</Button>
 					</div>
-				</form>
-			</section>
-		{/if}
 
-		<div class="mt-5 flex flex-wrap items-center justify-end gap-2 border-t border-border pt-4">
-			{#if !tracking}
+					<!-- The Sentry issue being tracked — nested inside the incident container as context. -->
+					<div class="space-y-4 rounded-lg border border-border p-3">
+						<div class="flex items-start justify-between gap-2">
+							<h3 class="text-[11px] font-semibold tracking-wider text-muted uppercase">Sentry issue</h3>
+							{#if issue.permalink}
+								<!-- absolute external Sentry URL — resolve() (internal paths) doesn't apply. -->
+								<!-- eslint-disable svelte/no-navigation-without-resolve -->
+								<a
+									href={issue.permalink}
+									target="_blank"
+									rel="noopener noreferrer"
+									class="inline-flex shrink-0 items-center gap-1 text-xs font-medium text-brand hover:underline"
+								>
+									Open in Sentry <ExternalLink class="h-3.5 w-3.5" aria-hidden="true" />
+								</a>
+								<!-- eslint-enable svelte/no-navigation-without-resolve -->
+							{/if}
+						</div>
+						<div>
+							<div class="flex items-center gap-2 text-xs text-muted">
+								{#if issue.shortId}<span class="font-mono">{issue.shortId}</span>{/if}
+								<StatusBadge tone={levelTone(issue.level)} label={issue.level} />
+							</div>
+							<p class="mt-1 font-mono text-sm break-words text-ink">{issue.title}</p>
+						</div>
+						{@render sentryDetail()}
+					</div>
+				</div>
+
+				<div class="mt-4 flex justify-end gap-2 border-t border-border pt-4">
+					<Button type="button" variant="secondary" onclick={() => (tracking = false)}>Cancel</Button>
+					<Button type="submit" loading={trackSubmitting}>Create incident</Button>
+				</div>
+			</form>
+		{:else}
+			<div class="mt-4 max-h-[60vh] space-y-4 overflow-y-auto">
+				{@render sentryDetail()}
+			</div>
+
+			<div class="mt-5 flex flex-wrap items-center justify-end gap-2 border-t border-border pt-4">
 				<button
 					type="button"
 					onclick={() => (tracking = true)}
@@ -275,38 +314,38 @@
 				>
 					<ClipboardPlus class="h-4 w-4" aria-hidden="true" /> Track as incident
 				</button>
-			{/if}
-			<form method="post" action="?/resolve" use:enhance={() => async ({ result, update }) => { if (result.type === 'success') open = false; await update(); }}>
-				<input type="hidden" name="id" value={issue.id} />
-				<button
-					type="submit"
-					class="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-border bg-bg px-3 text-sm font-medium text-ink transition-colors hover:border-brand/40 hover:bg-surface focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:outline-none"
-				>
-					<Check class="h-4 w-4" aria-hidden="true" /> Resolve
-				</button>
-			</form>
-			<form method="post" action="?/ignore" use:enhance={() => async ({ result, update }) => { if (result.type === 'success') open = false; await update(); }}>
-				<input type="hidden" name="id" value={issue.id} />
-				<button
-					type="submit"
-					class="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-border bg-bg px-3 text-sm font-medium text-ink transition-colors hover:border-brand/40 hover:bg-surface focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:outline-none"
-				>
-					<BellOff class="h-4 w-4" aria-hidden="true" /> Ignore
-				</button>
-			</form>
-			{#if issue.permalink}
-				<!-- permalink is an absolute external Sentry URL, so resolve() doesn't apply here. -->
-				<!-- eslint-disable svelte/no-navigation-without-resolve -->
-				<a
-					href={issue.permalink}
-					target="_blank"
-					rel="noopener noreferrer"
-					class="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-border bg-bg px-3 text-sm font-medium text-ink transition-colors hover:border-brand/40 hover:bg-surface focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:outline-none"
-				>
-					Open in Sentry <ExternalLink class="h-4 w-4 text-muted" aria-hidden="true" />
-				</a>
-				<!-- eslint-enable svelte/no-navigation-without-resolve -->
-			{/if}
-		</div>
+				<form method="post" action="?/resolve" use:enhance={() => async ({ result, update }) => { if (result.type === 'success') open = false; await update(); }}>
+					<input type="hidden" name="id" value={issue.id} />
+					<button
+						type="submit"
+						class="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-border bg-bg px-3 text-sm font-medium text-ink transition-colors hover:border-brand/40 hover:bg-surface focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:outline-none"
+					>
+						<Check class="h-4 w-4" aria-hidden="true" /> Resolve
+					</button>
+				</form>
+				<form method="post" action="?/ignore" use:enhance={() => async ({ result, update }) => { if (result.type === 'success') open = false; await update(); }}>
+					<input type="hidden" name="id" value={issue.id} />
+					<button
+						type="submit"
+						class="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-border bg-bg px-3 text-sm font-medium text-ink transition-colors hover:border-brand/40 hover:bg-surface focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:outline-none"
+					>
+						<BellOff class="h-4 w-4" aria-hidden="true" /> Ignore
+					</button>
+				</form>
+				{#if issue.permalink}
+					<!-- permalink is an absolute external Sentry URL, so resolve() doesn't apply here. -->
+					<!-- eslint-disable svelte/no-navigation-without-resolve -->
+					<a
+						href={issue.permalink}
+						target="_blank"
+						rel="noopener noreferrer"
+						class="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-border bg-bg px-3 text-sm font-medium text-ink transition-colors hover:border-brand/40 hover:bg-surface focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:outline-none"
+					>
+						Open in Sentry <ExternalLink class="h-4 w-4 text-muted" aria-hidden="true" />
+					</a>
+					<!-- eslint-enable svelte/no-navigation-without-resolve -->
+				{/if}
+			</div>
+		{/if}
 	{/if}
 </BaseDialog>
