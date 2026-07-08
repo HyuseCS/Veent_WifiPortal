@@ -20,6 +20,7 @@ import {
 import { markAllNotificationsRead, markNotificationRead } from '$lib/server/notifications';
 import { notifyAssignees } from '$lib/server/issueNotify';
 import { getIssues as getSentryIssues, isSentryConfigured } from '$lib/server/sentry';
+import type { SentryIssue } from '$lib/server/sentry';
 import type { Actions, PageServerLoad } from './$types';
 
 /**
@@ -54,12 +55,9 @@ export const load: PageServerLoad = async (event) => {
 				.map((s) => ({ id: s.id, name: s.name, roleLabel: s.roleLabel })),
 			networks: networks.map((n) => ({ id: n.id, name: n.name })),
 			sentryConfigured,
-			sentryIssues: (sentry?.issues ?? []).map((s) => ({
-				id: s.id,
-				shortId: s.shortId,
-				title: s.title,
-				permalink: s.permalink
-			}))
+			// Full issue view models — the in-modal picker renders the same table the /sentry page does
+			// (level/events/last-seen + expandable error detail), then snapshots the four track fields.
+			sentryIssues: sentry?.issues ?? []
 		};
 	}
 
@@ -71,7 +69,7 @@ export const load: PageServerLoad = async (event) => {
 		assignableStaff: [] as { id: string; name: string; roleLabel: string }[],
 		networks: [] as { id: string; name: string }[],
 		sentryConfigured: false,
-		sentryIssues: [] as { id: string; shortId: string; title: string; permalink: string }[]
+		sentryIssues: [] as SentryIssue[]
 	};
 };
 
