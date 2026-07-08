@@ -19,6 +19,7 @@ import {
 } from '$lib/server/issues';
 import { markAllNotificationsRead, markNotificationRead } from '$lib/server/notifications';
 import { notifyAssignees } from '$lib/server/issueNotify';
+import { getIssues as getSentryIssues, isSentryConfigured } from '$lib/server/sentry';
 import type { Actions, PageServerLoad } from './$types';
 
 /**
@@ -32,10 +33,15 @@ export const load: PageServerLoad = async (event) => {
 	const canManage = MANAGER_ROLES.includes(user.role as StaffRole);
 
 	if (canManage) {
-		const [issues, staff, networks] = await Promise.all([
+		// The New-incident modal can also track a Sentry error (source='sentry') without leaving the
+		// page, so managers get the unresolved-issue list for its picker. getIssues() degrades to []
+		// internally (never throws), so a Sentry outage just empties the picker.
+		const sentryConfigured = isSentryConfigured();
+		const [issues, staff, networks, sentry] = await Promise.all([
 			listIssues(db),
 			listStaff(db),
-			listNetworkHealth(db)
+			listNetworkHealth(db),
+			sentryConfigured ? getSentryIssues() : Promise.resolve(null)
 		]);
 		return {
 			canManage,
@@ -46,7 +52,14 @@ export const load: PageServerLoad = async (event) => {
 			assignableStaff: staff
 				.filter((s) => s.status === STAFF_STATUS.active)
 				.map((s) => ({ id: s.id, name: s.name, roleLabel: s.roleLabel })),
-			networks: networks.map((n) => ({ id: n.id, name: n.name }))
+			networks: networks.map((n) => ({ id: n.id, name: n.name })),
+			sentryConfigured,
+			sentryIssues: (sentry?.issues ?? []).map((s) => ({
+				id: s.id,
+				shortId: s.shortId,
+				title: s.title,
+				permalink: s.permalink
+			}))
 		};
 	}
 
@@ -56,7 +69,9 @@ export const load: PageServerLoad = async (event) => {
 		issues: await listIssuesForAssignee(db, user.id),
 		events: {} as Record<number, import('$lib/server/issues').IssueEventRow[]>,
 		assignableStaff: [] as { id: string; name: string; roleLabel: string }[],
-		networks: [] as { id: string; name: string }[]
+		networks: [] as { id: string; name: string }[],
+		sentryConfigured: false,
+		sentryIssues: [] as { id: string; shortId: string; title: string; permalink: string }[]
 	};
 };
 

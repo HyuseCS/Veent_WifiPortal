@@ -30,6 +30,8 @@
 		issue={editing}
 		staff={data.assignableStaff}
 		networks={data.networks}
+		sentryIssues={data.sentryIssues}
+		sentryConfigured={data.sentryConfigured}
 	/>
 {:else}
 	<MyIssuesList issues={data.issues} />
