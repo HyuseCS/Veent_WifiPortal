@@ -36,7 +36,7 @@ export const actions: Actions = {
 	comment: async (event) => {
 		const userId = event.locals.user?.id;
 		const id = Number(event.params.id);
-		if (!userId || !Number.isInteger(id)) return fail(400, { error: 'Invalid request.' });
+		if (!userId || !Number.isInteger(id) || id <= 0) return fail(400, { error: 'Invalid request.' });
 
 		const notManager = await requireManager(userId, '');
 		if (notManager && !(await isAssignee(db, id, userId))) {
@@ -57,7 +57,7 @@ export const actions: Actions = {
 	updateStatus: async (event) => {
 		const userId = event.locals.user?.id;
 		const id = Number(event.params.id);
-		if (!userId || !Number.isInteger(id)) return fail(400, { error: 'Invalid request.' });
+		if (!userId || !Number.isInteger(id) || id <= 0) return fail(400, { error: 'Invalid request.' });
 
 		const notManager = await requireManager(userId, '');
 		if (notManager && !(await isAssignee(db, id, userId))) {

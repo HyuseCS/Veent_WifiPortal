@@ -62,7 +62,11 @@
 			.catch((e: unknown) => {
 				if (!(e instanceof DOMException && e.name === 'AbortError')) eventsFailed = true;
 			})
-			.finally(() => (loadingEvents = false));
+			// Only the still-current request may clear the spinner — an aborted (stale) one must not
+			// hide the spinner for the newer fetch that replaced it.
+			.finally(() => {
+				if (!controller.signal.aborted) loadingEvents = false;
+			});
 		return () => controller.abort();
 	});
 </script>

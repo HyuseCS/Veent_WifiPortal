@@ -12,6 +12,7 @@
 	import { SvelteSet } from 'svelte/reactivity';
 	import { enhance } from '$app/forms';
 	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
 	import { Button, EmptyState, IconButton, SearchInput, StatusBadge, Table } from '$lib/components/ui';
 	import Timeline from './Timeline.svelte';
 	import type { AdminIssueRow, IssueEventRow } from '$lib/server/issues';
@@ -48,7 +49,7 @@
 	// left alone — those keep their own behaviour. The title <a> stays the keyboard/right-click path.
 	function openIssue(e: MouseEvent, id: number) {
 		if ((e.target as HTMLElement).closest('a, button, select, input, form, label')) return;
-		goto(`/issues/${id}`);
+		goto(resolve(`/issues/${id}`));
 	}
 
 	const filtered = $derived.by(() => {
@@ -104,7 +105,6 @@
 	{/snippet}
 
 	{#each filtered as issue (issue.id)}
-		<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
 		<!-- Row-wide click opens the incident (see openIssue); the title <a> is the keyboard path. -->
 		<tr
 			class="cursor-pointer align-top hover:bg-surface"
@@ -128,7 +128,7 @@
 					</button>
 					<div class="min-w-0">
 						<a
-							href="/issues/{issue.id}"
+							href={resolve(`/issues/${issue.id}`)}
 							title={issue.title}
 							class="block truncate font-medium text-ink underline-offset-2 hover:text-brand hover:underline"
 						>

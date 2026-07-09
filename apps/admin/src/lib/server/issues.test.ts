@@ -183,7 +183,12 @@ function seqDb(reads: unknown[][]) {
 				from: () => ({
 					where: () => {
 						const r = Promise.resolve(val) as Promise<unknown> & { limit: () => unknown };
-						r.limit = () => Promise.resolve(val);
+						// .limit() is chainable via .for('update') (the locked before-row read in takeIssue).
+						r.limit = () => {
+							const p = Promise.resolve(val) as Promise<unknown> & { for: () => unknown };
+							p.for = () => Promise.resolve(val);
+							return p;
+						};
 						return r;
 					}
 				})

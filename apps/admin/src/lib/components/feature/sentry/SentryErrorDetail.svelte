@@ -26,18 +26,28 @@
 	// Refetch whenever a new issue is opened (keyed on id); abort if it unmounts/disables mid-flight.
 	$effect(() => {
 		const id = enabled ? issue.id : null;
-		if (!id) return;
+		if (!id) {
+			loading = false;
+			return;
+		}
 		detail = null;
 		failed = false;
 		loading = true;
 		const controller = new AbortController();
+		// Guard every state write on the current signal: a stale (aborted) request must not overwrite
+		// detail/failed or clear the spinner for the newer fetch that replaced it.
 		fetch(`/sentry/event?id=${encodeURIComponent(id)}`, { signal: controller.signal })
 			.then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
-			.then((d: SentryEventDetail) => (detail = d))
-			.catch((e: unknown) => {
-				if (!(e instanceof DOMException && e.name === 'AbortError')) failed = true;
+			.then((d: SentryEventDetail) => {
+				if (!controller.signal.aborted) detail = d;
 			})
-			.finally(() => (loading = false));
+			.catch((e: unknown) => {
+				if (!controller.signal.aborted && !(e instanceof DOMException && e.name === 'AbortError'))
+					failed = true;
+			})
+			.finally(() => {
+				if (!controller.signal.aborted) loading = false;
+			});
 		return () => controller.abort();
 	});
 

@@ -77,6 +77,11 @@ export const actions: Actions = {
 		const userId = event.locals.user?.id;
 		if (!userId) return fail(401, { action: 'track', error: 'Not signed in.' });
 
+		// Same throttle as resolve/ignore — track creates an incident + fires notifications, so it
+		// needs the same abuse ceiling. Keyed per signed-in user (30 tracks / 15 min).
+		const rl = await rateLimit('admin_sentry_track', userId, 30, 15 * 60 * 1000);
+		if (!rl.allowed) return fail(429, { action: 'track', error: 'Too many attempts. Please wait a few minutes.' });
+
 		const form = await event.request.formData();
 		const sentryIssueId = String(form.get('sentryIssueId') ?? '').trim();
 		const shortId = String(form.get('sentryShortId') ?? '').trim();

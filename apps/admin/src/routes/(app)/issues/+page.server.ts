@@ -192,7 +192,8 @@ export const actions: Actions = {
 		const id = issueId(form);
 		if (id == null) return fail(400, { action: 'update', error: 'Invalid issue.' });
 		const existing = await getIssue(db, id);
-		const parsed = parseIssueInput(form, existing?.dueDate ?? null);
+		if (!existing) return fail(404, { action: 'update', error: 'Incident not found.', id });
+		const parsed = parseIssueInput(form, existing.dueDate ?? null);
 		if ('error' in parsed) return fail(400, { action: 'update', error: parsed.error, id });
 		parsed.input.assigneeIds = await validAssignees(parsed.input.assigneeIds);
 		const added = await updateIssue(db, id, parsed.input, event.locals.user!.id);

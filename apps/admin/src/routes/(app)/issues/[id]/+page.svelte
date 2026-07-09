@@ -4,6 +4,7 @@
 	import ExternalLink from 'lucide-svelte/icons/external-link';
 	import MapPin from 'lucide-svelte/icons/map-pin';
 	import { enhance } from '$app/forms';
+	import { resolve } from '$app/paths';
 	import { Button, StatusBadge } from '$lib/components/ui';
 	import { Timeline } from '$lib/components/feature';
 	import type { PageData } from './$types';
@@ -43,7 +44,7 @@
 
 <div class="mx-auto flex h-full w-full max-w-6xl flex-col gap-4">
 	<a
-		href="/issues"
+		href={resolve('/issues')}
 		class="inline-flex w-fit items-center gap-1.5 text-sm font-medium text-muted transition-colors hover:text-ink"
 	>
 		<ArrowLeft class="h-4 w-4" aria-hidden="true" />

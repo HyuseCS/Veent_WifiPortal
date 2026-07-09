@@ -33,6 +33,7 @@ import {
 	adminAuthSchema,
 	adminIssue,
 	adminIssueAssignee,
+	adminIssueEvent,
 	adminProfile,
 	creditLedger,
 	customerProfile,
@@ -271,9 +272,21 @@ async function main() {
 
 	for (const { row, assignees } of SEED_INCIDENTS) {
 		const [inserted] = await db.insert(adminIssue).values(row).returning({ id: adminIssue.id });
+		// Mirror the app's createIssue timeline so seeded incidents aren't blank in the history/feed:
+		// a `created` event, then one `assigned` per assignee. ponytail: literal event types (match the
+		// admin_issue_event CHECK) — importing ISSUE_EVENT from app $lib into this script isn't worth it.
+		await db.insert(adminIssueEvent).values({ issueId: inserted.id, actorId: ownerId, type: 'created' });
 		if (assignees.length > 0) {
 			await db.insert(adminIssueAssignee).values(
 				assignees.map((adminUserId) => ({ issueId: inserted.id, adminUserId, assignedBy: ownerId }))
+			);
+			await db.insert(adminIssueEvent).values(
+				assignees.map((adminUserId) => ({
+					issueId: inserted.id,
+					actorId: ownerId,
+					type: 'assigned',
+					toValue: adminUserId
+				}))
 			);
 		}
 	}

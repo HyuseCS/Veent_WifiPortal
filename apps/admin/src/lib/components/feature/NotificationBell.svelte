@@ -3,6 +3,7 @@
 	import Check from 'lucide-svelte/icons/check';
 	import { page } from '$app/state';
 	import { enhance } from '$app/forms';
+	import { resolve } from '$app/paths';
 	import type { NotificationRow } from '$lib/server/notifications';
 
 	/**
@@ -122,7 +123,7 @@
 					{#each notifications as n (n.id)}
 						<li class="flex items-start gap-1 transition-colors hover:bg-surface">
 							<a
-								href="/issues/{n.issueId}"
+								href={resolve(`/issues/${n.issueId}`)}
 								role="menuitem"
 								onclick={() => (open = false)}
 								class="flex min-w-0 flex-1 flex-col gap-0.5 px-3 py-2 outline-none focus-visible:bg-surface"
@@ -156,7 +157,7 @@
 			{/if}
 
 			<a
-				href="/issues/notifications"
+				href={resolve('/issues/notifications')}
 				onclick={() => (open = false)}
 				class="block border-t border-border px-3 py-2.5 text-center text-xs font-medium text-brand outline-none transition-colors hover:bg-surface focus-visible:bg-surface"
 			>

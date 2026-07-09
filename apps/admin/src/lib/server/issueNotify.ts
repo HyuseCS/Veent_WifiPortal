@@ -21,24 +21,31 @@ export async function notifyAssignees(
 ): Promise<void> {
 	const recipients = assigneeIds.filter((id) => id !== actor.id);
 	if (recipients.length === 0) return;
-	const byId = new Map((await listStaff(db)).map((s) => [s.id, s]));
-	const url = `${origin}/issues/${issue.id}`; // deep-link to the incident detail page
-	for (const id of recipients) {
-		const staff = byId.get(id);
-		if (!staff?.email) continue;
-		if (await checkAdminEmailLimit(staff.email, actor.id)) continue; // capped → skip this send
-		try {
-			await mailer.send({
-				to: staff.email,
-				...issueAssignedEmail({
-					recipientName: staff.name,
-					actorName: actor.name ?? 'A manager',
-					issueTitle: issue.title,
-					url
-				})
-			});
-		} catch (err) {
-			log.error('issue-assigned notify send failed:', err);
+	// Whole-body guard so this truly never throws: the incident is already committed by the time we
+	// run, and a failure in listStaff/checkAdminEmailLimit must not bubble up and fail the request
+	// (a retry would then create a DUPLICATE incident). The DB row is the source of truth.
+	try {
+		const byId = new Map((await listStaff(db)).map((s) => [s.id, s]));
+		const url = `${origin}/issues/${issue.id}`; // deep-link to the incident detail page
+		for (const id of recipients) {
+			const staff = byId.get(id);
+			if (!staff?.email) continue;
+			if (await checkAdminEmailLimit(staff.email, actor.id)) continue; // capped → skip this send
+			try {
+				await mailer.send({
+					to: staff.email,
+					...issueAssignedEmail({
+						recipientName: staff.name,
+						actorName: actor.name ?? 'A manager',
+						issueTitle: issue.title,
+						url
+					})
+				});
+			} catch (err) {
+				log.error('issue-assigned notify send failed:', err);
+			}
 		}
+	} catch (err) {
+		log.error('issue-assigned notify failed:', err);
 	}
 }

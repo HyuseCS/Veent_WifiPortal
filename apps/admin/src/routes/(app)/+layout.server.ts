@@ -21,9 +21,12 @@ export const load: LayoutServerLoad = async (event) => {
 	// see adminBypass.ts). Never awaited: it must not add latency to or fail a page load.
 	void refreshAdminBypass(event);
 
-	const role = await getAdminRole(db, event.locals.user.id);
-	// Global unread incident-activity count → drives the sidebar Incidents badge on every page.
-	const issuesUnread = await unreadCount(db, event.locals.user.id);
+	// Independent reads — run them together so a page load waits on one round-trip, not two.
+	// (issuesUnread drives the sidebar Incidents badge on every page.)
+	const [role, issuesUnread] = await Promise.all([
+		getAdminRole(db, event.locals.user.id),
+		unreadCount(db, event.locals.user.id)
+	]);
 	return {
 		user: { ...event.locals.user, role },
 		issuesUnread

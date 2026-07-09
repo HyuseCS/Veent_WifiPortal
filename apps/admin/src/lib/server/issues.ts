@@ -242,11 +242,15 @@ export async function listOpenPool(db: DB): Promise<AdminIssueRow[]> {
  */
 export async function takeIssue(db: DB, issueId: number, userId: string): Promise<boolean> {
 	return db.transaction(async (tx) => {
+		// Lock the incident row so two simultaneous takers serialize: the second waits here, then
+		// re-reads below and sees the first's assignee — without the lock both could pass the checks
+		// and both insert (different adminUserId → the composite PK doesn't stop it).
 		const [issue] = await tx
 			.select({ status: adminIssue.status })
 			.from(adminIssue)
 			.where(eq(adminIssue.id, issueId))
-			.limit(1);
+			.limit(1)
+			.for('update');
 		if (!issue || issue.status !== ISSUE_STATUS.open) return false;
 
 		const existing = await tx
@@ -628,6 +632,9 @@ export async function setIssueStatus(
 			.where(eq(adminIssue.id, id))
 			.limit(1);
 		if (!before) return false;
+		// No transition → touch nothing. Writing resolvedBy/resolvedAt/resolutionNote here without a
+		// matching status_changed event would mutate resolution metadata with no audit trail.
+		if (before.status === status) return false;
 
 		await tx
 			.update(adminIssue)
@@ -640,17 +647,15 @@ export async function setIssueStatus(
 			})
 			.where(eq(adminIssue.id, id));
 
-		if (before.status !== status) {
-			await recordEvent(tx, {
-				issueId: id,
-				actorId: opts.actorId,
-				type: ISSUE_EVENT.statusChanged,
-				fromValue: before.status,
-				toValue: status,
-				// keep the resolution note on the event so the timeline shows why it resolved
-				note: resolving ? (opts.resolutionNote ?? null) : null
-			});
-		}
+		await recordEvent(tx, {
+			issueId: id,
+			actorId: opts.actorId,
+			type: ISSUE_EVENT.statusChanged,
+			fromValue: before.status,
+			toValue: status,
+			// keep the resolution note on the event so the timeline shows why it resolved
+			note: resolving ? (opts.resolutionNote ?? null) : null
+		});
 		return true;
 	});
 }

@@ -4,6 +4,7 @@
 	import Check from 'lucide-svelte/icons/check';
 	import type { Component } from 'svelte';
 	import { enhance } from '$app/forms';
+	import { resolve } from '$app/paths';
 	import { EmptyState } from '$lib/components/ui';
 	import type { PageData } from './$types';
 
@@ -32,7 +33,7 @@
 <div class="mx-auto flex h-full w-full max-w-3xl flex-col gap-4">
 	<div class="flex flex-wrap items-center gap-x-3 gap-y-2">
 		<a
-			href="/issues"
+			href={resolve('/issues')}
 			class="inline-flex w-fit items-center gap-1.5 text-sm font-medium text-muted transition-colors hover:text-ink"
 		>
 			<ArrowLeft class="h-4 w-4" aria-hidden="true" />
@@ -72,7 +73,7 @@
 							class="mt-1.5 h-2 w-2 shrink-0 rounded-full {n.read ? 'bg-transparent' : 'bg-brand'}"
 							aria-hidden="true"
 						></span>
-						<a href="/issues/{n.issueId}" class="min-w-0 flex-1">
+						<a href={resolve(`/issues/${n.issueId}`)} class="min-w-0 flex-1">
 							<span class="block truncate text-sm font-medium text-ink">{n.issueTitle}</span>
 							<span class="block truncate text-xs text-muted">{n.summary}</span>
 							<span class="text-[11px] text-muted">

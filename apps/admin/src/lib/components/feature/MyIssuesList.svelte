@@ -4,6 +4,7 @@
 	import type { Component } from 'svelte';
 	import { enhance } from '$app/forms';
 	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
 	import { Button, EmptyState, FilterTabs, StatusBadge } from '$lib/components/ui';
 	import IssueDetailModal from './IssueDetailModal.svelte';
 	import IssueForm from './IssueForm.svelte';
@@ -67,7 +68,7 @@
 	function onCardClick(e: MouseEvent, issue: AdminIssueRow) {
 		if ((e.target as HTMLElement).closest('a, button, select, input, form, label')) return;
 		if (isPool) openModal(issue);
-		else goto(`/issues/${issue.id}`);
+		else goto(resolve(`/issues/${issue.id}`));
 	}
 
 	// "Report an issue" — the self-report create modal, open to any signed-in staff.
@@ -205,7 +206,7 @@
 									</button>
 								{:else}
 									<a
-										href="/issues/{issue.id}"
+										href={resolve(`/issues/${issue.id}`)}
 										class="rounded-sm underline-offset-2 hover:text-brand hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
 									>
 										{issue.title}
