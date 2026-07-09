@@ -110,12 +110,22 @@ export const actions: Actions = {
 		]);
 
 		const input: IssueInput = { title, description, priority, networkId: null, dueDate, assigneeIds };
-		const id = await createIssueFromSentry(
-			db,
-			{ issueId: sentryIssueId, shortId, permalink, title: sentryTitle },
-			input,
-			userId!
-		);
+		let id: number;
+		try {
+			id = await createIssueFromSentry(
+				db,
+				{ issueId: sentryIssueId, shortId, permalink, title: sentryTitle },
+				input,
+				userId!
+			);
+		} catch (err) {
+			// The partial unique index on sentry_issue_id (source='sentry') is the race-safe guard
+			// against duplicate incidents — a 23505 here means this error is already tracked.
+			if (err && typeof err === 'object' && 'code' in err && err.code === '23505') {
+				return fail(409, { action: 'track', error: 'This Sentry issue is already tracked as an incident.' });
+			}
+			throw err;
+		}
 		// Notify assignees (email + in-app), same as a manual incident. Post-commit, best-effort.
 		await notifyAssignees(assigneeIds, event.locals.user!, { id, title }, event.url.origin);
 		return { action: 'track', ok: true, id };

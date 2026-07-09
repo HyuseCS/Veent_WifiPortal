@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm';
-import { pgTable, serial, integer, text, timestamp, index, primaryKey, check } from 'drizzle-orm/pg-core';
+import { pgTable, serial, integer, text, timestamp, index, uniqueIndex, primaryKey, check } from 'drizzle-orm/pg-core';
 import { adminUser } from './auth-admin';
 
 /**
@@ -46,7 +46,13 @@ export const adminIssue = pgTable(
 	(t) => [
 		check('admin_issue_status_ck', sql`${t.status} in ('open', 'in_progress', 'resolved')`),
 		check('admin_issue_priority_ck', sql`${t.priority} in ('low', 'medium', 'high')`),
-		check('admin_issue_source_ck', sql`${t.source} in ('human', 'sentry')`)
+		check('admin_issue_source_ck', sql`${t.source} in ('human', 'sentry')`),
+		// One incident per Sentry issue. Partial (source='sentry' only) so it never touches human
+		// incidents (all of which have a null sentry_issue_id anyway), and it closes the retry/race
+		// window where createIssueFromSentry could otherwise insert the same error twice.
+		uniqueIndex('admin_issue_sentry_issue_id_key')
+			.on(t.sentryIssueId)
+			.where(sql`${t.source} = 'sentry'`)
 	]
 );
 
