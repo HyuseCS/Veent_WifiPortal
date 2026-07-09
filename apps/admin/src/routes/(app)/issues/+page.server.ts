@@ -66,9 +66,12 @@ export const load: PageServerLoad = async (event) => {
 		};
 	}
 
-	const [issues, pool] = await Promise.all([
+	const [issues, pool, networks] = await Promise.all([
 		listIssuesForAssignee(db, user.id),
-		listOpenPool(db) // the shared self-serve pool — every staff member can see + take from it
+		listOpenPool(db), // the shared self-serve pool — every staff member can see + take from it
+		// Same AP list the manager form uses, for the "Report an issue" self-report modal (?/selfReport)
+		// — not a new exposure, the /networks page is already visible to every signed-in staff member.
+		listNetworkHealth(db)
 	]);
 	return {
 		canManage,
@@ -77,7 +80,7 @@ export const load: PageServerLoad = async (event) => {
 		pool,
 		events: {} as Record<number, import('$lib/server/issues').IssueEventRow[]>,
 		assignableStaff: [] as { id: string; name: string; roleLabel: string }[],
-		networks: [] as { id: string; name: string }[],
+		networks: networks.map((n) => ({ id: n.id, name: n.name })),
 		sentryConfigured: false,
 		sentryIssues: [] as SentryIssue[]
 	};
@@ -165,6 +168,21 @@ export const actions: Actions = {
 			event.url.origin
 		);
 		return { ok: true, action: 'create', id };
+	},
+
+	/** Self-report: any signed-in staff member (not just owner/system_admin) can flag something
+	 *  they noticed. Always unassigned — lands in the shared Open pool for anyone free to take —
+	 *  regardless of what (if anything) was posted as assigneeId, so a tampered request can't
+	 *  smuggle an assignment through this path. */
+	selfReport: async (event) => {
+		const userId = event.locals.user?.id;
+		if (!userId) return fail(401, { action: 'selfReport', error: 'Not signed in.' });
+		const form = await event.request.formData();
+		const parsed = parseIssueInput(form);
+		if ('error' in parsed) return fail(400, { action: 'selfReport', error: parsed.error });
+		parsed.input.assigneeIds = [];
+		const id = await createIssue(db, parsed.input, userId);
+		return { ok: true, action: 'selfReport', id };
 	},
 
 	update: async (event) => {

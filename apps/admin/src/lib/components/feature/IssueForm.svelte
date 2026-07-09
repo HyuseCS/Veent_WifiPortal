@@ -25,7 +25,8 @@
 		staff,
 		networks,
 		sentryIssues = [],
-		sentryConfigured = false
+		sentryConfigured = false,
+		canAssign = true
 	}: {
 		open?: boolean;
 		issue?: AdminIssueRow | null;
@@ -33,6 +34,9 @@
 		networks: { id: string; name: string }[];
 		sentryIssues?: SentryIssue[];
 		sentryConfigured?: boolean;
+		/** False for the assignee self-report path: hides "Assign to" and posts a new incident to
+		 *  ?/selfReport (always unassigned, into the shared Open pool) instead of ?/create. */
+		canAssign?: boolean;
 	} = $props();
 
 	const inputClass =
@@ -101,9 +105,16 @@
 	const today = new Date().toLocaleDateString('en-CA'); // en-CA → ISO-ish YYYY-MM-DD
 	const minDue = $derived(dueDate && dueDate < today ? dueDate : today);
 
-	// Manual → ?/create|?/update on this route; sentry → the shared tracking action on /sentry.
+	// Manual → ?/create|?/update on this route (or ?/selfReport when a non-manager is filing);
+	// sentry → the shared tracking action on /sentry.
 	const formAction = $derived(
-		issue ? '?/update' : mode === 'sentry' ? '/sentry?/track' : '?/create'
+		issue
+			? '?/update'
+			: mode === 'sentry'
+				? '/sentry?/track'
+				: canAssign
+					? '?/create'
+					: '?/selfReport'
 	);
 	const submitLabel = $derived(
 		issue ? 'Save changes' : mode === 'sentry' ? 'Track as incident' : 'Create incident'
@@ -147,8 +158,10 @@
 					<p class="text-xs text-muted">
 						{#if isSentry}
 							Track a Sentry error as an assigned incident
-						{:else}
+						{:else if canAssign}
 							Describe the problem, link an AP, and assign it to staff
+						{:else}
+							Describe the problem and link an AP if it applies
 						{/if}
 					</p>
 				</div>
@@ -312,29 +325,36 @@
 						</div>
 					{/if}
 
-					<fieldset class="space-y-1.5">
-						<legend class="block text-sm font-medium text-ink">Assign to</legend>
-						{#if staff.length === 0}
-							<p class="text-xs text-muted">No active staff to assign.</p>
-						{:else}
-							<div class="max-h-44 space-y-1 overflow-y-auto rounded-lg border border-border p-2">
-								{#each staff as s (s.id)}
-									<label class="flex min-h-11 items-center gap-2 rounded-md px-2 py-1.5 hover:bg-surface">
-										<input
-											type="checkbox"
-											name="assigneeId"
-											value={s.id}
-											checked={assignees.includes(s.id)}
-											onchange={(e) => toggleAssignee(s.id, e.currentTarget.checked)}
-											class="h-4 w-4 rounded border-border text-brand focus:ring-brand/30"
-										/>
-										<span class="text-sm text-ink">{s.name}</span>
-										<span class="ml-auto text-xs text-muted">{s.roleLabel}</span>
-									</label>
-								{/each}
-							</div>
-						{/if}
-					</fieldset>
+					{#if canAssign}
+						<fieldset class="space-y-1.5">
+							<legend class="block text-sm font-medium text-ink">Assign to</legend>
+							{#if staff.length === 0}
+								<p class="text-xs text-muted">No active staff to assign.</p>
+							{:else}
+								<div class="max-h-44 space-y-1 overflow-y-auto rounded-lg border border-border p-2">
+									{#each staff as s (s.id)}
+										<label class="flex min-h-11 items-center gap-2 rounded-md px-2 py-1.5 hover:bg-surface">
+											<input
+												type="checkbox"
+												name="assigneeId"
+												value={s.id}
+												checked={assignees.includes(s.id)}
+												onchange={(e) => toggleAssignee(s.id, e.currentTarget.checked)}
+												class="h-4 w-4 rounded border-border text-brand focus:ring-brand/30"
+											/>
+											<span class="text-sm text-ink">{s.name}</span>
+											<span class="ml-auto text-xs text-muted">{s.roleLabel}</span>
+										</label>
+									{/each}
+								</div>
+							{/if}
+						</fieldset>
+					{:else}
+						<p class="text-xs text-muted">
+							This will be reported unassigned, into the shared Open pool — anyone free can pick it
+							up from there.
+						</p>
+					{/if}
 				</div>
 			</div>
 
