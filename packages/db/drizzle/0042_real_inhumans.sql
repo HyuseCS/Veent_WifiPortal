@@ -1,0 +1,1 @@
+ALTER TABLE "admin_profile" ADD COLUMN "notifications_seen_at" timestamp;

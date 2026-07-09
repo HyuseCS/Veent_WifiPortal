@@ -3,10 +3,12 @@
 // there's no reason to make getDashboard()'s extra stats fetch.
 import { getIssues, isSentryConfigured } from '$lib/server/sentry';
 import type { PageServerLoad } from './$types';
+import { _trackContext } from '../+page.server';
 
 export { actions } from '../+page.server';
 
 export const load: PageServerLoad = async () => {
-	if (!isSentryConfigured()) return { configured: false as const };
-	return getIssues();
+	const ctx = await _trackContext();
+	if (!isSentryConfigured()) return { configured: false as const, ...ctx };
+	return { ...(await getIssues()), ...ctx };
 };

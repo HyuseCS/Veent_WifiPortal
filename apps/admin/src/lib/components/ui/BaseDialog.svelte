@@ -9,16 +9,20 @@
 	 * the open/close boilerplate the admin dialogs each hand-rolled.
 	 *
 	 * `class` overrides only the width (default max-w-sm); the rest of the chrome is shared.
+	 * `padded` (default true) is the inner p-6; pass false for a full-bleed body that fills the
+	 * panel edge-to-edge (e.g. a table that IS the modal).
 	 */
 	let {
 		open = $bindable(false),
 		reset,
 		class: klass = 'max-w-sm',
+		padded = true,
 		children
 	}: {
 		open?: boolean;
 		reset?: () => void;
 		class?: string;
+		padded?: boolean;
 		children: Snippet;
 	} = $props();
 
@@ -41,12 +45,26 @@
 		restoreFocusTo?.focus();
 		restoreFocusTo = null;
 	}
+
+	// Light-dismiss: showModal() has no backdrop-close, so close when a click lands outside the
+	// panel box (i.e. on the ::backdrop — its target is the <dialog> itself, and the point falls
+	// outside its rect). Clicks on the panel's own padding stay inside the rect and don't dismiss.
+	function handleBackdropClick(e: MouseEvent) {
+		if (!el) return;
+		const r = el.getBoundingClientRect();
+		const inside =
+			e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
+		if (!inside) open = false;
+	}
 </script>
 
 <dialog
 	bind:this={el}
 	onclose={handleClose}
-	class="m-auto w-full {klass} rounded-lg border border-border bg-bg p-6 text-ink backdrop:bg-black/50"
+	onclick={handleBackdropClick}
+	class="m-auto w-full {klass} overflow-hidden rounded-lg border border-border bg-bg text-ink backdrop:bg-black/50 {padded
+		? 'p-6'
+		: ''}"
 >
 	{@render children()}
 </dialog>

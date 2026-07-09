@@ -31,6 +31,9 @@ import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 import { eq, sql } from 'drizzle-orm';
 import {
 	adminAuthSchema,
+	adminIssue,
+	adminIssueAssignee,
+	adminIssueEvent,
 	adminProfile,
 	creditLedger,
 	customerProfile,
@@ -40,7 +43,14 @@ import {
 	packages,
 	paymentTransactions
 } from '@veent/db';
-import { LEDGER_TYPE, SESSION_STATUS, STAFF_ROLE, STAFF_STATUS } from '@veent/core';
+import {
+	ISSUE_PRIORITY,
+	ISSUE_STATUS,
+	LEDGER_TYPE,
+	SESSION_STATUS,
+	STAFF_ROLE,
+	STAFF_STATUS
+} from '@veent/core';
 
 // ───────────────────────────── config ─────────────────────────────
 const STAFF_PASSWORD = 'password123'; // shared dev password for every staff login
@@ -167,6 +177,7 @@ async function main() {
 		emailAndPassword: { enabled: true },
 		advanced: { cookiePrefix: 'radius-admin' }
 	});
+	const staffIds = new Map<string, string>(); // email → admin_user.id (for issue seeding)
 	for (const s of STAFF) {
 		// signUpEmail creates the auth user + credential account (hashed password).
 		// ponytail: pending/disabled members get a password too — unrealistic, but the
@@ -175,6 +186,7 @@ async function main() {
 		const res = await auth.api.signUpEmail({
 			body: { name: s.name, email: s.email, password: STAFF_PASSWORD }
 		});
+		staffIds.set(s.email, res.user.id);
 		await db
 			.insert(adminProfile)
 			.values({
@@ -187,6 +199,96 @@ async function main() {
 				target: adminProfile.userId,
 				set: { role: s.role, status: s.status }
 			});
+	}
+
+	// Phase 3b — incidents (admin_issue). A small, representative mix: an unresolved high-priority
+	// AP outage, an in-progress speed complaint with two assignees, a resolved one with a note, and
+	// an unassigned general incident. All human-sourced; Sentry-sourced ones arrive via the app (Phase 4).
+	console.log('▸ Seeding incidents…');
+	const ownerId = staffIds.get('owner@veent.test')!;
+	const adrianId = staffIds.get('adrian@veent.test')!;
+	const beaId = staffIds.get('bea@veent.test')!;
+	const cleoId = staffIds.get('cleo@veent.test')!;
+	const ap0 = apRows[0];
+	const ap1 = apRows[1];
+	const daysFromNow = (n: number) => new Date(Date.now() + n * 86_400_000);
+
+	const SEED_INCIDENTS: {
+		row: typeof adminIssue.$inferInsert;
+		assignees: string[];
+	}[] = [
+		{
+			row: {
+				title: `${ap0.name} access point offline`,
+				description: 'No uplink since this morning; guests in the area cannot connect. Needs an on-site check.',
+				status: ISSUE_STATUS.open,
+				priority: ISSUE_PRIORITY.high,
+				networkId: ap0.id,
+				networkName: ap0.name,
+				dueDate: daysFromNow(1),
+				createdBy: ownerId
+			},
+			assignees: [adrianId]
+		},
+		{
+			row: {
+				title: 'Slow speeds reported near the lobby',
+				description: 'Multiple guests report < 2 Mbps during peak hours. Investigate channel congestion vs backhaul.',
+				status: ISSUE_STATUS.inProgress,
+				priority: ISSUE_PRIORITY.medium,
+				networkId: ap1.id,
+				networkName: ap1.name,
+				dueDate: daysFromNow(4),
+				createdBy: ownerId
+			},
+			assignees: [beaId, cleoId]
+		},
+		{
+			row: {
+				title: 'Captive portal not loading on some Android devices',
+				description: 'Redirect intermittently failed; traced to a stale DNS cache on the gateway.',
+				status: ISSUE_STATUS.resolved,
+				priority: ISSUE_PRIORITY.low,
+				networkName: ap0.name,
+				networkId: ap0.id,
+				resolutionNote: 'Flushed gateway DNS and pinned the portal host. Verified on 3 devices.',
+				resolvedBy: adrianId,
+				resolvedAt: new Date(),
+				createdBy: ownerId
+			},
+			assignees: [adrianId]
+		},
+		{
+			row: {
+				title: 'Draft monthly network health summary',
+				description: 'General ops task — no specific access point.',
+				status: ISSUE_STATUS.open,
+				priority: ISSUE_PRIORITY.high,
+				createdBy: ownerId
+			},
+			assignees: []
+		}
+	];
+
+	for (const { row, assignees } of SEED_INCIDENTS) {
+		const [inserted] = await db.insert(adminIssue).values(row).returning({ id: adminIssue.id });
+		// Mirror the app's createIssue timeline so seeded incidents aren't blank in the history/feed:
+		// a `created` event, then one `assigned` per assignee. ponytail: literal event types (match the
+		// admin_issue_event CHECK) — importing ISSUE_EVENT from app $lib into this script isn't worth it.
+		await db.insert(adminIssueEvent).values({ issueId: inserted.id, actorId: ownerId, type: 'created' });
+		if (assignees.length > 0) {
+			await db.insert(adminIssueAssignee).values(
+				assignees.map((adminUserId) => ({ issueId: inserted.id, adminUserId, assignedBy: ownerId }))
+			);
+			await db.insert(adminIssueEvent).values(
+				assignees.map((adminUserId) => ({
+					issueId: inserted.id,
+					actorId: ownerId,
+					type: 'assigned',
+					toValue: adminUserId
+				}))
+			);
+		}
 	}
 
 	// Phase 4 — customers. Direct inserts; assigned a cohort that fixes their state.

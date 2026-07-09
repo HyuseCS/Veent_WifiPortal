@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { page } from '$app/state';
 	import { invalidateAll } from '$app/navigation';
+	import ArrowLeft from 'lucide-svelte/icons/arrow-left';
 	import RotateCw from 'lucide-svelte/icons/rotate-cw';
 	import Lock from 'lucide-svelte/icons/lock';
 	import SearchX from 'lucide-svelte/icons/search-x';
@@ -67,6 +68,13 @@
 	// A load failure is usually transient — re-running the load is the natural retry. 401/403 are
 	// not retryable, so send those to the login page instead.
 	const authError = $derived(status === 401 || status === 403);
+
+	// Return the operator to where they came from (e.g. the incident board after a bad /issues/[id]),
+	// not a fixed dashboard. Falls back to the dashboard only on a cold/direct load with no history.
+	function goBack() {
+		if (typeof history !== 'undefined' && history.length > 1) history.back();
+		else location.href = '/dashboard';
+	}
 </script>
 
 <div class="grid h-full min-h-[60vh] place-items-center">
@@ -101,12 +109,14 @@
 					<RotateCw class="h-4 w-4" aria-hidden="true" />
 					Try again
 				</button>
-				<a
-					href="/dashboard"
-					class="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-lg border border-border bg-bg px-4 text-sm font-medium text-ink transition-colors hover:bg-surface focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+				<button
+					type="button"
+					onclick={goBack}
+					class="inline-flex min-h-[44px] cursor-pointer items-center justify-center gap-2 rounded-lg border border-border bg-bg px-4 text-sm font-medium text-ink transition-colors hover:bg-surface focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
 				>
-					Back to dashboard
-				</a>
+					<ArrowLeft class="h-4 w-4" aria-hidden="true" />
+					Go back
+				</button>
 			{/if}
 		</div>
 	</div>

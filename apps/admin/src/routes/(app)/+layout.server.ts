@@ -2,6 +2,7 @@ import { redirect } from '@sveltejs/kit';
 import { getAdminRole } from '@veent/core';
 import { db } from '$lib/server/db';
 import { refreshAdminBypass } from '$lib/server/adminBypass';
+import { unreadCount } from '$lib/server/notifications';
 import type { LayoutServerLoad } from './$types';
 
 /** Auth guard for every page in the (app) shell: only signed-in staff get in.
@@ -20,8 +21,14 @@ export const load: LayoutServerLoad = async (event) => {
 	// see adminBypass.ts). Never awaited: it must not add latency to or fail a page load.
 	void refreshAdminBypass(event);
 
-	const role = await getAdminRole(db, event.locals.user.id);
+	// Independent reads — run them together so a page load waits on one round-trip, not two.
+	// (issuesUnread drives the sidebar Incidents badge on every page.)
+	const [role, issuesUnread] = await Promise.all([
+		getAdminRole(db, event.locals.user.id),
+		unreadCount(db, event.locals.user.id)
+	]);
 	return {
-		user: { ...event.locals.user, role }
+		user: { ...event.locals.user, role },
+		issuesUnread
 	};
 };

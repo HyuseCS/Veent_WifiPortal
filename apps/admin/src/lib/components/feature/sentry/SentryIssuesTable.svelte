@@ -2,8 +2,8 @@
 	import ArrowDown from 'lucide-svelte/icons/arrow-down';
 	import ArrowUp from 'lucide-svelte/icons/arrow-up';
 	import BellOff from 'lucide-svelte/icons/bell-off';
-	import Check from 'lucide-svelte/icons/check';
 	import ChevronsUpDown from 'lucide-svelte/icons/chevrons-up-down';
+	import ClipboardPlus from 'lucide-svelte/icons/clipboard-plus';
 	import ExternalLink from 'lucide-svelte/icons/external-link';
 	import ShieldCheck from 'lucide-svelte/icons/shield-check';
 	import TriangleAlert from 'lucide-svelte/icons/triangle-alert';
@@ -22,8 +22,15 @@
 	let {
 		issues,
 		degraded = false,
-		fill = false
-	}: { issues: SentryIssue[]; degraded?: boolean; fill?: boolean } = $props();
+		fill = false,
+		assignableStaff = []
+	}: {
+		issues: SentryIssue[];
+		degraded?: boolean;
+		fill?: boolean;
+		/** Active staff a tracked incident can be assigned to (any viewer may track). */
+		assignableStaff?: { id: string; name: string; roleLabel: string }[];
+	} = $props();
 
 	type SortKey = 'title' | 'level' | 'count' | 'userCount' | 'lastSeen';
 	const columns: { label: string; key?: SortKey; srOnly?: boolean }[] = [
@@ -107,9 +114,13 @@
 	// focused row only (not when focus is on a child control).
 	let selected = $state<SentryIssue | null>(null);
 	let dialogOpen = $state(false);
+	// When true, the dialog opens straight into its "Track as incident" form (the inline row action);
+	// a plain row click opens it in read mode. Read fresh by the dialog's reset on each open.
+	let startTracking = $state(false);
 
-	function openIssue(issue: SentryIssue) {
+	function openIssue(issue: SentryIssue, track = false) {
 		selected = issue;
+		startTracking = track;
 		dialogOpen = true;
 	}
 	function onRowClick(issue: SentryIssue, e: MouseEvent) {
@@ -245,14 +256,11 @@
 			<td data-label="Last seen" class="px-4 py-3 font-mono text-muted">{seenAgo(issue.lastSeen)}</td>
 			<td class="tc-full px-4 py-3">
 				<div class="flex items-center justify-end gap-1">
-					<form method="post" action="?/resolve" use:enhance>
-						<input type="hidden" name="id" value={issue.id} />
-						<IconButton
-							type="submit"
-							icon={Check as unknown as Component}
-							label="Resolve {issue.shortId || issue.title}"
-						/>
-					</form>
+					<IconButton
+						icon={ClipboardPlus as unknown as Component}
+						label="Track {issue.shortId || issue.title} as incident"
+						onclick={() => openIssue(issue, true)}
+					/>
 					<form method="post" action="?/ignore" use:enhance>
 						<input type="hidden" name="id" value={issue.id} />
 						<IconButton
@@ -305,4 +313,4 @@
 	{/if}
 </Table>
 
-<SentryIssueDialog issue={selected} bind:open={dialogOpen} {levelTone} {seenAgo} />
+<SentryIssueDialog issue={selected} bind:open={dialogOpen} {levelTone} {seenAgo} {startTracking} {assignableStaff} />
