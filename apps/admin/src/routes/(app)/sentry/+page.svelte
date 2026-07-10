@@ -24,7 +24,9 @@
 		<div class="hidden md:block">
 			<SentryIssuesTable
 				issues={data.issues}
+				ignoredIssues={data.ignoredIssues}
 				degraded={data.degraded.issues}
+				ignoredDegraded={data.degraded.ignored}
 				assignableStaff={data.assignableStaff}
 			/>
 		</div>
