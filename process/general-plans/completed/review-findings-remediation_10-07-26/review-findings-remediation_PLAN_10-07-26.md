@@ -78,7 +78,7 @@ Admin e2e suite has **10 specs total, 4 of which are IMS** (`incident-detail`,
 | `process/_seeds/general-plans/active/_GUIDE.md` | E3 |
 | `process/development-protocols/vc-system-behavior/05-spec.md` | E6 |
 
-19 fixes across 19 files (C1 and E4 both touch `all-context.md`; D1 touches 2 files —
+19 fixes across 20 files (C1 and E4 both touch `all-context.md`; D1 touches 2 files —
 see VALIDATE addendum). No new/untracked files expected.
 
 **VALIDATE addendum (added at VALIDATE, 10-07-26):** Layer 2 review found that D1's fix
@@ -119,7 +119,7 @@ second edit.**
 - **Package scope**: `apps/admin` (code: A1–A4), repo root (`.gitignore`: B1),
   `process/context/**` (C1–C4, E4), `process/development-protocols/**` (D1–D4, E1, E5, E6),
   `process/general-plans/**` and `process/_seeds/**` (E2, E3), `process/features/**` (C4, E1).
-- **File count**: 19 files touched, 20 discrete edits (D1 now touches 2 files — see
+- **File count**: 20 files touched, 20 discrete edits (D1 now touches 2 files — see
   VALIDATE addendum above).
 - **Size**: every edit is small (1–15 lines); no fix exceeds a single function/section.
 
@@ -264,7 +264,7 @@ second edit.**
 ## Acceptance Criteria
 
 - [x] All 19 checklist items (A1-A4, B1, C1-C4, D1-D4, E1-E6) applied exactly as scoped — no scope creep into the 5 skipped findings (#3, #7, #8/10, #19).
-- [x] `bun test src/lib/server/formValidation.test.ts` and `bun test src/lib/server/issues.test.ts` pass (apps/admin).
+- [x] `bunx vitest run src/lib/server/formValidation.test.ts` and `bunx vitest run src/lib/server/issues.test.ts` pass (apps/admin).
 - [x] Root `bun run check` passes with zero new typecheck errors.
 - [x] `validate-context-discovery.mjs` and `validate-protocol-wiring.mjs` pass with zero new failures.
 - [x] Manual A3/A4 checks confirm no regression in notification-list isolation or e2e browser cleanup.
@@ -277,7 +277,7 @@ second edit.**
 This is a SIMPLE single-pass plan (no phase split). It is considered complete when:
 1. All 19 checklist items are checked off.
 2. All Verification Evidence gates below are green (or explicitly accepted as CONDITIONAL known-gaps for the 2 Agent-Probe / 1 Hybrid rows).
-3. `git diff` scoped to exactly the 19 touched files listed in Touchpoints — no unrelated file changes.
+3. `git diff` scoped to exactly the 20 touched files listed in Touchpoints — no unrelated file changes.
 4. Acceptance Criteria above are all checked.
 
 ## Verification Evidence
@@ -339,7 +339,7 @@ gap-resolution legend:
 - D — backlog test-building stub (named residual; keep-active; continue)
 
 Legacy line form (retained so existing validate-contract consumers still parse):
-- apps/admin (A1-A4): Fully-automated: `bun test src/lib/server/{formValidation,issues}.test.ts` | Agent-probe: manual A3 error-isolation check + A4 browser-cleanup check
+- apps/admin (A1-A4): Fully-automated: `bunx vitest run src/lib/server/{formValidation,issues}.test.ts` | Agent-probe: manual A3 error-isolation check + A4 browser-cleanup check
 - .gitignore (B1): Fully-automated: `git diff .gitignore` inspection
 - process/context/** (C1-C4): Fully-automated: `grep -rn "46 migrations|0000–0045|3/10 IMS" process/context/`
 - process/development-protocols/** (D1-D4): Fully-automated: `validate-context-discovery.mjs` + `validate-protocol-wiring.mjs` + `grep -n "read_order: 7" all-development-protocols.md`
@@ -359,7 +359,7 @@ Dimension findings:
 Open gaps: none — the one CONCERN found (D1 secondary reference) was resolved in-plan (see Plan Update P1 below), not deferred.
 
 What this coverage does NOT prove:
-- `bun test formValidation.test.ts` / `issues.test.ts` prove the specific asserted cases only — they do not prove absence of *other* undiscovered date-parsing or status-transition edge cases outside what the plan's new test case and existing suite already assert.
+- `bunx vitest run formValidation.test.ts` / `issues.test.ts` prove the specific asserted cases only — they do not prove absence of *other* undiscovered date-parsing or status-transition edge cases outside what the plan's new test case and existing suite already assert.
 - `bun run check` proves TypeScript type-soundness only — it does not prove runtime behavior of A1-A4 beyond what the two `bun test` gates above assert, and does not exercise the doc-only changes at all.
 - `validate-context-discovery.mjs` / `validate-protocol-wiring.mjs` prove frontmatter/routing/wiring structure stays valid — they do not prove the *prose content* of C1-C4/D1-D4 is accurate; that accuracy was confirmed manually during this VALIDATE pass via direct line-level reads, not by an automated content-diff gate.
 - The `grep -rn "46 migrations|..."` stale-string checks prove those specific 3 strings are gone — they do not prove no *other* stale count/reference exists anywhere in `process/`; scope is deliberately limited to `process/context/` per the plan's own Acceptance Criteria.
@@ -378,7 +378,7 @@ re-run confirmed both pass (12/12 and 16/16). Verdict unchanged (Gate: PASS).
 
 | # | What changes | Where in plan | Why |
 |---|---|---|---|
-| P1 | Added a second edit to D1 (update `all-development-protocols.md:51` `read_order: 7` → `8`); added a new Touchpoints row for that file; added a new Verification Evidence + Test Gates row (`grep -n "read_order: 7" all-development-protocols.md` → no matches); bumped file/edit counts (18→19 files, 19→20 discrete edits) | Touchpoints, Blast Radius, Group D checklist (D1), Acceptance Criteria, Verification Evidence | Layer 2 review of D1 found that fixing `vc-autoresearch-spec.md`'s `read_order` in isolation leaves a stale duplicate mention in the protocol router file, reintroducing the exact class of doc-drift this plan exists to close. Applied directly rather than left as an open CONCERN since the fix is a one-line addition fully within D1's existing scope. |
+| P1 | Added a second edit to D1 (update `all-development-protocols.md:51` `read_order: 7` → `8`); added a new Touchpoints row for that file; added a new Verification Evidence + Test Gates row (`grep -n "read_order: 7" all-development-protocols.md` → no matches); bumped file/edit counts (19→20 files, 19→20 discrete edits) | Touchpoints, Blast Radius, Group D checklist (D1), Acceptance Criteria, Verification Evidence | Layer 2 review of D1 found that fixing `vc-autoresearch-spec.md`'s `read_order` in isolation leaves a stale duplicate mention in the protocol router file, reintroducing the exact class of doc-drift this plan exists to close. Applied directly rather than left as an open CONCERN since the fix is a one-line addition fully within D1's existing scope. |
 
 No Execute-Agent Instructions or Backlog Artifacts were needed — the single finding was resolved as a Plan Update.
 
@@ -394,15 +394,19 @@ Hard stop conditions / safety constraints:
 - A3's `.catch(() => [])` must be scoped to `listNotifications` only — `role` and `unreadCount` must keep propagating failures.
 - Every verbatim signal string touched by D2/D4 (`Gate: PASS`, `V1 AUTO-PROCEED: ...`, etc.) must be byte-identical after the edit — reword only the surrounding prose.
 - `git diff` at completion must be scoped to exactly the 19 Touchpoints files — no unrelated changes.
-Next phase: EXECUTE — `process/general-plans/active/review-findings-remediation_10-07-26/review-findings-remediation_PLAN_10-07-26.md`
+Next phase: None — plan COMPLETE and archived to `process/general-plans/completed/review-findings-remediation_10-07-26/review-findings-remediation_PLAN_10-07-26.md`; see the closeout REPORT in the same folder.
 Validate contract: inline in plan (see `## Validate Contract` section above)
-Execute start: Fully-automated commands: `cd apps/admin && bun test src/lib/server/formValidation.test.ts`, `cd apps/admin && bun test src/lib/server/issues.test.ts`, root `bun run check`, `node .claude/skills/vc-audit-context/scripts/validate-context-discovery.mjs`, `node .claude/skills/vc-audit-vc/scripts/validate-protocol-wiring.mjs` | Agent-probe: A3 notification-isolation check, A4 browser-cleanup check, Group E visual fence-diff review | high-risk pack: no (no high-risk class present)
+Execute start: Fully-automated commands: `cd apps/admin && bunx vitest run src/lib/server/formValidation.test.ts`, `cd apps/admin && bunx vitest run src/lib/server/issues.test.ts`, root `bun run check`, `node .claude/skills/vc-audit-context/scripts/validate-context-discovery.mjs`, `node .claude/skills/vc-audit-vc/scripts/validate-protocol-wiring.mjs` | Agent-probe: A3 notification-isolation check, A4 browser-cleanup check, Group E visual fence-diff review | high-risk pack: no (no high-risk class present)
 
 ## Resume and Execution Handoff
 
-1. **Selected plan file path**: `process/general-plans/active/review-findings-remediation_10-07-26/review-findings-remediation_PLAN_10-07-26.md`
-2. **Last completed phase or step**: VALIDATE — full V1-V7 sequence run 10-07-26, Gate: PASS
-   (1 CONCERN found and resolved in-plan; see Proposed Plan Updates P1). RESEARCH was
+1. **Selected plan file path**: `process/general-plans/completed/review-findings-remediation_10-07-26/review-findings-remediation_PLAN_10-07-26.md`
+   (archived from `active/` 10-07-26 — plan is COMPLETE).
+2. **Last completed phase or step**: UPDATE PROCESS — full PLAN→VALIDATE→EXECUTE→EVL→UPDATE
+   PROCESS sequence is complete. VALIDATE ran 10-07-26 (Gate: PASS; 1 CONCERN found and
+   resolved in-plan; see Proposed Plan Updates P1); EXECUTE + EVL landed in commits
+   `8d67f7a`/`1d43a84`; UPDATE PROCESS closeout applied 10-07-26 (see
+   `review-findings-remediation_REPORT_10-07-26.md` in this same folder). RESEARCH was
    completed upstream (draft at `~/.claude/plans/resilient-imagining-teapot.md`, fully
    verified at line level; VALIDATE independently re-verified every touched file/line
    directly against live source).
@@ -412,7 +416,7 @@ Execute start: Fully-automated commands: `cd apps/admin && bun test src/lib/serv
    `process/context/database/all-database.md` (routing target for C2),
    `process/context/tests/all-tests.md` (routing target for C3 and D4's script-name
    source of truth).
-5. **Next step for a fresh agent picking up mid-execution**: run `ENTER EXECUTE MODE` on
-   this plan file. All 20 discrete edits (19 findings, D1 now spans 2 files) are ready to
-   implement in checklist order; run the Verification Evidence gates as each group
-   completes.
+5. **Next step**: none — plan is COMPLETE and archived. All 20 discrete edits (19
+   findings, D1 spans 2 files) landed across commits `8d67f7a`/`1d43a84`; UPDATE PROCESS
+   closeout is done. See `review-findings-remediation_REPORT_10-07-26.md` in this folder
+   for the closeout packet.

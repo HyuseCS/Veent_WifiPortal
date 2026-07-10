@@ -73,7 +73,7 @@ metadata:
    regression-check.
 
 9. **SPEC achievement**: No SPEC file exists for this plan (SIMPLE single-pass plan, no
-   phase-program umbrella SPEC). All 10 Verification Evidence / Test-gate rows from the
+   phase-program umbrella SPEC). All 11 Verification Evidence / Test-gate rows from the
    plan's own validate-contract were honored: 8 Fully-Automated rows proven directly this
    session or by the original EXECUTE/EVL run; 2 Agent-Probe rows (A3, A4) and 1 Hybrid row
    (Group E) carried forward from VALIDATE/EXECUTE as originally judged — no criterion rests
