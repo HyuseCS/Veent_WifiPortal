@@ -45,8 +45,13 @@ export function parseDueDate(
 ): { dueDate: Date | null } | { error: string } {
 	const trimmed = raw.trim();
 	if (!trimmed) return { dueDate: null };
-	const d = new Date(`${trimmed}T00:00:00Z`);
+	if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return { error: 'Invalid due date.' };
+	const [y, mo, da] = trimmed.split('-').map(Number);
+	const d = new Date(Date.UTC(y, mo - 1, da));
 	if (Number.isNaN(d.getTime())) return { error: 'Invalid due date.' };
+	if (d.getUTCFullYear() !== y || d.getUTCMonth() + 1 !== mo || d.getUTCDate() !== da) {
+		return { error: 'Invalid due date.' };
+	}
 	if (d.getTime() < todayUtcMs() && d.getTime() !== existingDueMs) {
 		return { error: 'Due date cannot be in the past.' };
 	}

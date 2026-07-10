@@ -72,6 +72,16 @@ describe('parseDueDate', () => {
 		expect(parseDueDate('not-a-date')).toEqual({ error: 'Invalid due date.' });
 	});
 
+	it('rejects an impossible calendar date (does not silently normalize)', () => {
+		expect(parseDueDate('2026-02-31')).toEqual({ error: 'Invalid due date.' });
+	});
+
+	it('still accepts a valid yyyy-mm-dd future date', () => {
+		pin('2026-07-10T09:00:00Z');
+		const r = parseDueDate('2026-12-25');
+		expect('dueDate' in r && r.dueDate?.getTime()).toBe(ms('2026-12-25'));
+	});
+
 	it('rejects a newly-set past date', () => {
 		pin('2026-07-10T09:00:00Z');
 		expect(parseDueDate('2026-07-01')).toEqual({ error: 'Due date cannot be in the past.' });

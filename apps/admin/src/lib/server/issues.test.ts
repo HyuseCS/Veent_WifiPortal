@@ -76,10 +76,14 @@ function fakeDb(before: unknown[] = []) {
 		delete: () => ({ where: () => Promise.resolve(undefined) }),
 		select: () => ({
 			from: () => ({
-				// where() is awaitable (existing-assignee read) AND chainable via .limit() (before-row reads).
+				// where() is awaitable (existing-assignee read) AND chainable via .for()/.limit() (before-row reads).
 				where: () => {
-					const r = Promise.resolve(before) as Promise<unknown> & { limit: () => unknown };
+					const r = Promise.resolve(before) as Promise<unknown> & {
+						limit: () => unknown;
+						for: () => unknown;
+					};
 					r.limit = () => Promise.resolve(before);
+					r.for = () => r;
 					return r;
 				}
 			})

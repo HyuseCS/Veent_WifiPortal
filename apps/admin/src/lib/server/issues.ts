@@ -644,6 +644,7 @@ export async function setIssueStatus(
 			.select({ status: adminIssue.status, resolutionNote: adminIssue.resolutionNote })
 			.from(adminIssue)
 			.where(eq(adminIssue.id, id))
+			.for('update')
 			.limit(1);
 		if (!before) return 'not_found';
 

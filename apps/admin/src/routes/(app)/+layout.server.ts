@@ -31,7 +31,7 @@ export const load: LayoutServerLoad = async (event) => {
 	const [role, issuesUnread, notifications] = await Promise.all([
 		getAdminRole(db, event.locals.user.id),
 		unreadCount(db, event.locals.user.id),
-		onIssues ? listNotifications(db, event.locals.user.id) : Promise.resolve([])
+		onIssues ? listNotifications(db, event.locals.user.id).catch(() => []) : Promise.resolve([])
 	]);
 	return {
 		user: { ...event.locals.user, role },

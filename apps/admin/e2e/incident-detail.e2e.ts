@@ -55,19 +55,24 @@ async function assign(issueId: number, adminUserId: string): Promise<void> {
 async function loginNonManager(email: string): Promise<Page> {
 	const browser = await chromium.launch();
 	const page = await browser.newPage({ baseURL: TEST_ORIGIN });
-	await page.goto('/login');
-	await page.fill('input[name="email"]', email);
-	await page.fill('input[name="password"]', STAFF_PASSWORD);
-	await page.getByRole('button', { name: 'Sign In' }).click();
-	await page.waitForURL('**/enroll-2fa');
-	await page.fill('input[name="password"]', STAFF_PASSWORD);
-	await page.getByRole('button', { name: 'Continue' }).click();
-	const secret = (await page.locator('span.font-mono.select-all').innerText()).trim();
-	await page.locator('input[type="checkbox"]').check();
-	await page.fill('input[name="code"]', totp(secret));
-	await page.getByRole('button', { name: 'Verify & finish' }).click();
-	await page.waitForURL('**/dashboard');
-	return page;
+	try {
+		await page.goto('/login');
+		await page.fill('input[name="email"]', email);
+		await page.fill('input[name="password"]', STAFF_PASSWORD);
+		await page.getByRole('button', { name: 'Sign In' }).click();
+		await page.waitForURL('**/enroll-2fa');
+		await page.fill('input[name="password"]', STAFF_PASSWORD);
+		await page.getByRole('button', { name: 'Continue' }).click();
+		const secret = (await page.locator('span.font-mono.select-all').innerText()).trim();
+		await page.locator('input[type="checkbox"]').check();
+		await page.fill('input[name="code"]', totp(secret));
+		await page.getByRole('button', { name: 'Verify & finish' }).click();
+		await page.waitForURL('**/dashboard');
+		return page;
+	} catch (e) {
+		await browser.close();
+		throw e;
+	}
 }
 
 test('open an incident from the board, read its timeline, and comment', async ({ page }) => {
