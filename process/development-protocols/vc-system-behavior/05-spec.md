@@ -28,7 +28,7 @@ SPEC is the bridge between **RESEARCH** (the facts we gathered) and **INNOVATE**
 
 SPEC sits **immediately after RESEARCH, before INNOVATE**, in the general flow:
 
-```
+```text
 RESEARCH → SPEC → [INNOVATE] → PLAN → VALIDATE → EXECUTE → UPDATE PROCESS
    facts    what/why   how       build
 ```
@@ -40,7 +40,7 @@ RESEARCH → SPEC → [INNOVATE] → PLAN → VALIDATE → EXECUTE → UPDATE PR
 
 In a phase program, SPEC runs **once** during the outer loop and governs every inner phase:
 
-```
+```text
 Outer loop (runs once):  R → S → I → P → PVL → /goal
 Inner loop (per phase):  R → I → P → PVL → E → EVL → UP
 ```
@@ -121,7 +121,7 @@ Use this when any acceptance criterion assumes an external/runtime mechanism wor
 
 A SPEC is a **readable product doc**. Every SPEC file has these sections, in this order. Lead with the user's perspective; keep the language plain.
 
-```
+```text
 ## Summary
 One short paragraph a non-engineer can read: what we're building and why it matters to the user.
 

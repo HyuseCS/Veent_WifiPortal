@@ -5,7 +5,7 @@ date: 09-06-26
 metadata:
   node_type: memory
   type: protocol
-  read_order: 7
+  read_order: 8
   required: false
   read_when: "designing or deeply understanding the autoresearch gap-loop primitive used by PVL/EVL"
 ---
@@ -35,7 +35,7 @@ Find gaps → fix them → repeat until no gaps remain. Extract this loop into a
 
 ## The loop shape (all three use this)
 
-```
+```text
 START
   │
   ▼
@@ -153,7 +153,7 @@ The skill is a loop bookkeeper, not a framework that replaces phase agent logic.
 
 Checked after every research pass, in priority order:
 
-```
+```text
 1. SUCCESS    — agents ALL_CLEAR for K consecutive iterations (verdict)
                OR verify command hits target value (metric)
 2. PLATEAU    — gap count unchanged or increased for 3 consecutive iterations
@@ -265,7 +265,7 @@ loop_status: CONTINUE | HALTED_SUCCESS | HALTED_PLATEAU | HALTED_SEVERITY | HALT
 
 ### Gap entry format
 
-```
+```markdown
 ### GAP-I{N}-{ID} — {short title}
 - **SEVERITY:** FAIL | CONCERN | OBSERVATION
 - **LOCATION:** {file} §{section}
@@ -286,7 +286,7 @@ One TSV file per loop run at `process/features/{feature}/active/{task-slug}_{dd-
 
 Each row = one iteration:
 
-```
+```tsv
 iteration | timestamp | gaps_found | fail_count | concern_count | applied | saturation_status | loop_status | notes
 0         | ...       | 20         | 3          | 12            | 0       | ACTIVE            | CONTINUE    | baseline
 1         | ...       | 15         | 1          | 11            | 14      | ACTIVE            | CONTINUE    | iteration 1 apply complete

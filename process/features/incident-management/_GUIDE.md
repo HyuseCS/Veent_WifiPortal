@@ -20,7 +20,7 @@ resolution flow (including resolution notes).
 - `apps/admin/src/lib/server/emails/issue-assigned.ts` -- assignment email template
 - `packages/db/src/schema/admin-issue.ts` -- incident/issue schema
 - `packages/db/src/schema/admin-issue-event.ts` -- issue event/timeline schema
-- `e2e/incident-detail.e2e.ts`, `e2e/incident-notifications.e2e.ts`, `e2e/incident-sentry.e2e.ts`, `e2e/incident-timeline.e2e.ts` -- E2E coverage
+- `apps/admin/e2e/incident-detail.e2e.ts`, `apps/admin/e2e/incident-notifications.e2e.ts`, `apps/admin/e2e/incident-sentry.e2e.ts`, `apps/admin/e2e/incident-timeline.e2e.ts` -- E2E coverage
 
 ## Related Context
 

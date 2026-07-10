@@ -223,7 +223,7 @@ EVL Steps:
      - If execute-agent reported DONE: may accept execute-agent's run evidence unless step 2 delta check found touchpoint mismatches.
      - If execute-agent reported NEEDS_CONTEXT: treat as DONE_WITH_CONCERNS. Re-run all validate-contract gates from scratch. Create a follow-up plan stub scoped to the area requiring missing context. Record as CONTEXT_PARTIAL: [missing context area] in the EVL summary. Pass the CONTEXT_PARTIAL list to UPDATE PROCESS as part of the EVL handoff summary.
 
-     If uncertain: ask execute-agent to run pnpm test:local one final time.
+     If uncertain: ask execute-agent to run bun test one final time.
 
      Zero-gates edge case — gated on whether the contract developed any behavior at all: if the validate-contract has no fully-automated tier gates (all gates are hybrid, agent-probe, or known-gap), the handling forks on whether the contract developed any behavior.
 

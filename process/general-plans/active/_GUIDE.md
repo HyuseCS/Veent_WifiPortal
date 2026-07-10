@@ -6,7 +6,7 @@ This folder holds implementation plans that are currently in progress.
 
 Plans use the **task-folder convention**: create a subfolder `{slug}_{dd-mm-yy}/` and place the plan file inside it.
 
-```
+```text
 active/
   user-auth_15-03-26/
     user-auth_PLAN_15-03-26.md

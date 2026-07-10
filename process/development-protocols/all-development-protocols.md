@@ -48,7 +48,7 @@ Use this folder for durable, repo-specific operating instructions that must stay
   How `process/context/` is organized, when to create or split groups, how to keep `all-context.md` accurate, and how long-lived knowledge differs from feature plans.
 - `communication-standards.md`
   How agents write human-facing output: answer-first (BLUF), plain language, TL;DR, no filler. Single source of truth for output style; CLAUDE.md, AGENTS.md, prose-producing agents, and report/spec/closeout/clarify skills point here instead of restating it.
-- `vc-autoresearch-spec.md` (optional deep reference; `read_order: 7`, `required: false`)
+- `vc-autoresearch-spec.md` (optional deep reference; `read_order: 8`, `required: false`)
   Deeper design reference for the `vc-autoresearch` loop primitive (the find-gaps → fix → repeat bookkeeper wired into PVL and EVL): canonical domain configs, iteration-report frontmatter schema, and TSV log format. The operative contract is `.claude/skills/vc-autoresearch/SKILL.md`; this file is the design rationale behind it.
 - `autopilot.md`
   Autopilot Mode protocol: trigger phrase detection, consolidated clarification round (one-round rule),

@@ -24,7 +24,7 @@ RESEARCH is the first phase of every non-trivial task. The agent reads the codeb
 
 **Tools allowed:** Read, Grep, Glob, Bash (safe commands only), WebSearch
 
-**Bash whitelist:** `ls`, `cat`, `head`, `tail`, `git status`, `git log`, `git diff`, `find`, `grep`, `date`, `pwd`, `which`
+**Bash whitelist:** `ls`, `cat`, `head`, `tail`, `git status`, `git log`, `git diff`, `find`, `grep`, `sort`, `date`, `pwd`, `which`
 
 **Tools NOT allowed:** Write
 

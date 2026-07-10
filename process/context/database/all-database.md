@@ -151,5 +151,6 @@ Update this group when:
   `apps/customer/src/lib/server/{rateLimit,otpRateLimit}.ts`). `network_health` is read by both the
   admin dashboard and the public locator — `isNetworkHealthStale()` in `network-health.ts` is the
   one shared staleness rule that keeps the two surfaces from disagreeing about whether an AP is live.
-- Migration count is a snapshot (46, `0000`–`0045` as of 2026-07-10) — re-check
-  `ls packages/db/drizzle/*.sql | wc -l` if the exact count matters for a task.
+- Migration count is a snapshot (47, `0000`–`0046` as of 2026-07-10, latest
+  `0046_oval_lorna_dane.sql`) — re-check `ls packages/db/drizzle/*.sql | wc -l` if the
+  exact count matters for a task.

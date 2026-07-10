@@ -601,12 +601,15 @@ After `vc-plan-agent` creates or updates a plan file, before routing to `vc-exec
 
 ### Skip conditions
 
-VALIDATE may be skipped when ALL of the following are true:
+VALIDATE may be skipped via one of two alternative branches:
+
+**Branch (a) — new trivial change.** ALL of the following are true:
 
 1. The change is a single-file edit under 15 lines with no schema, auth, API, or billing surface
 2. No new dependencies, agents, or runtime surfaces are introduced
 3. The user explicitly skips with a stated reason ("skip VALIDATE — trivial rename")
-4. Existing `## Validate Contract` with PASS gate — ask user: "Plan has an existing PASS validate-contract. Re-validate or proceed to EXECUTE?" Under /goal: if `## Inner Loop Refresh Note` exists in the plan file with a date newer than the existing validate-contract date → re-run PVL from V1; if no Refresh Note is found (or Refresh Note date ≤ contract date) → auto-proceed to EXECUTE (vc-validate-agent V1 will independently confirm via the same Refresh Note check). Do not use contract origin (outer vs inner) as the routing signal — the Refresh Note date is the authoritative trigger. **When the auto-proceed path fires, the orchestrator MUST relay the `V1 AUTO-PROCEED: ...` line verbatim in its own chat response — the literal token must appear in the main thread, not only inside the subagent transcript.**
+
+**Branch (b) — existing PASS contract.** The plan already has an `## Validate Contract` with a PASS gate — ask user: "Plan has an existing PASS validate-contract. Re-validate or proceed to EXECUTE?" Under /goal: if `## Inner Loop Refresh Note` exists in the plan file with a date newer than the existing validate-contract date → re-run PVL from V1; if no Refresh Note is found (or Refresh Note date ≤ contract date) → auto-proceed to EXECUTE (vc-validate-agent V1 will independently confirm via the same Refresh Note check). Do not use contract origin (outer vs inner) as the routing signal — the Refresh Note date is the authoritative trigger. **When the auto-proceed path fires, the orchestrator MUST relay the `V1 AUTO-PROCEED: ...` line verbatim in its own chat response — the literal token must appear in the main thread, not only inside the subagent transcript.**
 
 When VALIDATE is skipped, note the skip reason in the plan file or handoff prompt. A plan without
 a validate-contract must document why VALIDATE was skipped.

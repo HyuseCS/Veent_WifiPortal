@@ -52,7 +52,7 @@ permission/trust-boundary logic) — any future work here should invoke the
 
 ## Folder Contents
 
-```
+```text
 process/features/admin-staff-governance/
   active/       -- in-progress plans for this feature (each task lives inside a {slug}_{date}/ task folder)
   completed/    -- archived completed plans

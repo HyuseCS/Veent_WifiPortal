@@ -122,9 +122,9 @@ Section 8 is the canonical owner of this format. vc-plan-agent.md and vc-validat
 
 ### Pre-V1 Smoke Test
 
-Before V1 gate work: run `pnpm typecheck` and `pnpm test:local` scoped to blast radius. If either fails, emit a PRE-CHECK FAIL block and halt — the baseline must be clean before validation begins. (This dirty-baseline halt is a broken-precondition halt, not a safety pause; it halts even under /goal.)
+Before V1 gate work: run `bun run check` and `bun test` scoped to blast radius. If either fails, emit a PRE-CHECK FAIL block and halt — the baseline must be clean before validation begins. (This dirty-baseline halt is a broken-precondition halt, not a safety pause; it halts even under /goal.)
 
-**Baseline is necessary but NOT sufficient.** A clean `pnpm typecheck` + `pnpm test:local` baseline is a precondition for validation, not evidence that the developed behavior works. For every developed surface a clean PASS additionally requires comprehensive test scenarios across the 3 strategies, with at least one NAMED fully-automated E2E/integration scenario planned wherever that surface is automatable (see V3 §Net Gate Rule — Hard E2E gate). A green baseline alone can never lift a developed area to PASS.
+**Baseline is necessary but NOT sufficient.** A clean `bun run check` + `bun test` baseline is a precondition for validation, not evidence that the developed behavior works. For every developed surface a clean PASS additionally requires comprehensive test scenarios across the 3 strategies, with at least one NAMED fully-automated E2E/integration scenario planned wherever that surface is automatable (see V3 §Net Gate Rule — Hard E2E gate). A green baseline alone can never lift a developed area to PASS.
 
 ### Structural Validation
 

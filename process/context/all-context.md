@@ -38,7 +38,7 @@ Every `process/context/` directory has one `all-*.md` entrypoint that acts as an
 
 **The pattern:**
 
-```
+```text
 process/context/
   all-context.md                      <-- THIS FILE: root router
   planning/
@@ -173,7 +173,7 @@ When durable project knowledge changes:
 
 ## Repository Structure
 
-```
+```text
 veent_wifiportal/
 ├── apps/
 │   ├── admin/            -- radius-admin: staff dashboard (src/, e2e/, scripts/, static/, playwright.config.ts)
@@ -181,7 +181,7 @@ veent_wifiportal/
 │   └── locator/          -- veent-locator: public hotspot map, no auth (src/, static/, playwright.config.ts)
 ├── packages/
 │   ├── core/              -- @veent/core: business services + integration providers (src/, scripts/)
-│   └── db/                -- @veent/db: sole Drizzle/Postgres schema source (src/, drizzle/ ← 46 migrations)
+│   └── db/                -- @veent/db: sole Drizzle/Postgres schema source (src/, drizzle/ ← 47 migrations)
 ├── docs/                   -- assets/, design/, dev/, mikrotik/, problems/, runbooks/, use-cases/
 ├── scripts/                 -- dev-cron.ts, idempotent-migrations.ts, setup-prod.ts, ...
 ├── process/                 -- this context/plan/development-protocol system
