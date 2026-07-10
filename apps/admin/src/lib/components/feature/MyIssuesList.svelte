@@ -213,13 +213,6 @@
 									</a>
 								{/if}
 							</h3>
-							{#if isPool}
-								<StatusBadge tone={issue.priorityTone} label={issue.priorityLabel} />
-								<StatusBadge tone={issue.statusTone} label={issue.statusLabel} />
-							{/if}
-							{#if isOverdue(issue)}
-								<StatusBadge tone="blocked" label="Overdue" />
-							{/if}
 						</div>
 						{#if issue.description}
 							<p class="mt-1 line-clamp-2 text-sm text-muted">{issue.description}</p>
@@ -253,7 +246,7 @@
 						<!-- Pool card: a single Take button self-assigns this incident (?/take). A full
 						     update() then reloads both the pool and my incidents. -->
 						<form
-							class="mt-3 flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-border pt-3"
+							class="mt-3 flex shrink-0 flex-wrap items-center gap-2 border-t border-border pt-3"
 							method="post"
 							action="?/take"
 							use:enhance={() => {
@@ -272,14 +265,21 @@
 							}}
 						>
 							<input type="hidden" name="id" value={issue.id} />
-							<Button type="submit" loading={submittingId === issue.id}>Take</Button>
+							<StatusBadge tone={issue.priorityTone} label={issue.priorityLabel} />
+							<StatusBadge tone={issue.statusTone} label={issue.statusLabel} />
+							{#if isOverdue(issue)}
+								<StatusBadge tone="blocked" label="Overdue" />
+							{/if}
+							<div class="ml-auto">
+								<Button type="submit" loading={submittingId === issue.id}>Take</Button>
+							</div>
 							{#if errors[issue.id]}
 								<p class="w-full text-sm text-blocked" role="alert">{errors[issue.id]}</p>
 							{/if}
 						</form>
 					{:else}
 						<form
-							class="mt-3 flex shrink-0 flex-wrap items-end gap-2 border-t border-border pt-3"
+							class="mt-3 flex shrink-0 flex-wrap items-center gap-2 border-t border-border pt-3"
 							method="post"
 							action="?/updateStatus"
 							use:enhance={() => {
@@ -304,44 +304,41 @@
 							}}
 						>
 							<input type="hidden" name="id" value={issue.id} />
-							<div class="space-y-1">
-								<label for="status-{issue.id}" class="block text-xs font-medium text-ink">Status</label>
-								<select
-									id="status-{issue.id}"
-									name="status"
-									value={statusOf(issue)}
-									disabled={submittingId === issue.id}
-									onchange={(e) => {
-										draft[issue.id] = e.currentTarget.value;
-										e.currentTarget.form?.requestSubmit();
-									}}
-									class="min-h-11 cursor-pointer rounded-lg border border-border bg-bg px-2.5 py-1.5 text-sm text-ink hover:border-brand/40 focus:border-brand focus:ring-2 focus:ring-brand/20 focus:outline-none"
-								>
-									{#each statusOptions as o (o.value)}
-										<option value={o.value}>{o.label}</option>
-									{/each}
-								</select>
-							</div>
+							<label for="status-{issue.id}" class="sr-only">Status</label>
+							<select
+								id="status-{issue.id}"
+								name="status"
+								value={statusOf(issue)}
+								disabled={submittingId === issue.id}
+								onchange={(e) => {
+									draft[issue.id] = e.currentTarget.value;
+									e.currentTarget.form?.requestSubmit();
+								}}
+								class="min-h-11 w-auto cursor-pointer rounded-lg border border-border bg-bg px-2 py-1.5 text-sm text-ink hover:border-brand/40 focus:border-brand focus:ring-2 focus:ring-brand/20 focus:outline-none"
+							>
+								{#each statusOptions as o (o.value)}
+									<option value={o.value}>{o.label}</option>
+								{/each}
+							</select>
 
 							{#if statusOf(issue) === 'resolved'}
-								<div class="min-w-0 flex-1 space-y-1">
-									<label for="note-{issue.id}" class="block text-xs font-medium text-ink">
-										Resolution note (optional)
-									</label>
-									<input
-										id="note-{issue.id}"
-										name="resolutionNote"
-										value={issue.resolutionNote ?? ''}
-										placeholder="What fixed it?"
-										onchange={(e) => e.currentTarget.form?.requestSubmit()}
-										class="min-h-11 w-full rounded-lg border border-border bg-bg px-2.5 py-1.5 text-sm text-ink hover:border-brand/40 focus:border-brand focus:ring-2 focus:ring-brand/20 focus:outline-none"
-									/>
-								</div>
+								<label for="note-{issue.id}" class="sr-only">Resolution note (optional)</label>
+								<input
+									id="note-{issue.id}"
+									name="resolutionNote"
+									value={issue.resolutionNote ?? ''}
+									placeholder="What fixed it?"
+									onchange={(e) => e.currentTarget.form?.requestSubmit()}
+									class="min-h-11 min-w-0 flex-1 rounded-lg border border-border bg-bg px-2.5 py-1.5 text-sm text-ink hover:border-brand/40 focus:border-brand focus:ring-2 focus:ring-brand/20 focus:outline-none"
+								/>
 							{/if}
 
 							<div class="ml-auto flex items-center gap-2">
 								<StatusBadge tone={issue.priorityTone} label={issue.priorityLabel} />
 								<StatusBadge tone={issue.statusTone} label={issue.statusLabel} />
+								{#if isOverdue(issue)}
+									<StatusBadge tone="blocked" label="Overdue" />
+								{/if}
 								{#if submittingId === issue.id}
 									<span class="text-xs text-muted">Saving…</span>
 								{/if}

@@ -46,21 +46,37 @@
 		restoreFocusTo = null;
 	}
 
-	// Light-dismiss: showModal() has no backdrop-close, so close when a click lands outside the
-	// panel box (i.e. on the ::backdrop — its target is the <dialog> itself, and the point falls
-	// outside its rect). Clicks on the panel's own padding stay inside the rect and don't dismiss.
-	function handleBackdropClick(e: MouseEvent) {
-		if (!el) return;
+	// Light-dismiss: showModal() has no backdrop-close, so close when a genuine click lands on the
+	// ::backdrop. A coordinate-only check is not enough (L1): Firefox dispatches keyboard-activated
+	// button clicks with clientX/Y = 0 (which read as "outside" and wrongly closed the modal), and a
+	// text-selection drag that starts inside an input but ends over the backdrop fires a click on
+	// <dialog> with outside coords (closing the form mid-edit). So we require BOTH: the pointer press
+	// STARTED on the backdrop, AND the resulting click's target IS the <dialog> with outside coords.
+	let pressedOnBackdrop = false;
+
+	function isOutsidePanel(e: { clientX: number; clientY: number }): boolean {
+		if (!el) return false;
 		const r = el.getBoundingClientRect();
 		const inside =
 			e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
-		if (!inside) open = false;
+		return !inside;
+	}
+
+	function handleBackdropPointerDown(e: PointerEvent) {
+		pressedOnBackdrop = e.target === el && isOutsidePanel(e);
+	}
+
+	function handleBackdropClick(e: MouseEvent) {
+		const dismiss = pressedOnBackdrop && e.target === el && isOutsidePanel(e);
+		pressedOnBackdrop = false;
+		if (dismiss) open = false;
 	}
 </script>
 
 <dialog
 	bind:this={el}
 	onclose={handleClose}
+	onpointerdown={handleBackdropPointerDown}
 	onclick={handleBackdropClick}
 	class="m-auto w-full {klass} overflow-hidden rounded-lg border border-border bg-bg text-ink backdrop:bg-black/50 {padded
 		? 'p-6'

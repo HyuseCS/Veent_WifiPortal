@@ -156,7 +156,7 @@
 									statusDraft = null; // re-sync to the saved (reloaded) value
 									statusError = '';
 								}
-								await update(); // reload → badges + timeline reflect the change
+								await update({ reset: false }); // reload → badges + timeline reflect the change (reset:false so the native form.reset doesn't snap the Svelte-managed <select> back to the first option after a note-only edit)
 							}
 							statusSubmitting = false;
 						};

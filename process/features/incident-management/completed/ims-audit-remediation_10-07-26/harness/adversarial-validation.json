@@ -1,0 +1,45 @@
+{
+  "task": "ims-audit-remediation (PR #74 IMS audit, 13 findings, 5 phases)",
+  "scenarios": [
+    {
+      "scenario": "H1: non-manager staff POSTs sentryPermalink=javascript:alert(...) to ?/track; a manager/assignee later clicks 'Open in Sentry' -> attacker JS runs in their session (staff->manager escalation).",
+      "ruled_out": true,
+      "rationale": "?/track now runs validateSentrySnapshot: any non-empty permalink not starting with 'https://' -> fail(400). Covered by map.test.ts (javascript:/http:/protocol-relative all -> null). Svelte already HTML-escapes; the scheme gate closes the href-scheme vector. RESIDUAL (backlog): host is not pinned to the configured Sentry org, so an attacker-controlled https host is still storable — noted for backlog hardening, lower severity than scheme injection."
+    },
+    {
+      "scenario": "H1: tampered POST stores megabyte-scale sentryTitle / malformed sentryIssueId to fabricate or bloat a 'Tracked from Sentry' incident.",
+      "ruled_out": true,
+      "rationale": "issueId must match /^\\d{1,32}$/, shortId /^[A-Za-z0-9._-]{0,64}$/, title capped <=500 — else fail(400). Provenance check against the Sentry API (M4d) is explicitly backlog, so a fabricated-but-well-formed sentryIssueId is still possible (documented residual, integrity nit only)."
+    },
+    {
+      "scenario": "M4b: tampered POST stores unbounded title/description on ?/create,?/update,?/selfReport to exhaust storage.",
+      "ruled_out": true,
+      "rationale": "parseIssueInput now caps title<=200 and description<=5000 server-side (resolutionNote<=2000 and snapshot caps landed in Phase 1); comment body was already 2000-capped."
+    },
+    {
+      "scenario": "M1: assign a staff member to a long-lived incident -> they inherit its entire pre-assignment history as unread (badge inflation / information surfacing of activity that predates them).",
+      "ruled_out": true,
+      "rationale": "assigneeJoinOn adds lte(assignee.assignedAt, event.createdAt), so only events at/after assignment surface. NOTE: SQL semantics proven at the e2e + browser tier only (unit fakeDb cannot exercise the WHERE/JOIN) — deferred to EVL, not yet runtime-confirmed in this session."
+    },
+    {
+      "scenario": "M3: a resolved (or in-progress) incident whose assignees were later removed is readable — full timeline + resolution note — by ANY signed-in staff via /issues/[id]/detail.",
+      "ruled_out": true,
+      "rationale": "isPoolItem now requires status === ISSUE_STATUS.open, so only open+unassigned pool incidents are broadly readable; a resolved/in-progress unassigned incident 404s to a non-manager non-assignee (managers still see all, by design). Type-proven via bun run check; runtime e2e assertion added, deferred to EVL."
+    },
+    {
+      "scenario": "M2: leaked better-auth session cookie + TOTP secret committed to the repo grant standing test-owner access.",
+      "ruled_out": false,
+      "rationale": "PARTIAL: files are staged for git rm --cached and gitignored so future runs won't re-commit them, but the previously-committed secret remains in git history. NOT fully ruled out until the secret is rotated. Test-env-only (localhost throwaway DB), so production exposure is nil, but rotation is required to close the residual."
+    },
+    {
+      "scenario": "L4/notifications: a removed person is silently dropped from the audience of the very unassignment event that removed them (never learns they were unassigned).",
+      "ruled_out": true,
+      "rationale": "notifWhere ORs in (type='unassigned' AND toValue=userId), so the removed person still receives their own unassignment even though their assignee row is gone. SQL semantics deferred to e2e/browser tier (unit is JS-shape only)."
+    },
+    {
+      "scenario": "L6c: markNotificationRead accepts a valid event id on an incident the caller cannot see (info leak / cross-incident tampering).",
+      "ruled_out": true,
+      "rationale": "The read row is (user,event)-scoped with a composite PK; recording it neither reveals nor mutates anything outside the caller's own feed — it parks a marker no query of theirs surfaces. Harmless by construction (comment amended)."
+    }
+  ]
+}

@@ -5,6 +5,7 @@
 	import UserMinus from 'lucide-svelte/icons/user-minus';
 	import Flag from 'lucide-svelte/icons/flag';
 	import MessageSquare from 'lucide-svelte/icons/message-square';
+	import PenLine from 'lucide-svelte/icons/pen-line';
 	import History from 'lucide-svelte/icons/history';
 	import type { Component } from 'svelte';
 	import { EmptyState } from '$lib/components/ui';
@@ -27,7 +28,8 @@
 		assigned: { icon: icon(UserPlus), tone: 'text-online' },
 		unassigned: { icon: icon(UserMinus), tone: 'text-muted' },
 		priority_changed: { icon: icon(Flag), tone: 'text-blocked' },
-		comment: { icon: icon(MessageSquare), tone: 'text-ink' }
+		comment: { icon: icon(MessageSquare), tone: 'text-ink' },
+		note_edited: { icon: icon(PenLine), tone: 'text-ink' }
 	};
 	const metaOf = (t: IssueEventType) => META[t] ?? { icon: icon(History), tone: 'text-muted' };
 

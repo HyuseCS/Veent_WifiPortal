@@ -1,5 +1,5 @@
 import { error, json, type RequestEvent } from '@sveltejs/kit';
-import { getAdminRole, MANAGER_ROLES } from '@veent/core';
+import { getAdminRole, ISSUE_STATUS, MANAGER_ROLES } from '@veent/core';
 import { db } from '$lib/server/db';
 import { getIssue, listIssueEvents, isAssignee } from '$lib/server/issues';
 import type { RequestHandler } from './$types';
@@ -26,7 +26,9 @@ export const GET: RequestHandler = async (event: RequestEvent) => {
 
 	const role = await getAdminRole(db, userId);
 	const canManage = !!role && MANAGER_ROLES.includes(role);
-	const isPoolItem = issue.assignees.length === 0;
+	// Parity with listOpenPool() = OPEN *and* unassigned. A resolved/in-progress incident whose
+	// assignees were later removed must NOT fall back into the shared pool audience (M3).
+	const isPoolItem = issue.assignees.length === 0 && issue.status === ISSUE_STATUS.open;
 	if (!canManage && !isPoolItem && !(await isAssignee(db, id, userId))) {
 		throw error(404, 'Incident not found.');
 	}

@@ -22,6 +22,12 @@ describe('NOTIFIABLE_EVENTS', () => {
 	it("includes 'assigned'", () => {
 		expect(NOTIFIABLE_EVENTS).toContain('assigned');
 	});
+	it("includes 'unassigned' (L4 audience exception routes on this type)", () => {
+		expect(NOTIFIABLE_EVENTS).toContain('unassigned');
+	});
+	it("excludes 'note_edited' (resolution-note edits are deliberately non-notifiable)", () => {
+		expect(NOTIFIABLE_EVENTS).not.toContain('note_edited');
+	});
 });
 
 /** Chainable stand-in: every builder call returns the proxy; the terminal (`where` for the count,
@@ -94,6 +100,37 @@ describe('listNotifications', () => {
 				createdAt: new Date('2026-07-07T00:00:00Z').getTime(),
 				read: true,
 				readAt: readAt.getTime()
+			}
+		]);
+	});
+
+	it("maps an 'unassigned' row to its summary (L4 removed-person feed item)", async () => {
+		// JS-shape only: the fakeDb returns this row regardless of the WHERE/JOIN, so this proves the
+		// row→summary mapping for an unassignment, NOT the SQL audience predicate (that is the e2e +
+		// browser scenario 4). See the module's SQL note.
+		const db = fakeDb('limit', [
+			{
+				id: 20,
+				issueId: 7,
+				issueTitle: 'AP flapping',
+				type: 'unassigned',
+				fromValue: null,
+				toValue: 'u1',
+				createdAt: new Date('2026-07-09T00:00:00Z'),
+				targetName: 'Cara Diaz',
+				readAt: null
+			}
+		]);
+		const rows = await listNotifications(db, 'u1', { unreadOnly: true });
+		expect(rows).toEqual([
+			{
+				id: 20,
+				issueId: 7,
+				issueTitle: 'AP flapping',
+				summary: 'Unassigned Cara Diaz',
+				createdAt: new Date('2026-07-09T00:00:00Z').getTime(),
+				read: false,
+				readAt: null
 			}
 		]);
 	});

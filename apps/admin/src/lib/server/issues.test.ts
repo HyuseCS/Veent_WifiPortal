@@ -76,10 +76,14 @@ function fakeDb(before: unknown[] = []) {
 		delete: () => ({ where: () => Promise.resolve(undefined) }),
 		select: () => ({
 			from: () => ({
-				// where() is awaitable (existing-assignee read) AND chainable via .limit() (before-row reads).
+				// where() is awaitable (existing-assignee read) AND chainable via .for()/.limit() (before-row reads).
 				where: () => {
-					const r = Promise.resolve(before) as Promise<unknown> & { limit: () => unknown };
+					const r = Promise.resolve(before) as Promise<unknown> & {
+						limit: () => unknown;
+						for: () => unknown;
+					};
 					r.limit = () => Promise.resolve(before);
+					r.for = () => r;
 					return r;
 				}
 			})
@@ -129,14 +133,37 @@ describe('createIssue events', () => {
 
 describe('setIssueStatus events', () => {
 	it('records a status_changed event when the status actually changes', async () => {
-		const { db, inserts } = fakeDb([{ status: 'open' }]);
-		await setIssueStatus(db, 1, 'in_progress', { actorId: 'mgr' });
+		const { db, inserts } = fakeDb([{ status: 'open', resolutionNote: null }]);
+		const result = await setIssueStatus(db, 1, 'in_progress', { actorId: 'mgr' });
+		expect(result).toBe('updated');
 		expect(eventTypes(inserts)).toEqual([ISSUE_EVENT.statusChanged]);
 	});
 
-	it('records nothing when the status is unchanged', async () => {
-		const { db, inserts } = fakeDb([{ status: 'open' }]);
-		await setIssueStatus(db, 1, 'open', { actorId: 'mgr' });
+	it('records nothing when a non-resolved status is unchanged', async () => {
+		const { db, inserts } = fakeDb([{ status: 'open', resolutionNote: null }]);
+		const result = await setIssueStatus(db, 1, 'open', { actorId: 'mgr' });
+		expect(result).toBe('unchanged');
+		expect(eventTypes(inserts)).toEqual([]);
+	});
+
+	it('records a note_edited event when an already-resolved note is changed (H2)', async () => {
+		const { db, inserts } = fakeDb([{ status: 'resolved', resolutionNote: 'old' }]);
+		const result = await setIssueStatus(db, 1, 'resolved', { resolutionNote: 'new', actorId: 'mgr' });
+		expect(result).toBe('updated');
+		expect(eventTypes(inserts)).toEqual([ISSUE_EVENT.noteEdited]);
+	});
+
+	it('no-ops when an already-resolved note is unchanged', async () => {
+		const { db, inserts } = fakeDb([{ status: 'resolved', resolutionNote: 'same' }]);
+		const result = await setIssueStatus(db, 1, 'resolved', { resolutionNote: 'same', actorId: 'mgr' });
+		expect(result).toBe('unchanged');
+		expect(eventTypes(inserts)).toEqual([]);
+	});
+
+	it('returns not_found when the incident id does not exist', async () => {
+		const { db, inserts } = fakeDb([]); // before row read returns nothing
+		const result = await setIssueStatus(db, 999, 'resolved', { resolutionNote: 'x', actorId: 'mgr' });
+		expect(result).toBe('not_found');
 		expect(eventTypes(inserts)).toEqual([]);
 	});
 });

@@ -1,12 +1,14 @@
 /**
  * Phase 5 — incident notifications.
  *
- * The feed is watermark-derived: a staff member's unread items are notifiable timeline events on
- * incidents they're assigned to, done by someone else, newer than their `notifications_seen_at`.
+ * The feed uses a per-event read model: a staff member's unread items are notifiable timeline
+ * events on incidents they're assigned to (from their assignment onward), done by someone else,
+ * with NO `admin_notification_read` row for that (user, event). Reading marks individual events by
+ * inserting a read row; "Mark all read" inserts a read row for every currently-unread event.
  * As the seeded owner we: create an incident assigned to ourselves (our OWN 'assigned' event must
  * NOT notify us — self-exclusion), then simulate another admin acting on it (a status change by
  * adrian) and assert the bell + count light up, the dropdown lists it, and "Mark all read" clears
- * it (watermark bump). Assigning a second person also exercises the stub email path (no real send).
+ * it (a read row per event). Assigning a second person also exercises the stub email path (no real send).
  */
 import { test, expect } from '@playwright/test';
 import postgres from 'postgres';
@@ -59,7 +61,7 @@ test('assignee is notified of others’ activity; own action is silent; mark-all
 	await dlg.getByLabel('Title').fill(TITLE);
 	await dlg.locator(`input[name="assigneeId"][value="${ownerId}"]`).check();
 	await dlg.locator(`input[name="assigneeId"][value="${adrianId}"]`).check();
-	await dlg.getByRole('button', { name: 'Create issue' }).click();
+	await dlg.getByRole('button', { name: 'Create incident' }).click();
 
 	await expect.poll(() => issueIdByTitle(TITLE)).not.toBeNull();
 	const id = (await issueIdByTitle(TITLE))!;
@@ -100,7 +102,7 @@ test('mark a single notification done, and browse read + unread in the history',
 	const dlg = page.locator('dialog[open]');
 	await dlg.getByLabel('Title').fill(TITLE2);
 	await dlg.locator(`input[name="assigneeId"][value="${ownerId}"]`).check();
-	await dlg.getByRole('button', { name: 'Create issue' }).click();
+	await dlg.getByRole('button', { name: 'Create incident' }).click();
 	await expect.poll(() => issueIdByTitle(TITLE2)).not.toBeNull();
 	const id = (await issueIdByTitle(TITLE2))!;
 

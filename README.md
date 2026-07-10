@@ -302,3 +302,49 @@ The better-auth tables are hand-maintained in `packages/db`. If you change an ap
 config and want better-auth to emit the schema, run `bun run --filter veent-customer auth:schema`
 (or `veent-admin`) — it writes a `auth-*.generated.ts` you can reconcile into the prefixed
 factory.
+
+## Agent Harness (vibecode-pro-max-kit)
+
+AI-assisted development runs through the [vibecode-pro-max-kit](https://github.com/withkynam/vibecode-pro-max-kit)
+harness. The harness config itself (`.claude/`, `.codex/`, `.agents/`, `CLAUDE.md`, `AGENTS.md`) is
+**machine-local and gitignored** — install it per-machine with the kit's `install.sh`, then run
+`vc-setup`. Durable project knowledge and plans live in the **tracked** `process/` directory
+(`process/context/all-context.md` is the entry point). This catalog is kept in sync with the
+installed kit by its `validate-guide-sync` check.
+
+### Agents
+
+| Agent | Role |
+|---|---|
+| `vc-research-agent` | RESEARCH — read-only information gathering |
+| `vc-spec-agent` | SPEC — product-discovery requirements doc |
+| `vc-innovate-agent` | INNOVATE — compare approaches, decision summary |
+| `vc-plan-agent` | PLAN — implementation plan artifacts |
+| `vc-validate-agent` | VALIDATE — turn a plan into an executable contract |
+| `vc-execute-agent` | EXECUTE — implement the approved plan exactly |
+| `vc-update-process-agent` | UPDATE PROCESS — archive plans, capture learnings |
+| `vc-fast-mode-agent` | Compressed research→spec→innovate→plan→validate flow |
+| `vc-quick-fix-agent` | Small low-risk edits with a scoped check |
+| `vc-tester` | Diff-aware test verification |
+| `vc-debugger` | Evidence-first root-cause investigation |
+| `vc-code-reviewer` | Production-readiness review |
+| `vc-code-simplifier` | Clarity refactors, no behavior change |
+| `vc-ui-ux-designer` | Design-aware UI implementation |
+| `vc-git-manager` | Staging + conventional commit preparation |
+
+### 35 Skills
+
+`vc-agent-browser` · `vc-agent-strategy-compare` · `vc-audit-context` · `vc-audit-plans` ·
+`vc-audit-vc` · `vc-autopilot` · `vc-autoresearch` · `vc-context-discovery` · `vc-debug` ·
+`vc-docs-seeker` · `vc-feasibility-test` · `vc-frontend-design` · `vc-generate-closeout` ·
+`vc-generate-context` · `vc-generate-phase-program` · `vc-generate-plan` · `vc-generate-spec` ·
+`vc-intent-clarify` · `vc-plan-discovery` · `vc-predict` · `vc-problem-solving` · `vc-publish` ·
+`vc-review-situation` · `vc-risk-evidence-pack` · `vc-scenario` · `vc-scout` · `vc-security` ·
+`vc-sequential-thinking` · `vc-setup` · `vc-test-coverage-plan` · `vc-update` ·
+`vc-validate-findings` · `vc-web-testing` — plus the local design skills `impeccable` and
+`ui-ux-pro-max`.
+
+### Harness notes
+
+- `process/` is tracked and shared; everything else the kit installs is per-machine.
+- Agents never commit — staged changes + a suggested message only; a human commits.

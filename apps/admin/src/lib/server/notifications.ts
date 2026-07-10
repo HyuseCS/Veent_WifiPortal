@@ -7,7 +7,7 @@
  * The in-app feed and the assignment EMAIL are separate: email fires once, from the assign path in
  * the route action (best-effort, rate-limited); this module only reads + records read state.
  */
-import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNotNull, isNull, lte, or, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import {
 	type DB,
@@ -20,7 +20,9 @@ import {
 import { ISSUE_EVENT, type IssueEventType, eventSummary } from './issues';
 
 /** Event types that notify an assignee. 'created' is excluded — the paired 'assigned' event
- *  is the signal that work landed on you; 'created' is just the manager filing it. */
+ *  is the signal that work landed on you; 'created' is just the manager filing it. 'note_edited'
+ *  is deliberately excluded too: editing an already-resolved incident's resolution note is a
+ *  low-signal metadata correction, not something assignees need pushed to their bell (H2). */
 export const NOTIFIABLE_EVENTS: IssueEventType[] = [
 	ISSUE_EVENT.assigned,
 	ISSUE_EVENT.unassigned,
@@ -41,14 +43,35 @@ export interface NotificationRow {
 	readAt: number | null;
 }
 
-/** Feed predicate: notifiable events on MY incidents, not by me. Read-state is layered on top
- *  by the callers (a left-join to the read table). `is distinct from` so a null-actor (removed
- *  staff) event still counts. */
+/**
+ * Assignee-join condition: match MY assignment row for the event's incident, but only if I was
+ * already assigned when the event happened (`assignedAt <= createdAt`). This is a LEFT join so an
+ * event can still surface with NO matching assignee row — that is how a removed person still sees
+ * their own `unassigned` event (see `notifWhere`). The `assignedAt` bound is M1: a fresh assignee
+ * no longer inherits the incident's entire pre-assignment history as unread.
+ */
+function assigneeJoinOn(userId: string) {
+	return and(
+		eq(adminIssueAssignee.issueId, adminIssueEvent.issueId),
+		eq(adminIssueAssignee.adminUserId, userId),
+		lte(adminIssueAssignee.assignedAt, adminIssueEvent.createdAt)
+	);
+}
+
+/**
+ * Feed audience predicate: notifiable events not done by me, where EITHER I have a live assignment
+ * row for the incident (the join matched) OR this is the `unassigned` event that removed ME
+ * (`toValue = userId`) — the L4 exception, since unassigning also deletes my assignee row so the
+ * join can't match. `is distinct from` so a null-actor (removed staff) event still counts.
+ */
 function notifWhere(userId: string) {
 	return and(
-		eq(adminIssueAssignee.adminUserId, userId),
 		inArray(adminIssueEvent.type, NOTIFIABLE_EVENTS),
-		sql`${adminIssueEvent.actorId} is distinct from ${userId}`
+		sql`${adminIssueEvent.actorId} is distinct from ${userId}`,
+		or(
+			isNotNull(adminIssueAssignee.adminUserId),
+			and(eq(adminIssueEvent.type, ISSUE_EVENT.unassigned), eq(adminIssueEvent.toValue, userId))
+		)
 	);
 }
 
@@ -57,7 +80,7 @@ export async function unreadCount(db: DB, userId: string): Promise<number> {
 	const [row] = await db
 		.select({ n: sql<number>`count(*)::int` })
 		.from(adminIssueEvent)
-		.innerJoin(adminIssueAssignee, eq(adminIssueAssignee.issueId, adminIssueEvent.issueId))
+		.leftJoin(adminIssueAssignee, assigneeJoinOn(userId))
 		.leftJoin(
 			adminNotificationRead,
 			and(
@@ -93,7 +116,7 @@ export async function listNotifications(
 			readAt: adminNotificationRead.readAt
 		})
 		.from(adminIssueEvent)
-		.innerJoin(adminIssueAssignee, eq(adminIssueAssignee.issueId, adminIssueEvent.issueId))
+		.leftJoin(adminIssueAssignee, assigneeJoinOn(userId))
 		.innerJoin(adminIssue, eq(adminIssue.id, adminIssueEvent.issueId))
 		.leftJoin(target, eq(target.id, adminIssueEvent.toValue))
 		.leftJoin(
@@ -119,7 +142,10 @@ export async function listNotifications(
 }
 
 /** Mark a single notification (event) read for this user. Idempotent (composite PK). The FK on
- *  eventId means only real events can be recorded, so a bogus id is a harmless no-op at worst. */
+ *  eventId means only real events can be recorded, so a bogus id is a harmless no-op at worst.
+ *  A VALID event id on an incident the user can't actually see is likewise harmless: the read row
+ *  is (user, event)-scoped, so it never reveals or alters anything outside this user's own feed
+ *  (it just parks a read marker no query of theirs will surface) (L6c). */
 export async function markNotificationRead(
 	db: DB,
 	userId: string,
@@ -134,7 +160,7 @@ export async function markAllNotificationsRead(db: DB, userId: string): Promise<
 	const unread = await db
 		.select({ eventId: adminIssueEvent.id })
 		.from(adminIssueEvent)
-		.innerJoin(adminIssueAssignee, eq(adminIssueAssignee.issueId, adminIssueEvent.issueId))
+		.leftJoin(adminIssueAssignee, assigneeJoinOn(userId))
 		.leftJoin(
 			adminNotificationRead,
 			and(
