@@ -44,6 +44,7 @@ start_db.sh
 # AI agent tooling — machine-local, not part of the app (vendored skills, configs)
 .agents/
 .claude/
+.codex/
 .gemini/
 .vibecode-backup
 .vc-version
@@ -51,3 +52,4 @@ start_db.sh
 CLAUDE.md
 GEMINI.md
 AGENTS.md
+.vibecode-backup*/
