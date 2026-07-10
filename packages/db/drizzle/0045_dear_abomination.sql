@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "admin_issue_sentry_issue_id_key" ON "admin_issue" USING btree ("sentry_issue_id") WHERE "admin_issue"."source" = 'sentry';

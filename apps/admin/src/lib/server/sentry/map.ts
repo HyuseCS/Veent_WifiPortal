@@ -16,9 +16,40 @@ function str(v: unknown): string {
  * The permalink is rendered as an `href` on an admin page; the source is trusted (the Sentry
  * API), but a poisoned/compromised response must not be able to inject a `javascript:` URL.
  */
-function httpsUrl(v: unknown): string {
+export function httpsUrl(v: unknown): string {
 	const s = str(v);
 	return s.startsWith('https://') ? s : '';
+}
+
+export interface SentrySnapshotInput {
+	issueId: string;
+	shortId: string;
+	permalink: string;
+	title: string;
+}
+
+/**
+ * Validate the client-supplied "Sentry snapshot" fields before they are stored and later rendered
+ * (the permalink becomes an `href` on the incident detail page). The track form posts these as plain
+ * hidden inputs, so a tampered POST from any signed-in staff member could smuggle a `javascript:`
+ * permalink (stored XSS → staff/manager escalation) or a megabyte-sized title. Validate loudly:
+ * returns the trimmed snapshot on success, or null when ANY field fails its check.
+ *
+ * - `issueId`  must be 1–32 digits (Sentry issue ids are numeric).
+ * - `shortId`  must be 0–64 of `[A-Za-z0-9._-]` (e.g. `RADIUS-3F`); may be empty.
+ * - `permalink` may be empty, otherwise it must be an absolute `https://` URL (reuses httpsUrl).
+ * - `title`    is capped at 500 chars.
+ */
+export function validateSentrySnapshot(input: SentrySnapshotInput): SentrySnapshotInput | null {
+	const issueId = input.issueId.trim();
+	const shortId = input.shortId.trim();
+	const permalink = input.permalink.trim();
+	const title = input.title.trim();
+	if (!/^\d{1,32}$/.test(issueId)) return null;
+	if (!/^[A-Za-z0-9._-]{0,64}$/.test(shortId)) return null;
+	if (permalink !== '' && httpsUrl(permalink) === '') return null;
+	if (title.length > 500) return null;
+	return { issueId, shortId, permalink, title };
 }
 
 /** Sentry returns count/userCount as either a number or a numeric string — coerce, never NaN. */

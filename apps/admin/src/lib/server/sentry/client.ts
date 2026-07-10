@@ -1,5 +1,5 @@
 import { env } from '$env/dynamic/private';
-import type { IssueStatus } from './types';
+import type { IssueFilter, IssueStatus } from './types';
 
 /**
  * Sentry REST transport — the ONLY module that talks HTTP to Sentry or reads its credentials.
@@ -111,17 +111,21 @@ export function invalidate(): void {
 // --- Endpoints (raw JSON out) ----------------------------------------------
 
 /**
- * Unresolved issues for the project, most-frequent first, over the last 14 days. `trendPeriod`
- * picks the per-issue `stats` sparkline granularity (14d → daily, 24h → hourly): the org endpoint
- * controls that via `groupStatsPeriod`, SEPARATELY from `statsPeriod` (which is the query window —
- * `statsPeriod` alone always yields a 24h sparkline). The window stays 14d for both periods so the
- * 24h call returns the same issue set, letting the facade merge each issue's 24h trend in by id.
+ * Issues for the project, most-frequent first, over the last 14 days. `status` selects the feed
+ * (`is:unresolved` for the open list, `is:ignored` for the dismissed archive). `trendPeriod` picks
+ * the per-issue `stats` sparkline granularity (14d → daily, 24h → hourly): the org endpoint controls
+ * that via `groupStatsPeriod`, SEPARATELY from `statsPeriod` (which is the query window — `statsPeriod`
+ * alone always yields a 24h sparkline). The window stays 14d for both periods so the 24h call returns
+ * the same issue set, letting the facade merge each issue's 24h trend in by id.
  */
-export function fetchIssuesRaw(trendPeriod: '24h' | '14d' = '14d'): Promise<unknown> {
-	return cached(`issues:${trendPeriod}`, () =>
+export function fetchIssuesRaw(
+	status: IssueFilter = 'unresolved',
+	trendPeriod: '24h' | '14d' = '14d'
+): Promise<unknown> {
+	return cached(`issues:${status}:${trendPeriod}`, () =>
 		sentryGet(`/organizations/${org()}/issues/`, {
 			project: project() as string,
-			query: 'is:unresolved',
+			query: `is:${status}`,
 			statsPeriod: '14d',
 			groupStatsPeriod: trendPeriod,
 			sort: 'freq',

@@ -78,6 +78,14 @@ export const ISSUE_PRIORITY = {
 } as const;
 export type IssuePriority = (typeof ISSUE_PRIORITY)[keyof typeof ISSUE_PRIORITY];
 
+/** Where an issue came from. `human` = staff-filed AP/field problem; `sentry` = a code error
+ *  a manager tracked from the Sentry feed. Drives the source-aware detail view. */
+export const ISSUE_SOURCE = {
+	human: 'human',
+	sentry: 'sentry'
+} as const;
+export type IssueSource = (typeof ISSUE_SOURCE)[keyof typeof ISSUE_SOURCE];
+
 /** Staff lifecycle (stored in admin_profile.status). Only `active` may sign in. */
 export const STAFF_STATUS = {
 	active: 'active',

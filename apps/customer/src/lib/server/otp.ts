@@ -106,8 +106,11 @@ function otpMessage(code: string): string {
 /**
  * THE single SMS delivery seam (wired into the phoneNumber plugin's `sendOTP`). Dispatches to the
  * configured gateway so we can switch providers without touching the auth flow — set `SMS_PROVIDER`
- * to `itexmo` (default) or `unisms`. The phone arrives E.164 (+639171234567); each provider adapts
- * it (iTexMo wants the local 09… form, UniSMS takes E.164 as-is).
+ * to `itexmo` (default), `unisms`, or `smsgate`. The phone arrives E.164 (+639171234567); each
+ * provider adapts it (iTexMo wants the local 09… form; UniSMS and SMS Gate take E.164 as-is).
+ *
+ * `smsgate` is a TEMPORARY stopgap (an Android phone running SMS Gate in Cloud mode, reached via
+ * api.sms-gate.app) used while iTexMo account approval is pending — remove it once iTexMo is live.
  *
  * Fail-safe BY ENVIRONMENT (per provider): missing config in DEV prints the code to the server
  * console so you can still log in; in PRODUCTION it's a hard error — an OTP MUST be delivered, never
@@ -115,6 +118,7 @@ function otpMessage(code: string): string {
  */
 export async function sendOtp(phone: string, code: string): Promise<void> {
 	const provider = (env.SMS_PROVIDER ?? 'itexmo').trim().toLowerCase();
+	if (provider === 'smsgate') return sendViaSMSGate(phone, code);
 	if (provider === 'unisms') return sendViaUniSMS(phone, code);
 	return sendViaITexMo(phone, code);
 }
@@ -162,7 +166,7 @@ async function sendViaITexMo(phone: string, code: string): Promise<void> {
 			signal: AbortSignal.timeout(10_000)
 		});
 	} catch (err) {
-		throw new Error(`iTexMo SMS send failed: ${err instanceof Error ? err.message : String(err)}`);
+		throw new Error(`iTexMo SMS send failed: ${err instanceof Error ? err.message : String(err)}`, { cause: err });
 	}
 
 	// Transport-level failure.
@@ -211,7 +215,7 @@ async function sendViaUniSMS(phone: string, code: string): Promise<void> {
 			signal: AbortSignal.timeout(10_000)
 		});
 	} catch (err) {
-		throw new Error(`UniSMS SMS send failed: ${err instanceof Error ? err.message : String(err)}`);
+		throw new Error(`UniSMS SMS send failed: ${err instanceof Error ? err.message : String(err)}`, { cause: err});
 	}
 
 	// 201 Created on success (body echoes the queued message). A non-2xx OR a message that came back
@@ -225,5 +229,62 @@ async function sendViaUniSMS(phone: string, code: string): Promise<void> {
 		| null;
 	if (!body?.message || body.message.status === 'failed') {
 		throw new Error(`UniSMS SMS rejected: ${body?.message?.fail_reason ?? 'no message returned'}`);
+	}
+}
+
+/**
+ * SMS Gate (https://sms-gate.app) — a TEMPORARY stopgap used while iTexMo approval is pending. Runs in
+ * CLOUD mode: an Android phone (with SMS Gate's Cloud Server enabled) and the portal server both talk
+ * OUTBOUND to api.sms-gate.app, so it works even when the site's AP isolates Wi-Fi clients / we don't
+ * control the router. We POST the OTP to the cloud 3rd-party API and the phone picks it up and sends it.
+ *
+ * Endpoint: POST {SMSGATE_BASE_URL}/3rdparty/v1/messages  (over HTTPS). Basic auth = the username/
+ * password from the app's Cloud Server registration; recipient in E.164 (which normalizePhone already
+ * produces). Config (customer env):
+ *   SMSGATE_BASE_URL — optional; defaults to https://api.sms-gate.app (override for a private server)
+ *   SMSGATE_USERNAME / SMSGATE_PASSWORD — REQUIRED (from the app's Cloud Server credentials)
+ *
+ * Delete this branch once iTexMo is live.
+ */
+const SMSGATE_CLOUD_BASE = 'https://api.sms-gate.app';
+
+async function sendViaSMSGate(phone: string, code: string): Promise<void> {
+	const baseUrl = env.SMSGATE_BASE_URL?.trim() || SMSGATE_CLOUD_BASE;
+	const username = env.SMSGATE_USERNAME;
+	const password = env.SMSGATE_PASSWORD;
+
+	if (!username || !password) {
+		if (dev) {
+			console.info(`[otp] SMS Gate not configured — code for ${phone}: ${code}`);
+			return;
+		}
+		throw new Error('SMS Gate not configured: set SMSGATE_USERNAME / SMSGATE_PASSWORD');
+	}
+
+	// Basic auth: base64("<username>:<password>"). `phone` is already E.164 (+63…).
+	const authorization = 'Basic ' + btoa(`${username}:${password}`);
+	const url = `${baseUrl.replace(/\/+$/, '')}/3rdparty/v1/messages`;
+
+	let res: Response;
+	try {
+		res = await fetch(url, {
+			method: 'POST',
+			headers: { 'content-type': 'application/json', authorization },
+			body: JSON.stringify({ textMessage: { text: otpMessage(code) }, phoneNumbers: [phone] }),
+			signal: AbortSignal.timeout(10_000)
+		});
+	} catch (err) {
+		throw new Error(`SMS Gate send failed: ${err instanceof Error ? err.message : String(err)}`, { cause: err });
+	}
+
+	// 202 Accepted on success (the message is queued for the phone). A non-2xx OR a message that came
+	// back in the `Failed` state means the code never went out.
+	if (!res.ok) {
+		const detail = await res.text().catch(() => '');
+		throw new Error(`SMS Gate send failed (${res.status}): ${detail}`);
+	}
+	const body = (await res.json().catch(() => null)) as { id?: string; state?: string } | null;
+	if (!body?.id || body.state === 'Failed') {
+		throw new Error(`SMS Gate rejected: ${body?.state ?? 'no message id returned'}`);
 	}
 }

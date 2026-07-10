@@ -6,7 +6,8 @@
 	import {
 		FinanceHeaderControls,
 		NetworkHeaderControls,
-		SentryHeaderControls
+		SentryHeaderControls,
+		NotificationBell
 	} from '$lib/components/feature';
 	import { nav } from '$lib/nav';
 	import { mobileNav } from '$lib/uiState.svelte';
@@ -37,7 +38,7 @@
 		'/finance': 'Settled revenue & payments',
 		'/content': 'Packages, FAQ & session limits',
 		'/staff': 'Admin access management',
-		'/issues': 'Assign & track operational issues',
+		'/issues': 'Assign & track operational incidents',
 		'/sentry': 'Error monitoring',
 		'/profile': 'Your account & security'
 	};
@@ -49,6 +50,8 @@
 		]
 	);
 	const onFinance = $derived(navPath.startsWith('/finance'));
+	// The notification bell lives only on the Incidents page (its dropdown reads that page's data).
+	const onIssues = $derived(navPath === '/issues' || navPath.startsWith('/issues/'));
 	// Networks page opts into vertical scroll-snap (two full-screen sections). Scoped here
 	// so the snap + hidden scrollbar apply only on that route, not the whole admin.
 	const onNetworks = $derived(navPath.startsWith('/networks'));
@@ -77,8 +80,8 @@
 </script>
 
 <div class="flex h-dvh overflow-hidden bg-bg">
-	<Sidebar user={data.user} />
-	<MobileDrawer user={data.user} />
+	<Sidebar user={data.user} issuesUnread={data.issuesUnread} />
+	<MobileDrawer user={data.user} issuesUnread={data.issuesUnread} />
 	<!-- Background goes inert while the mobile drawer is open → focus can't leave the drawer.
 	     On desktop the drawer never opens, so this is never inert. -->
 	<div class="flex flex-1 flex-col overflow-hidden" inert={mobileNav.open ? true : undefined}>
@@ -87,6 +90,7 @@
 				{#if onFinance}<FinanceHeaderControls />{/if}
 			{#if onNetworks}<NetworkHeaderControls />{/if}
 			{#if onSentryIssues}<SentryHeaderControls />{/if}
+			{#if onIssues}<NotificationBell />{/if}
 			{/snippet}
 		</Topbar>
 		<main class={mainClass} aria-busy={routeLoading || undefined}>

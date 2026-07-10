@@ -1,0 +1,2 @@
+ALTER TABLE "admin_issue_event" DROP CONSTRAINT "admin_issue_event_type_ck";--> statement-breakpoint
+ALTER TABLE "admin_issue_event" ADD CONSTRAINT "admin_issue_event_type_ck" CHECK ("admin_issue_event"."type" in ('created', 'status_changed', 'assigned', 'unassigned', 'priority_changed', 'comment', 'note_edited'));

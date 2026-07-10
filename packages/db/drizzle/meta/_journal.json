@@ -281,6 +281,55 @@
       "when": 1783397438834,
       "tag": "0039_gifted_vampiro",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1783476822929,
+      "tag": "0040_sweet_wolf_cub",
+      "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1783477543585,
+      "tag": "0041_certain_sersi",
+      "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "7",
+      "when": 1783480195823,
+      "tag": "0042_real_inhumans",
+      "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1783484277425,
+      "tag": "0043_light_doomsday",
+      "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1783485423863,
+      "tag": "0044_real_krista_starr",
+      "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "7",
+      "when": 1783566751082,
+      "tag": "0045_dear_abomination",
+      "breakpoints": true
+    },
+    {
+      "idx": 46,
+      "version": "7",
+      "when": 1783649255597,
+      "tag": "0046_oval_lorna_dane",
+      "breakpoints": true
     }
   ]
 }

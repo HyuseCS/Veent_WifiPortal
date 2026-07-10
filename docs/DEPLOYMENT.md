@@ -412,9 +412,9 @@ Most setup failures are a **missing env var** or the **router IP restriction**. 
 **DB: `ECONNREFUSED` / `password authentication failed` / `database "local" does not exist`**
 
 - Postgres isn't running, or `DATABASE_URL` doesn't match it. With Docker: `docker compose up -d db`
-  (`compose.yaml` → user `root`, password `mysecretpassword`, db `local`, port `5432`).
+  (`compose.yaml` → user `root`, password `mysecretpassword`, db `local`, host port `5433`).
 - **Prod:** change the default password in **both** `compose.yaml` and `DATABASE_URL`, and bind
-  `127.0.0.1:5432:5432` so the DB isn't exposed. If the apps are containerized too, use the compose
+  `127.0.0.1:5433:5432` so the DB isn't exposed. If the apps are containerized too, use the compose
   service name (`@db:5432`), not `localhost`.
 
 **Router: `SOCKTMOUT` / connection refused / timeout to the router**

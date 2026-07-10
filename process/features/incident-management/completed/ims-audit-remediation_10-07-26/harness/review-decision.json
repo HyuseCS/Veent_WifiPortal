@@ -1,0 +1,18 @@
+{
+  "task": "ims-audit-remediation (PR #74 IMS audit, 13 findings, 5 phases)",
+  "reviewer": "vc-execute-agent (session, autonomous EXECUTE self-review) — pending independent EVL (vc-tester) + human browser handoff",
+  "decision": "approved-with-concerns",
+  "timestamp": "2026-07-10",
+  "notes": "All 13 audit findings implemented per the locked plan with zero scope deviations. Fully-Automated gates green (138 unit tests, root svelte-check, packages/db tsc, migration DDL applied+verified, secrets staged for removal, zero new eslint errors). H1 reuses the existing https gate + adds format/length checks with a loud fail(400); H2 persists resolution-note edits behind a new audited note_edited event + a forward-compatible additive CHECK migration. Approval is for the CODE tier only — it does NOT assert that the deferred runtime gates have executed.",
+  "blockingFindings": [
+    "M2 residual: the leaked e2e session cookie + TOTP secret remain in git history (git rm --cached removes tracking, not history). Must be rotated before finalize.",
+    "mustStopBeforeFinalize is TRUE: the agent browser pass + human verification handoff for the 5 UI-visible scenarios must complete before the work is treated as finalized.",
+    "Orchestrator must spawn vc-tester for the independent EVL re-run of the validate-contract gates (execute-agent's internal green run does not substitute)."
+  ],
+  "nonBlockingFindings": [
+    "M1/L4 SQL semantics (assignedAt bound + L4 OR-predicate) are proven only at the e2e + browser tier — the notifications.test.ts fakeDb cannot exercise the WHERE/JOIN (documented plan G1/E4).",
+    "H1 host-pinning to the configured Sentry org and M4d provenance check (verify sentryIssueId against the Sentry API) are deliberately deferred to backlog.",
+    "L3 ships a ceiling comment + backlog stub only (no manager-board pagination now), as locked.",
+    "Repo-wide pre-existing lint debt: prettier tailwindStylesheet path resolves to a nonexistent repo-root path (prettier --check fails on ALL files) and svelte/no-navigation-without-resolve fires on untouched href={item.href} links — both present on HEAD, not introduced by this work."
+  ]
+}

@@ -1,0 +1,47 @@
+{
+  "task": "ims-audit-remediation (PR #74 IMS audit, 13 findings, 5 phases)",
+  "snippets": [
+    {
+      "file": "apps/admin/src/lib/server/sentry/map.ts",
+      "lines": "19-52",
+      "description": "H1: httpsUrl() now exported + new validateSentrySnapshot() — rejects non-https permalinks, format-checks issueId (/^\\d{1,32}$/) and shortId (/^[A-Za-z0-9._-]{0,64}$/), caps title <=500. Returns null on any failure.",
+      "content": "export function validateSentrySnapshot(input): SentrySnapshotInput | null { ... if (permalink !== '' && httpsUrl(permalink) === '') return null; ... }"
+    },
+    {
+      "file": "apps/admin/src/routes/(app)/sentry/+page.server.ts",
+      "lines": "85-100",
+      "description": "H1: ?/track calls validateSentrySnapshot; null -> fail(400, 'Invalid Sentry permalink.'). Legit UI always posts https from the Sentry API.",
+      "content": "const snapshot = validateSentrySnapshot({...}); if (!snapshot) return fail(400, { action: 'track', error: 'Invalid Sentry permalink.' });"
+    },
+    {
+      "file": "packages/db/src/schema/admin-issue-event.ts",
+      "lines": "35,46",
+      "description": "H2: admin_issue_event_type_ck CHECK relaxed to add 'note_edited'. Migration 0046_oval_lorna_dane.sql generated + DDL applied to local dev DB (push-managed).",
+      "content": "sql`${t.type} in ('created','status_changed','assigned','unassigned','priority_changed','comment','note_edited')`"
+    },
+    {
+      "file": "apps/admin/src/lib/server/issues.ts",
+      "lines": "620-680",
+      "description": "H2: setIssueStatus returns 'updated'|'unchanged'|'not_found'; before-query now selects resolutionNote; same-status resolved+note-differs branch persists the note + records a note_edited event (audit trail), never mutating resolution metadata silently.",
+      "content": "if (before.status === status) { if (resolving && newNote !== before.resolutionNote) { ...recordEvent(tx,{type: ISSUE_EVENT.noteEdited, note:newNote}); return 'updated'; } return 'unchanged'; }"
+    },
+    {
+      "file": "apps/admin/src/lib/server/notifications.ts",
+      "lines": "44-90",
+      "description": "M1+L4: innerJoin(assignee) -> leftJoin(assigneeJoinOn) with assignedAt <= event.createdAt bound (M1); audience predicate ORs isNotNull(assignee) with (type='unassigned' AND toValue=userId) so a removed person still sees their own unassignment (L4). Applied to all 3 query sites in one pass.",
+      "content": "and(eq(assignee.issueId, event.issueId), eq(assignee.adminUserId, userId), lte(assignee.assignedAt, event.createdAt)) ; or(isNotNull(assignee.adminUserId), and(eq(type,'unassigned'), eq(toValue, userId)))"
+    },
+    {
+      "file": "apps/admin/src/routes/(app)/issues/[id]/detail/+server.ts",
+      "lines": "2,29-31",
+      "description": "M3: ISSUE_STATUS added to the existing @veent/core import; isPoolItem now requires status === ISSUE_STATUS.open so a resolved/in-progress unassigned incident is NOT pool-readable by a non-assignee.",
+      "content": "const isPoolItem = issue.assignees.length === 0 && issue.status === ISSUE_STATUS.open;"
+    },
+    {
+      "file": "apps/admin/e2e/.auth/owner.json, apps/admin/e2e/.auth/owner-totp.txt",
+      "lines": "n/a",
+      "description": "M2: both tracked-despite-gitignore secret artifacts staged for removal via git rm --cached (files remain on disk; harness regenerates). RESIDUAL: the leaked session cookie + TOTP secret remain in git history and must be rotated.",
+      "content": "git rm --cached apps/admin/e2e/.auth/owner.json apps/admin/e2e/.auth/owner-totp.txt"
+    }
+  ]
+}

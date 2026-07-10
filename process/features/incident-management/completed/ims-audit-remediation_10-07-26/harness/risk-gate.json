@@ -1,0 +1,14 @@
+{
+  "task": "ims-audit-remediation (PR #74 IMS audit, 13 findings, 5 phases)",
+  "planPath": "process/features/incident-management/active/ims-audit-remediation_10-07-26/ims-audit-remediation_PLAN_10-07-26.md",
+  "riskLevel": "high",
+  "riskClasses": [
+    "permission, secret, or trust-boundary logic",
+    "schema/data migration or destructive data mutation",
+    "public API or external contract changes"
+  ],
+  "mustStopBeforeFinalize": true,
+  "humanApprovalRequired": true,
+  "why": "H1 stored-XSS via unvalidated Sentry permalink (trust-boundary); H2 resolution-note persistence + new note_edited event requiring a CHECK-constraint migration (schema); M1/L4 notification-audience predicate restructure + M3 detail-endpoint pool-read predicate (permission/trust-boundary); M2 committed session/TOTP secret removal (secret). Internal module contract change: setIssueStatus boolean -> 'updated'|'unchanged'|'not_found'. mustStopBeforeFinalize stays true until the agent browser pass + human verification handoff for the 5 UI-visible scenarios completes AND the leaked session/TOTP secret (staged for git rm, still in history) is rotated.",
+  "approver": "session (autonomous EXECUTE, orchestrator-driven; opus EXECUTE leg per plan)"
+}

@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import { parseIntField } from './formValidation';
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import { parseIntField, parseDueDate } from './formValidation';
 
 /**
  * Boundary coverage for the required-integer parser behind the operational-limits save
@@ -35,5 +35,61 @@ describe('parseIntField', () => {
 
 	it('returns null for a missing field', () => {
 		expect(parseIntField(new FormData(), 'k', { min: 1, max: 20 })).toBeNull();
+	});
+});
+
+/**
+ * parseDueDate underpins BOTH the incident board form and the Sentry ?/track action, so its rules
+ * (UTC-midnight parse, NaN reject, past-date reject with grandfathering) are the single source of
+ * truth for due-date validation (M4a). Clock is pinned so "today" is deterministic.
+ */
+describe('parseDueDate', () => {
+	afterEach(() => vi.useRealTimers());
+	const pin = (iso: string) => {
+		vi.useFakeTimers();
+		vi.setSystemTime(new Date(iso));
+	};
+	const ms = (day: string) => new Date(`${day}T00:00:00Z`).getTime();
+
+	it('returns null for an empty / whitespace value (no due date)', () => {
+		expect(parseDueDate('')).toEqual({ dueDate: null });
+		expect(parseDueDate('   ')).toEqual({ dueDate: null });
+	});
+
+	it('parses a valid future date at UTC midnight', () => {
+		pin('2026-07-10T09:00:00Z');
+		const r = parseDueDate('2026-07-20');
+		expect('dueDate' in r && r.dueDate?.getTime()).toBe(ms('2026-07-20'));
+	});
+
+	it('accepts today (UTC-midnight boundary is inclusive)', () => {
+		pin('2026-07-10T23:00:00Z');
+		const r = parseDueDate('2026-07-10');
+		expect('dueDate' in r && r.dueDate?.getTime()).toBe(ms('2026-07-10'));
+	});
+
+	it('rejects a malformed value', () => {
+		expect(parseDueDate('not-a-date')).toEqual({ error: 'Invalid due date.' });
+	});
+
+	it('rejects an impossible calendar date (does not silently normalize)', () => {
+		expect(parseDueDate('2026-02-31')).toEqual({ error: 'Invalid due date.' });
+	});
+
+	it('still accepts a valid yyyy-mm-dd future date', () => {
+		pin('2026-07-10T09:00:00Z');
+		const r = parseDueDate('2026-12-25');
+		expect('dueDate' in r && r.dueDate?.getTime()).toBe(ms('2026-12-25'));
+	});
+
+	it('rejects a newly-set past date', () => {
+		pin('2026-07-10T09:00:00Z');
+		expect(parseDueDate('2026-07-01')).toEqual({ error: 'Due date cannot be in the past.' });
+	});
+
+	it('grandfathers a past date that already matches the existing due date (edit case)', () => {
+		pin('2026-07-10T09:00:00Z');
+		const r = parseDueDate('2026-07-01', ms('2026-07-01'));
+		expect('dueDate' in r && r.dueDate?.getTime()).toBe(ms('2026-07-01'));
 	});
 });

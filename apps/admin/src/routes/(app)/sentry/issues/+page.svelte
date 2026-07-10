@@ -18,6 +18,13 @@
 	<!-- Full-height: the table (with its own toolbar/footer) is the whole page; "Back to overview"
 	     lives in the Topbar (SentryHeaderControls). -->
 	<div class="flex h-full flex-col">
-		<SentryIssuesTable issues={data.issues} degraded={data.degraded.issues} fill />
+		<SentryIssuesTable
+			issues={data.issues}
+			ignoredIssues={data.ignoredIssues}
+			degraded={data.degraded.issues}
+			ignoredDegraded={data.degraded.ignored}
+			assignableStaff={data.assignableStaff}
+			fill
+		/>
 	</div>
 {/if}

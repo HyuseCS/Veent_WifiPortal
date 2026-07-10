@@ -15,10 +15,16 @@
 	// duplicated here on purpose — the cost of a provably-unchanged desktop path.
 	// ponytail: dup over a shared child that would force edits into the frozen desktop sidebar.
 	let {
-		user
-	}: { user?: { name?: string; email?: string; image?: string | null; role?: string | null } } =
-		$props();
+		user,
+		issuesUnread = 0
+	}: {
+		user?: { name?: string; email?: string; image?: string | null; role?: string | null };
+		/** Unread incident-activity count → badge on the Incidents nav item. */
+		issuesUnread?: number;
+	} = $props();
 	const items = $derived(nav.filter((item) => !item.ownerOnly || user?.role === 'owner'));
+	const badgeFor = (href: string) => (href === '/issues' ? issuesUnread : 0);
+	const badgeLabel = (n: number) => (n > 99 ? '99+' : String(n));
 
 	// Highlight the destination tab as soon as navigation starts (mirrors Sidebar) so a slow page
 	// switch feels immediate; falls back to the committed path when idle.
@@ -143,6 +149,7 @@
 			{#each items as item (item.href)}
 				{@const Icon = item.icon}
 				{@const active = activePath === item.href || activePath.startsWith(item.href + '/')}
+				{@const badge = badgeFor(item.href)}
 				<a
 					href={item.href}
 					aria-current={active ? 'page' : undefined}
@@ -161,7 +168,19 @@
 							? 'text-cta'
 							: 'text-sidebar-muted group-hover:text-white'}"
 					/>
-					{item.label}
+					<span class="flex-1">{item.label}</span>
+					{#if badge > 0}
+						<!-- Count folded into the LINK's accessible name (sr-only); the visible pill is
+						     decorative/aria-hidden — an aria-label on a non-focusable span was mostly not
+						     announced (L6b). -->
+						<span class="sr-only">, {badge} unread</span>
+						<span
+							class="ml-auto inline-flex min-w-5 items-center justify-center rounded-full bg-cta px-1.5 py-0.5 text-[11px] font-semibold text-white"
+							aria-hidden="true"
+						>
+							{badgeLabel(badge)}
+						</span>
+					{/if}
 				</a>
 			{/each}
 		</div>

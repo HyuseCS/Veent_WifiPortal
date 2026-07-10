@@ -11,18 +11,24 @@
 	import type { Component } from 'svelte';
 	import { SvelteSet } from 'svelte/reactivity';
 	import { enhance } from '$app/forms';
+	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
 	import { Button, EmptyState, IconButton, SearchInput, StatusBadge, Table } from '$lib/components/ui';
-	import type { AdminIssueRow } from '$lib/server/issues';
+	import Timeline from './Timeline.svelte';
+	import type { AdminIssueRow, IssueEventRow } from '$lib/server/issues';
 
 	// Manager board (owner / system_admin). Row actions post to the page's form actions
 	// (?/updateStatus, ?/remove); edit/new open the shared <IssueForm> via callbacks. The
 	// route enforces manager access — this component is only rendered when canManage.
 	let {
 		issues,
+		events,
 		onedit,
 		onnew
 	}: {
 		issues: AdminIssueRow[];
+		/** Audit timeline per issue id (newest-first), for the expanded-row history. */
+		events: Record<number, IssueEventRow[]>;
 		onedit: (issue: AdminIssueRow) => void;
 		onnew: () => void;
 	} = $props();
@@ -36,6 +42,14 @@
 	function toggleExpand(id: number) {
 		if (expanded.has(id)) expanded.delete(id);
 		else expanded.add(id);
+	}
+
+	// Whole-row navigation to the detail page. Clicks that land on an interactive control (the
+	// expand chevron, the status <select>, the edit/delete buttons, or the title link itself) are
+	// left alone — those keep their own behaviour. The title <a> stays the keyboard/right-click path.
+	function openIssue(e: MouseEvent, id: number) {
+		if ((e.target as HTMLElement).closest('a, button, select, input, form, label')) return;
+		goto(resolve(`/issues/${id}`));
 	}
 
 	const filtered = $derived.by(() => {
@@ -52,12 +66,6 @@
 
 	const headers = ['Issue', 'Access point', 'Priority', 'Status', 'Assignees', 'Due', 'Actions'];
 
-	const statusOptions = [
-		{ value: 'open', label: 'Open' },
-		{ value: 'in_progress', label: 'In Progress' },
-		{ value: 'resolved', label: 'Resolved' }
-	];
-
 	function dueLabel(ms: number | null): string {
 		return ms ? new Date(ms).toLocaleDateString() : '—';
 	}
@@ -69,16 +77,16 @@
 <Table cards class="min-h-0 flex-1">
 	{#snippet toolbar()}
 		<div class="flex flex-wrap items-center gap-3 px-4 py-3">
-			<h2 class="text-base font-semibold text-ink">Issues</h2>
+			<h2 class="text-base font-semibold text-ink">Incidents</h2>
 			<SearchInput
 				bind:value={query}
 				placeholder="Search title, AP or assignee…"
-				label="Search issues"
+				label="Search incidents"
 				class="ml-auto min-w-0 flex-1 sm:max-w-xs"
 			/>
 			<Button onclick={onnew} class="shrink-0">
 				<Plus class="h-4 w-4" aria-hidden="true" />
-				New issue
+				New incident
 			</Button>
 		</div>
 	{/snippet}
@@ -97,8 +105,13 @@
 	{/snippet}
 
 	{#each filtered as issue (issue.id)}
-		<tr class="align-top hover:bg-surface" class:opacity-60={issue.status === 'resolved'}>
-			<td class="tc-full px-4 py-3">
+		<!-- Row-wide click opens the incident (see openIssue); the title <a> is the keyboard path. -->
+		<tr
+			class="cursor-pointer align-top hover:bg-surface"
+			class:opacity-60={issue.status === 'resolved'}
+			onclick={(e) => openIssue(e, issue.id)}
+		>
+			<td class="tc-full max-w-[16rem] px-4 py-3 sm:max-w-[24rem]">
 				<div class="flex items-start gap-2">
 					<button
 						type="button"
@@ -114,7 +127,13 @@
 						{/if}
 					</button>
 					<div class="min-w-0">
-						<div class="truncate font-medium text-ink">{issue.title}</div>
+						<a
+							href={resolve(`/issues/${issue.id}`)}
+							title={issue.title}
+							class="block truncate font-medium text-ink underline-offset-2 hover:text-brand hover:underline"
+						>
+							{issue.title}
+						</a>
 					</div>
 				</div>
 			</td>
@@ -125,22 +144,8 @@
 				<StatusBadge tone={issue.priorityTone} label={issue.priorityLabel} />
 			</td>
 			<td data-label="Status" class="px-4 py-3">
-				<!-- Inline status change (auto-submits on change). Resolving here leaves the note
-				     empty; assignees add a note from their My Issues view. -->
-				<form method="post" action="?/updateStatus" use:enhance>
-					<input type="hidden" name="id" value={issue.id} />
-					<select
-						name="status"
-						value={issue.status}
-						aria-label="Status for {issue.title}"
-						onchange={(e) => e.currentTarget.form?.requestSubmit()}
-						class="min-h-11 cursor-pointer rounded-lg border border-border bg-bg px-2.5 py-1.5 text-xs text-ink hover:border-brand/40 focus:border-brand focus:ring-2 focus:ring-brand/20 focus:outline-none"
-					>
-						{#each statusOptions as o (o.value)}
-							<option value={o.value}>{o.label}</option>
-						{/each}
-					</select>
-				</form>
+				<!-- Read-only here — status is changed from the incident detail page (open the row). -->
+				<StatusBadge tone={issue.statusTone} label={issue.statusLabel} />
 			</td>
 			<td data-label="Assignees" class="px-4 py-3 text-sm text-ink">
 				{#if issue.assignees.length === 0}
@@ -222,6 +227,10 @@
 								<span class="text-muted">{issue.resolutionNote}</span>
 							</div>
 						{/if}
+						<div class="border-t border-border pt-3">
+							<span class="mb-2 block font-medium text-ink">History</span>
+							<Timeline events={events[issue.id] ?? []} />
+						</div>
 					</div>
 				</td>
 			</tr>
@@ -233,8 +242,8 @@
 			<td colspan={headers.length} class="tc-full p-0">
 				<EmptyState
 					icon={icon(query ? Search : ClipboardList)}
-					title={query ? 'No issues match' : 'No issues yet'}
-					description={query ? 'Try a different search term.' : 'Create the first issue to start tracking.'}
+					title={query ? 'No incidents match' : 'No incidents yet'}
+					description={query ? 'Try a different search term.' : 'Create the first incident to start tracking.'}
 					compact
 				/>
 			</td>
@@ -242,6 +251,6 @@
 	{/if}
 
 	{#snippet footer()}
-		<p class="px-4 py-3 text-xs text-muted">Showing {filtered.length} of {issues.length} issues</p>
+		<p class="px-4 py-3 text-xs text-muted">Showing {filtered.length} of {issues.length} incidents</p>
 	{/snippet}
 </Table>
