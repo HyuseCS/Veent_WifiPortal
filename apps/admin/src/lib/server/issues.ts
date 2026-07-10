@@ -36,7 +36,8 @@ export const ISSUE_EVENT = {
 	assigned: 'assigned',
 	unassigned: 'unassigned',
 	priorityChanged: 'priority_changed',
-	comment: 'comment'
+	comment: 'comment',
+	noteEdited: 'note_edited'
 } as const;
 export type IssueEventType = (typeof ISSUE_EVENT)[keyof typeof ISSUE_EVENT];
 
@@ -382,6 +383,8 @@ export function eventSummary(
 			return `Unassigned ${who}`;
 		case ISSUE_EVENT.comment:
 			return 'Commented';
+		case ISSUE_EVENT.noteEdited:
+			return 'Updated the resolution note';
 		default:
 			return type;
 	}
@@ -614,27 +617,57 @@ export async function updateIssue(
 	});
 }
 
+/** Outcome of a setIssueStatus call: a row changed, nothing changed, or the id was not found. */
+export type SetIssueStatusResult = 'updated' | 'unchanged' | 'not_found';
+
 /**
  * Change an issue's status. Resolving stamps resolvedBy/resolvedAt + the note; moving
- * back to open/in_progress clears them. Returns true if a row changed.
+ * back to open/in_progress clears them.
+ *
+ * Same-status is NOT always a no-op: when the issue is already `resolved` and the caller submits a
+ * DIFFERENT resolution note, this is a note edit — persist the new note (+ updatedAt) and record a
+ * `note_edited` audit event so resolution metadata is never mutated without a trail (H2). A truly
+ * unchanged submit still touches nothing.
+ *
+ * Returns 'updated' when a row changed, 'unchanged' when nothing changed, 'not_found' when the id
+ * does not exist (callers map that to fail(404)).
  */
 export async function setIssueStatus(
 	db: DB,
 	id: number,
 	status: IssueStatus,
 	opts: { resolutionNote?: string | null; actorId: string }
-): Promise<boolean> {
+): Promise<SetIssueStatusResult> {
 	const resolving = status === ISSUE_STATUS.resolved;
 	return db.transaction(async (tx) => {
 		const [before] = await tx
-			.select({ status: adminIssue.status })
+			.select({ status: adminIssue.status, resolutionNote: adminIssue.resolutionNote })
 			.from(adminIssue)
 			.where(eq(adminIssue.id, id))
 			.limit(1);
-		if (!before) return false;
-		// No transition → touch nothing. Writing resolvedBy/resolvedAt/resolutionNote here without a
-		// matching status_changed event would mutate resolution metadata with no audit trail.
-		if (before.status === status) return false;
+		if (!before) return 'not_found';
+
+		if (before.status === status) {
+			// No status transition. The only meaningful same-status edit is changing the resolution
+			// note on an already-resolved incident (both UIs offer exactly this). Anything else is a
+			// true no-op — touching resolvedBy/resolvedAt without a status_changed event would mutate
+			// resolution metadata with no audit trail.
+			const newNote = opts.resolutionNote ?? null;
+			if (resolving && newNote !== before.resolutionNote) {
+				await tx
+					.update(adminIssue)
+					.set({ resolutionNote: newNote, updatedAt: new Date() })
+					.where(eq(adminIssue.id, id));
+				await recordEvent(tx, {
+					issueId: id,
+					actorId: opts.actorId,
+					type: ISSUE_EVENT.noteEdited,
+					note: newNote
+				});
+				return 'updated';
+			}
+			return 'unchanged';
+		}
 
 		await tx
 			.update(adminIssue)
@@ -656,7 +689,7 @@ export async function setIssueStatus(
 			// keep the resolution note on the event so the timeline shows why it resolved
 			note: resolving ? (opts.resolutionNote ?? null) : null
 		});
-		return true;
+		return 'updated';
 	});
 }
 

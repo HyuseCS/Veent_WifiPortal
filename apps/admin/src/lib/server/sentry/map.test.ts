@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { mapEventDetail, mapIssue, mapTrend, deriveKpis } from './map';
+import { mapEventDetail, mapIssue, mapTrend, deriveKpis, validateSentrySnapshot } from './map';
 
 // The mappers are the seam that absorbs Sentry's payload quirks — if they regress, the dashboard
 // silently mis-reports. Assert the coercions and the accepted-series selection that matter.
@@ -103,6 +103,41 @@ describe('mapEventDetail', () => {
 		expect(detail.value).toBe('bad');
 		expect(detail.frames).toEqual([]);
 		expect(mapEventDetail(null).id).toBe('');
+	});
+});
+
+describe('validateSentrySnapshot', () => {
+	const ok = { issueId: '42', shortId: 'RADIUS-3F', permalink: 'https://sentry.io/issues/42/', title: 'Boom' };
+
+	it('accepts a well-formed snapshot and returns trimmed values', () => {
+		expect(validateSentrySnapshot({ ...ok, title: '  Boom  ', permalink: ' https://sentry.io/issues/42/ ' })).toEqual(ok);
+	});
+
+	it('accepts an empty permalink and empty shortId', () => {
+		expect(validateSentrySnapshot({ issueId: '7', shortId: '', permalink: '', title: '' })).toEqual({
+			issueId: '7',
+			shortId: '',
+			permalink: '',
+			title: ''
+		});
+	});
+
+	it('rejects a javascript: / non-https permalink (H1 stored-XSS guard)', () => {
+		expect(validateSentrySnapshot({ ...ok, permalink: 'javascript:alert(1)' })).toBeNull();
+		expect(validateSentrySnapshot({ ...ok, permalink: 'http://evil.example/x' })).toBeNull();
+		expect(validateSentrySnapshot({ ...ok, permalink: '//evil.example' })).toBeNull();
+	});
+
+	it('rejects a malformed issueId (non-numeric, empty, or too long)', () => {
+		expect(validateSentrySnapshot({ ...ok, issueId: 'abc' })).toBeNull();
+		expect(validateSentrySnapshot({ ...ok, issueId: '' })).toBeNull();
+		expect(validateSentrySnapshot({ ...ok, issueId: '1'.repeat(33) })).toBeNull();
+	});
+
+	it('rejects a malformed shortId and an over-long title', () => {
+		expect(validateSentrySnapshot({ ...ok, shortId: 'has spaces!' })).toBeNull();
+		expect(validateSentrySnapshot({ ...ok, title: 'x'.repeat(501) })).toBeNull();
+		expect(validateSentrySnapshot({ ...ok, title: 'x'.repeat(500) })).not.toBeNull();
 	});
 });
 

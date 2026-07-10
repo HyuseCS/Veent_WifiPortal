@@ -23,3 +23,32 @@ export function parseIntField(
 	if (raw === '' || !Number.isInteger(n) || n < min || n > max) return null;
 	return n;
 }
+
+/** UTC-midnight epoch for "today". Due dates are parsed at UTC midnight, so compare at that grain. */
+function todayUtcMs(): number {
+	const now = new Date();
+	return Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+}
+
+/**
+ * Parse a `yyyy-mm-dd` due-date string to a UTC-midnight Date (so it round-trips with issues.ts
+ * `toDateInput()`), rejecting a malformed value and a past date. `existingDueMs` grandfathers an
+ * already-set past due date on edit — keeping an overdue incident's original date is fine, only
+ * NEWLY setting a past date is rejected. An empty string means "no due date" → `{ dueDate: null }`.
+ *
+ * Shared by the incident board's `parseIssueInput` AND the Sentry `?/track` action so the two apply
+ * identical rules — they had drifted (track NaN-checked only, never rejecting past dates) (M4a).
+ */
+export function parseDueDate(
+	raw: string,
+	existingDueMs?: number | null
+): { dueDate: Date | null } | { error: string } {
+	const trimmed = raw.trim();
+	if (!trimmed) return { dueDate: null };
+	const d = new Date(`${trimmed}T00:00:00Z`);
+	if (Number.isNaN(d.getTime())) return { error: 'Invalid due date.' };
+	if (d.getTime() < todayUtcMs() && d.getTime() !== existingDueMs) {
+		return { error: 'Due date cannot be in the past.' };
+	}
+	return { dueDate: d };
+}

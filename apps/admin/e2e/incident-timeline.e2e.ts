@@ -44,7 +44,7 @@ test('incident timeline records create + status change, and cascades on delete',
 	await page.getByRole('button', { name: 'New incident' }).click();
 	const dlg = page.locator('dialog[open]');
 	await dlg.getByLabel('Title').fill(TITLE);
-	await dlg.getByRole('button', { name: 'Create issue' }).click();
+	await dlg.getByRole('button', { name: 'Create incident' }).click();
 
 	// The created event exists in the DB the moment the transaction commits.
 	await expect.poll(() => issueIdByTitle(TITLE)).not.toBeNull();

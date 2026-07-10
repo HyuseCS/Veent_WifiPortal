@@ -12,7 +12,9 @@ import postgres from 'postgres';
 import { TEST_DATABASE_URL, TEST_ORIGIN } from './config';
 
 const ADRIAN_EMAIL = 'adrian@veent.test';
-const SENTRY_ID = `S-e2e-${Date.now()}`;
+// Sentry issue ids are numeric (H1 validateSentrySnapshot enforces /^\d{1,32}$/). Fixed '9'
+// prefix keeps it unique-per-run and ≤32 digits.
+const SENTRY_ID = `9${Date.now()}`;
 
 async function withSql<T>(fn: (sql: ReturnType<typeof postgres>) => Promise<T>): Promise<T> {
 	const sql = postgres(TEST_DATABASE_URL, { max: 1 });

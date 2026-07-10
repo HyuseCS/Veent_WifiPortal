@@ -2,6 +2,8 @@ import { fail } from '@sveltejs/kit';
 import { MANAGER_ROLES, STAFF_STATUS, type StaffRole } from '@veent/core';
 import { db } from '$lib/server/db';
 import { requireManager } from '$lib/server/auth-guard';
+import { parseDueDate } from '$lib/server/formValidation';
+import { rateLimit } from '$lib/server/rateLimit';
 import { listStaff, listNetworkHealth } from '$lib/server/queries';
 import {
 	listIssues,
@@ -54,6 +56,11 @@ export const load: PageServerLoad = async (event) => {
 			// Managers work the full board (which already lists the pool as "Open"); no separate pool feed.
 			pool: [] as AdminIssueRow[],
 			// Timelines for the expanded-row preview, grouped by issue (one query, no N+1).
+			// CEILING (L3): this ships EVERY issue plus the FULL event history of every issue on each
+			// visit, and the append-only event table only grows. Fine at current volume; the upgrade
+			// path when it stops being fine is to paginate listIssues() and fetch event history lazily
+			// on row-expand via the existing /issues/[id]/detail endpoint (the assignee modal already
+			// does exactly this). Tracked as a backlog item — no pagination now.
 			events: await listIssueEventsByIssue(db, issues.map((i) => i.id)),
 			assignableStaff: staff
 				.filter((s) => s.status === STAFF_STATUS.active)
@@ -94,13 +101,6 @@ function issueId(form: FormData): number | null {
 	return Number.isInteger(id) && id > 0 ? id : null;
 }
 
-// UTC midnight for "today", matching how due dates are parsed below (T00:00:00Z). Due dates on
-// or after this are allowed; earlier ones are in the past.
-function todayUtcMs(): number {
-	const now = new Date();
-	return Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
-}
-
 // `existingDueMs` grandfathers an already-set past due date on edit: keeping an overdue incident's
 // original date is fine, only NEWLY setting a past date is rejected.
 function parseIssueInput(
@@ -109,7 +109,13 @@ function parseIssueInput(
 ): { input: IssueInput } | { error: string } {
 	const title = String(form.get('issue-title') ?? '').trim();
 	if (!title) return { error: 'Title is required.' };
+	// Server-side length caps — the input's maxlength is client-only, a tampered POST could store
+	// megabytes otherwise (M4b; mirrors the 2000-char comment/resolution-note caps).
+	if (title.length > 200) return { error: 'Title is too long (200 characters max).' };
 	const description = String(form.get('issue-description') ?? '').trim() || null;
+	if (description && description.length > 5000) {
+		return { error: 'Description is too long (5000 characters max).' };
+	}
 
 	const priority = String(form.get('issue-priority') ?? 'medium');
 	if (!isIssuePriority(priority)) return { error: 'Invalid priority.' };
@@ -122,23 +128,11 @@ function parseIssueInput(
 		networkId = n;
 	}
 
-	const rawDue = String(form.get('issue-dueDate') ?? '').trim();
-	let dueDate: Date | null = null;
-	if (rawDue) {
-		// Parse as UTC midnight so it round-trips with issues.ts toDateInput() (which reads back
-		// via toISOString/UTC) — a local parse would drift the date by a day in non-UTC zones.
-		const d = new Date(`${rawDue}T00:00:00Z`);
-		if (Number.isNaN(d.getTime())) return { error: 'Invalid due date.' };
-		// Reject deadlines in the past — unless this exact date was already on the incident (edit of
-		// an existing overdue item), so managers can still edit without being forced to bump the date.
-		if (d.getTime() < todayUtcMs() && d.getTime() !== existingDueMs) {
-			return { error: 'Due date cannot be in the past.' };
-		}
-		dueDate = d;
-	}
+	const due = parseDueDate(String(form.get('issue-dueDate') ?? ''), existingDueMs);
+	if ('error' in due) return { error: due.error };
 
 	const assigneeIds = [...new Set(form.getAll('assigneeId').map((v) => String(v)).filter(Boolean))];
-	return { input: { title, description, priority, networkId, dueDate, assigneeIds } };
+	return { input: { title, description, priority, networkId, dueDate: due.dueDate, assigneeIds } };
 }
 
 /** Keep only ids that are currently ACTIVE staff — never trust the posted assignee list
@@ -161,7 +155,10 @@ export const actions: Actions = {
 		parsed.input.assigneeIds = await validAssignees(parsed.input.assigneeIds);
 		const id = await createIssue(db, parsed.input, event.locals.user!.id);
 		// Every assignee on a fresh incident is newly-assigned → notify them all (minus self).
-		await notifyAssignees(
+		// Fire-and-forget: notifyAssignees is best-effort (whole-body try/catch, never throws) and its
+		// serial per-recipient sends must not delay the HTTP response (L2). node/VPS runtime keeps the
+		// promise alive past the response.
+		void notifyAssignees(
 			parsed.input.assigneeIds,
 			event.locals.user!,
 			{ id, title: parsed.input.title },
@@ -177,6 +174,10 @@ export const actions: Actions = {
 	selfReport: async (event) => {
 		const userId = event.locals.user?.id;
 		if (!userId) return fail(401, { action: 'selfReport', error: 'Not signed in.' });
+		// Any signed-in staff may self-report — cap the abuse ceiling so a tampered client can't spam
+		// the Open pool (30 / 15 min, per-user). Same shape as the Sentry track limiter (M4c).
+		const rl = await rateLimit('admin_issue_selfreport', userId, 30, 15 * 60 * 1000);
+		if (!rl.allowed) return fail(429, { action: 'selfReport', error: 'Too many attempts. Please wait a few minutes.' });
 		const form = await event.request.formData();
 		const parsed = parseIssueInput(form);
 		if ('error' in parsed) return fail(400, { action: 'selfReport', error: parsed.error });
@@ -198,7 +199,8 @@ export const actions: Actions = {
 		parsed.input.assigneeIds = await validAssignees(parsed.input.assigneeIds);
 		const added = await updateIssue(db, id, parsed.input, event.locals.user!.id);
 		// Only NEW assignees get an email (updateIssue returns the diff), never on every edit.
-		await notifyAssignees(added, event.locals.user!, { id, title: parsed.input.title }, event.url.origin);
+		// Fire-and-forget best-effort notify (never throws, must not block the response) — L2.
+		void notifyAssignees(added, event.locals.user!, { id, title: parsed.input.title }, event.url.origin);
 		return { ok: true, action: 'update', id };
 	},
 
@@ -233,7 +235,11 @@ export const actions: Actions = {
 		}
 
 		const resolutionNote = String(form.get('resolutionNote') ?? '').trim() || null;
-		await setIssueStatus(db, id, status, { resolutionNote, actorId: userId! });
+		if (resolutionNote && resolutionNote.length > 2000) {
+			return fail(400, { action: 'updateStatus', error: 'Resolution note is too long (2000 characters max).' });
+		}
+		const result = await setIssueStatus(db, id, status, { resolutionNote, actorId: userId! });
+		if (result === 'not_found') return fail(404, { action: 'updateStatus', error: 'Incident not found.' });
 		return { ok: true, action: 'updateStatus', id };
 	},
 

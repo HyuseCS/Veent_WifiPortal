@@ -7,6 +7,8 @@ import { listStaff } from '$lib/server/queries';
 import { createIssueFromSentry, isIssuePriority, type IssueInput } from '$lib/server/issues';
 import { notifyAssignees } from '$lib/server/issueNotify';
 import { getDashboard, ignoreIssue, isSentryConfigured, resolveIssue } from '$lib/server/sentry';
+import { validateSentrySnapshot } from '$lib/server/sentry/map';
+import { parseDueDate } from '$lib/server/formValidation';
 import type { Actions, PageServerLoad } from './$types';
 
 const log = logger('sentry');
@@ -84,10 +86,19 @@ export const actions: Actions = {
 
 		const form = await event.request.formData();
 		const sentryIssueId = String(form.get('sentryIssueId') ?? '').trim();
-		const shortId = String(form.get('sentryShortId') ?? '').trim();
-		const permalink = String(form.get('sentryPermalink') ?? '').trim();
-		const sentryTitle = String(form.get('sentryTitle') ?? '').trim();
 		if (!sentryIssueId) return fail(400, { action: 'track', error: 'Missing Sentry issue.' });
+
+		// The snapshot fields are client-supplied hidden inputs; the permalink is later rendered as
+		// an href. Reject non-https permalinks / malformed ids / oversized titles loudly — the legit
+		// UI always posts an https permalink straight from the Sentry API (H1: stored-XSS guard).
+		const snapshot = validateSentrySnapshot({
+			issueId: sentryIssueId,
+			shortId: String(form.get('sentryShortId') ?? ''),
+			permalink: String(form.get('sentryPermalink') ?? ''),
+			title: String(form.get('sentryTitle') ?? '')
+		});
+		if (!snapshot) return fail(400, { action: 'track', error: 'Invalid Sentry permalink.' });
+		const { shortId, permalink, title: sentryTitle } = snapshot;
 
 		const title = String(form.get('issue-title') ?? '').trim();
 		if (!title) return fail(400, { action: 'track', error: 'Title is required.' });
@@ -96,14 +107,11 @@ export const actions: Actions = {
 		const priority = String(form.get('issue-priority') ?? 'medium');
 		if (!isIssuePriority(priority)) return fail(400, { action: 'track', error: 'Invalid priority.' });
 
-		const rawDue = String(form.get('issue-dueDate') ?? '').trim();
-		let dueDate: Date | null = null;
-		if (rawDue) {
-			// UTC midnight, matching the incident form parser (round-trips with toDateInput).
-			const d = new Date(`${rawDue}T00:00:00Z`);
-			if (Number.isNaN(d.getTime())) return fail(400, { action: 'track', error: 'Invalid due date.' });
-			dueDate = d;
-		}
+		// Same due-date rules as the incident form (UTC midnight + past-date rejection) — previously
+		// track NaN-checked only and silently accepted past dates (M4a).
+		const due = parseDueDate(String(form.get('issue-dueDate') ?? ''));
+		if ('error' in due) return fail(400, { action: 'track', error: due.error });
+		const dueDate = due.dueDate;
 
 		const assigneeIds = await validAssignees([
 			...new Set(form.getAll('assigneeId').map((v) => String(v)).filter(Boolean))
@@ -126,8 +134,9 @@ export const actions: Actions = {
 			}
 			throw err;
 		}
-		// Notify assignees (email + in-app), same as a manual incident. Post-commit, best-effort.
-		await notifyAssignees(assigneeIds, event.locals.user!, { id, title }, event.url.origin);
+		// Notify assignees (email + in-app), same as a manual incident. Post-commit, best-effort,
+		// fire-and-forget so the serial sends don't delay the response (never throws) — L2.
+		void notifyAssignees(assigneeIds, event.locals.user!, { id, title }, event.url.origin);
 		return { action: 'track', ok: true, id };
 	}
 };

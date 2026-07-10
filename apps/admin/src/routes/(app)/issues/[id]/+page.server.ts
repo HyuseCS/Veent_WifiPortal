@@ -2,6 +2,7 @@ import { error, fail } from '@sveltejs/kit';
 import { MANAGER_ROLES, type StaffRole } from '@veent/core';
 import { db } from '$lib/server/db';
 import { requireManager } from '$lib/server/auth-guard';
+import { rateLimit } from '$lib/server/rateLimit';
 import {
 	getIssue,
 	listIssueEvents,
@@ -43,6 +44,11 @@ export const actions: Actions = {
 			return fail(403, { error: 'You can only comment on incidents assigned to you.' });
 		}
 
+		// Comments fan out to every assignee's notification feed — cap the abuse ceiling so a
+		// tampered client can't spam notifications (30 / 15 min, per-user). Same shape as track (M4c).
+		const rl = await rateLimit('admin_issue_comment', userId, 30, 15 * 60 * 1000);
+		if (!rl.allowed) return fail(429, { error: 'Too many attempts. Please wait a few minutes.' });
+
 		const form = await event.request.formData();
 		const body = String(form.get('body') ?? '').trim();
 		if (!body) return fail(400, { error: 'Comment cannot be empty.' });
@@ -69,7 +75,11 @@ export const actions: Actions = {
 		if (!isIssueStatus(status)) return fail(400, { error: 'Invalid status.' });
 
 		const resolutionNote = String(form.get('resolutionNote') ?? '').trim() || null;
-		await setIssueStatus(db, id, status, { resolutionNote, actorId: userId });
+		if (resolutionNote && resolutionNote.length > 2000) {
+			return fail(400, { error: 'Resolution note is too long (2000 characters max).' });
+		}
+		const result = await setIssueStatus(db, id, status, { resolutionNote, actorId: userId });
+		if (result === 'not_found') return fail(404, { error: 'Incident not found.' });
 		return { ok: true };
 	}
 };

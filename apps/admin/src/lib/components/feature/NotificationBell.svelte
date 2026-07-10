@@ -92,9 +92,12 @@
 		<!-- `fixed` (not absolute): the Topbar sits inside the layout's overflow-hidden scroll column,
 		     which would clip an absolutely-positioned panel. Anchored just below the h-16 top bar,
 		     right-aligned to its padding, with a high z so it overlays the page content. -->
+		<!-- A labelled region + plain list, not a role="menu": the panel holds forms/links/buttons, not
+		     menuitems, so the ARIA menu interaction model (arrow-key roving, one focusable child) never
+		     applied and misled screen readers (L6a). -->
 		<div
 			bind:this={panelEl}
-			role="menu"
+			role="region"
 			aria-label="Notifications"
 			class="fixed top-[4.25rem] right-4 z-[60] w-80 max-w-[calc(100vw-2rem)] overflow-hidden rounded-lg border border-border bg-bg shadow-xl shadow-black/10 sm:right-6"
 		>
@@ -119,12 +122,11 @@
 			{#if notifications.length === 0}
 				<p class="px-3 py-6 text-center text-sm text-muted">You're all caught up.</p>
 			{:else}
-				<ul class="max-h-80 overflow-y-auto py-1" aria-live="polite">
+				<ul class="max-h-80 overflow-y-auto py-1">
 					{#each notifications as n (n.id)}
 						<li class="flex items-start gap-1 transition-colors hover:bg-surface">
 							<a
 								href={resolve(`/issues/${n.issueId}`)}
-								role="menuitem"
 								onclick={() => (open = false)}
 								class="flex min-w-0 flex-1 flex-col gap-0.5 px-3 py-2 outline-none focus-visible:bg-surface"
 							>

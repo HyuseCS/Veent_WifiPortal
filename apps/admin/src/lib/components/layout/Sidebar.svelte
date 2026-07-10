@@ -171,9 +171,13 @@
 					{#if !collapsed}
 						<span class="flex-1">{item.label}</span>
 						{#if badge > 0}
+							<!-- Count folded into the LINK's accessible name (sr-only) so screen readers voice
+							     it; the visible pill is decorative/aria-hidden — an aria-label on a
+							     non-focusable span was mostly not announced (L6b). -->
+							<span class="sr-only">, {badge} unread</span>
 							<span
 								class="ml-auto inline-flex min-w-5 items-center justify-center rounded-full bg-cta px-1.5 py-0.5 text-[11px] font-semibold text-white"
-								aria-label="{badge} unread"
+								aria-hidden="true"
 							>
 								{badgeLabel(badge)}
 							</span>

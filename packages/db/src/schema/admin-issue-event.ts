@@ -32,7 +32,7 @@ export const adminIssueEvent = pgTable(
 			.notNull()
 			.references(() => adminIssue.id, { onDelete: 'cascade' }),
 		actorId: text('actor_id').references(() => adminUser.id, { onDelete: 'set null' }),
-		type: text('type').notNull(), // created | status_changed | assigned | unassigned | priority_changed | comment
+		type: text('type').notNull(), // created | status_changed | assigned | unassigned | priority_changed | comment | note_edited
 		fromValue: text('from_value'),
 		toValue: text('to_value'),
 		note: text('note'),
@@ -43,7 +43,7 @@ export const adminIssueEvent = pgTable(
 		index('admin_issue_event_issue_idx').on(t.issueId, t.createdAt),
 		check(
 			'admin_issue_event_type_ck',
-			sql`${t.type} in ('created', 'status_changed', 'assigned', 'unassigned', 'priority_changed', 'comment')`
+			sql`${t.type} in ('created', 'status_changed', 'assigned', 'unassigned', 'priority_changed', 'comment', 'note_edited')`
 		)
 	]
 );
