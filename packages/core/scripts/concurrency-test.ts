@@ -16,7 +16,7 @@ import { createStubNetworkController } from '@veent/core/integrations';
 import { eq, like } from 'drizzle-orm';
 
 const DATABASE_URL =
-	process.env.DATABASE_URL ?? 'postgres://root:mysecretpassword@localhost:5432/local';
+	process.env.DATABASE_URL ?? 'postgres://root:mysecretpassword@localhost:5433/local';
 
 // Bigger pool than prod default (10) so the test driver isn't the bottleneck we're measuring.
 const db = createDb(DATABASE_URL, { max: 30 });
