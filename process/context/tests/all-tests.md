@@ -118,6 +118,14 @@ Recommended gate order for this repo (no CI to enforce it, so run manually in th
 
 **`packages/db`:** no test script — zero tests, not covered by any root fan-out.
 
+**Gotcha — scoping to a single file:** never invoke `bun test <file>` directly (bun's
+native test runner) to scope a unit run — it silently no-ops `vi.setSystemTime` (undefined),
+failing any spec using fake timers. Use `bunx vitest run <file>` (or `cd apps/admin && bunx
+vitest run src/lib/server/foo.test.ts`) instead — this runs the real vitest project the repo
+is built on. `bun test` (no args, root `package.json` alias) is fine — it fans out to `bun
+run --filter ... test`, which is `vitest run` per app; the trap is only `bun test <file>`
+called directly.
+
 **Admin harness scripts** (`apps/admin/scripts/`):
 
 | Command | What it does |

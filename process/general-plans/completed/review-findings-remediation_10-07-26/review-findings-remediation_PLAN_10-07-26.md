@@ -9,7 +9,7 @@ phase: "PLAN"
 # Review Findings Remediation — Code-Review Findings Sweep (19 claims)
 
 Date: 10-07-26
-Status: ACTIVE — VALIDATE complete (Gate: PASS), ready for EXECUTE
+Status: COMPLETE — EXECUTE + EVL green across both commits (8d67f7a, 1d43a84); archived 10-07-26
 Complexity: SIMPLE (19 small surgical fixes, no phase split)
 
 ## Context
@@ -127,7 +127,7 @@ second edit.**
 
 ### Group A — `apps/admin` code fixes (4)
 
-- [ ] **A1** — `apps/admin/src/lib/server/formValidation.ts` `parseDueDate` (~L42–53):
+- [x] **A1** — `apps/admin/src/lib/server/formValidation.ts` `parseDueDate` (~L42–53):
   reject impossible calendar dates.
   - Require `/^\d{4}-\d{2}-\d{2}$/` on `trimmed`; on mismatch return
     `{ error: 'Invalid due date.' }`.
@@ -142,7 +142,7 @@ second edit.**
     that a valid `yyyy-mm-dd` (e.g. a future date) still parses to `{ dueDate: Date }`.
     Must not break the existing suite.
 
-- [ ] **A2** — `apps/admin/src/lib/server/issues.ts` `setIssueStatus` pre-update select
+- [x] **A2** — `apps/admin/src/lib/server/issues.ts` `setIssueStatus` pre-update select
   (~L643–648): add row lock.
   - Add `.for('update')` to the `before` read so two concurrent same-status
     resolution-note edits serialize before the compare/emit:
@@ -152,14 +152,14 @@ second edit.**
   - Single-caller path behavior is unchanged — no new test (concurrency isn't
     unit-testable here); existing `issues.test.ts` must stay green as regression proof.
 
-- [ ] **A3** — `apps/admin/src/routes/(app)/+layout.server.ts` (~L31–35): isolate the
+- [x] **A3** — `apps/admin/src/routes/(app)/+layout.server.ts` (~L31–35): isolate the
   notification-list read.
   - Change `onIssues ? listNotifications(db, event.locals.user.id) : Promise.resolve([])`
     to `onIssues ? listNotifications(db, event.locals.user.id).catch(() => []) : Promise.resolve([])`.
   - `role` and `unreadCount` promises in the same `Promise.all` are untouched and must
     keep propagating failures as today.
 
-- [ ] **A4** — `apps/admin/e2e/incident-detail.e2e.ts` `loginNonManager` (~L55–71): close
+- [x] **A4** — `apps/admin/e2e/incident-detail.e2e.ts` `loginNonManager` (~L55–71): close
   browser on failure.
   - Wrap the goto/fill/click auth sequence (everything after `browser.newPage(...)`) in
     `try { ...; return page } catch (e) { await browser.close(); throw e }`.
@@ -167,32 +167,32 @@ second edit.**
 
 ### Group B — config (1)
 
-- [ ] **B1** — `.gitignore` L55: `.vibecode-backup*/` → `.vibecode-backup*` (drop
+- [x] **B1** — `.gitignore` L55: `.vibecode-backup*/` → `.vibecode-backup*` (drop
   trailing `/`) so backup files and dirs are both ignored. Optionally delete the now-fully-
   subsumed L49 `.vibecode-backup` entry (not required — verify it doesn't break anything
   else first; if unsure, leave L49 in place).
 
 ### Group C — context-doc accuracy (4)
 
-- [ ] **C1** — `process/context/all-context.md` L184 (repository structure tree): change
+- [x] **C1** — `process/context/all-context.md` L184 (repository structure tree): change
   `drizzle/ ← 46 migrations` → `drizzle/ ← 47 migrations` (re-verify count live at EXECUTE
   time; grep the file for any other stale "46" migration references before finishing).
 
-- [ ] **C2** — `process/context/database/all-database.md` L154–155: change
+- [x] **C2** — `process/context/database/all-database.md` L154–155: change
   `46, 0000–0045` → `47, 0000–0046 as of 2026-07-10`; mention `0046_oval_lorna_dane.sql`
   by name.
 
-- [ ] **C3** — `process/context/tests/all-tests.md` L177: change
+- [x] **C3** — `process/context/tests/all-tests.md` L177: change
   `3/10 IMS e2e specs` → `3/10 admin E2E specs` (the 10 is the admin suite total; only 4
   specs are IMS). Leave the rest of the line unchanged.
 
-- [ ] **C4** — `process/features/incident-management/_GUIDE.md` L23: prefix the four spec
+- [x] **C4** — `process/features/incident-management/_GUIDE.md` L23: prefix the four spec
   names with `apps/admin/e2e/` (`incident-detail`, `incident-notifications`,
   `incident-sentry`, `incident-timeline`).
 
 ### Group D — protocol-doc fixes (4)
 
-- [ ] **D1** — `process/development-protocols/vc-autoresearch-spec.md` frontmatter:
+- [x] **D1** — `process/development-protocols/vc-autoresearch-spec.md` frontmatter:
   change `read_order: 7` → `read_order: 8` (fixes collision with
   `communication-standards.md`, also `7`). Resulting order:
   communication-standards=7, vc-autoresearch-spec=8, autopilot=9 (already correct).
@@ -203,7 +203,7 @@ second edit.**
   in the same pass, so this fix doesn't reintroduce the drift it's closing. (Added at
   VALIDATE — see VALIDATE addendum in Touchpoints.)
 
-- [ ] **D2** — `process/development-protocols/orchestration.md` §VALIDATE Gate §Skip
+- [x] **D2** — `process/development-protocols/orchestration.md` §VALIDATE Gate §Skip
   conditions (~L602–612): restructure the "skipped when **ALL** of the following are
   true" numbered list (which currently mixes a brand-new-trivial-change path, items 1–3,
   with an existing-PASS-contract path, item 4, that cannot co-exist with the others) into
@@ -220,11 +220,11 @@ second edit.**
     prose only — every signal string stays byte-identical. Scope this edit to
     `orchestration.md` only — do not touch any other file's copy of this rule.
 
-- [ ] **D3** — `process/development-protocols/vc-system-behavior/04-research.md` L27:
+- [x] **D3** — `process/development-protocols/vc-system-behavior/04-research.md` L27:
   add `sort` to the Bash command whitelist (it is used by the required session-start
   commands at ~L52/53/60/65 — `find ... | sort`).
 
-- [ ] **D4** — `process/development-protocols/vc-system-behavior/08-validate.md`
+- [x] **D4** — `process/development-protocols/vc-system-behavior/08-validate.md`
   L123–127 and `09-execute.md` L226: replace stale `pnpm` commands with the real `bun`
   equivalents, keeping the pre-V1 baseline gate itself intact (doc-only, no gate
   removed):
@@ -239,15 +239,15 @@ second edit.**
 
 ### Group E — markdown fence language, MD040 (6)
 
-- [ ] **E1** — `process/features/admin-staff-governance/_GUIDE.md` L55: add ` ```text `
+- [x] **E1** — `process/features/admin-staff-governance/_GUIDE.md` L55: add ` ```text `
   to the opening fence.
-- [ ] **E2** — `process/general-plans/active/_GUIDE.md` L9: add ` ```text ` to the
+- [x] **E2** — `process/general-plans/active/_GUIDE.md` L9: add ` ```text ` to the
   opening fence.
-- [ ] **E3** — `process/_seeds/general-plans/active/_GUIDE.md` L9: add ` ```text ` to
+- [x] **E3** — `process/_seeds/general-plans/active/_GUIDE.md` L9: add ` ```text ` to
   the opening fence.
-- [ ] **E4** — `process/context/all-context.md` L41 **and** L176 (both repository
+- [x] **E4** — `process/context/all-context.md` L41 **and** L176 (both repository
   structure trees): add ` ```text ` to each opening fence.
-- [ ] **E5** — `process/development-protocols/vc-autoresearch-spec.md`: add a language
+- [x] **E5** — `process/development-protocols/vc-autoresearch-spec.md`: add a language
   to 4 opening fences — `text` (ASCII loop diagram + termination list), `markdown`
   (gap-entry format block), `tsv` (TSV log format block). Confirm exact count/locations
   by grepping the file for bare ` ``` ` at EXECUTE time (draft counted 4; re-verify).
@@ -256,21 +256,21 @@ second edit.**
   (tsv — TSV log format); closing fences at L63, L164, L275, L296 stay bare. (A 5th bare
   fence at L255 is a closing fence only — its opener elsewhere is already tagged; leave
   it alone.)
-- [ ] **E6** — `process/development-protocols/vc-system-behavior/05-spec.md`: add
+- [x] **E6** — `process/development-protocols/vc-system-behavior/05-spec.md`: add
   ` ```text ` to 3 unlabeled opening fences at L31, L43, L124.
   Rule for all of Group E: only OPENING fences get a language tag; closing fences (bare
   ` ``` `) are left unchanged.
 
 ## Acceptance Criteria
 
-- [ ] All 19 checklist items (A1-A4, B1, C1-C4, D1-D4, E1-E6) applied exactly as scoped — no scope creep into the 5 skipped findings (#3, #7, #8/10, #19).
-- [ ] `bun test src/lib/server/formValidation.test.ts` and `bun test src/lib/server/issues.test.ts` pass (apps/admin).
-- [ ] Root `bun run check` passes with zero new typecheck errors.
-- [ ] `validate-context-discovery.mjs` and `validate-protocol-wiring.mjs` pass with zero new failures.
-- [ ] Manual A3/A4 checks confirm no regression in notification-list isolation or e2e browser cleanup.
-- [ ] No stale "46 migrations" / "0000-0045" / "3/10 IMS e2e specs" strings remain in `process/context/`.
-- [ ] Every verbatim signal string in D2/D4 (`Gate: PASS`, `V1 AUTO-PROCEED`, etc.) is byte-identical to before the edit.
-- [ ] `process/development-protocols/all-development-protocols.md:51` no longer says `read_order: 7` for `vc-autoresearch-spec.md` (added at VALIDATE).
+- [x] All 19 checklist items (A1-A4, B1, C1-C4, D1-D4, E1-E6) applied exactly as scoped — no scope creep into the 5 skipped findings (#3, #7, #8/10, #19).
+- [x] `bun test src/lib/server/formValidation.test.ts` and `bun test src/lib/server/issues.test.ts` pass (apps/admin).
+- [x] Root `bun run check` passes with zero new typecheck errors.
+- [x] `validate-context-discovery.mjs` and `validate-protocol-wiring.mjs` pass with zero new failures.
+- [x] Manual A3/A4 checks confirm no regression in notification-list isolation or e2e browser cleanup.
+- [x] No stale "46 migrations" / "0000-0045" / "3/10 IMS e2e specs" strings remain in `process/context/`.
+- [x] Every verbatim signal string in D2/D4 (`Gate: PASS`, `V1 AUTO-PROCEED`, etc.) is byte-identical to before the edit.
+- [x] `process/development-protocols/all-development-protocols.md:51` no longer says `read_order: 7` for `vc-autoresearch-spec.md` (added at VALIDATE).
 
 ## Phase Completion Rules
 
@@ -284,8 +284,8 @@ This is a SIMPLE single-pass plan (no phase split). It is considered complete wh
 
 | Gate / Scenario | Strategy | Proves SPEC criterion |
 |---|---|---|
-| `cd apps/admin && bun test src/lib/server/formValidation.test.ts` | Fully-Automated | A1: `2026-02-31` rejected, valid dates still parse |
-| `cd apps/admin && bun test src/lib/server/issues.test.ts` | Fully-Automated | A2: `setIssueStatus` outcomes unchanged for single-caller path |
+| `cd apps/admin && bunx vitest run src/lib/server/formValidation.test.ts` | Fully-Automated | A1: `2026-02-31` rejected, valid dates still parse |
+| `cd apps/admin && bunx vitest run src/lib/server/issues.test.ts` | Fully-Automated | A2: `setIssueStatus` outcomes unchanged for single-caller path |
 | Root `bun run check` | Fully-Automated | A1/A2/A3/A4 typecheck clean across all 3 apps + packages |
 | `node .claude/skills/vc-audit-context/scripts/validate-context-discovery.mjs` | Fully-Automated | C1–C4, D1 frontmatter/routing stay valid (D1 read_order de-dupe specifically) |
 | `node .claude/skills/vc-audit-vc/scripts/validate-protocol-wiring.mjs` | Fully-Automated | D2/D3/D4 protocol doc edits keep wiring/discovery intact |
@@ -322,8 +322,8 @@ Test gates (C3 5-column table):
 
 | criterion id | behavior | strategy | proving test | gap-resolution |
 |---|---|---|---|---|
-| A1 | `parseDueDate` rejects impossible calendar dates (`2026-02-31`), still accepts valid `yyyy-mm-dd` | Fully-Automated | `cd apps/admin && bun test src/lib/server/formValidation.test.ts` (new case added by this plan) | B |
-| A2 | `setIssueStatus` outcomes byte-identical for the single-caller path after adding `.for('update')` | Fully-Automated | `cd apps/admin && bun test src/lib/server/issues.test.ts` (pre-existing suite as regression proof) | A |
+| A1 | `parseDueDate` rejects impossible calendar dates (`2026-02-31`), still accepts valid `yyyy-mm-dd` | Fully-Automated | `cd apps/admin && bunx vitest run src/lib/server/formValidation.test.ts` (new case added by this plan) | B |
+| A2 | `setIssueStatus` outcomes byte-identical for the single-caller path after adding `.for('update')` | Fully-Automated | `cd apps/admin && bunx vitest run src/lib/server/issues.test.ts` (pre-existing suite as regression proof) | A |
 | A3 | `listNotifications` failure isolated (page still renders, bell empty); `role`/`unreadCount` failures still propagate | Agent-Probe | Manual: force a `listNotifications` throw on an `/issues*` page, confirm page renders and other two promises still fail loudly | B |
 | A4 | `loginNonManager` closes the browser on an auth-step failure, no orphaned process | Agent-Probe | Manual: force the auth sequence to fail, confirm `browser.close()` ran and no leaked Chromium process | B |
 | B1 | `.gitignore` L55 glob widened to match files + dirs | Fully-Automated | `git diff .gitignore` shows only the L55 change (+ optional L49 removal) | A |
@@ -367,6 +367,12 @@ What this coverage does NOT prove:
 - The Hybrid visual-diff row (E1-E6) proves a human/agent visually confirmed the fence tags at EXECUTE time — it does not constitute an automated markdownlint gate (none exists in this repo), so a future re-introduction of an untagged fence in these files would not be caught automatically.
 
 Gate: PASS (no FAILs, plan updated to resolve the 1 CONCERN found)
+
+**Closeout correction (applied 10-07-26, UPDATE PROCESS):** the two A1/A2 unit-test gate
+commands (Verification Evidence + Test gates tables) were written as `bun test <file>` but
+this repo's real unit runner is **vitest** — bun's native runner lacks `vi.setSystemTime`
+and fails the A1 fake-timer spec. Corrected to `bunx vitest run <file>` in both tables;
+re-run confirmed both pass (12/12 and 16/16). Verdict unchanged (Gate: PASS).
 
 ### Proposed Plan Updates (P1 — applied)
 
