@@ -65,7 +65,7 @@ bun run db:migrate          # apply the committed migrations → all tables
 > [Database](#database-run-from-the-repo-root--delegates-to-veentdb) below.
 
 Each developer's `DATABASE_URL` is identical because it points at their **own** local
-Docker Postgres (`localhost:5432`), not a shared server.
+Docker Postgres (`localhost:5433`), not a shared server.
 
 ## Develop
 
@@ -275,9 +275,9 @@ bun run db:seed             # optional: reseed packages/dev data
 To sanity-check a fresh install works end-to-end, migrate a throwaway database:
 
 ```sh
-psql "postgres://root:mysecretpassword@localhost:5432/postgres" -c 'CREATE DATABASE migrate_test;'
-DATABASE_URL="postgres://root:mysecretpassword@localhost:5432/migrate_test" bun run --filter @veent/db db:migrate
-psql "postgres://root:mysecretpassword@localhost:5432/postgres" -c 'DROP DATABASE migrate_test;'
+psql "postgres://root:mysecretpassword@localhost:5433/postgres" -c 'CREATE DATABASE migrate_test;'
+DATABASE_URL="postgres://root:mysecretpassword@localhost:5433/migrate_test" bun run --filter @veent/db db:migrate
+psql "postgres://root:mysecretpassword@localhost:5433/postgres" -c 'DROP DATABASE migrate_test;'
 ```
 
 ## Deploying to production
