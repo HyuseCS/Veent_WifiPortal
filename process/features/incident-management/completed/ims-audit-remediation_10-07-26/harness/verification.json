@@ -1,0 +1,69 @@
+{
+  "task": "ims-audit-remediation (PR #74 IMS audit, 13 findings, 5 phases)",
+  "result": "PASS-CODE-TIER (fully-automated gates green; hybrid/agent-probe + human handoff deferred to EVL)",
+  "commands": [
+    {
+      "step": "Admin unit suite (all phases): 18 pre-existing IMS tests stay green + 9 new (5 validateSentrySnapshot H1, 3 setIssueStatus tri-state H2, parseDueDate M4a, unassigned-shape L4, note_edited exclusion)",
+      "command": "cd apps/admin && bun run test",
+      "result": "PASS",
+      "notes": "19 files / 138 tests pass (was 129)."
+    },
+    {
+      "step": "H2 migration typecheck + direct DDL apply (push-managed dev DB; db:migrate NOT used per journal-drift gotcha)",
+      "command": "cd packages/db && bun run db:generate && bunx tsc --noEmit; direct ALTER TABLE CHECK apply via postgres client",
+      "result": "PASS",
+      "notes": "0046_oval_lorna_dane.sql generated (clean DROP+ADD CHECK). DDL applied to postgres://root:***@localhost:5432/local; verified via pg_get_constraintdef — constraint accepts 'note_edited'. packages/db tsc clean."
+    },
+    {
+      "step": "Root typecheck across all apps (svelte-check, incl. Svelte a11y for L1/L6)",
+      "command": "bun run check",
+      "result": "PASS",
+      "notes": "locator/customer/admin all 0 errors 0 warnings."
+    },
+    {
+      "step": "ESLint on every changed source file (all 5 phases)",
+      "command": "cd apps/admin && bunx eslint <changed files>",
+      "result": "PASS",
+      "notes": "0 new errors. Pre-existing repo-wide debt (svelte/no-navigation-without-resolve on href={item.href} in Sidebar/MobileDrawer, untouched lines) confirmed present on HEAD."
+    },
+    {
+      "step": "M2 secrets untracked",
+      "command": "git status --short apps/admin/e2e/.auth/",
+      "result": "PASS",
+      "notes": "owner.json + owner-totp.txt shown 'D' (staged for removal). RESIDUAL: secret remains in history until rotated."
+    },
+    {
+      "step": "M1/L4 SQL semantics + M3 pool-read predicate (runtime)",
+      "command": "bun run --filter radius-admin test:e2e (incident-notifications + incident-detail specs)",
+      "result": "DEFERRED",
+      "notes": "Deferred to orchestrator EVL (vc-tester). notifications.test.ts fakeDb returns canned rows regardless of WHERE/JOIN, so unit proves JS-shape ONLY (plan G1/E4). M3 type-proof green via bun run check; new e2e assertion added (non-manager adrian login + 2FA enroll + /detail GET)."
+    }
+  ],
+  "manualChecks": [
+    {
+      "check": "H1 in live request path — ?/track POST with javascript: permalink returns 400",
+      "result": "DEFERRED",
+      "notes": "Agent browser pass + human handoff (plan scenario 3)."
+    },
+    {
+      "check": "H2 client self-heal — resolve from My Issues card with a note persists + note_edited in timeline; edit note on detail page while resolved persists",
+      "result": "DEFERRED",
+      "notes": "Agent browser pass + human handoff (plan scenarios 1-2)."
+    },
+    {
+      "check": "M1/L4 live feed — newly assigned user's bell has no pre-assignment backlog; unassigned user sees their unassignment",
+      "result": "DEFERRED",
+      "notes": "Agent browser pass + human handoff (plan scenario 4)."
+    },
+    {
+      "check": "L1 dialog dismiss — Firefox keyboard-activation + drag-select from input stays open; true backdrop click closes",
+      "result": "DEFERRED",
+      "notes": "Agent browser pass + human handoff (plan scenario 5)."
+    },
+    {
+      "check": "Rotate leaked e2e session cookie + TOTP secret out of git history",
+      "result": "DEFERRED",
+      "notes": "M2 git rm removes tracking but not history; rotation required to fully close."
+    }
+  ]
+}
