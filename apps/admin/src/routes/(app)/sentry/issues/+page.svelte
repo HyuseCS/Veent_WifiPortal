@@ -20,7 +20,9 @@
 	<div class="flex h-full flex-col">
 		<SentryIssuesTable
 			issues={data.issues}
+			ignoredIssues={data.ignoredIssues}
 			degraded={data.degraded.issues}
+			ignoredDegraded={data.degraded.ignored}
 			assignableStaff={data.assignableStaff}
 			fill
 		/>

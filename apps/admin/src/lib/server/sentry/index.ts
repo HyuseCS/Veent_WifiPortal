@@ -9,7 +9,7 @@ import {
 	SENTRY_CREDENTIAL_KEYS
 } from './client';
 import { deriveKpis, mapEventDetail, mapIssue, mapTrend } from './map';
-import type { IssueStatus, SentryDashboard, SentryEventDetail, SentryIssue } from './types';
+import type { IssueFilter, IssueStatus, SentryDashboard, SentryEventDetail, SentryIssue } from './types';
 
 /**
  * Facade over the Sentry transport + mappers — the ONLY Sentry module the route imports. It
@@ -23,15 +23,16 @@ export type { SentryDashboard, SentryEventDetail, SentryIssue } from './types';
 
 const log = logger('sentry');
 
-/** Assemble the whole dashboard. */
+/** Assemble the whole dashboard. Unresolved drives the KPIs; ignored fills the second tab. */
 export async function getDashboard(): Promise<SentryDashboard> {
-	const issues = await loadIssues();
+	const [unresolved, ignored] = await Promise.all([loadIssues('unresolved'), loadIssues('ignored')]);
 	return {
 		configured: true,
-		kpis: deriveKpis(issues.data),
-		issues: issues.data,
+		kpis: deriveKpis(unresolved.data),
+		issues: unresolved.data,
+		ignoredIssues: ignored.data,
 		dashboardUrl: pub.PUBLIC_SENTRY_DASHBOARD_URL || null,
-		degraded: { issues: issues.degraded }
+		degraded: { issues: unresolved.degraded, ignored: ignored.degraded }
 	};
 }
 
@@ -39,20 +40,29 @@ export async function getDashboard(): Promise<SentryDashboard> {
 export async function getIssues(): Promise<{
 	configured: true;
 	issues: SentryIssue[];
-	degraded: { issues: boolean };
+	ignoredIssues: SentryIssue[];
+	degraded: { issues: boolean; ignored: boolean };
 }> {
-	const { data, degraded } = await loadIssues();
-	return { configured: true, issues: data, degraded: { issues: degraded } };
+	const [unresolved, ignored] = await Promise.all([loadIssues('unresolved'), loadIssues('ignored')]);
+	return {
+		configured: true,
+		issues: unresolved.data,
+		ignoredIssues: ignored.data,
+		degraded: { issues: unresolved.degraded, ignored: ignored.degraded }
+	};
 }
 
 /**
- * Load the unresolved issues with BOTH sparkline windows. The 14d list is primary — it drives the
- * table, counts and KPIs, and its failure degrades the section. The 24h list is best-effort: it's
+ * Load one status's issues with BOTH sparkline windows. The 14d list is primary — it drives the
+ * table and counts, and its failure degrades the section. The 24h list is best-effort: it's
  * harvested only for its per-issue sparkline and merged in by id (issues absent from the 24h
  * top-list keep an empty — correctly flat — 24h trend), so a 24h failure never blanks the table.
  */
-async function loadIssues(): Promise<{ data: SentryIssue[]; degraded: boolean }> {
-	const [primary, hourly] = await Promise.allSettled([fetchIssuesRaw('14d'), fetchIssuesRaw('24h')]);
+async function loadIssues(status: IssueFilter): Promise<{ data: SentryIssue[]; degraded: boolean }> {
+	const [primary, hourly] = await Promise.allSettled([
+		fetchIssuesRaw(status, '14d'),
+		fetchIssuesRaw(status, '24h')
+	]);
 
 	if (primary.status === 'rejected') {
 		log.error('issues fetch failed', primary.reason);
@@ -83,6 +93,8 @@ export async function getIssueEvent(id: string): Promise<SentryEventDetail> {
 
 export const resolveIssue = (id: string) => setStatus(id, 'resolved');
 export const ignoreIssue = (id: string) => setStatus(id, 'ignored');
+/** Un-ignore: put a dismissed issue back into the open feed. */
+export const restoreIssue = (id: string) => setStatus(id, 'unresolved');
 
 async function setStatus(id: string, status: IssueStatus): Promise<void> {
 	await putIssueStatus(id, status);

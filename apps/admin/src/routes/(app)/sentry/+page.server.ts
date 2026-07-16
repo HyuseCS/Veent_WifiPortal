@@ -6,7 +6,13 @@ import { clientIp, rateLimit } from '$lib/server/rateLimit';
 import { listStaff } from '$lib/server/queries';
 import { createIssueFromSentry, isIssuePriority, type IssueInput } from '$lib/server/issues';
 import { notifyAssignees } from '$lib/server/issueNotify';
-import { getDashboard, ignoreIssue, isSentryConfigured, resolveIssue } from '$lib/server/sentry';
+import {
+	getDashboard,
+	ignoreIssue,
+	isSentryConfigured,
+	resolveIssue,
+	restoreIssue
+} from '$lib/server/sentry';
 import { validateSentrySnapshot } from '$lib/server/sentry/map';
 import { parseDueDate } from '$lib/server/formValidation';
 import type { Actions, PageServerLoad } from './$types';
@@ -68,6 +74,7 @@ async function validAssignees(ids: string[]): Promise<string[]> {
 export const actions: Actions = {
 	resolve: (event) => mutate(event, 'resolve', resolveIssue),
 	ignore: (event) => mutate(event, 'ignore', ignoreIssue),
+	restore: (event) => mutate(event, 'restore', restoreIssue),
 
 	/**
 	 * Track a Sentry error as an assigned incident. Any signed-in active staff member may track (same
