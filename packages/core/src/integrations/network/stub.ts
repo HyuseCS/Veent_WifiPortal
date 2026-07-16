@@ -3,6 +3,8 @@ import type {
 	GrantInput,
 	InterfaceLimitInput,
 	DeviceHostAccessInput,
+	DhcpLeaseEntry,
+	HotspotActiveEntry,
 	RevokeScope
 } from './types';
 
@@ -50,6 +52,23 @@ export function createStubNetworkController(
 		},
 		async sweepAdminBindings(): Promise<string[]> {
 			return [];
+		},
+		async listDhcpLeases(): Promise<DhcpLeaseEntry[]> {
+			// No router in dev — no leases to sample, so the AP portion of the health refresh is a
+			// no-op and seeded rows stay untouched (Regression contract #5).
+			log('[network:stub] LIST-DHCP-LEASES → []');
+			return [];
+		},
+		async listHotspotActive(): Promise<HotspotActiveEntry[]> {
+			log('[network:stub] LIST-HOTSPOT-ACTIVE → []');
+			return [];
+		},
+		async pingHosts(
+			addresses: string[]
+		): Promise<Array<{ address: string; aliveMs: number | null }>> {
+			// No network to probe — every host is "unknown" (null), never fabricate a liveness.
+			log(`[network:stub] PING-HOSTS ${addresses.length} host(s) → null`);
+			return addresses.map((address) => ({ address, aliveMs: null }));
 		}
 	};
 }

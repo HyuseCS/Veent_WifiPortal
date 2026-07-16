@@ -391,6 +391,18 @@ export async function listNetworkHealth(db: DB, now: Date = new Date()): Promise
 		else logsByNetwork.set(r.networkId, [entry]);
 	}
 
+	// Group peers: AP rows sharing a non-null circuit-id (attributionSource='circuit-id') form a
+	// shared-ONU group the router can't split. Precompute each circuit-id's member names so a card
+	// can name the OTHER APs it shares an ONU with (AC5). Non-AP rows never participate.
+	const namesByCircuit = new Map<string, string[]>();
+	for (const r of rows) {
+		if (r.attributionSource === 'circuit-id' && r.apCircuitId) {
+			const list = namesByCircuit.get(r.apCircuitId);
+			if (list) list.push(r.name);
+			else namesByCircuit.set(r.apCircuitId, [r.name]);
+		}
+	}
+
 	return rows.map((r) => {
 		const uptime = Number(r.uptimePct);
 		// B3.5: if no fresh sample has landed within the ceiling, the stored online/uptime is no
@@ -419,7 +431,17 @@ export async function listNetworkHealth(db: DB, now: Date = new Date()): Promise
 			uptime: `${uptime.toFixed(1)}%`,
 			latency: r.latencyMs == null ? '—' : `${r.latencyMs}ms`,
 			users: activeByNetwork.get(r.id) ?? 0,
-			throughput: `${r.throughputMbps} Mbps`,
+			// Null throughput = per-AP counters unavailable on this firmware → honest "—" (AC4). Every
+			// consumer already parses the leading number (num()/parseFloat → NaN for "—", filtered), so
+			// this display-string guard is the single null-safety seam (E2).
+			throughput: r.throughputMbps == null ? '—' : `${r.throughputMbps} Mbps`,
+			mac: r.mac,
+			apCircuitId: r.apCircuitId,
+			attributionSource: r.attributionSource,
+			groupPeers:
+				r.attributionSource === 'circuit-id' && r.apCircuitId
+					? (namesByCircuit.get(r.apCircuitId) ?? []).filter((n) => n !== r.name)
+					: [],
 			latitude: r.latitude,
 			longitude: r.longitude,
 			address: r.address,

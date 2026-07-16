@@ -6,6 +6,8 @@ import type {
 	ActivateSessionInput,
 	InterfaceLimitInput,
 	DeviceHostAccessInput,
+	DhcpLeaseEntry,
+	HotspotActiveEntry,
 	RevokeScope
 } from './types';
 
@@ -63,6 +65,22 @@ const CONNECT_TIMEOUT_MS = 10_000;
 /** Comment/name prefix on the per-AP bandwidth queues we create, so ours are identifiable
  * and a re-apply updates rather than duplicates: `veent-hotspot-limit:<apName>`. */
 const LIMIT_TAG = 'veent-hotspot-limit';
+
+/**
+ * The RouterOS DHCP-lease field that carries the OLT-inserted Option 82 agent-circuit-id — the key
+ * for `listDhcpLeases`. Isolated as a single named constant (E5): `agent-circuit-id` was OBSERVED in
+ * RESEARCH but NOT yet confirmed against the live router's `/ip/dhcp-server/lease/print` output. If
+ * the live print exposes it under a different key, this one line is the only edit needed. */
+const DHCP_OPTION82_CIRCUIT_KEY = 'agent-circuit-id';
+
+/** Per-host timeout (ms) for the concurrent AP liveness pings (`pingHosts`). */
+const AP_PING_TIMEOUT_MS = 1500;
+/** Max concurrent pings on the single RouterOS connection. Bounded (chunks of this size) rather than
+ * fully parallel: whether node-routeros 1.6.9 safely multiplexes many concurrent `/ping` writes on
+ * one connection is UNVERIFIED (Risk R1) — 4-at-a-time caps the total budget at
+ * ceil(n/4)×timeout (≤ 6s for 10 APs) while keeping the multiplex small. If the live probe (E4)
+ * shows concurrent writes misbehave, drop this to 1 or open a second short-lived connection. */
+const AP_PING_CONCURRENCY = 4;
 
 /** Comment prefix on the per-device, src-scoped walled-garden entries `openHostAccessForDevice`
  * creates. The creation time is appended (`veent-checkout:<epochMs>`) so `sweepHostAccess` can
@@ -827,6 +845,86 @@ export function createMikrotikController(config: MikrotikConfig): NetworkControl
 					});
 				}
 				return samples;
+			});
+		},
+
+		async listDhcpLeases(): Promise<DhcpLeaseEntry[]> {
+			return withConn(async (conn) => {
+				const rows = await conn.write('/ip/dhcp-server/lease/print');
+				return rows.map((r) => {
+					// Option 82 agent-circuit-id: raw string pass-through, no interpretation. An absent or
+					// empty value (unicast renewal that skipped the OLT relay) normalises to null so the
+					// service never overwrites a cached circuit-id with a blank.
+					const rawCircuit = r[DHCP_OPTION82_CIRCUIT_KEY];
+					const agentCircuitId =
+						typeof rawCircuit === 'string' && rawCircuit.trim() !== '' ? rawCircuit : null;
+					const hostname =
+						typeof r['host-name'] === 'string' && r['host-name'] !== '' ? r['host-name'] : null;
+					return {
+						mac: (r['mac-address'] ?? '').toUpperCase(),
+						address: r.address ?? '',
+						hostname,
+						agentCircuitId,
+						status: r.status ?? ''
+					};
+				});
+			});
+		},
+
+		async listHotspotActive(): Promise<HotspotActiveEntry[]> {
+			return withConn(async (conn) => {
+				const rows = await conn.write('/ip/hotspot/active/print');
+				// `bytes-in`/`bytes-out` absent = firmware doesn't expose per-session counters (the AC4
+				// degradation signal). NEVER coerce an absent counter to 0 — leave it null.
+				const counter = (v: unknown): number | null => {
+					if (typeof v !== 'string' || v === '') return null;
+					const n = Number(v);
+					return Number.isFinite(n) ? n : null;
+				};
+				return rows.map((r) => ({
+					mac: (r['mac-address'] ?? '').toUpperCase(),
+					address: r.address ?? '',
+					bytesIn: counter(r['bytes-in']),
+					bytesOut: counter(r['bytes-out'])
+				}));
+			});
+		},
+
+		async pingHosts(
+			addresses: string[],
+			opts?: { timeoutMs?: number }
+		): Promise<Array<{ address: string; aliveMs: number | null }>> {
+			if (addresses.length === 0) return [];
+			const timeoutMs = opts?.timeoutMs ?? AP_PING_TIMEOUT_MS;
+			return withConn(async (conn) => {
+				const pingOne = async (address: string): Promise<{ address: string; aliveMs: number | null }> => {
+					try {
+						// `=count=2`: two echoes so a single dropped packet doesn't read as down. Bounded by
+						// withTimeout so a host that never replies can't stall the batch; a reject/timeout →
+						// aliveMs null (never throws for an unreachable host — R1 / the pingHosts contract).
+						const pings = await withTimeout(
+							conn.write('/ping', [`=address=${address}`, '=count=2']),
+							timeoutMs,
+							`ping ${address}`
+						);
+						const times = pings
+							.map((p) => rttToMs(p.time))
+							.filter((n): n is number => n != null);
+						const aliveMs = times.length
+							? Math.round(times.reduce((a, b) => a + b, 0) / times.length)
+							: null;
+						return { address, aliveMs };
+					} catch {
+						return { address, aliveMs: null };
+					}
+				};
+				// Bounded concurrency (chunks of AP_PING_CONCURRENCY) — see the constant's doc (R1).
+				const out: Array<{ address: string; aliveMs: number | null }> = [];
+				for (let i = 0; i < addresses.length; i += AP_PING_CONCURRENCY) {
+					const chunk = addresses.slice(i, i + AP_PING_CONCURRENCY);
+					out.push(...(await Promise.all(chunk.map(pingOne))));
+				}
+				return out;
 			});
 		}
 	};

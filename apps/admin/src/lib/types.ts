@@ -78,7 +78,19 @@ export interface NetworkAp {
 	uptime: string;
 	latency: string;
 	users: number;
+	/** Pre-formatted throughput ("47 Mbps"), or "—" when this AP's firmware doesn't expose per-AP
+	 * byte counters (honest AC4 degradation — the number is genuinely unavailable, not zero). */
 	throughput: string;
+	/** Physical-AP MAC for an auto-discovered AP row (Phase A), or null for interface/pinned rows. */
+	mac: string | null;
+	/** OLT Option 82 agent-circuit-id this AP is on; the group key. Null on non-AP rows. */
+	apCircuitId: string | null;
+	/** How this row's attribution was derived: 'circuit-id' marks an auto-discovered AP row; null =
+	 * an interface/pinned row (KPI throughput/latency sums are computed over these only). */
+	attributionSource: string | null;
+	/** Display names of the OTHER APs sharing this AP's circuit-id (a shared-ONU group the router
+	 * can't split). Empty for solo APs and non-AP rows. */
+	groupPeers: string[];
 	/** Operator-entered location for the public locator map; null until set. Raw
 	 * numeric strings (decimal degrees), kept as-is for round-tripping into the form. */
 	latitude: string | null;

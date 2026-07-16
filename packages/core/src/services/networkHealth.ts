@@ -1,6 +1,110 @@
-import { and, eq, isNull, notInArray, sql } from 'drizzle-orm';
-import { type DB, networkHealth } from '@veent/db';
-import type { NetworkController } from '../integrations/network';
+import { and, eq, inArray, isNull, notInArray, sql } from 'drizzle-orm';
+import { type DB, networkHealth, networkClientAttribution } from '@veent/db';
+import type {
+	NetworkController,
+	DhcpLeaseEntry,
+	HotspotActiveEntry
+} from '../integrations/network';
+
+// ── AP recognition constants (Phase A per-AP visibility) ───────────────────────────────────────
+/** OUI prefix of the Suncomm AP3000G outdoor APs (uppercased MAC prefix). A lease whose MAC starts
+ * with this is an AP. */
+export const AP_MAC_OUI = 'E4:67:1E';
+/** Hostname signature of the AP3000G firmware (`OAP3000G-*`). OR'd with the OUI match — either
+ * signal alone recognises an AP. */
+export const AP_HOSTNAME_RE = /^OAP3000G-/i;
+
+/** True when a DHCP lease looks like an access point — by MAC OUI OR hostname signature. */
+function isApLease(lease: DhcpLeaseEntry): boolean {
+	if (lease.mac.toUpperCase().startsWith(AP_MAC_OUI)) return true;
+	return lease.hostname != null && AP_HOSTNAME_RE.test(lease.hostname);
+}
+
+/**
+ * Recognise access points among raw DHCP leases (OUI match OR hostname match), deduped by MAC
+ * preferring the `bound` lease (a MAC can appear once per DHCP-server instance / in a transient
+ * `waiting`/`offered` state). Pure — unit-testable without a DB.
+ */
+export function recognizeAccessPoints(leases: readonly DhcpLeaseEntry[]): DhcpLeaseEntry[] {
+	const byMac = new Map<string, DhcpLeaseEntry>();
+	for (const lease of leases) {
+		if (!isApLease(lease)) continue;
+		const mac = lease.mac.toUpperCase();
+		const existing = byMac.get(mac);
+		// Prefer a `bound` lease over any other state; otherwise first-seen wins.
+		if (!existing || (existing.status !== 'bound' && lease.status === 'bound')) {
+			byMac.set(mac, { ...lease, mac });
+		}
+	}
+	return [...byMac.values()];
+}
+
+/** One AP row's grouping-relevant fields. */
+export interface ApGroupRow {
+	name: string;
+	apCircuitId: string | null;
+}
+
+/**
+ * Group AP rows by their Option 82 circuit-id. Only circuit-ids shared by 2+ APs form a group (a
+ * shared ONU the router can't split). Rows with no circuit-id are never grouped. Pure.
+ * Returns Map circuitId → member rows (each entry has 2+ members).
+ */
+export function computeApGroups<T extends ApGroupRow>(apRows: readonly T[]): Map<string, T[]> {
+	const byCircuit = new Map<string, T[]>();
+	for (const row of apRows) {
+		const cid = row.apCircuitId;
+		if (!cid) continue;
+		const list = byCircuit.get(cid);
+		if (list) list.push(row);
+		else byCircuit.set(cid, [row]);
+	}
+	// Drop singletons — a group is 2+ APs on one ONU.
+	for (const [cid, members] of byCircuit) {
+		if (members.length < 2) byCircuit.delete(cid);
+	}
+	return byCircuit;
+}
+
+/**
+ * Per-AP traffic rate (Mbps) from two cumulative byte samples (Section 5). Pure — the AC4 delta
+ * math, unit-tested independently of the DB:
+ *  - first sample (no previous byte total): rate is UNKNOWN → null (only the running total is
+ *    stored so the next sample has a basis).
+ *  - counter reset / session churn ⇒ negative delta ⇒ clamp to 0 (never fabricate a huge spike).
+ *  - otherwise: (Δbytes × 8) / elapsedSec / 1e6, rounded.
+ * `elapsedSec <= 0` (clock skew / same-instant re-sample) → null (can't divide).
+ */
+export function computeTrafficRateMbps(
+	prevBytes: number | null | undefined,
+	currBytes: number,
+	elapsedSec: number
+): number | null {
+	if (prevBytes == null) return null;
+	if (elapsedSec <= 0) return null;
+	const deltaBits = Math.max(0, currBytes - prevBytes) * 8;
+	return Math.round(deltaBits / elapsedSec / 1e6);
+}
+
+/**
+ * The offline/online-since SET expressions for the serving-transition debounce, shared VERBATIM by
+ * the interface upsert and the AP upsert (Regression contract #7 — the CASE logic is written once,
+ * never hand-duplicated). `serving` = link up AND uplink reachable; `nowIso` is the ISO string
+ * interpolated into the raw SQL (never a JS Date — Postgres rejects Date.toString()).
+ */
+function sinceTransitionSet(serving: boolean, nowIso: string) {
+	// The SET reads the PRE-update (existing) row's serving state; the JS `serving` picks the branch.
+	// COALESCE backfills a legacy/seeded row that carried no stamp so the sweep's non-NULL need holds.
+	const wasServing = sql`(${networkHealth.online} = true AND ${networkHealth.wanOk} = true)`;
+	return {
+		offlineSinceOnUpdate: serving
+			? sql`NULL`
+			: sql`CASE WHEN ${wasServing} THEN ${nowIso} ELSE COALESCE(${networkHealth.offlineSince}, ${nowIso}) END`,
+		onlineSinceOnUpdate: serving
+			? sql`CASE WHEN NOT ${wasServing} THEN ${nowIso} ELSE COALESCE(${networkHealth.onlineSince}, ${nowIso}) END`
+			: sql`NULL`
+	};
+}
 
 /**
  * Refreshes `network_health` from the controller's live sample (link/users/
@@ -9,14 +113,17 @@ import type { NetworkController } from '../integrations/network';
  * sample APs. A no-op when the controller can't sample (e.g. the dev stub), which
  * leaves any seeded rows untouched.
  *
- * `uptimePct` and `latencyMs` aren't part of the light sample: we set uptime to a
- * coarse 100/0 from link state and leave latency null (no per-AP ping). Returns the
- * number of interfaces written.
+ * Phase A: additionally recognises physical access points from the DHCP lease table (OLT-inserted
+ * Option 82 agent-circuit-id), attributes hotspot clients per-AP, pings each AP for liveness, and
+ * upserts one AP row per MAC. The AP portion is fully guarded — a controller without
+ * `listDhcpLeases` (stub) or a router hiccup degrades to interface-only refresh with AP rows
+ * untouched.
+ *
+ * `uptimePct` and `latencyMs` aren't part of the light interface sample: uptime is a coarse 100/0
+ * from link state. Returns the number of interfaces written (AP rows are not counted — the return
+ * contract is unchanged).
  */
-export async function refreshNetworkHealth(
-	db: DB,
-	network: NetworkController
-): Promise<number> {
+export async function refreshNetworkHealth(db: DB, network: NetworkController): Promise<number> {
 	if (!network.sampleHealth) return 0;
 	const samples = await network.sampleHealth();
 	const now = new Date();
@@ -47,17 +154,8 @@ export async function refreshNetworkHealth(
 			onlineSince: serving ? now : null
 		};
 		// offline_since/online_since track the SERVING transition (link AND uplink), not just link, so
-		// a WAN outage on an up-link AP still starts the pause debounce. The SET expression reads the
-		// pre-update (existing) row's online+wan_ok; the JS `serving` decides which branch is written.
-		// COALESCE backfills a row that was already not-serving / already-serving but carried no stamp
-		// (seeded/legacy, or predating this feature) so the sweep's non-NULL requirement is satisfied.
-		const wasServing = sql`(${networkHealth.online} = true AND ${networkHealth.wanOk} = true)`;
-		const offlineSinceOnUpdate = serving
-			? sql`NULL`
-			: sql`CASE WHEN ${wasServing} THEN ${nowIso} ELSE COALESCE(${networkHealth.offlineSince}, ${nowIso}) END`;
-		const onlineSinceOnUpdate = serving
-			? sql`CASE WHEN NOT ${wasServing} THEN ${nowIso} ELSE COALESCE(${networkHealth.onlineSince}, ${nowIso}) END`
-			: sql`NULL`;
+		// a WAN outage on an up-link AP still starts the pause debounce.
+		const { offlineSinceOnUpdate, onlineSinceOnUpdate } = sinceTransitionSet(serving, nowIso);
 		// Upsert on the unique `name`: one round-trip, and two concurrent sweeps can't create
 		// duplicate rows for the same AP (the select-then-insert this replaced could).
 		await db
@@ -69,17 +167,240 @@ export async function refreshNetworkHealth(
 			});
 	}
 
-	// Drop auto-discovered rows the router didn't report this round (e.g. the seeded
-	// sample APs). Operator-placed pins (those with coordinates) are kept regardless —
-	// they're manually curated map locations, not live router interfaces, so the
-	// interface sweep must never delete them.
-	const names = samples.map((s) => s.name);
-	if (names.length > 0) {
-		await db
-			.delete(networkHealth)
-			.where(and(notInArray(networkHealth.name, names), isNull(networkHealth.latitude)));
+	// ── AP portion (Phase A) — guarded + degradable ─────────────────────────────────────────────
+	// Shared WAN reachability from the interface sample (all interfaces share one uplink probe).
+	const sharedWanOk = samples.length > 0 ? (samples[0].wanReachable ?? true) : true;
+	const apNames: string[] = [];
+	let apScanRan = false;
+	if (network.listDhcpLeases) {
+		try {
+			apNames.push(...(await refreshAccessPoints(db, network, now, nowIso, sharedWanOk)));
+			apScanRan = true;
+		} catch {
+			// Router hiccup / lease-table unavailable → degrade to interface-only refresh. AP rows are
+			// left untouched (the prune below restricts to mac IS NULL when the scan didn't run).
+			apScanRan = false;
+		}
 	}
+
+	// Drop auto-discovered rows the router didn't report this round (e.g. the seeded sample APs, or a
+	// disappeared AP). Operator-placed pins (coordinates set) are kept regardless. When the AP scan
+	// did NOT run, additionally restrict the delete to `mac IS NULL` rows so a stub/failed scan can
+	// never wipe the AP rows (Regression contracts #2, #5; R2).
+	const names = [...samples.map((s) => s.name), ...apNames];
+	if (names.length > 0) {
+		const keepByName = notInArray(networkHealth.name, names);
+		const predicate = apScanRan
+			? and(keepByName, isNull(networkHealth.latitude))
+			: and(keepByName, isNull(networkHealth.latitude), isNull(networkHealth.mac));
+		await db.delete(networkHealth).where(predicate);
+	}
+
 	return samples.length;
+}
+
+/**
+ * The AP portion of a health refresh (Phase A). Recognises APs from the lease table, keeps the
+ * client-attribution cache current, attributes hotspot clients per circuit-id, pings each AP for
+ * liveness, and upserts one AP row per MAC. Returns the AP row names written this cycle (for the
+ * prune name-set). Throws on a router error so the caller can degrade to interface-only.
+ */
+async function refreshAccessPoints(
+	db: DB,
+	network: NetworkController,
+	now: Date,
+	nowIso: string,
+	sharedWanOk: boolean
+): Promise<string[]> {
+	const leases = await network.listDhcpLeases!();
+	const apLeases = recognizeAccessPoints(leases);
+
+	// Attribution-cache upkeep: every lease (guest OR AP) carrying a NON-EMPTY circuit-id refreshes
+	// its cache row. A blank/absent circuit-id (unicast renewal that omits Option 82) never
+	// overwrites a cached value (AC6) — we simply skip those leases.
+	for (const lease of leases) {
+		const cid = lease.agentCircuitId;
+		if (!cid) continue;
+		await db
+			.insert(networkClientAttribution)
+			.values({ mac: lease.mac.toUpperCase(), circuitId: cid, updatedAt: now })
+			.onConflictDoUpdate({
+				target: networkClientAttribution.mac,
+				set: { circuitId: cid, updatedAt: now }
+			});
+	}
+
+	// Per-circuit-id attributed device counts + byte sums from the active hotspot clients: circuit-id
+	// from the client's CURRENT lease when present, else the durable cache. Devices with no
+	// circuit-id from either source are unattributed (network-wide only, AC7).
+	const byCircuit = await aggregateByCircuit(db, network, leases);
+
+	// Liveness: ping every AP's leased IP in parallel (provider bounds + never throws). When the
+	// controller can't ping, fall back to lease `status === 'bound'` (discovery-only liveness).
+	const pingByAddress = new Map<string, number | null>();
+	if (network.pingHosts && apLeases.length > 0) {
+		const results = await network.pingHosts(apLeases.map((l) => l.address));
+		for (const r of results) pingByAddress.set(r.address, r.aliveMs);
+	}
+
+	// Previous byte totals + sample times (Section 5 traffic delta basis), keyed on MAC.
+	const prevByMac = new Map<string, { trafficBytes: number | null; lastSampleAt: Date | null }>();
+	if (apLeases.length > 0) {
+		const rows = await db
+			.select({
+				mac: networkHealth.mac,
+				trafficBytes: networkHealth.trafficBytes,
+				lastSampleAt: networkHealth.lastSampleAt
+			})
+			.from(networkHealth)
+			.where(inArray(networkHealth.mac, apLeases.map((l) => l.mac.toUpperCase())));
+		for (const r of rows) {
+			if (r.mac) prevByMac.set(r.mac, { trafficBytes: r.trafficBytes, lastSampleAt: r.lastSampleAt });
+		}
+	}
+
+	const names: string[] = [];
+	for (const lease of apLeases) {
+		const mac = lease.mac.toUpperCase();
+		const aliveMs = network.pingHosts ? (pingByAddress.get(lease.address) ?? null) : null;
+		const online = network.pingHosts ? aliveMs != null : lease.status === 'bound';
+		const latencyMs = aliveMs == null ? null : Math.round(aliveMs);
+		const serving = online && sharedWanOk;
+		const name = await resolveApName(db, mac, lease.hostname);
+		names.push(name);
+
+		// Per-AP traffic (Section 5): sum this circuit-id's attributed hotspot bytes, then rate it
+		// against the row's previous byte total + sample time. Null byte sum (firmware hides counters)
+		// ⇒ throughput null + trafficBytes untouched → the card shows "—" (honest AC4 degradation).
+		const agg = lease.agentCircuitId ? byCircuit.get(lease.agentCircuitId) : undefined;
+		const currBytes = agg?.bytes ?? null;
+		const prev = prevByMac.get(mac);
+		let throughputMbps: number | null = null;
+		let trafficBytes: number | null = null;
+		if (currBytes != null) {
+			trafficBytes = currBytes;
+			const elapsedSec = prev?.lastSampleAt
+				? (now.getTime() - prev.lastSampleAt.getTime()) / 1000
+				: 0;
+			throughputMbps = computeTrafficRateMbps(prev?.trafficBytes, currBytes, elapsedSec);
+		}
+
+		const vals = {
+			name,
+			mac,
+			apCircuitId: lease.agentCircuitId,
+			attributionSource: 'circuit-id' as const,
+			online,
+			wanOk: sharedWanOk,
+			users: agg?.users ?? 0,
+			latencyMs,
+			uptimePct: online ? '100.00' : '0.00',
+			throughputMbps,
+			trafficBytes,
+			lastSampleAt: now,
+			offlineSince: serving ? null : now,
+			onlineSince: serving ? now : null
+		};
+		const { offlineSinceOnUpdate, onlineSinceOnUpdate } = sinceTransitionSet(serving, nowIso);
+		// Upsert keyed on the unique `mac` (physical-AP identity) so an AP-lease IP change updates the
+		// same row (AC8). On conflict, `trafficBytes` is only overwritten when a fresh counter sum
+		// exists (COALESCE keeps the prior basis when counters are absent this cycle).
+		await db
+			.insert(networkHealth)
+			.values(vals)
+			.onConflictDoUpdate({
+				target: networkHealth.mac,
+				set: {
+					name: vals.name,
+					apCircuitId: vals.apCircuitId,
+					attributionSource: vals.attributionSource,
+					online: vals.online,
+					wanOk: vals.wanOk,
+					users: vals.users,
+					latencyMs: vals.latencyMs,
+					uptimePct: vals.uptimePct,
+					throughputMbps: vals.throughputMbps,
+					trafficBytes:
+						currBytes != null
+							? currBytes
+							: sql`${networkHealth.trafficBytes}`,
+					lastSampleAt: vals.lastSampleAt,
+					offlineSince: offlineSinceOnUpdate,
+					onlineSince: onlineSinceOnUpdate
+				}
+			});
+	}
+	return names;
+}
+
+/**
+ * Per-circuit-id aggregate (device count + attributed byte sum) from the active hotspot clients.
+ * Circuit-id resolves from the client's current lease when it carries one, else the durable
+ * attribution cache. Unattributed devices (no circuit-id from either source) are excluded (AC7).
+ * `bytes` is null for a circuit-id when ANY attributed client's counters are absent (firmware hides
+ * them) — never coerce a missing counter to 0 (AC4 degradation signal). No-op when the controller
+ * can't list active clients.
+ */
+async function aggregateByCircuit(
+	db: DB,
+	network: NetworkController,
+	leases: readonly DhcpLeaseEntry[]
+): Promise<Map<string, { users: number; bytes: number | null }>> {
+	const agg = new Map<string, { users: number; bytes: number | null }>();
+	if (!network.listHotspotActive) return agg;
+	const active: HotspotActiveEntry[] = await network.listHotspotActive();
+	if (active.length === 0) return agg;
+
+	const leaseCircuitByMac = new Map<string, string>();
+	for (const lease of leases) {
+		if (lease.agentCircuitId) leaseCircuitByMac.set(lease.mac.toUpperCase(), lease.agentCircuitId);
+	}
+
+	// MACs whose circuit-id isn't known from a current lease → look up the durable cache in one pass.
+	const needCache = active
+		.map((a) => a.mac.toUpperCase())
+		.filter((mac) => !leaseCircuitByMac.has(mac));
+	const cacheCircuitByMac = new Map<string, string>();
+	if (needCache.length > 0) {
+		const rows = await db
+			.select({ mac: networkClientAttribution.mac, circuitId: networkClientAttribution.circuitId })
+			.from(networkClientAttribution)
+			.where(inArray(networkClientAttribution.mac, needCache));
+		for (const r of rows) cacheCircuitByMac.set(r.mac, r.circuitId);
+	}
+
+	for (const a of active) {
+		const mac = a.mac.toUpperCase();
+		const cid = leaseCircuitByMac.get(mac) ?? cacheCircuitByMac.get(mac);
+		if (!cid) continue; // unattributed → network-wide only
+		const entry = agg.get(cid) ?? { users: 0, bytes: 0 as number | null };
+		entry.users += 1;
+		// A missing counter poisons the whole circuit's byte sum to null — honest "unavailable".
+		if (a.bytesIn == null || a.bytesOut == null) entry.bytes = null;
+		else if (entry.bytes != null) entry.bytes += a.bytesIn + a.bytesOut;
+		agg.set(cid, entry);
+	}
+	return agg;
+}
+
+/**
+ * Deterministic, collision-free display name for an AP row. Base is the DHCP hostname (else
+ * `AP <mac>`). If that name is already taken by a DIFFERENT row (an interface row, or another AP
+ * sharing a hostname), disambiguate with the MAC tail — `<base> (<last-5-of-mac>)` — so the unique
+ * `network_health_name_key` index never rejects the upsert. A pre-check SELECT rather than a
+ * try/catch on the unique violation (E3): refreshNetworkHealth isn't inside a wrapping transaction,
+ * and PGlite doesn't reproduce Postgres's abort-on-violation semantics exactly.
+ */
+async function resolveApName(db: DB, mac: string, hostname: string | null): Promise<string> {
+	const base = hostname && hostname.trim() ? hostname.trim() : `AP ${mac}`;
+	const [clash] = await db
+		.select({ mac: networkHealth.mac })
+		.from(networkHealth)
+		.where(eq(networkHealth.name, base))
+		.limit(1);
+	// No row with that name, or the row is THIS AP's own row (same MAC) → keep the base name.
+	if (!clash || clash.mac === mac) return base;
+	return `${base} (${mac.slice(-5).replace(':', '')})`;
 }
 
 /**
@@ -105,15 +426,41 @@ export async function resolveNetworkIdByApName(db: DB, apName: string): Promise<
 }
 
 /**
- * Resolve the AP a device MAC is currently on to a `network_health` id, via the controller's
- * MAC→AP lookup. Never throws — returns null when the controller can't map it (wired client,
- * dev stub, no `resolveApForMac`) or no AP row matches.
+ * Resolve the AP a device MAC is currently on to a `network_health` id. Never throws — returns
+ * null when nothing maps.
+ *
+ * Phase A: a fast path tries the client-attribution cache first — MAC → circuit-id → the AP row(s)
+ * carrying that circuit-id, returning the DETERMINISTIC lowest-id member (so a shared-ONU group
+ * resolves stably to one representative AP). On a cache miss (or no AP row for the circuit-id), it
+ * falls through to today's router lookup (`resolveApForMac` → `resolveNetworkIdByApName`)
+ * byte-for-byte — the external contract is unchanged (Regression #4).
  */
 export async function resolveNetworkIdForMac(
 	db: DB,
 	network: NetworkController,
 	macAddress: string
 ): Promise<number | null> {
+	const mac = macAddress.toUpperCase();
+	// Fast path: durable attribution cache → AP row(s) sharing the circuit-id → lowest id.
+	try {
+		const [cached] = await db
+			.select({ circuitId: networkClientAttribution.circuitId })
+			.from(networkClientAttribution)
+			.where(eq(networkClientAttribution.mac, mac))
+			.limit(1);
+		if (cached) {
+			const [ap] = await db
+				.select({ id: networkHealth.id })
+				.from(networkHealth)
+				.where(eq(networkHealth.apCircuitId, cached.circuitId))
+				.orderBy(networkHealth.id)
+				.limit(1);
+			if (ap) return ap.id;
+		}
+	} catch {
+		// Cache lookup failed — fall through to the router path (best-effort).
+	}
+	// Fallback: today's router MAC→AP lookup, unchanged.
 	if (!network.resolveApForMac) return null;
 	try {
 		const apName = await network.resolveApForMac(macAddress);

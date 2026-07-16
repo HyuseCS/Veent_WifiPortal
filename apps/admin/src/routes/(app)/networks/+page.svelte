@@ -74,15 +74,19 @@
 
 	// Metrics arrive pre-formatted ("47 Mbps", "22ms") — pull the leading number to aggregate.
 	const lead = (s: string): number => parseFloat(s);
+	// Throughput/latency KPIs aggregate over INTERFACE rows only (attributionSource === null): an AP
+	// row's throughput is a subset of its interface figure (double-count) and its latency is LAN RTT,
+	// not internet RTT (Regression #3). Counts (healthy/degraded/offline/users) stay per-row below.
+	const infraRows = $derived(networks.filter((n) => n.attributionSource === null));
 	const tputTotal = $derived(
 		Math.round(
-			networks.reduce(
+			infraRows.reduce(
 				(s, n) => s + (Number.isFinite(lead(n.throughput)) ? lead(n.throughput) : 0),
 				0
 			)
 		)
 	);
-	const latVals = $derived(networks.map((n) => lead(n.latency)).filter((v) => Number.isFinite(v)));
+	const latVals = $derived(infraRows.map((n) => lead(n.latency)).filter((v) => Number.isFinite(v)));
 	const avgLat = $derived(
 		latVals.length ? Math.round(latVals.reduce((s, v) => s + v, 0) / latVals.length) : null
 	);
@@ -197,6 +201,37 @@
 				? networks.filter((n: NetworkAp) => n.tone === 'warning' || n.tone === 'blocked')
 				: networks.filter((n: NetworkAp) => n.tone === filter)
 	);
+
+	// Group-aware render units: APs sharing a circuit-id (a shared ONU the router can't split, AC5)
+	// collapse into ONE card whose `group` prop lists every member with its own up/down (AC2). The
+	// representative is the deterministic lowest-id member (matches resolveNetworkIdForMac's group
+	// pick), and combined users = the sum of member counts. Solo APs and interface rows render as
+	// today. Per-row KPI counts above are unaffected — only the card layout groups.
+	type Member = { name: string; tone: StatusTone; status: string };
+	type RenderUnit = { ap: NetworkAp; group?: { members: Member[] } };
+	const renderUnits = $derived.by<RenderUnit[]>(() => {
+		// Plain object (not a Map) — this is a transient grouping rebuilt each derivation, not reactive
+		// state, so SvelteMap would be inappropriate (and lint's prefer-svelte-reactivity flags Map).
+		const groups: Record<string, NetworkAp[]> = {};
+		const units: RenderUnit[] = [];
+		for (const n of visible) {
+			if (n.attributionSource === 'circuit-id' && n.apCircuitId && n.groupPeers.length > 0) {
+				(groups[n.apCircuitId] ??= []).push(n);
+			} else {
+				units.push({ ap: n });
+			}
+		}
+		for (const members of Object.values(groups)) {
+			const sorted = [...members].sort((a, b) => Number(a.id) - Number(b.id));
+			const rep = sorted[0];
+			const combinedUsers = sorted.reduce((s, m) => s + m.users, 0);
+			units.push({
+				ap: { ...rep, users: combinedUsers },
+				group: { members: sorted.map((m) => ({ name: m.name, tone: m.tone, status: m.status })) }
+			});
+		}
+		return units;
+	});
 
 	// Selecting a card flies the coverage map to that AP (and rings the card), and
 	// scrolls the map into view so the focus is visible on small/scrolled layouts.
@@ -380,7 +415,7 @@
 			</div>
 		</div>
 
-	{#if visible.length === 0}
+	{#if renderUnits.length === 0}
 		<p
 			class="rounded-xl border border-dashed border-border px-4 py-8 text-center text-sm text-muted"
 		>
@@ -396,10 +431,11 @@
 			class="grid items-start gap-4"
 			style="grid-template-columns: repeat(auto-fill, minmax(min(330px, 100%), 1fr));"
 		>
-			{#each visible as ap (ap.id)}
+			{#each renderUnits as unit (unit.ap.id)}
 				<NetworkHealthCard
-					{ap}
-					selected={ap.id === selectedId}
+					ap={unit.ap}
+					group={unit.group}
+					selected={unit.ap.id === selectedId}
 					canDelete={data.isOwner}
 					canConfigure={data.isOwner}
 					onfocus={focusAp}
