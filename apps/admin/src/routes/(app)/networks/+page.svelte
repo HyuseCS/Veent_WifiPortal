@@ -88,6 +88,30 @@
 	);
 	const alerts = $derived(cntDegraded + cntOffline);
 
+	// Whole-fleet staleness = the router refresh on load has been failing (unreachable/offline),
+	// so every AP is showing last-known data. Per-AP "Stale" chips already flag individuals; this
+	// page banner names the shared cause so a frozen board doesn't read as silently broken.
+	const cntStale = $derived(networks.filter((n) => n.stale).length);
+	const routerUnreachable = $derived(total > 0 && cntStale === total);
+	// Freshest sample across the fleet → "last synced X ago". Static (computed on render, not a
+	// ticker) — precision to the minute/hour/day is enough for an outage that lasts hours+.
+	const lastSyncedAt = $derived(
+		networks.reduce<string | null>((latest, n) => {
+			if (!n.syncedAt) return latest;
+			return !latest || n.syncedAt > latest ? n.syncedAt : latest;
+		}, null)
+	);
+	function ago(iso: string | null): string {
+		if (!iso) return 'never';
+		const s = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
+		if (s < 90) return 'moments ago';
+		const m = Math.round(s / 60);
+		if (m < 60) return `${m}m ago`;
+		const h = Math.round(m / 60);
+		if (h < 24) return `${h}h ago`;
+		return `${Math.round(h / 24)}d ago`;
+	}
+
 	// Feeds the shared <KpiCard> (same component as Dashboard/Finance). `tone`/`captionTone`
 	// carry the status colour; `unit` is the muted value suffix.
 	type NetKpi = {
@@ -232,6 +256,18 @@
 	     is desktop-only — on mobile the map/log are gone, so let this shrink to content and the
 	     access points pull up right under it instead of sitting a screen-height below. -->
 	<div class="snap-start space-y-5 pt-5 pb-5 md:min-h-full">
+		{#if routerUnreachable}
+			<div class="flex items-center gap-3 rounded-xl border border-blocked/30 bg-blocked/10 px-4 py-3">
+				<TriangleAlert class="h-5 w-5 shrink-0 text-blocked" aria-hidden="true" />
+				<p class="text-sm">
+					<span class="font-semibold text-ink">Router unreachable.</span>
+					<span class="text-muted">
+						Showing last-known data (synced {ago(lastSyncedAt)}) — live health and AP detection
+						resume automatically once the router is back online.
+					</span>
+				</p>
+			</div>
+		{/if}
 		{#if data.outagePausedGuests > 0}
 			<div class="flex items-center gap-3 rounded-xl border border-warning/30 bg-warning/10 px-4 py-3">
 				<TriangleAlert class="h-5 w-5 shrink-0 text-warning" aria-hidden="true" />

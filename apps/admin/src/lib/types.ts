@@ -72,6 +72,9 @@ export interface NetworkAp {
 	/** True when no fresh router sample has landed within the staleness ceiling — the metrics
 	 * shown are last-known, not live. Drives a "Stale" chip instead of a misleading "Healthy". */
 	stale: boolean;
+	/** ISO timestamp of the last router sample for this AP (null if never sampled). Feeds the
+	 * page-level "router unreachable, last synced X ago" banner. */
+	syncedAt: string | null;
 	uptime: string;
 	latency: string;
 	users: number;

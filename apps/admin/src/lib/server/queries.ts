@@ -415,6 +415,7 @@ export async function listNetworkHealth(db: DB, now: Date = new Date()): Promise
 			tone,
 			status,
 			stale,
+			syncedAt: r.lastSampleAt ? r.lastSampleAt.toISOString() : null,
 			uptime: `${uptime.toFixed(1)}%`,
 			latency: r.latencyMs == null ? '—' : `${r.latencyMs}ms`,
 			users: activeByNetwork.get(r.id) ?? 0,
