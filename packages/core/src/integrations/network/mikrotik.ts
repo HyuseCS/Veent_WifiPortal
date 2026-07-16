@@ -56,6 +56,10 @@ export interface MikrotikConfig {
 const LATENCY_PROBE_HOST = '1.1.1.1';
 /** Hard ceiling for the latency ping so a hung ping stream can't stall a health refresh. */
 const PING_TIMEOUT_MS = 5000;
+/** Wall-clock ceiling on a single connect attempt. node-routeros' own timeout does NOT reliably
+ * settle for an unreachable on-link router (ARP fail) — its connect promise can hang forever — so
+ * we bound it ourselves and reject, letting callers fall back to last-known data. */
+const CONNECT_TIMEOUT_MS = 10_000;
 /** Comment/name prefix on the per-AP bandwidth queues we create, so ours are identifiable
  * and a re-apply updates rather than duplicates: `veent-hotspot-limit:<apName>`. */
 const LIMIT_TAG = 'veent-hotspot-limit';
@@ -213,6 +217,40 @@ function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
 	});
 }
 
+/**
+ * Connect a node-routeros client with two hardening layers around its fragile failure path.
+ * Exported for tests.
+ *
+ *  1. **Crash containment.** node-routeros' `Connector.destroy()` calls `socket.destroy()` and THEN
+ *     `removeAllListeners()`; the destroyed socket re-emits `'error'` on the next tick, so the
+ *     socket's still-bound `onError` re-emits it on a now-listener-less Connector — an unhandled
+ *     `'error'` that crashes the whole process (a downed on-link router does this on every dial).
+ *     `connect()` assigns `conn.connector` synchronously, so we keep a no-op `'error'` listener
+ *     re-armed across every `removeAllListeners()` — the re-emit then always has a listener and can
+ *     never throw. Contained to this one connector instance (no global `uncaughtException` handler,
+ *     so it can't collide with Sentry's).
+ *  2. **No hang.** For an unreachable on-link host node-routeros' connect promise may never settle,
+ *     so we bound it with `withTimeout` and reject — the caller falls back to last-known data.
+ */
+export async function connectHardened(
+	conn: RosConn,
+	timeoutMs: number = CONNECT_TIMEOUT_MS
+): Promise<void> {
+	const pending = conn.connect();
+	const c = conn.connector;
+	if (c?.on && c.removeAllListeners) {
+		const noop = () => {};
+		c.on('error', noop);
+		const removeAll = c.removeAllListeners.bind(c);
+		c.removeAllListeners = (event?: string) => {
+			const r = removeAll(event);
+			c.on?.('error', noop);
+			return r;
+		};
+	}
+	await withTimeout(pending, timeoutMs, 'connect');
+}
+
 /** Parse a RouterOS ping `time` value ("12ms", "834us", "1s200ms") into milliseconds. */
 function rttToMs(raw: unknown): number | null {
 	if (typeof raw !== 'string') return null;
@@ -262,7 +300,10 @@ export function createMikrotikController(config: MikrotikConfig): NetworkControl
 		// crashes the whole server. Swallow it here — connect()/write() already reject on
 		// failure, which callers catch and turn into an empty result / 500.
 		conn.on?.('error', () => {});
-		await conn.connect();
+		// connectHardened bounds the connect time AND stops an unreachable router's socket-destroy
+		// error from crashing the process (see its doc). The awaited connect still rejects on failure,
+		// which callers catch and turn into an empty result / 500.
+		await connectHardened(conn);
 		try {
 			return await fn(conn);
 		} finally {
@@ -831,6 +872,13 @@ interface RosConn {
 	write(menu: string, params?: string[]): Promise<Array<Record<string, string>>>;
 	/** node-routeros connections are EventEmitters; attach to swallow async socket errors. */
 	on?(event: string, listener: (...args: unknown[]) => void): void;
+	/** node-routeros assigns this internal Connector (its own EventEmitter) synchronously inside
+	 * connect(). Its `destroy()` clears listeners just before the socket re-emits 'error', so
+	 * connectHardened re-arms an 'error' listener across `removeAllListeners` to prevent the crash. */
+	connector?: {
+		on?(event: string, listener: (...args: unknown[]) => void): void;
+		removeAllListeners?(event?: string): unknown;
+	};
 }
 
 async function openConn(config: MikrotikConfig): Promise<RosConn> {
@@ -850,7 +898,8 @@ async function openConn(config: MikrotikConfig): Promise<RosConn> {
 	// See withConn: without an 'error' listener a socket timeout becomes an uncaught
 	// exception that crashes the server. The awaited connect()/write() still reject.
 	conn.on?.('error', () => {});
-	await conn.connect();
+	// Bound the connect + contain the socket-destroy crash (see connectHardened).
+	await connectHardened(conn);
 	return conn;
 }
 
