@@ -20,6 +20,12 @@ export async function refreshNetworkHealth(
 	if (!network.sampleHealth) return 0;
 	const samples = await network.sampleHealth();
 	const now = new Date();
+	// Interpolated into the raw `sql` CASE templates below as an ISO string, NOT the Date object:
+	// Drizzle serializes a bare Date in a `sql` template via `.toString()` ("… GMT+0800 (Philippine
+	// Standard Time)"), which real Postgres rejects ("time zone not recognized") — the whole upsert
+	// then throws and no health row is ever written. The column-mapped `vals` (lastSampleAt etc.)
+	// already send ISO; match that here.
+	const nowIso = now.toISOString();
 
 	for (const s of samples) {
 		// "Serving" folds LINK state together with WAN reachability: an AP with a live radio but a dead
@@ -48,9 +54,9 @@ export async function refreshNetworkHealth(
 		const wasServing = sql`(${networkHealth.online} = true AND ${networkHealth.wanOk} = true)`;
 		const offlineSinceOnUpdate = serving
 			? sql`NULL`
-			: sql`CASE WHEN ${wasServing} THEN ${now} ELSE COALESCE(${networkHealth.offlineSince}, ${now}) END`;
+			: sql`CASE WHEN ${wasServing} THEN ${nowIso} ELSE COALESCE(${networkHealth.offlineSince}, ${nowIso}) END`;
 		const onlineSinceOnUpdate = serving
-			? sql`CASE WHEN NOT ${wasServing} THEN ${now} ELSE COALESCE(${networkHealth.onlineSince}, ${now}) END`
+			? sql`CASE WHEN NOT ${wasServing} THEN ${nowIso} ELSE COALESCE(${networkHealth.onlineSince}, ${nowIso}) END`
 			: sql`NULL`;
 		// Upsert on the unique `name`: one round-trip, and two concurrent sweeps can't create
 		// duplicate rows for the same AP (the select-then-insert this replaced could).
