@@ -143,6 +143,9 @@
 			</span>
 			<div class="min-w-0">
 				<div class="truncate text-sm font-semibold text-ink">{ap.name}</div>
+				{#if ap.mac}
+					<div class="truncate font-mono text-xs text-muted">{ap.mac}</div>
+				{/if}
 				{#if ap.address}
 					<div class="truncate text-xs text-muted">{ap.address}</div>
 				{/if}
