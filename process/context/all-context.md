@@ -1,6 +1,6 @@
 # veent-wifiportal - All Context
 
-Last updated: 2026-07-10
+Last updated: 2026-07-17
 
 This file is the root context entrypoint for the repo.
 
@@ -312,6 +312,11 @@ easy to find).
 - Admin routes: `(app)/issues/**`, `(app)/sentry/**`
 - PII scrubbing: shared `scrubEvent` redactor wired into each app's Sentry `beforeSend` (drops
   secrets, masks emails/MACs/phones)
+- Error classification: `beforeSend` in `packages/core/src/observability.ts` downgrades
+  `RouterUnreachableError` (thrown by both `withTimeout()` helpers in `mikrotik.ts`/`adminAccess.ts`
+  on router-call timeout) to `event.level = 'warning'` instead of `error` — the cron
+  `Sentry.withMonitor('customer-network-revoke')` check-in already alerts on the failure, so this
+  is noise reduction, not silence; `scrubEvent` still runs on every branch.
 
 ### Resend email
 - `resend` dependency in `packages/core`
