@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { scrubEvent, traceMethods, captureHandled, sentryOptions } from './observability';
-import type { ErrorEvent, TransactionEvent } from '@sentry/core';
+import type { ErrorEvent, TransactionEvent, EventHint } from '@sentry/core';
+import { RouterUnreachableError } from './integrations/network/types';
 
 // The scrubber is the privacy safety net — if it regresses, PII ships to Sentry. Assert the
 // masking + secret-drop + request-strip behaviours that matter.
@@ -146,6 +147,49 @@ describe('sentryOptions', () => {
 		expect(rate(0)).toBe(0);
 		expect(rate(0.2)).toBe(0.2);
 		expect(rate(1)).toBe(1);
+	});
+
+	// beforeSend classification: router-unreachable timeouts are downgraded to `warning` (not
+	// dropped) so they stop cluttering the error stream — the cron withMonitor check-in already
+	// alerts on the sweep failure. scrubEvent MUST still run on every branch.
+	const beforeSend = (event: ErrorEvent, hint: EventHint) => {
+		const opts = sentryOptions({ app: 'customer', tracesSampleRate: 0.2 });
+		return opts.beforeSend(event, hint) as ErrorEvent;
+	};
+
+	it('Case A: downgrades RouterUnreachableError to warning via hint.originalException, PII still scrubbed', () => {
+		const event = {
+			message: 'router died for juan@example.com'
+		} as ErrorEvent;
+		const hint = {
+			originalException: new RouterUnreachableError('connect timed out after 5000ms')
+		} as EventHint;
+		const out = beforeSend(event, hint);
+		expect(out.level).toBe('warning');
+		// PII scrub runs on the matched (downgraded) branch.
+		expect(out.message).not.toContain('juan@example.com');
+		expect(out.message).toContain('•••');
+	});
+
+	it('Case B: leaves a normal Error untouched, PII still scrubbed', () => {
+		const event = {
+			message: 'normal bug for juan@example.com'
+		} as ErrorEvent;
+		const hint = { originalException: new Error('normal bug') } as EventHint;
+		const out = beforeSend(event, hint);
+		// Level unchanged — a real bug stays at error level (input had no level → stays undefined).
+		expect(out.level).toBeUndefined();
+		// PII scrub runs on the unmatched branch too.
+		expect(out.message).not.toContain('juan@example.com');
+		expect(out.message).toContain('•••');
+	});
+
+	it('Case C: downgrades via event.exception.values[0].type fallback when hint is absent', () => {
+		const event = {
+			exception: { values: [{ type: 'RouterUnreachableError', value: 'timed out' }] }
+		} as ErrorEvent;
+		const out = beforeSend(event, {} as EventHint);
+		expect(out.level).toBe('warning');
 	});
 });
 

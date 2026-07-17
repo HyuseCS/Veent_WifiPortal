@@ -15,7 +15,8 @@
  *    depends on telemetry.
  */
 import { captureException, startSpan } from '@sentry/core';
-import type { ErrorEvent, TransactionEvent } from '@sentry/core';
+import type { ErrorEvent, TransactionEvent, EventHint } from '@sentry/core';
+import { RouterUnreachableError } from './integrations/network/types';
 
 type AnyEvent = ErrorEvent | TransactionEvent;
 
@@ -231,7 +232,15 @@ export function sentryOptions(input: SentryInitInput) {
 		tracesSampleRate,
 		sendDefaultPii: false,
 		initialScope: { tags: { app: input.app } },
-		beforeSend: (event: ErrorEvent) => scrubEvent(event),
+		beforeSend: (event: ErrorEvent, hint: EventHint) => {
+			const isRouterUnreachable =
+				hint.originalException instanceof RouterUnreachableError ||
+				event.exception?.values?.[0]?.type === 'RouterUnreachableError';
+			if (isRouterUnreachable) {
+				event.level = 'warning';
+			}
+			return scrubEvent(event);
+		},
 		beforeSendTransaction: (event: TransactionEvent) => scrubEvent(event)
 	};
 }

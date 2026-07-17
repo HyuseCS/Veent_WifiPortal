@@ -5,6 +5,20 @@
  * controller API, RADIUS CoA, or a router grant_url) is chosen by the impl.
  */
 
+/**
+ * Thrown by `withTimeout()` in `mikrotik.ts` and `adminAccess.ts` when a router call exceeds its
+ * bound wall time (the router is unreachable/hung). Classified by `observability.ts`'s `beforeSend`
+ * to Sentry `warning` level (NOT dropped) because the cron `Sentry.withMonitor('customer-network-
+ * revoke')` check-in already alerts on this failure — this is a low-noise breadcrumb, not silence.
+ * `instanceof` survives the `traceMethods`/`connectHardened` wrappers (they re-throw unchanged).
+ */
+export class RouterUnreachableError extends Error {
+	constructor(message: string, options?: ErrorOptions) {
+		super(message, options);
+		this.name = 'RouterUnreachableError';
+	}
+}
+
 export interface GrantInput {
 	macAddress: string;
 	/** How long access should last; the controller may enforce its own timeout. */

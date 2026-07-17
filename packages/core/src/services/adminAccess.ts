@@ -1,5 +1,6 @@
 import type { DB } from '@veent/db';
 import { ADMIN_BYPASS_TAG, type NetworkController } from '../integrations/network';
+import { RouterUnreachableError } from '../integrations/network/types';
 import { hasLiveAccessForMac } from './sessions';
 
 /**
@@ -104,7 +105,10 @@ const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms
 
 function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
 	return new Promise<T>((resolve, reject) => {
-		const t = setTimeout(() => reject(new Error(`resolveMacByIp timed out after ${ms}ms`)), ms);
+		const t = setTimeout(
+			() => reject(new RouterUnreachableError(`resolveMacByIp timed out after ${ms}ms`)),
+			ms
+		);
 		p.then(
 			(v) => {
 				clearTimeout(t);

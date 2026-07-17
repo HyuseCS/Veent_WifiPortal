@@ -1,6 +1,7 @@
 import { EventEmitter } from 'node:events';
 import { describe, expect, it, vi } from 'vitest';
 import { connectHardened, createMikrotikController } from './mikrotik';
+import { RouterUnreachableError } from './types';
 
 // ── G17 (R1 / Regression #8): pingHosts concurrency + per-host timeout + never-throws ───────────
 // A fake node-routeros connection whose `/ping` write resolves after a short delay, tracking peak
@@ -81,6 +82,9 @@ describe('connectHardened', () => {
 	it('rejects via timeout instead of hanging when connect never settles', async () => {
 		const t0 = Date.now();
 		await expect(connectHardened(fakeConn({ neverSettles: true }), 50)).rejects.toThrow(/timed out/);
+		await expect(connectHardened(fakeConn({ neverSettles: true }), 50)).rejects.toBeInstanceOf(
+			RouterUnreachableError
+		);
 		expect(Date.now() - t0).toBeLessThan(500);
 		await new Promise((r) => setTimeout(r, 20));
 	});

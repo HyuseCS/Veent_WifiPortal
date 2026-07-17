@@ -10,6 +10,7 @@ import type {
 	HotspotActiveEntry,
 	RevokeScope
 } from './types';
+import { RouterUnreachableError } from './types';
 
 export interface MikrotikConfig {
 	host: string;
@@ -221,7 +222,10 @@ export function ipv4NetworkOf(cidr: string): string | null {
 /** Reject if `p` doesn't settle within `ms` — bounds a single router call's wall time. */
 function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
 	return new Promise<T>((resolve, reject) => {
-		const t = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
+		const t = setTimeout(
+			() => reject(new RouterUnreachableError(`${label} timed out after ${ms}ms`)),
+			ms
+		);
 		p.then(
 			(v) => {
 				clearTimeout(t);
