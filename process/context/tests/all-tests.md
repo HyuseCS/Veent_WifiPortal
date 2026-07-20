@@ -170,7 +170,17 @@ failing `$lib` alias resolution. Confirmed during the M4d Sentry-provenance EVL 
 - **2FA is mandatory in the flow.** `global-setup.ts` does a real Chromium login, walks through mandatory 2FA enrollment (`/enroll-2fa`), then caches `storageState` at `e2e/.auth/owner.json` plus the TOTP secret at `e2e/.auth/owner-totp.txt` for reuse across specs. TOTP itself is generated via a small stdlib helper (`e2e/totp.ts`), no external TOTP library.
 - **`webServer` builds + previews, doesn't reuse.** Playwright's `webServer` runs `npm run build && npm run preview` on port `4173` with `reuseExistingServer: false` (deliberate — always a clean build/preview). `webServer.timeout` is 180s, test `timeout` is 60s.
 - **Serial execution only.** `workers: 1`, `fullyParallel: false` — governance specs mutate shared state; each spec self-seeds via `config.ts` helpers rather than relying on isolation between workers.
-- **10 admin e2e specs today:** `content-mfa`, `finance-export`, `incident-detail`, `incident-notifications`, `incident-sentry`, `incident-timeline`, `invite`, `owner-change`, `promote`, `wipe`.
+- **12 admin e2e specs today (23 tests, all green as of 20-07-26):** `content-mfa`, `finance-export`,
+  `incident-detail`, `incident-notifications`, `incident-self-report`, `incident-sentry`,
+  `incident-timeline`, `invite`, `networks`, `owner-change`, `promote`, `wipe`.
+- **`playwright.config.ts:17` merges `storageState: OWNER_STORAGE_STATE` into EVERY context by
+  default — including `browser.newContext()`/`newPage()` calls made INSIDE a test body**, not just
+  the top-level `page` fixture. A spec that needs a genuinely unauthenticated or non-owner session
+  (e.g. a raw CSRF-tamper POST, or a non-manager login flow) must explicitly pass
+  `storageState: { cookies: [], origins: [] }` (imperative `newContext({...})` form) or
+  `test.use({...})` (declarative form) — otherwise the "fresh" context silently inherits the banked
+  owner session, which previously caused a 60s test timeout that looked like a slow login rather
+  than a state leak (root-caused and fixed 20-07-26 in `ims-e2e-spec-modernization_20-07-26`).
 
 **Unit test DB dependence:**
 
@@ -219,4 +229,10 @@ failing `$lib` alias resolution. Confirmed during the M4d Sentry-provenance EVL 
   The structural fix — a lint/test rule cross-referencing integration modules against
   harness-env overrides, so this class of gap can't recur silently — is still unimplemented.
   Backlog: `process/general-plans/backlog/customer-locator-e2e-harness-integration-gaps_NOTE_20-07-26.md`.
-- **3/10 admin E2E specs have known-flaky residuals** as of 2026-07-10 (`incident-detail`, `incident-notifications`, `incident-timeline`): stale `role="menuitem"` queries after an intentional a11y change (dropdown → labelled list) plus a notification-click flow that now opens a modal instead of navigating; a `loginNonManager` 2FA-enroll helper that times out near the 60s test cap; and a "2 unread" count assertion that needs a live trace (app logic verified correct by inspection in all 3 cases — no app regression). Backlog: `process/features/incident-management/backlog/ims-e2e-spec-modernization_NOTE_10-07-26.md`.
+- **RESOLVED 20-07-26** (was: "3/10 admin E2E specs have known-flaky residuals" as of 2026-07-10).
+  `incident-notifications.e2e.ts` was rewritten for the post-L6a labelled-region roles and the
+  modal-based notification-click flow; the `loginNonManager` "timeout" theory was disproven (it
+  was the `storageState`-merge leak documented above, not slowness — `incident-detail.e2e.ts` was
+  otherwise unaffected); the `:113` "2 unread" count was a cross-test leak, not a count-logic bug.
+  All 12 admin e2e specs (23 tests) are green. Closed:
+  `process/features/incident-management/backlog/ims-e2e-spec-modernization_NOTE_10-07-26.md`.

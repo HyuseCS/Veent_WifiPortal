@@ -1,6 +1,6 @@
 # veent-wifiportal - All Context
 
-Last updated: 2026-07-20 (added OTP delivery-observability table/endpoint, migration count 49, cron endpoint list)
+Last updated: 2026-07-20 (added OTP delivery-observability table/endpoint, migration count 49, cron endpoint list; IMS e2e spec modernization closed — 12 admin e2e specs/23 tests green, storageState-merge gotcha documented in tests/all-tests.md)
 
 This file is the root context entrypoint for the repo.
 
@@ -419,11 +419,12 @@ Approved feature folders under `process/features/`:
   (`completed/sentry-permalink-host-pinning_20-07-26/`) — `httpsUrl()` now pins the permalink host
   to `sentry.io`/regional subdomains. Repo-wide lint prettier-config drift — partially closed (the
   crashing bad path is fixed; 297 files of pre-existing style drift remain, tracked in
-  `backlog/repo-wide-lint-prettier-drift_NOTE_10-07-26.md`). **Currently open backlog:**
-  manager-board pagination, IMS e2e spec modernization, repo-wide lint drift (partial), and a new
-  item filed 20-07-26 — `TEST_ENV` does not enumerate every external integration (Maya payments
-  untested for e2e reachability). (M2 secret rotation is resolved and archived — see
-  `completed/ims-audit-remediation_10-07-26/`.)
+  `backlog/repo-wide-lint-prettier-drift_NOTE_10-07-26.md`). IMS e2e spec modernization closed
+  20-07-26 (`completed/ims-e2e-spec-modernization_20-07-26/`) — all 12 admin e2e specs (23 tests)
+  green; see `process/context/tests/all-tests.md`. **Currently open backlog:** manager-board
+  pagination and repo-wide lint drift (partial). (M2 secret rotation and the Maya/TEST_ENV coverage
+  question are both resolved and archived/superseded — see `completed/ims-audit-remediation_10-07-26/`
+  and `process/general-plans/backlog/customer-locator-e2e-harness-integration-gaps_NOTE_20-07-26.md`.)
 - **admin-staff-governance** (`process/features/admin-staff-governance/`) — staff accounts, roles,
   2FA/step-up auth, invite/promote/owner-change/wipe workflows. Mature, no imminent task; created
   now because governance work is a high-risk class (auth/identity, trust-boundary) and will need
