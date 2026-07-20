@@ -1,6 +1,6 @@
 # veent-wifiportal - All Context
 
-Last updated: 2026-07-17
+Last updated: 2026-07-20
 
 This file is the root context entrypoint for the repo.
 
@@ -375,9 +375,18 @@ Approved feature folders under `process/features/`:
   `apps/admin/src/lib/server/{issues.ts,issueNotify.ts,notifications.ts,sentry/*}`,
   `lib/server/emails/issue-assigned.ts`,
   `packages/db/src/schema/{admin-issue.ts,admin-issue-event.ts}`.
-  **6 non-blocking backlog items filed** under `process/features/incident-management/backlog/`
-  (Sentry host pinning, sentryIssueId provenance, manager-board pagination, IMS e2e spec
-  modernization, repo-wide lint prettier-config drift, M2 secret rotation).
+  Follow-up session (20-07-26) closed 3 of those items: sentryIssueId provenance verification
+  (M4d, `completed/sentry-issueid-provenance_20-07-26/`) — `?/track` now round-trips the Sentry API
+  before persisting a "Tracked from Sentry" incident, fail-closed on lookup failure; also fixed a
+  standalone hygiene finding where `apps/admin/e2e` was leaking live Sentry credentials (see
+  `process/context/tests/all-tests.md`). Sentry permalink host pinning
+  (`completed/sentry-permalink-host-pinning_20-07-26/`) — `httpsUrl()` now pins the permalink host
+  to `sentry.io`/regional subdomains. Repo-wide lint prettier-config drift — partially closed (the
+  crashing bad path is fixed; 297 files of pre-existing style drift remain, tracked in
+  `backlog/repo-wide-lint-prettier-drift_NOTE_10-07-26.md`). **Currently open backlog:**
+  manager-board pagination, IMS e2e spec modernization, repo-wide lint drift (partial), M2 secret
+  rotation (resolved, archived), and a new item filed 20-07-26 — `TEST_ENV` does not enumerate
+  every external integration (Maya payments untested for e2e reachability).
 - **admin-staff-governance** (`process/features/admin-staff-governance/`) — staff accounts, roles,
   2FA/step-up auth, invite/promote/owner-change/wipe workflows. Mature, no imminent task; created
   now because governance work is a high-risk class (auth/identity, trust-boundary) and will need

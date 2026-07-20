@@ -3,12 +3,12 @@ name: context:all-tests
 description: "Test runners, exact commands, the admin e2e throwaway-DB harness quirks, and known coverage gaps — the tests group entrypoint/router"
 keywords: test, tests, vitest, playwright, e2e, unit test, svelte-check, lint, coverage, test:seed, radius_admin_test, TEST_ENV, browser test, requireAssertions
 related: []
-date: 10-07-26
+date: 20-07-26
 ---
 
 # veent-wifiportal - All Tests
 
-Last updated: 2026-07-10
+Last updated: 2026-07-20
 
 Attach this file first when the task involves testing, verification, or test debugging.
 
@@ -126,6 +126,13 @@ is built on. `bun test` (no args, root `package.json` alias) is fine — it fans
 run --filter ... test`, which is `vitest run` per app; the trap is only `bun test <file>`
 called directly.
 
+**Gotcha — cwd matters for `bunx vitest run <file>`.** There is no root `vitest.config.*` —
+each app's `$lib` alias comes only from that app's `vite.config.ts` (`sveltekit()` plugin
+options). Run `bunx vitest run <path>` from **inside the target app's directory**
+(`cd apps/admin && bunx vitest run src/routes/(app)/sentry/track-provenance.test.ts`), not from
+the repo root — running from root risks vitest picking up the wrong (or no) project config and
+failing `$lib` alias resolution. Confirmed during the M4d Sentry-provenance EVL run (20-07-26).
+
 **Admin harness scripts** (`apps/admin/scripts/`):
 
 | Command | What it does |
@@ -152,6 +159,13 @@ called directly.
   - `DATABASE_URL` → the throwaway DB
   - `NETWORK_CONTROLLER='stub'` → never touches a real MikroTik router
   - `RESEND_API_KEY=''` + `EMAIL_FROM=''` → blanks Resend to force the console-stub mailer
+  - `SENTRY_AUTH_TOKEN=''` + `SENTRY_ORG_SLUG=''` + `SENTRY_PROJECT_ID=''` (added 20-07-26, M4d) →
+    blanks Sentry; before this fix the e2e webserver silently inherited real credentials from
+    `apps/admin/.env` and made live, authenticated calls to the production Sentry org — see Known
+    Gaps below for the general lesson this exposed
+  - **Not yet covered: Maya payments.** Whether the admin e2e suite can reach Maya
+    (`packages/core/src/integrations/payments/maya.ts`) is unverified — not investigated as of
+    20-07-26. See Known Gaps below.
 - **2FA is mandatory in the flow.** `global-setup.ts` does a real Chromium login, walks through mandatory 2FA enrollment (`/enroll-2fa`), then caches `storageState` at `e2e/.auth/owner.json` plus the TOTP secret at `e2e/.auth/owner-totp.txt` for reuse across specs. TOTP itself is generated via a small stdlib helper (`e2e/totp.ts`), no external TOTP library.
 - **`webServer` builds + previews, doesn't reuse.** Playwright's `webServer` runs `npm run build && npm run preview` on port `4173` with `reuseExistingServer: false` (deliberate — always a clean build/preview). `webServer.timeout` is 180s, test `timeout` is 60s.
 - **Serial execution only.** `workers: 1`, `fullyParallel: false` — governance specs mutate shared state; each spec self-seeds via `config.ts` helpers rather than relying on isolation between workers.
@@ -170,7 +184,7 @@ called directly.
 **Quality gates:**
 
 - **Lint:** single root `eslint.config.js` flat config (`@eslint/js` + `typescript-eslint` + `eslint-plugin-svelte` + `eslint-config-prettier`). No per-package configs.
-- **Format:** `.prettierrc` — tabs, single quotes, no trailing commas, `printWidth: 100`, `svelte` + `tailwindcss` plugins, `tailwindStylesheet: ./src/routes/layout.css`.
+- **Format:** `.prettierrc` — tabs, single quotes, no trailing commas, `printWidth: 100`, `svelte` + `tailwindcss` plugins, `tailwindStylesheet: apps/admin/src/routes/layout.css` (repo-root-relative; fixed 20-07-26 — previously `./src/routes/layout.css`, which was root-relative to a path that doesn't exist and crashed prettier with ENOENT at the repo root). Note: this path only feeds Tailwind class **sort order**, not correctness — customer/locator files sort against admin's theme, which is cosmetic, not a bug.
 
 ## Known Gaps
 
@@ -181,5 +195,15 @@ called directly.
 - **No coverage tooling** configured anywhere (no `@vitest/coverage-*` dep, no coverage config).
 - **No CI** — `.github/workflows` is absent; the recommended gate order (`check` → `lint` → `test` → admin `test:e2e`) is manual only.
 - **No confirmed pre-commit hooks** — a `.githooks/` directory exists at the repo root, but it is not confirmed wired via `core.hooksPath`; verify before relying on it to catch anything automatically.
-- **Root `bun run lint` fails repo-wide** — the `.prettierrc` `tailwindStylesheet: ./src/routes/layout.css` path (line 165 above) is app-relative and breaks when lint is invoked from the monorepo root. Confirmed pre-existing during IMS audit-remediation EVL (2026-07-10), unrelated to that work. Backlog: `process/features/incident-management/backlog/repo-wide-lint-prettier-drift_NOTE_10-07-26.md`.
+- **Root `bun run lint` still fails repo-wide, but the cause changed 20-07-26.** The original crash
+  (bad `tailwindStylesheet` path, ENOENT) is fixed — see Quality Gates above. Root `bun run lint`
+  now fails because `prettier --check .` reports 297 files with genuine pre-existing style/format
+  drift (not a crash), so `&& eslint .` never runs and eslint remains unverified at the repo root.
+  Backlog: `process/features/incident-management/backlog/repo-wide-lint-prettier-drift_NOTE_10-07-26.md`
+  (updated 20-07-26 with the narrowed remaining scope).
+- **`TEST_ENV` has no enforcement that new external integrations get added to it.** It currently
+  covers DB, router, mailer, and (as of 20-07-26) Sentry — each added reactively after being found
+  missing, not proactively. Maya payments is not covered and reachability from admin e2e is
+  unverified — treat as an open risk, not a confirmed non-issue. Backlog:
+  `process/features/incident-management/backlog/test-env-integration-coverage-gap_NOTE_20-07-26.md`.
 - **3/10 admin E2E specs have known-flaky residuals** as of 2026-07-10 (`incident-detail`, `incident-notifications`, `incident-timeline`): stale `role="menuitem"` queries after an intentional a11y change (dropdown → labelled list) plus a notification-click flow that now opens a modal instead of navigating; a `loginNonManager` 2FA-enroll helper that times out near the 60s test cap; and a "2 unread" count assertion that needs a live trace (app logic verified correct by inspection in all 3 cases — no app regression). Backlog: `process/features/incident-management/backlog/ims-e2e-spec-modernization_NOTE_10-07-26.md`.

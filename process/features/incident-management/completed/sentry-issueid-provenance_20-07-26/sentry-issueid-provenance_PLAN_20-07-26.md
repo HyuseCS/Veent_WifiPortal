@@ -27,6 +27,26 @@ real design fork — what to do when the Sentry API can't confirm the id — was
 user decision this session (see Locked Design Decision below), not by an INNOVATE session. The
 remaining work is mechanical: wire an existing client function into an existing form action.
 
+## Premise Correction (added at UPDATE PROCESS archival, 20-07-26)
+
+**This plan's premise that "Sentry is unconfigured in the e2e env" was FALSE when written and was
+disproven during EXECUTE.** `apps/admin/e2e/config.ts`'s `TEST_ENV` blanked `RESEND_API_KEY` but not
+any `SENTRY_*` key, so the e2e webserver inherited real credentials from `apps/admin/.env` and made
+live, authenticated calls to the production Sentry org (`radiusveent-0f`) — pre-existing, not
+introduced by this plan, but only surfaced because M4d made that code path fail loudly (see the
+EXECUTE report's "BLOCKING FINDING" and "Standalone hygiene finding" sections for the full
+evidence). Every mention below of "Sentry is unconfigured in the e2e env" / "the unconfigured
+escape hatch" describes the plan's *design intent* (still correct and still what was built), not an
+accident of the original environment.
+
+**The premise is true now, but only because of an approved out-of-checklist fix, not because it was
+ever an accurate description of the pre-existing environment.** `apps/admin/e2e/config.ts`'s
+`TEST_ENV` was extended to blank `SENTRY_AUTH_TOKEN` / `SENTRY_ORG_SLUG` / `SENTRY_PROJECT_ID`
+(mirroring the existing `RESEND_API_KEY` pattern) — see the EXECUTE report's `## Supplement`
+section for the full change and its verification (spec passes unmodified, zero live Sentry calls,
+measured baseline shows no other regression). Treat this correction as authoritative over the
+"Sentry is unconfigured" framing anywhere else in this document.
+
 ## Locked Design Decision (user-approved — do not re-litigate)
 
 When the Sentry API cannot confirm the issue id:
