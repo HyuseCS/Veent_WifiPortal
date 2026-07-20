@@ -174,7 +174,16 @@ failing `$lib` alias resolution. Confirmed during the M4d Sentry-provenance EVL 
 **Unit test DB dependence:**
 
 - Unit tests need **no DB at all** — everything (including `$env/dynamic/private`) is mocked via `vi.mock`.
-- The one exception: `packages/core/src/services/outage.integration.spec.ts` uses an **in-process PGlite** instance (real-Postgres semantics, still zero external dependencies) — safe to run blind, no setup required.
+- The exception: two specs use an **in-process PGlite** instance (real-Postgres semantics, still
+  zero external dependencies, safe to run blind, no setup required) —
+  `packages/core/src/services/outage.integration.spec.ts` and
+  `packages/core/src/services/networkHealth.integration.spec.ts`. PGlite applies the real
+  migration chain (`migrate()` over `packages/db/drizzle/`), so it genuinely enforces committed
+  unique/check constraints — a name-key `network_health_name_key` unique violation was empirically
+  confirmed (20-07-26) to raise a real, catchable `23505` through drizzle exactly like production
+  Postgres (`DrizzleQueryError` → `.cause` with `{ code: '23505', constraint: '...' }`), so
+  constraint-violation retry/discriminator logic can be genuinely PGlite-tested rather than assumed
+  or faked. See the shared discriminator pattern in `all-context.md` §Key Patterns and Conventions.
 
 **Client (browser) Vitest project:**
 

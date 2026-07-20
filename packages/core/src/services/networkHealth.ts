@@ -267,7 +267,6 @@ async function refreshAccessPoints(
 		const latencyMs = aliveMs == null ? null : Math.round(aliveMs);
 		const serving = online && sharedWanOk;
 		const name = await resolveApName(db, mac, lease.hostname);
-		names.push(name);
 
 		// Per-AP traffic (Section 5): sum this circuit-id's attributed hotspot bytes, then rate it
 		// against the row's previous byte total + sample time. Null byte sum (firmware hides counters)
@@ -302,35 +301,109 @@ async function refreshAccessPoints(
 			onlineSince: serving ? now : null
 		};
 		const { offlineSinceOnUpdate, onlineSinceOnUpdate } = sinceTransitionSet(serving, nowIso);
-		// Upsert keyed on the unique `mac` (physical-AP identity) so an AP-lease IP change updates the
-		// same row (AC8). On conflict, `trafficBytes` is only overwritten when a fresh counter sum
-		// exists (COALESCE keeps the prior basis when counters are absent this cycle).
-		await db
-			.insert(networkHealth)
-			.values(vals)
-			.onConflictDoUpdate({
-				target: networkHealth.mac,
-				set: {
-					name: vals.name,
-					apCircuitId: vals.apCircuitId,
-					attributionSource: vals.attributionSource,
-					online: vals.online,
-					wanOk: vals.wanOk,
-					users: vals.users,
-					latencyMs: vals.latencyMs,
-					uptimePct: vals.uptimePct,
-					throughputMbps: vals.throughputMbps,
-					trafficBytes:
-						currBytes != null
-							? currBytes
-							: sql`${networkHealth.trafficBytes}`,
-					lastSampleAt: vals.lastSampleAt,
-					offlineSince: offlineSinceOnUpdate,
-					onlineSince: onlineSinceOnUpdate
-				}
-			});
+		// Second collision layer (checklist 2.6 / constraint E3). `resolveApName`'s pre-check is a
+		// SELECT, so a concurrent refresh can claim the name between that read and this INSERT (TOCTOU)
+		// — and the `target: mac` conflict clause does NOT absorb a `network_health_name_key` violation.
+		// Retry ONCE with the MAC-tail suffix; a second collision propagates (F3): `refreshAccessPoints`
+		// throws and the caller degrades that cycle to interface-only. No loop, nothing swallowed.
+		let writtenName = vals.name;
+		try {
+			await upsertApRow(db, vals, currBytes, offlineSinceOnUpdate, onlineSinceOnUpdate);
+		} catch (e) {
+			if (!isNameUniqueViolation(e)) throw e;
+			// Suffix the name that just failed. When the pre-check already suffixed it, this yields
+			// `<base> (<tail>) (<tail>)` — expected and bounded, since there is exactly one retry.
+			writtenName = `${vals.name} (${mac.slice(-5).replace(':', '')})`;
+			await upsertApRow(
+				db,
+				{ ...vals, name: writtenName },
+				currBytes,
+				offlineSinceOnUpdate,
+				onlineSinceOnUpdate
+			);
+		}
+		// Push the name ACTUALLY written, not the pre-retry one: the prune below deletes auto-discovered
+		// rows whose name isn't in this set, so recording a never-written name would delete the row we
+		// just wrote in this very cycle (destroying its offline/online debounce state and traffic basis).
+		names.push(writtenName);
 	}
 	return names;
+}
+
+/**
+ * The AP-row upsert, keyed on the unique `mac` (physical-AP identity) so an AP-lease IP change
+ * updates the same row (AC8). On conflict, `trafficBytes` is only overwritten when a fresh counter
+ * sum exists (the `sql` fallback keeps the prior basis when counters are absent this cycle).
+ *
+ * Extracted from `refreshAccessPoints` purely so the name-collision retry path is directly testable
+ * (the TOCTOU window is unreachable through the public flow — nothing runs between the pre-check and
+ * the insert). Behaviour-preserving move. **Test-only internal export** — not part of the
+ * `@veent/core` public contract despite flowing through the `services/index.ts` barrel.
+ */
+export async function upsertApRow(
+	db: DB,
+	vals: typeof networkHealth.$inferInsert,
+	currBytes: number | null,
+	offlineSinceOnUpdate: ReturnType<typeof sinceTransitionSet>['offlineSinceOnUpdate'],
+	onlineSinceOnUpdate: ReturnType<typeof sinceTransitionSet>['onlineSinceOnUpdate']
+): Promise<void> {
+	await db
+		.insert(networkHealth)
+		.values(vals)
+		.onConflictDoUpdate({
+			target: networkHealth.mac,
+			set: {
+				name: vals.name,
+				apCircuitId: vals.apCircuitId,
+				attributionSource: vals.attributionSource,
+				online: vals.online,
+				wanOk: vals.wanOk,
+				users: vals.users,
+				latencyMs: vals.latencyMs,
+				uptimePct: vals.uptimePct,
+				throughputMbps: vals.throughputMbps,
+				trafficBytes:
+					currBytes != null
+						? currBytes
+						: sql`${networkHealth.trafficBytes}`,
+				lastSampleAt: vals.lastSampleAt,
+				offlineSince: offlineSinceOnUpdate,
+				onlineSince: onlineSinceOnUpdate
+			}
+		});
+}
+
+/**
+ * True when an error is the `network_health_name_key` unique violation (SQLSTATE 23505) raised by
+ * the AP upsert — the one error the once-retry handles. Everything else must propagate.
+ *
+ * drizzle-orm wraps driver errors in `DrizzleQueryError`, so the SQLSTATE lives on the `cause` chain
+ * — walk it bounded (self, `.cause`, `.cause.cause`), mirroring `reconcilePayments.ts`. The
+ * constraint name field differs by driver: postgres.js exposes `constraint_name`, PGlite /
+ * node-postgres-shaped errors expose `constraint`; check both on the same walk. NEVER substring-match
+ * the message.
+ *
+ * When no constraint field appears anywhere on the chain, code `23505` alone suffices: on this
+ * statement `onConflictDoUpdate({ target: mac })` already absorbs `network_health_mac_key`, leaving
+ * `network_health_name_key` as the only unique index the insert can trip. (`network_health_pkey` is
+ * theoretically reachable under sequence drift, but both drivers attach the constraint field, so
+ * such an error is correctly rejected by the constraint check above rather than retried.)
+ *
+ * **Test-only internal export** — not part of the `@veent/core` public contract.
+ */
+export function isNameUniqueViolation(e: unknown): boolean {
+	type PgLike = { code?: string; constraint?: string; constraint_name?: string; cause?: unknown };
+	let code: string | undefined;
+	let constraint: string | undefined;
+	let node: unknown = e;
+	for (let depth = 0; depth < 3 && node != null && typeof node === 'object'; depth++) {
+		const n = node as PgLike;
+		code ??= n.code;
+		constraint ??= n.constraint_name ?? n.constraint;
+		node = n.cause;
+	}
+	if (code !== '23505') return false;
+	return constraint == null || constraint === 'network_health_name_key';
 }
 
 /**
@@ -387,9 +460,12 @@ async function aggregateByCircuit(
  * Deterministic, collision-free display name for an AP row. Base is the DHCP hostname (else
  * `AP <mac>`). If that name is already taken by a DIFFERENT row (an interface row, or another AP
  * sharing a hostname), disambiguate with the MAC tail — `<base> (<last-5-of-mac>)` — so the unique
- * `network_health_name_key` index never rejects the upsert. A pre-check SELECT rather than a
- * try/catch on the unique violation (E3): refreshNetworkHealth isn't inside a wrapping transaction,
- * and PGlite doesn't reproduce Postgres's abort-on-violation semantics exactly.
+ * `network_health_name_key` index rejects the upsert in the common case.
+ *
+ * This pre-check is the FIRST of two layers: a cheap SELECT that avoids most collisions outright. It
+ * does NOT replace the upsert-level once-retry (checklist 2.6 / E3) — being a read, it leaves a
+ * TOCTOU window in which a concurrent refresh claims the name before this AP's INSERT lands. The
+ * retry around `upsertApRow` is the second layer that covers that window.
  */
 async function resolveApName(db: DB, mac: string, hostname: string | null): Promise<string> {
 	const base = hostname && hostname.trim() ? hostname.trim() : `AP ${mac}`;

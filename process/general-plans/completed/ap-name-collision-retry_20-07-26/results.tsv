@@ -1,0 +1,4 @@
+cycle	date	gaps_open	gaps_closed	verdict	loop_status
+baseline	2026-07-20	1	0	CONDITIONAL	RUNNING
+1	2026-07-20	0	1	PENDING_REVALIDATE	RUNNING
+2	2026-07-20	0	1	PASS	HALTED_SUCCESS
