@@ -55,6 +55,11 @@ beforeEach(() => {
 });
 
 describe('sendOtp (iTexMo)', () => {
+	// Cast is the coded default now, so iTexMo must be selected explicitly.
+	beforeEach(() => {
+		state.env.SMS_PROVIDER = 'itexmo';
+	});
+
 	it('POSTs the code to the iTexMo broadcast API with a JSON body when configured', async () => {
 		configure();
 		const fetchFn = mockFetch({ ok: true });
@@ -122,5 +127,63 @@ describe('sendOtp (iTexMo)', () => {
 		await expect(sendOtp(PHONE, CODE)).resolves.toBeUndefined();
 		expect(fetchFn).not.toHaveBeenCalled();
 		expect(info).toHaveBeenCalledWith(expect.stringContaining(CODE));
+	});
+});
+
+/** Cast success body; the default mockFetch body is iTexMo-shaped. */
+const castOk = { json: async () => ({ success: true, message_id: 'CAST123' }) };
+
+describe('sendOtp (Cast — default provider)', () => {
+	it('POSTs the code to the Cast OTP API with the E.164 number as-is', async () => {
+		state.env.CAST_API_KEY = 'cast_test_key';
+		const fetchFn = mockFetch({ ok: true, ...castOk });
+
+		await sendOtp(PHONE, CODE); // SMS_PROVIDER unset — Cast is the default
+
+		expect(fetchFn).toHaveBeenCalledTimes(1);
+		const [url, opts] = fetchFn.mock.calls[0];
+		expect(url).toBe('https://api.cast.ph/api/v1/otp/send');
+		expect(opts.method).toBe('POST');
+		expect(opts.headers['x-api-key']).toBe('cast_test_key');
+		const body = JSON.parse(opts.body as string);
+		expect(body.to).toBe(PHONE); // E.164, no reformatting
+		expect(body.message).toContain(CODE);
+		expect(body.sender_id).toBeUndefined(); // omitted unless CAST_SENDER_ID is set
+	});
+
+	it('includes sender_id when CAST_SENDER_ID is set', async () => {
+		state.env.CAST_API_KEY = 'cast_test_key';
+		state.env.CAST_SENDER_ID = 'PARAFIBER';
+		const fetchFn = mockFetch({ ok: true, ...castOk });
+
+		await sendOtp(PHONE, CODE);
+
+		const body = JSON.parse(fetchFn.mock.calls[0][1].body as string);
+		expect(body.sender_id).toBe('PARAFIBER');
+	});
+
+	it('throws (surfacing error_code) when the API responds success: false', async () => {
+		state.env.CAST_API_KEY = 'cast_test_key';
+		mockFetch({
+			ok: true,
+			json: async () => ({ success: false, error_code: 'INSUFFICIENT_CREDITS', error: 'no credits' })
+		});
+
+		await expect(sendOtp(PHONE, CODE)).rejects.toThrow(/INSUFFICIENT_CREDITS/);
+	});
+
+	it('throws on a non-OK HTTP response', async () => {
+		state.env.CAST_API_KEY = 'cast_test_key';
+		mockFetch({ ok: false, status: 502, json: async () => null });
+
+		await expect(sendOtp(PHONE, CODE)).rejects.toThrow(/Cast SMS rejected \(502\)/);
+	});
+
+	it('throws in production when unconfigured and never calls the gateway', async () => {
+		state.dev = false; // production
+		const fetchFn = mockFetch({ ok: true, ...castOk });
+
+		await expect(sendOtp(PHONE, CODE)).rejects.toThrow(/Cast not configured/);
+		expect(fetchFn).not.toHaveBeenCalled();
 	});
 });
