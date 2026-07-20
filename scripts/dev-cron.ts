@@ -7,7 +7,7 @@
  *
  *     bun run dev:cron
  *
- * It POSTs the two customer cron endpoints once a minute with the `x-cron-secret` header,
+ * It POSTs the customer cron endpoints once a minute with the `x-cron-secret` header,
  * exactly as a real scheduler would. Reads CRON_SECRET + the base URL from apps/customer/.env
  * (override with env vars CRON_SECRET / DEV_CRON_BASE_URL / DEV_CRON_INTERVAL_MS).
  *
@@ -63,7 +63,11 @@ if (!CUST_SECRET) {
 type Target = { url: string; secret: string; label: string };
 const TARGETS: Target[] = [
 	{ url: `${CUST_URL}/api/network/revoke`, secret: CUST_SECRET, label: 'revoke' },
-	{ url: `${CUST_URL}/api/payments/reconcile`, secret: CUST_SECRET, label: 'reconcile' }
+	{ url: `${CUST_URL}/api/payments/reconcile`, secret: CUST_SECRET, label: 'reconcile' },
+	// Prod runs this one every 5 min, not every minute. dev-cron has a single shared interval, so
+	// here it fires more often than prod — harmless: the sweep is idempotent and the 30-min give-up
+	// and 48h retention windows are wall-clock based, not per-run.
+	{ url: `${CUST_URL}/api/otp/sweep-delivery`, secret: CUST_SECRET, label: 'otp-sweep' }
 ];
 if (ADMIN_SECRET) {
 	TARGETS.push({ url: `${ADMIN_URL}/api/network/health/refresh`, secret: ADMIN_SECRET, label: 'health' });

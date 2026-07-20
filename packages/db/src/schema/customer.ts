@@ -355,3 +355,41 @@ export const appSettings = pgTable('app_settings', {
 	pointsEarnRate: integer('points_earn_rate').notNull().default(10),
 	updatedAt: timestamp('updated_at').notNull().defaultNow()
 });
+
+/**
+ * Append-only log of every OTP send attempt, written from the send seam
+ * (`apps/customer/src/lib/server/otp.ts`) after the gateway accepts a message.
+ *
+ * Exists because a gateway ACCEPT is not a DELIVERY: Cast accepts every OTP and the carrier
+ * can still reject 100% of them (`dlr_status: "REJECTD"`) — the guest is told "code sent" and
+ * nothing arrives, with no log and no alert. The 5-minute sweep cron
+ * (`/api/otp/sweep-delivery`) re-checks Cast's DLR status endpoint for `pending` rows and
+ * classifies them `rejected` (alerts) or `unknown` (30-min give-up, no alert).
+ *
+ * Deliberate design notes:
+ *  - Provider-agnostic shape: all four providers write a row, only Cast is swept (only Cast has
+ *    a DLR endpoint). `provider_message_id` is NULLABLE — the other providers return no id.
+ *  - NO unique constraint. This is an attempt log, not an idempotency table; a resend is a new
+ *    row. A 23505 on the guest-LOGIN path would lock a guest out, so there is nothing to retry.
+ *  - PII: `phone_masked` stores `maskPhone()` output only, never raw E.164. Rows are pruned
+ *    unconditionally after 48h on every sweep run.
+ */
+export const customerOtpDeliveryLog = pgTable(
+	'customer_otp_delivery_log',
+	{
+		id: serial('id').primaryKey(),
+		provider: text('provider').notNull(),
+		providerMessageId: text('provider_message_id'),
+		phoneMasked: text('phone_masked').notNull(),
+		// pending | rejected | unknown
+		status: text('status').notNull().default('pending'),
+		createdAt: timestamp('created_at').notNull().defaultNow()
+	},
+	(t) => [
+		index('customer_otp_delivery_log_provider_status_created_idx').on(
+			t.provider,
+			t.status,
+			t.createdAt
+		)
+	]
+);
