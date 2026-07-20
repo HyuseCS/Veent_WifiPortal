@@ -47,6 +47,17 @@ const insertEvent = (issueId: number, actorId: string, type: string, from: strin
 			VALUES (${issueId}, ${actorId}, ${type}, ${from}, ${to}, now())`
 	);
 
+/** Cleanup safety net: mark EVERY existing event read for this user (superset of their unread
+ *  feed, idempotent via the composite PK). Used in a `finally` so a throw mid-test can never leak
+ *  an unread item into the next test's exact-count assertion. */
+const markEverythingRead = (userId: string) =>
+	withSql(
+		(sql) => sql`
+			INSERT INTO admin_notification_read (user_id, event_id)
+			SELECT ${userId}, id FROM admin_issue_event
+			ON CONFLICT DO NOTHING`
+	);
+
 test('assignee is notified of others’ activity; own action is silent; mark-all-read clears it', async ({
 	page
 }) => {
@@ -75,21 +86,50 @@ test('assignee is notified of others’ activity; own action is silent; mark-all
 
 	await expect(page.getByRole('button', { name: 'Notifications (1 unread)' })).toBeVisible();
 
-	// The dropdown lists the incident.
-	await page.getByRole('button', { name: 'Notifications (1 unread)' }).click();
-	await expect(page.getByRole('menuitem', { name: new RegExp(TITLE) })).toBeVisible();
+	// The panel is a labelled region + plain list (NOT role="menu" — L6a dropped the menuitem
+	// interaction model), so each entry is a plain button named after the incident title. The
+	// sibling "Mark this notification as read" button has a fixed, distinct accessible name, so
+	// this query is unambiguous without extra scoping.
+	//
+	// try/finally: whatever happens inside, this test MUST leave the owner with no stray unread —
+	// test 2 asserts an exact "2 unread" count and there is no per-test DB reset (workers: 1,
+	// fullyParallel: false). Without the guarantee, one throw here cascades into a false failure there.
+	// Scoped to the panel region: the manager board behind it also renders "Edit <title>" /
+	// "Delete <title>" buttons, which would otherwise make a page-wide title query ambiguous.
+	const panel = page.getByRole('region', { name: 'Notifications' });
+	const entry = panel.getByRole('button', { name: new RegExp(TITLE) });
 
-	// Following the item deep-links to the detail page — and the bell must still work there
-	// (its list comes from the shared /issues layout load, not the index page).
-	await page.getByRole('menuitem', { name: new RegExp(TITLE) }).click();
-	await expect(page).toHaveURL(/\/issues\/\d+$/);
-	await expect(page.getByRole('button', { name: 'Notifications (1 unread)' })).toBeVisible();
-	await page.getByRole('button', { name: 'Notifications (1 unread)' }).click();
-	await expect(page.getByRole('menuitem', { name: new RegExp(TITLE) })).toBeVisible();
+	try {
+		await page.getByRole('button', { name: 'Notifications (1 unread)' }).click();
+		await expect(entry).toBeVisible();
 
-	// Mark all read records read rows for every unread item → count clears (from the detail page too).
-	await page.getByRole('button', { name: 'Mark all read' }).click();
-	await expect(page.getByRole('button', { name: 'Notifications', exact: true })).toBeVisible();
+		// Clicking an entry opens a preview MODAL in place (NotificationModal) — it deliberately does
+		// not navigate to /issues/[id], so an incident the user can no longer reach shows a graceful
+		// summary instead of a full-page 404.
+		await entry.click();
+		const modal = page.locator('dialog[open]');
+		await expect(modal).toBeVisible();
+		await expect(modal.getByRole('heading', { name: TITLE })).toBeVisible();
+
+		// Closing the preview counts as reading it (markOne + invalidateAll) → the bell clears, and
+		// the bell itself still works on the same page afterwards.
+		await modal.getByRole('button', { name: 'Close' }).click();
+		await expect(modal).toBeHidden();
+		await expect(page.getByRole('button', { name: 'Notifications', exact: true })).toBeVisible();
+
+		// A fresh event from another admin re-arms the feed, so "Mark all read" still has a subject:
+		// it records a read row for every unread item → count clears.
+		await insertEvent(id, adrianId, 'priority_changed', 'medium', 'high');
+		await page.reload();
+		await expect(page.getByRole('button', { name: 'Notifications (1 unread)' })).toBeVisible();
+		await page.getByRole('button', { name: 'Notifications (1 unread)' }).click();
+		await page.getByRole('button', { name: 'Mark all read' }).click();
+		await expect(page.getByRole('button', { name: 'Notifications', exact: true })).toBeVisible();
+	} finally {
+		// Unconditional safety net (runs even if an assertion above threw): park a read row on every
+		// existing event for the owner, so test 2 starts from a genuinely clean unread baseline.
+		await markEverythingRead(ownerId);
+	}
 });
 
 test('mark a single notification done, and browse read + unread in the history', async ({ page }) => {

@@ -1,9 +1,12 @@
 /**
  * Auth gate on the finance CSV export — /finance/export is a +server.ts endpoint, so the
  * (app) layout guard does NOT run for it; it must enforce auth + mandatory 2FA itself
- * (same contract as /api/router-log). Pins: anonymous → 401, authenticated-but-unenrolled
- * → 403, enrolled owner → the CSV. Before the guard, an anonymous hit 500'd on
- * `locals.user!.id` and a pre-enrollment session could pull the full transaction PII dump.
+ * (same contract as /api/router-log) — but in front of BOTH sits the central (app) gate in
+ * hooks.server.ts, which 302s an unauthenticated hit to /login and an unenrolled one to
+ * /enroll-2fa before the endpoint's own 401/403 can fire. Those endpoint checks stay as
+ * defence-in-depth; what this spec pins is the hop that actually runs. Before the guard, an
+ * anonymous hit 500'd on `locals.user!.id` and a pre-enrollment session could pull the full
+ * transaction PII dump.
  */
 import { test, expect } from '@playwright/test';
 import { STAFF_PASSWORD } from './config';
@@ -23,10 +26,17 @@ test.describe('without the banked owner session', () => {
 	// owner, and @playwright/test applies it to every context (even browser.newContext()).
 	test.use({ storageState: { cookies: [], origins: [] } });
 
-	test('anonymous gets 401; a pre-enrollment session gets 403', async ({ page, context }) => {
-		// No session at all → 401.
-		const unauthed = await context.request.get(EXPORT_PATH);
-		expect(unauthed.status()).toBe(401);
+	test('anonymous is bounced to /login; a pre-enrollment session to /enroll-2fa', async ({
+		page,
+		context
+	}) => {
+		// No session at all. The (app) auth gate lives in hooks.server.ts (handleBetterAuth), which
+		// 302s to /login BEFORE the endpoint's own 401 can run — so that is the status this hop
+		// actually returns. `maxRedirects: 0` is load-bearing: Playwright follows redirects by
+		// default, which would silently turn the real 302 into a followed 200 of the login page.
+		const unauthed = await context.request.get(EXPORT_PATH, { maxRedirects: 0 });
+		expect(unauthed.status()).toBe(302);
+		expect(unauthed.headers()['location']).toBe('/login');
 
 		// Log in as a seeded admin who never enrolled (only the owner enrolls in global-setup;
 		// bea is untouched by the governance specs). Hooks expose locals.user pre-enrollment,
@@ -37,7 +47,8 @@ test.describe('without the banked owner session', () => {
 		await page.getByRole('button', { name: 'Sign In' }).click();
 		await page.waitForURL('**/enroll-2fa'); // authenticated, parked at enrollment
 
-		const gated = await context.request.get(EXPORT_PATH);
-		expect(gated.status()).toBe(403);
+		const gated = await context.request.get(EXPORT_PATH, { maxRedirects: 0 });
+		expect(gated.status()).toBe(302);
+		expect(gated.headers()['location']).toBe('/enroll-2fa');
 	});
 });
