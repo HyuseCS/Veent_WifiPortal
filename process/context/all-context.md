@@ -1,6 +1,6 @@
 # veent-wifiportal - All Context
 
-Last updated: 2026-07-20 (added unique-constraint-violation discriminator pattern)
+Last updated: 2026-07-20 (added OTP delivery-observability table/endpoint, migration count 49, cron endpoint list)
 
 This file is the root context entrypoint for the repo.
 
@@ -181,7 +181,7 @@ veent_wifiportal/
 │   └── locator/          -- veent-locator: public hotspot map, no auth (src/, static/, playwright.config.ts)
 ├── packages/
 │   ├── core/              -- @veent/core: business services + integration providers (src/, scripts/)
-│   └── db/                -- @veent/db: sole Drizzle/Postgres schema source (src/, drizzle/ ← 47 migrations)
+│   └── db/                -- @veent/db: sole Drizzle/Postgres schema source (src/, drizzle/ ← 49 migrations)
 ├── docs/                   -- assets/, design/, dev/, mikrotik/, problems/, runbooks/, use-cases/
 ├── scripts/                 -- dev-cron.ts, idempotent-migrations.ts, setup-prod.ts, ...
 ├── process/                 -- this context/plan/development-protocol system
@@ -191,9 +191,13 @@ veent_wifiportal/
 Notes:
 - No `apps/cron` package. Cron = (a) HTTP endpoints hit by an EXTERNAL scheduler in prod
   (`apps/customer/src/routes/api/network/revoke`, `apps/customer/src/routes/api/payments/reconcile`,
-  `apps/admin/src/routes/api/network/health/refresh`), each guarded by an `x-cron-secret` header;
-  (b) `scripts/dev-cron.ts` at repo root — dev-only poller (`bun run dev:cron`) hitting those
-  endpoints once/minute.
+  `apps/customer/src/routes/api/otp/sweep-delivery`, `apps/admin/src/routes/api/network/health/refresh`),
+  each guarded by an `x-cron-secret` header; (b) `scripts/dev-cron.ts` at repo root — dev-only poller
+  (`bun run dev:cron`) hitting those endpoints. GOTCHA: `dev-cron.ts` has a single global 1-minute
+  interval — `otp/sweep-delivery` is designed for a 5-minute prod cadence
+  (`Sentry.withMonitor(..., { schedule: { value: '*/5 * * * *' } })`) but dev fires it every minute;
+  harmless (idempotent, wall-clock windows) but the real 5-minute schedule must be set on the
+  external prod scheduler, not inferred from dev-cron's interval.
 - No `svelte.config.js`/`.mjs` in any app — all SvelteKit config lives inline in each app's
   `vite.config.ts`, inside the `sveltekit({...})` plugin options.
 - Entry points: `apps/{admin,customer,locator}/src/hooks.server.ts` + `hooks.client.ts` (Sentry
@@ -264,11 +268,11 @@ real provider (mikrotik/maya/resend) plus a `stub.ts` fallback, selected by env.
 into each app's Sentry `beforeSend`.
 
 **Migrations:** `packages/db/drizzle.config.ts` is the single source of truth; schema lives in
-`packages/db/src/schema/index.ts`; 47 `.sql` migrations in `packages/db/drizzle/` (added
-`0046_oval_lorna_dane.sql` 2026-07-10, IMS audit remediation H2 — relaxes
-`admin_issue_event_type_ck` to add `note_edited`). Root scripts
-proxy `db:push/generate/migrate/studio/seed` → `bun run --filter @veent/db`. GOTCHA: dev DB is
-push-managed — see Gotchas below.
+`packages/db/src/schema/index.ts`; 49 `.sql` migrations in `packages/db/drizzle/` (newest:
+`0048_lying_firedrake.sql` 2026-07-20, adds `customer_otp_delivery_log` for OTP delivery
+observability — applied via direct `psql` DDL, not `db:push`, per the push-managed-dev-DB gotcha).
+Root scripts proxy `db:push/generate/migrate/studio/seed` → `bun run --filter @veent/db`. GOTCHA:
+dev DB is push-managed — see Gotchas below.
 
 **Naming / route groups:** admin's `(app)/` route group wraps authed routes (content, dashboard,
 finance, issues, map, networks, profile, sentry, staff, users); public/pre-auth routes sit outside
@@ -291,7 +295,9 @@ auth.ts` (cookiePrefix `veent-portal`) vs `apps/admin/src/lib/server/auth.ts` (c
 `radius-admin`); each reads its own `BETTER_AUTH_SECRET`. Schema via a shared `_auth-factory.ts`
 builder → `auth-admin.ts` / `auth-customer.ts` in packages/db. No direct customer↔admin imports —
 sharing happens only through `@veent/db` (single Postgres, `customer_*`/`admin_*` tables + shared
-`rate_limits`, `network_health`) and `@veent/core` services (accounts, credits, points, sessions,
+`rate_limits`, `network_health`, plus `customer_otp_delivery_log` — an append-only, no-unique-
+constraint OTP send-attempt log, provider-agnostic columns but only Cast is swept — see "SMS / OTP
+delivery observability" below) and `@veent/core` services (accounts, credits, points, sessions,
 staff, adminAccess, checkoutAccess, outage, reconcilePayments, rateLimit, settings, networkHealth,
 freeTime). Admin also has network-level isolation hints (`ADMIN_WG_HOSTS`/`ADMIN_WG_IPS` —
 WireGuard).
@@ -330,6 +336,23 @@ easy to find).
   on router-call timeout) to `event.level = 'warning'` instead of `error` — the cron
   `Sentry.withMonitor('customer-network-revoke')` check-in already alerts on the failure, so this
   is noise reduction, not silence; `scrubEvent` still runs on every branch.
+
+### SMS / OTP delivery observability
+- `customer_otp_delivery_log` (`packages/db/src/schema/customer.ts`, migration `0048`) — append-only
+  OTP send-attempt log, no unique constraint; every provider writes a row on synchronous gateway
+  accept (`apps/customer/src/lib/server/otp.ts`, `logDeliveryAttempt`, insert **must** be awaited
+  inside its own try/catch — an un-awaited insert's rejection escapes as an unhandled promise
+  rejection on the guest-login path, not just a missed log line).
+- `apps/customer/src/routes/api/otp/sweep-delivery/+server.ts` (cron-only, `requireCron()`) — the
+  ONLY provider with real DLR observability is **Cast** (`GET /api/v1/sms/status/{message_id}`);
+  `itexmo`/`unisms`/`smsgate` rows are written (satisfy the `provider` discriminator) but never
+  swept — unobservable by design, not a gap in this implementation. Alerts (`captureHandled`,
+  constant-message Sentry fingerprint) fire only on `dlr_status === 'REJECTD'` / `status ===
+  'undelivered'` within a 30-min window; unresolved rows age out to `unknown` with no alert. Rows
+  are pruned unconditionally after 48h every sweep run, regardless of sweep-loop outcome.
+- See `process/general-plans/completed/otp-delivery-observability_20-07-26/` for the full plan;
+  Cast DLR response-shape stability past the one observed `REJECTD` shape remains unproven (blocked
+  on Cast activating a real sender ID for live traffic).
 
 ### Resend email
 - `resend` dependency in `packages/core`

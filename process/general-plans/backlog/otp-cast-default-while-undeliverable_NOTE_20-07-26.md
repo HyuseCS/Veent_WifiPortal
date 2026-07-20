@@ -1,6 +1,6 @@
 ---
 name: note:otp-cast-default-while-undeliverable
-description: "sendOtp falls back to Cast when SMS_PROVIDER is unset; any env with CAST_API_KEY set and no explicit SMS_PROVIDER silently routes every OTP through a provider that live testing shows is currently 100% carrier-rejected."
+description: "PARTIALLY RESOLVED 20-07-26 — the silent-fallthrough sub-issue (unrecognized SMS_PROVIDER routing silently to Cast) is fixed: sendOtp now throws on any unrecognized non-empty value. Options 1 (change coded default) and 2 (validateEnv boot check) were deliberately declined as standing decisions, not oversights."
 date: 20-07-26
 metadata:
   node_type: memory
@@ -9,6 +9,32 @@ metadata:
 ---
 
 # Cast is the coded default while it cannot deliver
+
+## Resolution status (20-07-26)
+
+The **silent-fallthrough half** of this note is fixed — see
+`process/general-plans/completed/otp-delivery-observability_20-07-26/otp-delivery-observability_PLAN_20-07-26.md`
+Phase 4. `sendOtp`'s dispatch (`apps/customer/src/lib/server/otp.ts`) now throws synchronously on
+any unrecognized non-empty `SMS_PROVIDER` value instead of silently falling through to Cast.
+Unset/blank still defaults to `cast` — unchanged, by design.
+
+**Fix options 1 and 2 were deliberately NOT done, on purpose, not by oversight:**
+- **Option 1** (revert/change the coded default away from Cast) — not done. `SMS_PROVIDER ?? 'cast'`
+  defaulting to Cast is a standing team decision (iTexMo unresponsive; see
+  `~/.claude/projects/-home-hyuse-Desktop-veent-wifiportal/memory/project_cast-sms.md`). This note
+  does not argue to move off Cast and this session did not revisit that call.
+- **Option 2** (validate `SMS_PROVIDER` at boot in `validateEnv.ts`) — not done. `validateEnv.ts`
+  deliberately leaves SMS vars unvalidated by prior design (its own comment documents this); this
+  plan's Non-Goals explicitly excluded touching that file, per Q5 scope containment.
+
+**Option 3** (leave as-is, rely on deploy checklists) is effectively superseded by the throw fix —
+an unrecognized value now fails loud instead of needing a checklist to catch it.
+
+The underlying observability gap this note is "Related" to
+(`otp-delivery-unobservable_NOTE_20-07-26.md`) is now substantially addressed for Cast — see that
+note's own resolution status.
+
+---
 
 ## Why this exists
 

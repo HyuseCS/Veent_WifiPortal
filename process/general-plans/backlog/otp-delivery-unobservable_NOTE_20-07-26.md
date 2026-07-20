@@ -1,6 +1,6 @@
 ---
 name: note:otp-delivery-unobservable
-description: "sendOtp only checks the synchronous gateway accept response; carrier-side delivery rejection (DLR) is invisible today across all 4 SMS providers, so a login OTP can be silently accepted-then-dropped with no error and no log."
+description: "PARTIALLY RESOLVED 20-07-26 — Cast delivery observability shipped (see process/general-plans/completed/otp-delivery-observability_20-07-26/). Options 1-3 done for Cast only; itexmo/unisms/smsgate remain unobservable by design. Option 4 (guest-facing fallback) still open."
 date: 20-07-26
 metadata:
   node_type: memory
@@ -9,6 +9,27 @@ metadata:
 ---
 
 # OTP delivery is unobservable (silent accept-then-drop)
+
+## Resolution status (20-07-26)
+
+Fix options 1 (poll DLR), 2 (persist message_id for reconciliation), and 3 (alert on aggregate
+failure) are **shipped for Cast** — see
+`process/general-plans/completed/otp-delivery-observability_20-07-26/otp-delivery-observability_PLAN_20-07-26.md`.
+A new `customer_otp_delivery_log` table records every send attempt (all 4 providers); a 5-minute
+cron sweep (`apps/customer/src/routes/api/otp/sweep-delivery/`) checks Cast's DLR endpoint and
+fires a stable-fingerprint Sentry alert on confirmed carrier rejection.
+
+**Deliberately out of scope, still true today:** `itexmo`/`unisms`/`smsgate` rows are written but
+never swept — only Cast has a DLR status endpoint, so those three providers remain unobservable by
+design, not by oversight.
+
+**Option 4 (guest-facing fallback when delivery is known to have failed — resend, alternate
+channel, "delivery uncertain" messaging) was explicitly OUT OF SCOPE for that plan and remains
+open.** No guest-facing UX change has been made; a guest whose OTP is confirmed-rejected still just
+waits on a code that will never arrive. This is the one item from this note's original fix-option
+list that still needs a decision and a plan.
+
+---
 
 ## Why this exists
 
