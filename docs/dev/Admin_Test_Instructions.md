@@ -303,9 +303,9 @@ packages — so run `test:seed` to repopulate before using the app again.
 - **Reset to a clean state:** just run `bun run --filter radius-admin test:seed` again.
 - **"Online" users disappeared:** active sessions expire in real time (≤ 3 hours). Re-seed to refresh.
 - **Which database am I looking at?** The app and the seed use `DATABASE_URL` from `apps/admin/.env`
-  (default `postgres://root:mysecretpassword@localhost:5432/local`). Inspect it with:
+  (default `postgres://root:mysecretpassword@localhost:5433/local`). Inspect it with:
   ```bash
-  PGPASSWORD=mysecretpassword psql -h localhost -p 5432 -U root -d local
+  PGPASSWORD=mysecretpassword psql -h localhost -p 5433 -U root -d local
   ```
   Do **not** assume a `docker exec ... psql` into a container is the same database — verify the port.
 - **Verifying "active/unexpired" by hand:** the timestamp columns are timezone-naive and the DB

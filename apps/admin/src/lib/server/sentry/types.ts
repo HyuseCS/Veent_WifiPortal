@@ -62,16 +62,21 @@ export interface SentryEventDetail {
 	dateCreated: string;
 }
 
-/** The mutable statuses an owner can set from the admin page. */
-export type IssueStatus = 'resolved' | 'ignored';
+/** The mutable statuses an owner can set from the admin page. `unresolved` is the un-ignore target. */
+export type IssueStatus = 'resolved' | 'ignored' | 'unresolved';
+
+/** Which issue list a load fetches: the open feed or the dismissed (ignored) archive. */
+export type IssueFilter = 'unresolved' | 'ignored';
 
 /** Everything the /sentry page renders when Sentry is configured — assembled by the facade. */
 export interface SentryDashboard {
 	configured: true;
 	kpis: Kpi[];
 	issues: SentryIssue[];
+	/** The ignored (dismissed) issues — the "Ignored" tab of the same table. */
+	ignoredIssues: SentryIssue[];
 	/** The public "Open in Sentry" project URL (PUBLIC_SENTRY_DASHBOARD_URL), or null. */
 	dashboardUrl: string | null;
 	/** True per section when its fetch failed and it was degraded to empty. */
-	degraded: { issues: boolean };
+	degraded: { issues: boolean; ignored: boolean };
 }

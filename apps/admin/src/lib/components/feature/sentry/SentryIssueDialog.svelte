@@ -1,4 +1,5 @@
 <script lang="ts">
+	import Bell from 'lucide-svelte/icons/bell';
 	import BellOff from 'lucide-svelte/icons/bell-off';
 	import Check from 'lucide-svelte/icons/check';
 	import ClipboardPlus from 'lucide-svelte/icons/clipboard-plus';
@@ -225,15 +226,30 @@
 						<Check class="h-4 w-4" aria-hidden="true" /> Resolve
 					</button>
 				</form>
-				<form method="post" action="?/ignore" use:enhance={() => async ({ result, update }) => { if (result.type === 'success') open = false; await update(); }}>
-					<input type="hidden" name="id" value={issue.id} />
-					<button
-						type="submit"
-						class="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-border bg-bg px-3 text-sm font-medium text-ink transition-colors hover:border-brand/40 hover:bg-surface focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:outline-none"
-					>
-						<BellOff class="h-4 w-4" aria-hidden="true" /> Ignore
-					</button>
-				</form>
+				<!-- Only the two open feeds (unresolved / ignored) reach this dialog, so anything that
+				     isn't 'unresolved' is a dismissed issue → offer Restore. Sentry reports ignored as
+				     'ignored' or (older) 'muted'; keying off 'unresolved' covers both. -->
+				{#if issue.status === 'unresolved'}
+					<form method="post" action="?/ignore" use:enhance={() => async ({ result, update }) => { if (result.type === 'success') open = false; await update(); }}>
+						<input type="hidden" name="id" value={issue.id} />
+						<button
+							type="submit"
+							class="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-border bg-bg px-3 text-sm font-medium text-ink transition-colors hover:border-brand/40 hover:bg-surface focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:outline-none"
+						>
+							<BellOff class="h-4 w-4" aria-hidden="true" /> Ignore
+						</button>
+					</form>
+				{:else}
+					<form method="post" action="?/restore" use:enhance={() => async ({ result, update }) => { if (result.type === 'success') open = false; await update(); }}>
+						<input type="hidden" name="id" value={issue.id} />
+						<button
+							type="submit"
+							class="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-border bg-bg px-3 text-sm font-medium text-ink transition-colors hover:border-brand/40 hover:bg-surface focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:outline-none"
+						>
+							<Bell class="h-4 w-4" aria-hidden="true" /> Restore
+						</button>
+					</form>
+				{/if}
 				{#if issue.permalink}
 					<!-- permalink is an absolute external Sentry URL, so resolve() doesn't apply here. -->
 					<!-- eslint-disable svelte/no-navigation-without-resolve -->
