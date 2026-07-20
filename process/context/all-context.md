@@ -1,6 +1,6 @@
 # veent-wifiportal - All Context
 
-Last updated: 2026-07-20
+Last updated: 2026-07-20 (added unique-constraint-violation discriminator pattern)
 
 This file is the root context entrypoint for the repo.
 
@@ -237,6 +237,19 @@ navigation; `try/catch` around external calls (SMS, Maya) so downstream outage d
 **Audit-trail pattern (admin issues):** every mutation runs inside `db.transaction(tx)`; a private
 `recordEvent(tx, ...)` appends an `admin_issue_event` row in the SAME transaction — never a
 fire-and-forget log write.
+
+**Unique-constraint-violation discriminator (drizzle cause-chain walk):** drizzle-orm wraps driver
+errors in `DrizzleQueryError`, so a Postgres SQLSTATE (e.g. `23505` unique_violation) lives on the
+bounded `.cause` chain, not on the caught error directly — walk `err.code ?? err.cause?.code ??
+err.cause?.cause?.code` (2-3 levels deep is enough; never substring-match the error message). The
+constraint-name field differs by driver: postgres.js exposes `constraint_name`, PGlite/
+node-postgres-shaped errors expose `constraint` — check both. Canonical implementations:
+`packages/core/src/services/reconcilePayments.ts:104-112` (unit-tested in
+`apps/customer/src/lib/server/record-payment.spec.ts`) and
+`packages/core/src/services/networkHealth.ts` (`isNameUniqueViolation`, added 20-07-26 for the AP
+name-collision retry — see `process/general-plans/completed/ap-name-collision-retry_20-07-26/`).
+Reuse this pattern rather than re-deriving the cause-chain shape for any new unique-violation
+handling.
 
 **Rate limiting:** `packages/core/src/services/rateLimit.ts` → `consumeRateLimit(db, {key, max,
 windowMs})`, a Postgres sliding-window implementation that is race-safe (`INSERT ... ON CONFLICT`

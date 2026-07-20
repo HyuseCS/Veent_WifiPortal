@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { asc, eq } from 'drizzle-orm';
+import { asc, eq, sql } from 'drizzle-orm';
 import { PGlite } from '@electric-sql/pglite';
 import { drizzle } from 'drizzle-orm/pglite';
 import { migrate } from 'drizzle-orm/pglite/migrator';
@@ -18,7 +18,9 @@ import {
 	resolveNetworkIdByApName,
 	computeApGroups,
 	computeTrafficRateMbps,
-	recognizeAccessPoints
+	recognizeAccessPoints,
+	upsertApRow,
+	isNameUniqueViolation
 } from './networkHealth';
 
 /**
@@ -334,5 +336,84 @@ describe('per-AP visibility refresh (real Postgres)', () => {
 		row = (await apRows()).find((r) => r.mac === mac)!;
 		expect(row.trafficBytes).toBe(7_500_000);
 		expect(row.throughputMbps).toBe(1);
+	});
+});
+
+/**
+ * G-NC1 / G-NC2 — the `network_health_name_key` once-retry (checklist 2.6 / constraint E3).
+ *
+ * The TOCTOU window is unreachable through the public flow (nothing runs between `resolveApName`'s
+ * pre-check SELECT and the INSERT), so collisions are provoked by pre-seeding rows that already hold
+ * the target names. Seeds carry BOTH a mac and a latitude so the cycle's prune (which deletes
+ * auto-discovered rows whose name isn't in this round's name-set) can never remove them mid-test.
+ *
+ * MAC tail: 'E4:67:1E:00:00:99'.slice(-5).replace(':','') === '0099'.
+ */
+describe('AP name-collision once-retry (real Postgres)', () => {
+	const NEW_MAC = 'E4:67:1E:00:00:99';
+	const TAIL = '0099';
+
+	/** Operator-pinned seed row (latitude set) holding `name` under a different identity. */
+	async function seedName(name: string, mac: string) {
+		await db.insert(networkHealth).values({ name, mac, latitude: '14.500000' });
+	}
+
+	const newApNet = (hostname: string) =>
+		fake({ leases: [apLease({ mac: NEW_MAC, address: '10.0.0.99', hostname })], ping: { '10.0.0.99': 3 } });
+
+	const apVals = (name: string) => ({ name, mac: NEW_MAC, online: true, lastSampleAt: new Date() });
+
+	it('G-NC1a: a name clash raises a real 23505 whose shape the discriminator recognises', async () => {
+		await seedName('X', 'AA:00:00:00:00:01');
+
+		// Empirically record PGlite's error shape rather than assuming it (plan R-A).
+		const err = await upsertApRow(db, apVals('X'), null, sql`NULL`, sql`NULL`).catch((e) => e);
+		expect(err).toBeInstanceOf(Error);
+		expect(isNameUniqueViolation(err)).toBe(true);
+	});
+
+	it('G-NC1b: retry writes the suffixed row, survives the prune (AC6), leaves the seed untouched', async () => {
+		// Two seeds: the pre-check consumes the first (resolving to `X (0099)`), so the INSERT collides
+		// with the second and the once-retry writes `X (0099) (0099)` and succeeds.
+		await seedName('X', 'AA:00:00:00:00:01');
+		await seedName(`X (${TAIL})`, 'AA:00:00:00:00:02');
+
+		await refreshNetworkHealth(db, newApNet('X'));
+
+		const rows = await apRows();
+		const written = rows.find((r) => r.mac === NEW_MAC);
+		expect(written).toBeDefined();
+		// AC1: exactly one retry, suffix applied to the name that failed.
+		expect(written!.name).toBe(`X (${TAIL}) (${TAIL})`);
+		// AC6: the prune name-set holds the name ACTUALLY written — had it held the pre-retry name,
+		// this freshly-written row would have been deleted in the same cycle.
+		expect(written!.online).toBe(true);
+		// Seeds untouched.
+		expect(rows.find((r) => r.mac === 'AA:00:00:00:00:01')!.name).toBe('X');
+		expect(rows.find((r) => r.mac === 'AA:00:00:00:00:02')!.name).toBe(`X (${TAIL})`);
+	});
+
+	it('G-NC2 leg 1: with base and suffixed names taken, a direct upsert rejects (no loop)', async () => {
+		await seedName('X', 'AA:00:00:00:00:01');
+		await seedName(`X (${TAIL})`, 'AA:00:00:00:00:02');
+
+		await expect(upsertApRow(db, apVals('X'), null, sql`NULL`, sql`NULL`)).rejects.toThrow();
+	});
+
+	it('G-NC2 leg 2: a second collision degrades the cycle to interface-only without throwing', async () => {
+		// THREE seeds: the pre-check consumes `X`, the first INSERT collides with `X (0099)`, and the
+		// retry's recomputed `X (0099) (0099)` collides too — so the second 23505 propagates out of
+		// refreshAccessPoints into refreshNetworkHealth's existing catch (interface-only degradation).
+		await seedName('X', 'AA:00:00:00:00:01');
+		await seedName(`X (${TAIL})`, 'AA:00:00:00:00:02');
+		await seedName(`X (${TAIL}) (${TAIL})`, 'AA:00:00:00:00:03');
+
+		await expect(refreshNetworkHealth(db, newApNet('X'))).resolves.toBe(0);
+
+		const rows = await apRows();
+		// No AP row written for the new MAC, and all three seeds survive (prune restricted to
+		// mac IS NULL when the AP scan didn't complete).
+		expect(rows.find((r) => r.mac === NEW_MAC)).toBeUndefined();
+		expect(rows).toHaveLength(3);
 	});
 });
