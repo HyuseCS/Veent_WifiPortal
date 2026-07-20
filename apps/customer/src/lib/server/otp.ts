@@ -169,6 +169,14 @@ async function sendViaCast(phone: string, code: string): Promise<void> {
 			`Cast SMS rejected (${res.status})${body?.error_code ? ` [${body.error_code}]` : ''}: ${body?.error ?? 'no success flag'}`
 		);
 	}
+
+	// Dev-only proof-of-send: sandbox sends deliver no real SMS, so echo Cast's response plus the
+	// message body to the console. Guarded by `dev` — the message contains the OTP code and must
+	// never reach a production log.
+	if (dev) {
+		console.info(`[otp] Cast accepted: ${JSON.stringify(body)}`);
+		console.info(`[otp] Cast message to ${phone}: ${otpMessage(code)}`);
+	}
 }
 
 /**
