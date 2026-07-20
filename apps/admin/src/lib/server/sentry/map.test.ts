@@ -39,6 +39,17 @@ describe('mapIssue', () => {
 		expect(mapIssue({}).permalink).toBe(''); // missing → ''
 	});
 
+	it('pins the permalink host to sentry.io (rejects other https hosts)', () => {
+		// https alone isn't enough — the host must be Sentry's, so a compromised/poisoned URL
+		// can't point staff at an attacker-controlled origin.
+		expect(mapIssue({ permalink: 'https://de.sentry.io/issues/42/' }).permalink).toBe(
+			'https://de.sentry.io/issues/42/'
+		); // regional subdomain
+		expect(mapIssue({ permalink: 'https://evil.com/issues/42/' }).permalink).toBe('');
+		expect(mapIssue({ permalink: 'https://sentry.io.evil.com/x' }).permalink).toBe(''); // suffix confusion
+		expect(mapIssue({ permalink: 'https://' }).permalink).toBe(''); // malformed → '', not a throw
+	});
+
 	it('degrades garbage to empty/0 without throwing', () => {
 		const issue = mapIssue({ count: 'not-a-number' });
 		expect(issue.count).toBe(0);
@@ -126,6 +137,15 @@ describe('validateSentrySnapshot', () => {
 		expect(validateSentrySnapshot({ ...ok, permalink: 'javascript:alert(1)' })).toBeNull();
 		expect(validateSentrySnapshot({ ...ok, permalink: 'http://evil.example/x' })).toBeNull();
 		expect(validateSentrySnapshot({ ...ok, permalink: '//evil.example' })).toBeNull();
+	});
+
+	it('rejects an https permalink pointing at a non-Sentry host (H1 host pinning)', () => {
+		expect(validateSentrySnapshot({ ...ok, permalink: 'https://evil.com/issues/42/' })).toBeNull();
+		expect(validateSentrySnapshot({ ...ok, permalink: 'https://sentry.io.evil.com/x' })).toBeNull();
+		expect(validateSentrySnapshot({ ...ok, permalink: 'https://' })).toBeNull(); // malformed, no throw
+		expect(
+			validateSentrySnapshot({ ...ok, permalink: 'https://de.sentry.io/issues/42/' })
+		).not.toBeNull(); // regional subdomain still allowed
 	});
 
 	it('rejects a malformed issueId (non-numeric, empty, or too long)', () => {
