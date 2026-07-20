@@ -18,7 +18,7 @@ import type { IssueStatus, SentryDashboard, SentryEventDetail, SentryIssue } fro
  * client or mapper directly.
  */
 
-export { isSentryConfigured, SENTRY_CREDENTIAL_KEYS };
+export { fetchLatestEventRaw, isSentryConfigured, SENTRY_CREDENTIAL_KEYS };
 export type { SentryDashboard, SentryEventDetail, SentryIssue } from './types';
 
 const log = logger('sentry');

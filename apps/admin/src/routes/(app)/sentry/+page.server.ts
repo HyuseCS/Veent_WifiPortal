@@ -6,7 +6,13 @@ import { clientIp, rateLimit } from '$lib/server/rateLimit';
 import { listStaff } from '$lib/server/queries';
 import { createIssueFromSentry, isIssuePriority, type IssueInput } from '$lib/server/issues';
 import { notifyAssignees } from '$lib/server/issueNotify';
-import { getDashboard, ignoreIssue, isSentryConfigured, resolveIssue } from '$lib/server/sentry';
+import {
+	fetchLatestEventRaw,
+	getDashboard,
+	ignoreIssue,
+	isSentryConfigured,
+	resolveIssue
+} from '$lib/server/sentry';
 import { validateSentrySnapshot } from '$lib/server/sentry/map';
 import { parseDueDate } from '$lib/server/formValidation';
 import type { Actions, PageServerLoad } from './$types';
@@ -99,6 +105,28 @@ export const actions: Actions = {
 		});
 		if (!snapshot) return fail(400, { action: 'track', error: 'Invalid Sentry permalink.' });
 		const { shortId, permalink, title: sentryTitle } = snapshot;
+
+		// M4d provenance gate: the id is now known-format-valid, but a fabricated one would still
+		// create an incident that displays as "Tracked from Sentry". This org-scoped round trip
+		// 404s for both a nonexistent id AND a real id in another org — exactly the provenance
+		// signal needed. Fail-closed: configured + lookup failed → reject, persist nothing. It runs
+		// strictly before the DB write, and before the remaining field validation, so a fabricated
+		// id costs no further work. Unconfigured Sentry deliberately skips the check (unchanged
+		// behavior, asserted by e2e/incident-sentry.e2e.ts).
+		// KNOWN-GAP (VALIDATE 20-07-26): fetchLatestEventRaw proves the issue has >=1 retrievable
+		// event, not pure existence — a real issue with zero retrievable events would false-reject;
+		// accepted as a narrow, availability-only known-gap.
+		if (isSentryConfigured()) {
+			try {
+				await fetchLatestEventRaw(sentryIssueId);
+			} catch (err) {
+				log.error('track provenance check failed', err);
+				return fail(502, {
+					action: 'track',
+					error: 'Could not verify this Sentry issue. Try again.'
+				});
+			}
+		}
 
 		const title = String(form.get('issue-title') ?? '').trim();
 		if (!title) return fail(400, { action: 'track', error: 'Title is required.' });
