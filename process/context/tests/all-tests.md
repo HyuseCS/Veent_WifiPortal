@@ -163,9 +163,10 @@ failing `$lib` alias resolution. Confirmed during the M4d Sentry-provenance EVL 
     blanks Sentry; before this fix the e2e webserver silently inherited real credentials from
     `apps/admin/.env` and made live, authenticated calls to the production Sentry org — see Known
     Gaps below for the general lesson this exposed
-  - **Not yet covered: Maya payments.** Whether the admin e2e suite can reach Maya
-    (`packages/core/src/integrations/payments/maya.ts`) is unverified — not investigated as of
-    20-07-26. See Known Gaps below.
+  - **Maya payments — investigated and closed 20-07-26.** `apps/admin` has no Maya code path
+    at all (verified by exhaustive grep — only inert comments/string-label hits); admin never
+    calls Maya, so there was nothing for `TEST_ENV` to cover. The real exposure this
+    investigation found was in `apps/customer`/`apps/locator` instead — see Known Gaps below.
 - **2FA is mandatory in the flow.** `global-setup.ts` does a real Chromium login, walks through mandatory 2FA enrollment (`/enroll-2fa`), then caches `storageState` at `e2e/.auth/owner.json` plus the TOTP secret at `e2e/.auth/owner-totp.txt` for reuse across specs. TOTP itself is generated via a small stdlib helper (`e2e/totp.ts`), no external TOTP library.
 - **`webServer` builds + previews, doesn't reuse.** Playwright's `webServer` runs `npm run build && npm run preview` on port `4173` with `reuseExistingServer: false` (deliberate — always a clean build/preview). `webServer.timeout` is 180s, test `timeout` is 60s.
 - **Serial execution only.** `workers: 1`, `fullyParallel: false` — governance specs mutate shared state; each spec self-seeds via `config.ts` helpers rather than relying on isolation between workers.
@@ -199,7 +200,7 @@ failing `$lib` alias resolution. Confirmed during the M4d Sentry-provenance EVL 
 
 - `packages/db` has **zero tests** and no test script — not covered by any root command.
 - `apps/locator` has exactly **1 unit test** (`lib/clusters.test.ts`) and **no e2e specs**.
-- `apps/customer` and `apps/locator` have Playwright e2e configs wired but **no specs** — only `apps/admin` has actual e2e coverage.
+- `apps/customer` and `apps/locator` have Playwright e2e configs wired but **no specs** — only `apps/admin` has actual e2e coverage. As of 20-07-26, `apps/customer/playwright.config.ts` carries a credential tripwire in `webServer.env`, but its protection is **not uniform — do not call it "fail-closed" across the board**: SMS (`CAST_*`/`ITEXMO_*`/`UNISMS_*`/`SMSGATE_*`, all four blanked) is genuinely fail-closed — `sendOtp` throws before any network call because `dev` is `false` in a preview build. Maya is only **fail-rejected**: `basicAuth('')` still builds a valid (empty-credential) auth header, so the checkout request is actually sent and comes back `401` — the payload leaves the machine, it is not prevented. `MAYA_SANDBOX` is pinned `'true'` (it cannot be blanked — `payments.ts` hard-throws on anything but `'true'`/`'false'`) so an escaping request lands on sandbox rather than production, but that is a weaker guarantee than "never leaves the machine." MikroTik (`NETWORK_CONTROLLER: 'stub'`) is a real stub — no call attempted. Neither `DATABASE_URL` nor Sentry vars are touched by the tripwire — a future customer e2e spec still runs against the real dev DB and ships events to real Sentry. `apps/locator`'s config was left unchanged — its env schema has no external credentials to leak. Full detail: `process/general-plans/backlog/customer-locator-e2e-harness-integration-gaps_NOTE_20-07-26.md`.
 - The **client (browser) Vitest project** is wired in all 3 apps (`@vitest/browser-playwright` + `vitest-browser-svelte`, real headless Chromium) but has **zero `.svelte.test.ts` files** anywhere — no component-level test currently exists.
 - **No coverage tooling** configured anywhere (no `@vitest/coverage-*` dep, no coverage config).
 - **No CI** — `.github/workflows` is absent; the recommended gate order (`check` → `lint` → `test` → admin `test:e2e`) is manual only.
@@ -210,9 +211,12 @@ failing `$lib` alias resolution. Confirmed during the M4d Sentry-provenance EVL 
   drift (not a crash), so `&& eslint .` never runs and eslint remains unverified at the repo root.
   Backlog: `process/features/incident-management/backlog/repo-wide-lint-prettier-drift_NOTE_10-07-26.md`
   (updated 20-07-26 with the narrowed remaining scope).
-- **`TEST_ENV` has no enforcement that new external integrations get added to it.** It currently
-  covers DB, router, mailer, and (as of 20-07-26) Sentry — each added reactively after being found
-  missing, not proactively. Maya payments is not covered and reachability from admin e2e is
-  unverified — treat as an open risk, not a confirmed non-issue. Backlog:
-  `process/features/incident-management/backlog/test-env-integration-coverage-gap_NOTE_20-07-26.md`.
+- **`TEST_ENV` (and the customer tripwire) have no enforcement that new external integrations get
+  added to them.** `TEST_ENV` currently covers DB, router, mailer, and (as of 20-07-26) Sentry —
+  each added reactively after being found missing, not proactively. Admin's Maya coverage question
+  was investigated 20-07-26 and closed (admin has no Maya code path); the same investigation found
+  a real gap in `apps/customer`/`apps/locator` instead (see above) and shipped a tripwire for it.
+  The structural fix — a lint/test rule cross-referencing integration modules against
+  harness-env overrides, so this class of gap can't recur silently — is still unimplemented.
+  Backlog: `process/general-plans/backlog/customer-locator-e2e-harness-integration-gaps_NOTE_20-07-26.md`.
 - **3/10 admin E2E specs have known-flaky residuals** as of 2026-07-10 (`incident-detail`, `incident-notifications`, `incident-timeline`): stale `role="menuitem"` queries after an intentional a11y change (dropdown → labelled list) plus a notification-click flow that now opens a modal instead of navigating; a `loginNonManager` 2FA-enroll helper that times out near the 60s test cap; and a "2 unread" count assertion that needs a live trace (app logic verified correct by inspection in all 3 cases — no app regression). Backlog: `process/features/incident-management/backlog/ims-e2e-spec-modernization_NOTE_10-07-26.md`.
