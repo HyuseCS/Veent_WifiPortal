@@ -8,7 +8,7 @@ feature: incident-management
 # Sentry issueId Provenance Check (M4d) — Plan
 
 **Date**: 20-07-26
-**Status**: DRAFT
+**Status**: COMPLETE (archived 20-07-26 — see `sentry-issueid-provenance_REPORT_20-07-26.md` for the EXECUTE record)
 **Complexity**: SIMPLE
 
 ## Overview
@@ -172,7 +172,7 @@ leaking whether an id exists in a different org).
 |---|---|
 | `apps/admin/src/routes/(app)/sentry/+page.server.ts` | Add provenance check inside `track:` action, after `validateSentrySnapshot()`, before `createIssueFromSentry(...)`. Import `fetchLatestEventRaw` from `$lib/server/sentry`. |
 | `apps/admin/src/lib/server/sentry/index.ts` (or wherever the barrel re-exports live — confirm exact path during EXECUTE; `page.server.ts:9` already imports `isSentryConfigured` etc. from `$lib/server/sentry`) | Add `fetchLatestEventRaw` to the barrel export if not already exported there (client.ts already exports it directly; confirm barrel re-export exists before EXECUTE — read the barrel file first). |
-| `apps/admin/src/routes/(app)/sentry/+page.server.test.ts` (NEW) | Unit tests for the new provenance branch — see Verification Evidence. |
+| `apps/admin/src/routes/(app)/sentry/track-provenance.test.ts` (NEW; the plan originally proposed `+page.server.test.ts` — renamed during EXECUTE because SvelteKit reserves the `+` filename prefix) | Unit tests for the new provenance branch — see Verification Evidence. |
 | `apps/admin/src/lib/server/sentry/client.test.ts` (EXTEND) | Add `fetch` mock coverage for `fetchLatestEventRaw` if the unit tests are more naturally placed here instead of/alongside the page.server test — decide during EXECUTE based on which file can most cleanly mock `fetch` vs mock the client module. Both options are acceptable; prefer whichever avoids re-mocking `$app/*`/SvelteKit internals unnecessarily. |
 
 No other files are touched. No schema, no migration, no new env var.
@@ -228,18 +228,19 @@ No other files are touched. No schema, no migration, no new env var.
       ```
    c. Confirm `isSentryConfigured` is already imported (it is, line 9) — no new import needed for
       that symbol.
-3. Write unit tests (new file `apps/admin/src/routes/(app)/sentry/+page.server.test.ts` OR extend
+3. Write unit tests (new file `apps/admin/src/routes/(app)/sentry/track-provenance.test.ts` OR extend
    `client.test.ts`, per the Touchpoints decision) covering the 5 scenarios in Verification
    Evidence below. Build a `fetch` mock helper if one does not already exist for this module — check
    `client.test.ts` first (currently only mocks `Date.now`, not `fetch`) before writing a new one.
    **[VALIDATE instruction, see Execute-Agent Instructions E1 below: prefer mocking the
-   `$lib/server/sentry` facade module directly in the new `+page.server.test.ts`, not raw
+   `$lib/server/sentry` facade module directly in the new `track-provenance.test.ts`, not raw
    `fetch`/`$env/dynamic/private` — this is the first action-level unit test and the first
    `$env/dynamic/private` mock anywhere in the repo (confirmed 20-07-26: zero existing precedent
    repo-wide); budget it as a new test file, not a one-line extension.]**
-4. Run `bunx vitest run apps/admin/src/routes/\(app\)/sentry/+page.server.test.ts` (or the actual
-   path chosen) — confirm all new unit tests pass. Use `bunx vitest run <file>`, never
-   `bun test <file>` (silently no-ops `vi.setSystemTime` / mocks — see repo test gotcha).
+4. Run `cd apps/admin && bunx vitest run 'src/routes/(app)/sentry/track-provenance.test.ts'` —
+   confirm all new unit tests pass. Use `bunx vitest run <file>` from inside `apps/admin/` (see the
+   cwd gotcha in `process/context/tests/all-tests.md`), never `bun test <file>` (silently no-ops
+   `vi.setSystemTime` / mocks — see repo test gotcha).
 5. Run `cd apps/admin && bun run check` (svelte-check/typecheck) — confirm no type errors from the
    new import/branch.
 6. Run `cd apps/admin && bunx vitest run` (full admin unit suite) — confirm no regression in
@@ -273,7 +274,7 @@ No other files are touched. No schema, no migration, no new env var.
 
 | Area | High-risk class | Minimum tier | Gap rationale if known-gap accepted |
 |---|---|---|---|
-| Sentry issueId provenance gate in `?/track` | trust-boundary / provenance-integrity | Hybrid (via the e2e regression proof) — met | — |
+| Sentry issueId provenance gate in `?/track` | trust-boundary / provenance-integrity | Fully-Automated only (7 unit tests in `track-provenance.test.ts` mock the `$lib/server/sentry` facade) — met | Configured-Sentry provenance behavior (G1/G1b/G2/G4) is NOT covered by e2e: `incident-sentry.e2e.ts` runs with Sentry UNCONFIGURED, so it only exercises the `isSentryConfigured() === false` escape hatch (G3), not the provenance check itself. The "Hybrid" label previously used here overstated coverage. |
 
 ## Missing Test Areas
 
@@ -349,7 +350,7 @@ Test gates (C3 5-column table):
 
 | criterion id | behavior | strategy | proving test | gap-resolution |
 |---|---|---|---|---|
-| G1 | Reject a nonexistent `sentryIssueId` (404-shaped rejection) — nothing persisted | Fully-Automated | `bunx vitest run apps/admin/src/routes/\(app\)/sentry/+page.server.test.ts` — scenario: mocked lookup rejects 404 | A |
+| G1 | Reject a nonexistent `sentryIssueId` (404-shaped rejection) — nothing persisted | Fully-Automated | `cd apps/admin && bunx vitest run 'src/routes/(app)/sentry/track-provenance.test.ts'` — scenario: mocked lookup rejects 404 | A |
 | G1b | Reject an org-mismatch id (404-shaped rejection) — nothing persisted | Fully-Automated | same file — org-mismatch scenario | A |
 | G2 | Fail closed on lookup timeout / 5xx / network error while Sentry IS configured — nothing persisted | Fully-Automated | same file — network-error scenario | A |
 | G3 | Sentry NOT configured → provenance check skipped, `?/track` proceeds unchanged | Fully-Automated | same file — `isSentryConfigured()` mocked `false` scenario | A |
@@ -369,7 +370,7 @@ C-4 reconciliation: the `strategy:` column above carries ONLY the 3 proving stra
 (Fully-Automated / Hybrid / Agent-Probe). No row uses Known-Gap as a strategy.
 
 Legacy line form (retained so existing validate-contract consumers still parse):
-- Provenance rejection (nonexistent / org-mismatch / lookup-error) + happy path + unconfigured-skip: Fully-automated: `bunx vitest run apps/admin/src/routes/\(app\)/sentry/+page.server.test.ts` | Hybrid: `cd apps/admin && bun run test:e2e -- incident-sentry` (precondition: throwaway `radius_admin_test` DB seeded, Sentry env vars unset) | Agent-probe: live-Sentry happy/rejection smoke, conditional on a live `SENTRY_AUTH_TOKEN` sandbox | Regression: `cd apps/admin && bunx vitest run` (full suite) + `cd apps/admin && bun run check` (typecheck)
+- Provenance rejection (nonexistent / org-mismatch / lookup-error) + happy path + unconfigured-skip: Fully-automated: `cd apps/admin && bunx vitest run 'src/routes/(app)/sentry/track-provenance.test.ts'` | Hybrid: `cd apps/admin && bun run test:e2e -- incident-sentry` (precondition: throwaway `radius_admin_test` DB seeded, Sentry env vars unset) | Agent-probe: live-Sentry happy/rejection smoke, conditional on a live `SENTRY_AUTH_TOKEN` sandbox | Regression: `cd apps/admin && bunx vitest run` (full suite) + `cd apps/admin && bun run check` (typecheck)
 
 **Failing stubs (Fully-Automated new-scenario rows — G1, G1b, G2, G3, G4; REG/TYPE are
 pre-existing regression/typecheck commands and do not get scenario stubs):**
@@ -459,7 +460,7 @@ per Execute-Agent Instruction E2.
 
 | # | Instruction | Trigger condition |
 |---|---|---|
-| E1 | When writing the new unit tests (Implementation Checklist step 3), mock the `$lib/server/sentry` facade module directly (`vi.mock('$lib/server/sentry', ...)`) inside the new `apps/admin/src/routes/(app)/sentry/+page.server.test.ts` — do NOT extend `client.test.ts` with raw `fetch` + `$env/dynamic/private` mocking. This sidesteps needing to mock `$env/dynamic/private` (no existing repo precedent) and is the simpler of the two Touchpoints-listed options. Budget this as writing a new, first-of-its-kind test file (mocking `db`, `rateLimit`, `listStaff`, `createIssueFromSentry`/`isIssuePriority`, `notifyAssignees`, `validateSentrySnapshot`, `parseDueDate`, plus the sentry facade), not a one-line extension. | Implementation Checklist step 3 |
+| E1 | When writing the new unit tests (Implementation Checklist step 3), mock the `$lib/server/sentry` facade module directly (`vi.mock('$lib/server/sentry', ...)`) inside the new `apps/admin/src/routes/(app)/sentry/track-provenance.test.ts` — do NOT extend `client.test.ts` with raw `fetch` + `$env/dynamic/private` mocking. This sidesteps needing to mock `$env/dynamic/private` (no existing repo precedent) and is the simpler of the two Touchpoints-listed options. Budget this as writing a new, first-of-its-kind test file (mocking `db`, `rateLimit`, `listStaff`, `createIssueFromSentry`/`isIssuePriority`, `notifyAssignees`, `validateSentrySnapshot`, `parseDueDate`, plus the sentry facade), not a one-line extension. | Implementation Checklist step 3 |
 | E2 | Add a one-line code comment at the provenance-check call site (inside the `if (isSentryConfigured())` block added in checklist step 2b) noting: "fetchLatestEventRaw proves the issue has ≥1 retrievable event, not pure existence — a real issue with zero retrievable events would false-reject; accepted as a narrow, availability-only known-gap (VALIDATE 20-07-26)." No code-behavior change required. | Implementation Checklist step 2b |
 
 ## Autonomous Goal Block
@@ -468,8 +469,9 @@ per Execute-Agent Instruction E2.
 SESSION GOAL: M4d — verify sentryIssueId against the Sentry API before persisting a
 Tracked-from-Sentry incident, closing the fabricated-id gap in `?/track`.
 Charter + umbrella plan: N/A — single SIMPLE plan, no phase program.
-Autonomy: standard RIPER-5 EXECUTE gate — explicit "ENTER EXECUTE MODE" required before
-implementation; no standing /goal autonomy has been granted for this plan.
+Autonomy: standard RIPER-5 EXECUTE gate — explicit "ENTER EXECUTE MODE" was required before
+implementation; no standing /goal autonomy was granted for this plan. (Historical: EXECUTE has
+since completed — see §Resume and Execution Handoff below.)
 Hard stop conditions / safety constraints:
 - Nothing may persist to `admin_issue` when the Sentry provenance lookup fails or is inconclusive
   (fail-closed is mandatory, not best-effort).
@@ -480,19 +482,24 @@ Hard stop conditions / safety constraints:
   only.
 - Do not add a new Sentry API endpoint (`GET /issues/{id}/`) — reuse `fetchLatestEventRaw` per the
   Locked Design Decision; do not re-litigate that decision during EXECUTE.
-Next phase: EXECUTE — `process/features/incident-management/active/sentry-issueid-provenance_20-07-26/sentry-issueid-provenance_PLAN_20-07-26.md`
+Next phase: N/A — EXECUTE completed and this plan is archived. See
+`process/features/incident-management/completed/sentry-issueid-provenance_20-07-26/sentry-issueid-provenance_REPORT_20-07-26.md`
+for the execution record (this block is preserved as a historical resume artifact, not a live
+pointer).
 Validate contract: inline in plan (`## Validate Contract` section above)
-Execute start: fully-auto commands — `bunx vitest run apps/admin/src/routes/\(app\)/sentry/+page.server.test.ts`, `cd apps/admin && bun run check`, `cd apps/admin && bunx vitest run` | e2e spec: `cd apps/admin && bun run test:e2e -- incident-sentry` (precondition: `bun run test:seed`, Sentry env vars unset) | probe scenario: optional live-Sentry happy/rejection smoke (checklist step 8), best-effort | high-risk pack: no (trust-boundary class is present but this SIMPLE plan's evidence is carried inline in the validate-contract Test Gates + Dimension Findings above, not a separate 5-artifact risk-evidence-pack — scope and blast radius are small enough that the inline contract is the proportionate evidence bar; escalate to a full risk-evidence-pack only if EXECUTE discovers the change is larger than currently scoped)
+Execute start: fully-auto commands — `cd apps/admin && bunx vitest run 'src/routes/(app)/sentry/track-provenance.test.ts'`, `cd apps/admin && bun run check`, `cd apps/admin && bunx vitest run` | e2e spec: `cd apps/admin && bun run test:e2e -- incident-sentry` (precondition: `bun run test:seed`, Sentry env vars unset) | probe scenario: optional live-Sentry happy/rejection smoke (checklist step 8), best-effort | high-risk pack: no (trust-boundary class is present but this SIMPLE plan's evidence is carried inline in the validate-contract Test Gates + Dimension Findings above, not a separate 5-artifact risk-evidence-pack — scope and blast radius are small enough that the inline contract is the proportionate evidence bar; escalate to a full risk-evidence-pack only if EXECUTE discovers the change is larger than currently scoped)
 ```
 
-## Resume and Execution Handoff
+## Resume and Execution Handoff (historical record — plan is COMPLETE and archived, not resumable)
 
-1. **Selected plan file path:** `process/features/incident-management/active/sentry-issueid-provenance_20-07-26/sentry-issueid-provenance_PLAN_20-07-26.md`
-2. **Last completed phase or step:** VALIDATE — validate-contract written 20-07-26, Gate: CONDITIONAL (self-accepted, see Validate Contract section). Next: "ENTER EXECUTE MODE" against this plan.
-3. **Validate-contract status:** written, Gate: CONDITIONAL — 2 concerns resolved via Execute-Agent Instructions E1 (test-harness approach) and E2 (documented known-gap comment). Not BLOCKED; EXECUTE may proceed once explicitly approved.
-4. **Supporting context files loaded:** `process/context/all-context.md`, `process/context/tests/all-tests.md`, backlog note `sentry-issue-id-provenance-check_NOTE_10-07-26.md`, `apps/admin/src/lib/server/sentry/client.ts`, `apps/admin/src/lib/server/sentry/index.ts`, `apps/admin/src/routes/(app)/sentry/+page.server.ts`, `apps/admin/src/lib/server/sentry/client.test.ts`, `apps/admin/e2e/incident-sentry.e2e.ts`, `apps/admin/vite.config.ts`.
-5. **Next step for a fresh agent picking up mid-execution:** run `ENTER EXECUTE MODE` against this
-   plan file. Follow the Implementation Checklist in order, applying Execute-Agent Instructions E1
-   (mock the `$lib/server/sentry` facade, not raw `fetch`/`$env`, in the new
-   `+page.server.test.ts`) and E2 (add the one-line known-gap comment at the provenance-check call
-   site). Run the Test Gates table commands in the Validate Contract section as the gate sequence.
+1. **Archived plan file path:** `process/features/incident-management/completed/sentry-issueid-provenance_20-07-26/sentry-issueid-provenance_PLAN_20-07-26.md`
+2. **Last completed phase or step:** UPDATE PROCESS — EXECUTE completed and was confirmed green (see the co-located `sentry-issueid-provenance_REPORT_20-07-26.md`); this plan was then archived. At the time VALIDATE handed off to EXECUTE, the validate-contract was written 20-07-26 with Gate: CONDITIONAL (self-accepted, see Validate Contract section above).
+3. **Validate-contract status (as handed to EXECUTE):** written, Gate: CONDITIONAL — 2 concerns resolved via Execute-Agent Instructions E1 (test-harness approach) and E2 (documented known-gap comment). EXECUTE proceeded and completed; see the EXECUTE report for outcomes.
+4. **Supporting context files loaded during EXECUTE:** `process/context/all-context.md`, `process/context/tests/all-tests.md`, backlog note `sentry-issue-id-provenance-check_NOTE_10-07-26.md`, `apps/admin/src/lib/server/sentry/client.ts`, `apps/admin/src/lib/server/sentry/index.ts`, `apps/admin/src/routes/(app)/sentry/+page.server.ts`, `apps/admin/src/lib/server/sentry/client.test.ts`, `apps/admin/e2e/incident-sentry.e2e.ts`, `apps/admin/vite.config.ts`.
+5. **This work is done — do not resume it.** The steps below describe what a fresh agent WOULD have
+   done to pick up mid-execution; they are preserved for audit/record purposes only. If similar work
+   is needed again, start a new plan rather than reopening this one: follow the Implementation
+   Checklist in order, applying Execute-Agent Instructions E1 (mock the `$lib/server/sentry` facade,
+   not raw `fetch`/`$env`, in the new `track-provenance.test.ts`) and E2 (add the one-line known-gap
+   comment at the provenance-check call site). Run the Test Gates table commands in the Validate
+   Contract section as the gate sequence.

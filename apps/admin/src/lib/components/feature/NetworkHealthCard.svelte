@@ -280,7 +280,7 @@
 						onclick={(e) => e.stopPropagation()}
 						class="min-h-10 w-full rounded-lg border border-border bg-bg px-2.5 py-2 font-mono text-xs text-ink hover:border-brand/40 focus:border-brand focus:ring-2 focus:ring-brand/20 focus:outline-none"
 					/>
-					{#if isAp}
+					{#if isAp && !ap.interfaceName}
 						<!-- Reader Audit #7: an auto-discovered AP row's name is a hostname, not a router
 						     interface, so caps only reach the router once an explicit interface is bound. -->
 						<span class="text-[10px] text-muted">

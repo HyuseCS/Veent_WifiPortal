@@ -15,7 +15,9 @@ metadata:
 
 # EXECUTE Report — Sentry issueId Provenance Check (M4d)
 
-**TL;DR:** All gates green. Checklist steps 1–7 complete. Step 7 (the `incident-sentry.e2e.ts`
+**TL;DR:** Required gates are green (unit, typecheck, and the `incident-sentry.e2e.ts` hybrid
+regression spec all pass); the full admin e2e suite retains 4 pre-existing, unrelated failures
+(see "Final e2e position" below). Checklist steps 1–7 complete. Step 7 (the `incident-sentry.e2e.ts`
 hybrid gate) initially came up RED on a falsified plan premise — the plan assumed "Sentry is
 unconfigured in the e2e env", which was false here. That was surfaced, approved, and fixed via a
 one-line-class supplement to `apps/admin/e2e/config.ts` (see §Supplement). The spec passes

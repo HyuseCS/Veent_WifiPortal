@@ -129,7 +129,7 @@ called directly.
 **Gotcha — cwd matters for `bunx vitest run <file>`.** There is no root `vitest.config.*` —
 each app's `$lib` alias comes only from that app's `vite.config.ts` (`sveltekit()` plugin
 options). Run `bunx vitest run <path>` from **inside the target app's directory**
-(`cd apps/admin && bunx vitest run src/routes/(app)/sentry/track-provenance.test.ts`), not from
+(`cd apps/admin && bunx vitest run 'src/routes/(app)/sentry/track-provenance.test.ts'`), not from
 the repo root — running from root risks vitest picking up the wrong (or no) project config and
 failing `$lib` alias resolution. Confirmed during the M4d Sentry-provenance EVL run (20-07-26).
 
