@@ -1,6 +1,6 @@
 # veent-wifiportal - All Context
 
-Last updated: 2026-07-10
+Last updated: 2026-07-20 (added unique-constraint-violation discriminator pattern)
 
 This file is the root context entrypoint for the repo.
 
@@ -238,6 +238,19 @@ navigation; `try/catch` around external calls (SMS, Maya) so downstream outage d
 `recordEvent(tx, ...)` appends an `admin_issue_event` row in the SAME transaction — never a
 fire-and-forget log write.
 
+**Unique-constraint-violation discriminator (drizzle cause-chain walk):** drizzle-orm wraps driver
+errors in `DrizzleQueryError`, so a Postgres SQLSTATE (e.g. `23505` unique_violation) lives on the
+bounded `.cause` chain, not on the caught error directly — walk `err.code ?? err.cause?.code ??
+err.cause?.cause?.code` (2-3 levels deep is enough; never substring-match the error message). The
+constraint-name field differs by driver: postgres.js exposes `constraint_name`, PGlite/
+node-postgres-shaped errors expose `constraint` — check both. Canonical implementations:
+`packages/core/src/services/reconcilePayments.ts:104-112` (unit-tested in
+`apps/customer/src/lib/server/record-payment.spec.ts`) and
+`packages/core/src/services/networkHealth.ts` (`isNameUniqueViolation`, added 20-07-26 for the AP
+name-collision retry — see `process/general-plans/completed/ap-name-collision-retry_20-07-26/`).
+Reuse this pattern rather than re-deriving the cause-chain shape for any new unique-violation
+handling.
+
 **Rate limiting:** `packages/core/src/services/rateLimit.ts` → `consumeRateLimit(db, {key, max,
 windowMs})`, a Postgres sliding-window implementation that is race-safe (`INSERT ... ON CONFLICT`
 + `SELECT FOR UPDATE` in a transaction). Per-app thin wrappers:
@@ -312,6 +325,11 @@ easy to find).
 - Admin routes: `(app)/issues/**`, `(app)/sentry/**`
 - PII scrubbing: shared `scrubEvent` redactor wired into each app's Sentry `beforeSend` (drops
   secrets, masks emails/MACs/phones)
+- Error classification: `beforeSend` in `packages/core/src/observability.ts` downgrades
+  `RouterUnreachableError` (thrown by both `withTimeout()` helpers in `mikrotik.ts`/`adminAccess.ts`
+  on router-call timeout) to `event.level = 'warning'` instead of `error` — the cron
+  `Sentry.withMonitor('customer-network-revoke')` check-in already alerts on the failure, so this
+  is noise reduction, not silence; `scrubEvent` still runs on every branch.
 
 ### Resend email
 - `resend` dependency in `packages/core`
@@ -370,9 +388,19 @@ Approved feature folders under `process/features/`:
   `apps/admin/src/lib/server/{issues.ts,issueNotify.ts,notifications.ts,sentry/*}`,
   `lib/server/emails/issue-assigned.ts`,
   `packages/db/src/schema/{admin-issue.ts,admin-issue-event.ts}`.
-  **6 non-blocking backlog items filed** under `process/features/incident-management/backlog/`
-  (Sentry host pinning, sentryIssueId provenance, manager-board pagination, IMS e2e spec
-  modernization, repo-wide lint prettier-config drift, M2 secret rotation).
+  Follow-up session (20-07-26) closed 3 of those items: sentryIssueId provenance verification
+  (M4d, `completed/sentry-issueid-provenance_20-07-26/`) — `?/track` now round-trips the Sentry API
+  before persisting a "Tracked from Sentry" incident, fail-closed on lookup failure; also fixed a
+  standalone hygiene finding where `apps/admin/e2e` was leaking live Sentry credentials (see
+  `process/context/tests/all-tests.md`). Sentry permalink host pinning
+  (`completed/sentry-permalink-host-pinning_20-07-26/`) — `httpsUrl()` now pins the permalink host
+  to `sentry.io`/regional subdomains. Repo-wide lint prettier-config drift — partially closed (the
+  crashing bad path is fixed; 297 files of pre-existing style drift remain, tracked in
+  `backlog/repo-wide-lint-prettier-drift_NOTE_10-07-26.md`). **Currently open backlog:**
+  manager-board pagination, IMS e2e spec modernization, repo-wide lint drift (partial), and a new
+  item filed 20-07-26 — `TEST_ENV` does not enumerate every external integration (Maya payments
+  untested for e2e reachability). (M2 secret rotation is resolved and archived — see
+  `completed/ims-audit-remediation_10-07-26/`.)
 - **admin-staff-governance** (`process/features/admin-staff-governance/`) — staff accounts, roles,
   2FA/step-up auth, invite/promote/owner-change/wipe workflows. Mature, no imminent task; created
   now because governance work is a high-risk class (auth/identity, trust-boundary) and will need

@@ -7,6 +7,14 @@ feature: incident-management
 
 # Backlog: sentryIssueId provenance check (M4d)
 
+**Status: CLOSED (20-07-26).** Implemented and VERIFIED —
+`process/features/incident-management/completed/sentry-issueid-provenance_20-07-26/`. Fix option 1
+below was taken (reused the existing `fetchLatestEventRaw`, no new endpoint); fix option 2 (cache +
+rate-limit) was already satisfied by the existing `admin_sentry_track` rate limit plus
+`fetchLatestEventRaw`'s existing read cache — no new scope needed. See that plan's REPORT for full
+verification evidence, including a real hygiene finding this work surfaced (live Sentry credentials
+were leaking into the e2e test env — since fixed as part of the same session).
+
 **Priority:** Medium
 
 **Origin:** deferred scope item from `ims-audit-remediation_10-07-26` (see plan `## Backlog`), audit

@@ -74,19 +74,47 @@
 
 	// Metrics arrive pre-formatted ("47 Mbps", "22ms") — pull the leading number to aggregate.
 	const lead = (s: string): number => parseFloat(s);
+	// Throughput/latency KPIs aggregate over INTERFACE rows only (attributionSource === null): an AP
+	// row's throughput is a subset of its interface figure (double-count) and its latency is LAN RTT,
+	// not internet RTT (Regression #3). Counts (healthy/degraded/offline/users) stay per-row below.
+	const infraRows = $derived(networks.filter((n) => n.attributionSource === null));
 	const tputTotal = $derived(
 		Math.round(
-			networks.reduce(
+			infraRows.reduce(
 				(s, n) => s + (Number.isFinite(lead(n.throughput)) ? lead(n.throughput) : 0),
 				0
 			)
 		)
 	);
-	const latVals = $derived(networks.map((n) => lead(n.latency)).filter((v) => Number.isFinite(v)));
+	const latVals = $derived(infraRows.map((n) => lead(n.latency)).filter((v) => Number.isFinite(v)));
 	const avgLat = $derived(
 		latVals.length ? Math.round(latVals.reduce((s, v) => s + v, 0) / latVals.length) : null
 	);
 	const alerts = $derived(cntDegraded + cntOffline);
+
+	// Whole-fleet staleness = the router refresh on load has been failing (unreachable/offline),
+	// so every AP is showing last-known data. Per-AP "Stale" chips already flag individuals; this
+	// page banner names the shared cause so a frozen board doesn't read as silently broken.
+	const cntStale = $derived(networks.filter((n) => n.stale).length);
+	const routerUnreachable = $derived(total > 0 && cntStale === total);
+	// Freshest sample across the fleet → "last synced X ago". Static (computed on render, not a
+	// ticker) — precision to the minute/hour/day is enough for an outage that lasts hours+.
+	const lastSyncedAt = $derived(
+		networks.reduce<string | null>((latest, n) => {
+			if (!n.syncedAt) return latest;
+			return !latest || n.syncedAt > latest ? n.syncedAt : latest;
+		}, null)
+	);
+	function ago(iso: string | null): string {
+		if (!iso) return 'never';
+		const s = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
+		if (s < 90) return 'moments ago';
+		const m = Math.round(s / 60);
+		if (m < 60) return `${m}m ago`;
+		const h = Math.round(m / 60);
+		if (h < 24) return `${h}h ago`;
+		return `${Math.round(h / 24)}d ago`;
+	}
 
 	// Feeds the shared <KpiCard> (same component as Dashboard/Finance). `tone`/`captionTone`
 	// carry the status colour; `unit` is the muted value suffix.
@@ -174,6 +202,37 @@
 				: networks.filter((n: NetworkAp) => n.tone === filter)
 	);
 
+	// Group-aware render units: APs sharing a circuit-id (a shared ONU the router can't split, AC5)
+	// collapse into ONE card whose `group` prop lists every member with its own up/down (AC2). The
+	// representative is the deterministic lowest-id member (matches resolveNetworkIdForMac's group
+	// pick), and combined users = the sum of member counts. Solo APs and interface rows render as
+	// today. Per-row KPI counts above are unaffected — only the card layout groups.
+	type Member = { name: string; tone: StatusTone; status: string };
+	type RenderUnit = { ap: NetworkAp; group?: { members: Member[] } };
+	const renderUnits = $derived.by<RenderUnit[]>(() => {
+		// Plain object (not a Map) — this is a transient grouping rebuilt each derivation, not reactive
+		// state, so SvelteMap would be inappropriate (and lint's prefer-svelte-reactivity flags Map).
+		const groups: Record<string, NetworkAp[]> = {};
+		const units: RenderUnit[] = [];
+		for (const n of visible) {
+			if (n.attributionSource === 'circuit-id' && n.apCircuitId && n.groupPeers.length > 0) {
+				(groups[n.apCircuitId] ??= []).push(n);
+			} else {
+				units.push({ ap: n });
+			}
+		}
+		for (const members of Object.values(groups)) {
+			const sorted = [...members].sort((a, b) => Number(a.id) - Number(b.id));
+			const rep = sorted[0];
+			const combinedUsers = sorted.reduce((s, m) => s + m.users, 0);
+			units.push({
+				ap: { ...rep, users: combinedUsers },
+				group: { members: sorted.map((m) => ({ name: m.name, tone: m.tone, status: m.status })) }
+			});
+		}
+		return units;
+	});
+
 	// Selecting a card flies the coverage map to that AP (and rings the card), and
 	// scrolls the map into view so the focus is visible on small/scrolled layouts.
 	let selectedId = $state<string | null>(null);
@@ -232,6 +291,18 @@
 	     is desktop-only — on mobile the map/log are gone, so let this shrink to content and the
 	     access points pull up right under it instead of sitting a screen-height below. -->
 	<div class="snap-start space-y-5 pt-5 pb-5 md:min-h-full">
+		{#if routerUnreachable}
+			<div class="flex items-center gap-3 rounded-xl border border-blocked/30 bg-blocked/10 px-4 py-3">
+				<TriangleAlert class="h-5 w-5 shrink-0 text-blocked" aria-hidden="true" />
+				<p class="text-sm">
+					<span class="font-semibold text-ink">Router unreachable.</span>
+					<span class="text-muted">
+						Showing last-known data (synced {ago(lastSyncedAt)}) — live health and AP detection
+						resume automatically once the router is back online.
+					</span>
+				</p>
+			</div>
+		{/if}
 		{#if data.outagePausedGuests > 0}
 			<div class="flex items-center gap-3 rounded-xl border border-warning/30 bg-warning/10 px-4 py-3">
 				<TriangleAlert class="h-5 w-5 shrink-0 text-warning" aria-hidden="true" />
@@ -344,7 +415,7 @@
 			</div>
 		</div>
 
-	{#if visible.length === 0}
+	{#if renderUnits.length === 0}
 		<p
 			class="rounded-xl border border-dashed border-border px-4 py-8 text-center text-sm text-muted"
 		>
@@ -360,10 +431,11 @@
 			class="grid items-start gap-4"
 			style="grid-template-columns: repeat(auto-fill, minmax(min(330px, 100%), 1fr));"
 		>
-			{#each visible as ap (ap.id)}
+			{#each renderUnits as unit (unit.ap.id)}
 				<NetworkHealthCard
-					{ap}
-					selected={ap.id === selectedId}
+					ap={unit.ap}
+					group={unit.group}
+					selected={unit.ap.id === selectedId}
 					canDelete={data.isOwner}
 					canConfigure={data.isOwner}
 					onfocus={focusAp}

@@ -16,15 +16,21 @@ export const TEST_ORIGIN = 'http://localhost:4173';
 /** Env block shared by the seed subprocess and the preview webServer.
  *  Playwright merges process.env into webServer.env, and `bun` auto-loads apps/admin/.env
  *  into the runner — so we must explicitly override anything that would otherwise leak the
- *  dev config: the DB, the router, AND the mailer (a real RESEND_API_KEY would make wipe/
- *  invite attempt a live send). Blanking the mail vars forces the console stub. */
+ *  dev config: the DB, the router, the mailer (a real RESEND_API_KEY would make wipe/
+ *  invite attempt a live send), AND Sentry. Blanking the mail vars forces the console stub;
+ *  blanking the Sentry credentials makes isSentryConfigured() false, so no test ever issues a
+ *  live authenticated call to the real Sentry org (and ?/track's M4d provenance check correctly
+ *  takes its unconfigured skip path instead of 404ing on the spec's synthetic issue id). */
 export const TEST_ENV = {
 	DATABASE_URL: TEST_DATABASE_URL,
 	BETTER_AUTH_SECRET: TEST_BETTER_AUTH_SECRET,
 	ORIGIN: TEST_ORIGIN,
 	NETWORK_CONTROLLER: 'stub', // never fire a real router grant from a test login
 	RESEND_API_KEY: '', // force the stub mailer (no live email from tests)
-	EMAIL_FROM: ''
+	EMAIL_FROM: '',
+	SENTRY_AUTH_TOKEN: '', // never reach the live Sentry API from a test
+	SENTRY_ORG_SLUG: '',
+	SENTRY_PROJECT_ID: ''
 };
 
 /** Where global-setup parks the authenticated owner session + their TOTP secret. */

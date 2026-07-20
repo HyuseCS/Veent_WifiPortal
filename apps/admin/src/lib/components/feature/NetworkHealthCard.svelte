@@ -13,14 +13,19 @@
 	// `selected` rings the card and mirrors the coverage-map focus; clicking the card
 	// (or its onfocus) selects this AP on the page-level map. Location editing happens on
 	// the unified /map page (the "Edit on map" link deep-links to this AP's editor).
+	type GroupMember = { name: string; tone: 'online' | 'warning' | 'blocked'; status: string };
 	let {
 		ap,
+		group,
 		selected = false,
 		canDelete = false,
 		canConfigure = false,
 		onfocus
 	}: {
 		ap: NetworkAp;
+		/** Shared-ONU group members (2+ APs the router can't split): when set, this card represents
+		 * the whole group and lists each member's own up/down (AC5). Undefined for a solo AP. */
+		group?: { members: GroupMember[] };
 		selected?: boolean;
 		/** Owner-only: show the delete control (the server re-checks owner regardless). */
 		canDelete?: boolean;
@@ -28,6 +33,11 @@
 		canConfigure?: boolean;
 		onfocus?: (id: string) => void;
 	} = $props();
+
+	// This card stands for a physical AP (Phase A) when attribution came from a circuit-id.
+	const isAp = $derived(ap.attributionSource === 'circuit-id');
+	// Per-AP traffic is genuinely unavailable when the firmware hides byte counters ("—", AC4).
+	const trafficUnavailable = $derived(ap.throughput === '—');
 
 	// Kbps (stored) → Mbps (shown/edited). Blank when uncapped so the field reads "no limit".
 	const kbpsToMbps = (kbps: number | null): string => (kbps == null ? '' : String(kbps / 1000));
@@ -88,10 +98,15 @@
 	});
 
 	const metrics = $derived([
-		{ label: 'Uptime', value: ap.uptime, class: 'text-ink' },
-		{ label: 'Latency', value: ap.latency, class: latColor },
-		{ label: 'Users', value: String(ap.users), class: 'text-ink' },
-		{ label: 'Tput', value: ap.throughput, class: 'text-ink' }
+		{ label: 'Uptime', value: ap.uptime, class: 'text-ink', title: undefined as string | undefined },
+		{ label: 'Latency', value: ap.latency, class: latColor, title: undefined as string | undefined },
+		{ label: 'Users', value: String(ap.users), class: 'text-ink', title: undefined as string | undefined },
+		{
+			label: 'Tput',
+			value: ap.throughput,
+			class: trafficUnavailable ? 'text-muted' : 'text-ink',
+			title: trafficUnavailable ? 'Per-AP traffic unavailable on this firmware' : undefined
+		}
 	]);
 
 	const placed = $derived(ap.latitude != null && ap.longitude != null);
@@ -128,6 +143,9 @@
 			</span>
 			<div class="min-w-0">
 				<div class="truncate text-sm font-semibold text-ink">{ap.name}</div>
+				{#if ap.mac}
+					<div class="truncate font-mono text-xs text-muted">{ap.mac}</div>
+				{/if}
 				{#if ap.address}
 					<div class="truncate text-xs text-muted">{ap.address}</div>
 				{/if}
@@ -136,11 +154,29 @@
 		<StatusBadge tone={ap.tone} label={ap.status} pulse={ap.tone !== 'online'} />
 	</div>
 
+	{#if group}
+		<!-- Shared-ONU group: the router can't split these APs (they answer on one ONU/circuit-id),
+		     so we show them honestly as one card with each member's own up/down (AC5, AC2). -->
+		<div class="flex flex-col gap-2 rounded-lg border border-border/70 bg-surface/40 p-2.5">
+			<p class="text-[11px] font-medium text-muted">
+				Shared ONU — the router cannot split these {group.members.length} APs.
+			</p>
+			<ul class="flex flex-col gap-1.5">
+				{#each group.members as m (m.name)}
+					<li class="flex items-center justify-between gap-2">
+						<span class="min-w-0 truncate text-xs font-medium text-ink">{m.name}</span>
+						<StatusBadge tone={m.tone} label={m.status} pulse={m.tone !== 'online'} />
+					</li>
+				{/each}
+			</ul>
+		</div>
+	{/if}
+
 	<dl class="grid grid-cols-2 gap-2 border-y border-border py-3 text-center sm:grid-cols-4">
 		{#each metrics as metric (metric.label)}
 			<div class="flex flex-col gap-1">
 				<dt class="text-[10px] font-bold tracking-wide text-muted uppercase">{metric.label}</dt>
-				<dd class="font-mono text-sm font-semibold {metric.class}">{metric.value}</dd>
+				<dd class="font-mono text-sm font-semibold {metric.class}" title={metric.title}>{metric.value}</dd>
 			</div>
 		{/each}
 	</dl>
@@ -244,6 +280,13 @@
 						onclick={(e) => e.stopPropagation()}
 						class="min-h-10 w-full rounded-lg border border-border bg-bg px-2.5 py-2 font-mono text-xs text-ink hover:border-brand/40 focus:border-brand focus:ring-2 focus:ring-brand/20 focus:outline-none"
 					/>
+					{#if isAp && !ap.interfaceName}
+						<!-- Reader Audit #7: an auto-discovered AP row's name is a hostname, not a router
+						     interface, so caps only reach the router once an explicit interface is bound. -->
+						<span class="text-[10px] text-muted">
+							Auto-discovered AP — bind a router interface for speed caps to reach the router.
+						</span>
+					{/if}
 				</label>
 				<div class="flex gap-2">
 					<label class="flex flex-1 flex-col gap-1 text-[11px] font-medium text-muted">

@@ -200,6 +200,29 @@ describe('outage sweep (real Postgres)', () => {
 		expect((await profile('stuck')).accessPausedAt).toBeNull();
 	});
 
+	it('G13: outage sweep still pauses a guest on a down AP ROW (Phase A AP rows present)', async () => {
+		// Regression #7 / Risk R3: an auto-discovered AP row (mac + circuit-id + attributionSource set)
+		// participates in the sweep exactly like an interface row — a ping-dead AP pauses its guests.
+		const now = new Date('2026-07-03T12:00:00Z');
+		const [ap] = await db
+			.insert(networkHealth)
+			.values({
+				name: 'OAP3000G-1',
+				mac: 'E4:67:1E:00:00:01',
+				apCircuitId: 'OLT-9:0/1/0/4',
+				attributionSource: 'circuit-id',
+				online: false,
+				wanOk: true,
+				offlineSince: new Date(now.getTime() - 10 * 60_000)
+			})
+			.returning({ id: networkHealth.id });
+		await seedAccount('u-ap');
+		await seedSession('u-ap', ap.id, 'ap-guest');
+		const res = await sweepOutagePauses(db, controller(), now, { downMs: 3 * 60_000 });
+		expect(res.paused).toBe(1);
+		expect((await profile('u-ap')).accessPausedNetworkId).toBe(ap.id);
+	});
+
 	it('skips a guest whose device has roamed onto a fully-serving AP', async () => {
 		const now = new Date('2026-07-03T12:00:00Z');
 		const down = await seedHealth('ap1', {

@@ -6,8 +6,11 @@ import type {
 	ActivateSessionInput,
 	InterfaceLimitInput,
 	DeviceHostAccessInput,
+	DhcpLeaseEntry,
+	HotspotActiveEntry,
 	RevokeScope
 } from './types';
+import { RouterUnreachableError } from './types';
 
 export interface MikrotikConfig {
 	host: string;
@@ -56,9 +59,29 @@ export interface MikrotikConfig {
 const LATENCY_PROBE_HOST = '1.1.1.1';
 /** Hard ceiling for the latency ping so a hung ping stream can't stall a health refresh. */
 const PING_TIMEOUT_MS = 5000;
+/** Wall-clock ceiling on a single connect attempt. node-routeros' own timeout does NOT reliably
+ * settle for an unreachable on-link router (ARP fail) — its connect promise can hang forever — so
+ * we bound it ourselves and reject, letting callers fall back to last-known data. */
+const CONNECT_TIMEOUT_MS = 10_000;
 /** Comment/name prefix on the per-AP bandwidth queues we create, so ours are identifiable
  * and a re-apply updates rather than duplicates: `veent-hotspot-limit:<apName>`. */
 const LIMIT_TAG = 'veent-hotspot-limit';
+
+/**
+ * The RouterOS DHCP-lease field that carries the OLT-inserted Option 82 agent-circuit-id — the key
+ * for `listDhcpLeases`. Isolated as a single named constant (E5): `agent-circuit-id` was OBSERVED in
+ * RESEARCH but NOT yet confirmed against the live router's `/ip/dhcp-server/lease/print` output. If
+ * the live print exposes it under a different key, this one line is the only edit needed. */
+const DHCP_OPTION82_CIRCUIT_KEY = 'agent-circuit-id';
+
+/** Per-host timeout (ms) for the concurrent AP liveness pings (`pingHosts`). */
+const AP_PING_TIMEOUT_MS = 1500;
+/** Max concurrent pings on the single RouterOS connection. Bounded (chunks of this size) rather than
+ * fully parallel: whether node-routeros 1.6.9 safely multiplexes many concurrent `/ping` writes on
+ * one connection is UNVERIFIED (Risk R1) — 4-at-a-time caps the total budget at
+ * ceil(n/4)×timeout (≤ 6s for 10 APs) while keeping the multiplex small. If the live probe (E4)
+ * shows concurrent writes misbehave, drop this to 1 or open a second short-lived connection. */
+const AP_PING_CONCURRENCY = 4;
 
 /** Comment prefix on the per-device, src-scoped walled-garden entries `openHostAccessForDevice`
  * creates. The creation time is appended (`veent-checkout:<epochMs>`) so `sweepHostAccess` can
@@ -199,7 +222,10 @@ export function ipv4NetworkOf(cidr: string): string | null {
 /** Reject if `p` doesn't settle within `ms` — bounds a single router call's wall time. */
 function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
 	return new Promise<T>((resolve, reject) => {
-		const t = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
+		const t = setTimeout(
+			() => reject(new RouterUnreachableError(`${label} timed out after ${ms}ms`)),
+			ms
+		);
 		p.then(
 			(v) => {
 				clearTimeout(t);
@@ -211,6 +237,40 @@ function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
 			}
 		);
 	});
+}
+
+/**
+ * Connect a node-routeros client with two hardening layers around its fragile failure path.
+ * Exported for tests.
+ *
+ *  1. **Crash containment.** node-routeros' `Connector.destroy()` calls `socket.destroy()` and THEN
+ *     `removeAllListeners()`; the destroyed socket re-emits `'error'` on the next tick, so the
+ *     socket's still-bound `onError` re-emits it on a now-listener-less Connector — an unhandled
+ *     `'error'` that crashes the whole process (a downed on-link router does this on every dial).
+ *     `connect()` assigns `conn.connector` synchronously, so we keep a no-op `'error'` listener
+ *     re-armed across every `removeAllListeners()` — the re-emit then always has a listener and can
+ *     never throw. Contained to this one connector instance (no global `uncaughtException` handler,
+ *     so it can't collide with Sentry's).
+ *  2. **No hang.** For an unreachable on-link host node-routeros' connect promise may never settle,
+ *     so we bound it with `withTimeout` and reject — the caller falls back to last-known data.
+ */
+export async function connectHardened(
+	conn: RosConn,
+	timeoutMs: number = CONNECT_TIMEOUT_MS
+): Promise<void> {
+	const pending = conn.connect();
+	const c = conn.connector;
+	if (c?.on && c.removeAllListeners) {
+		const noop = () => {};
+		c.on('error', noop);
+		const removeAll = c.removeAllListeners.bind(c);
+		c.removeAllListeners = (event?: string) => {
+			const r = removeAll(event);
+			c.on?.('error', noop);
+			return r;
+		};
+	}
+	await withTimeout(pending, timeoutMs, 'connect');
 }
 
 /** Parse a RouterOS ping `time` value ("12ms", "834us", "1s200ms") into milliseconds. */
@@ -262,7 +322,10 @@ export function createMikrotikController(config: MikrotikConfig): NetworkControl
 		// crashes the whole server. Swallow it here — connect()/write() already reject on
 		// failure, which callers catch and turn into an empty result / 500.
 		conn.on?.('error', () => {});
-		await conn.connect();
+		// connectHardened bounds the connect time AND stops an unreachable router's socket-destroy
+		// error from crashing the process (see its doc). The awaited connect still rejects on failure,
+		// which callers catch and turn into an empty result / 500.
+		await connectHardened(conn);
 		try {
 			return await fn(conn);
 		} finally {
@@ -787,6 +850,86 @@ export function createMikrotikController(config: MikrotikConfig): NetworkControl
 				}
 				return samples;
 			});
+		},
+
+		async listDhcpLeases(): Promise<DhcpLeaseEntry[]> {
+			return withConn(async (conn) => {
+				const rows = await conn.write('/ip/dhcp-server/lease/print');
+				return rows.map((r) => {
+					// Option 82 agent-circuit-id: raw string pass-through, no interpretation. An absent or
+					// empty value (unicast renewal that skipped the OLT relay) normalises to null so the
+					// service never overwrites a cached circuit-id with a blank.
+					const rawCircuit = r[DHCP_OPTION82_CIRCUIT_KEY];
+					const agentCircuitId =
+						typeof rawCircuit === 'string' && rawCircuit.trim() !== '' ? rawCircuit : null;
+					const hostname =
+						typeof r['host-name'] === 'string' && r['host-name'] !== '' ? r['host-name'] : null;
+					return {
+						mac: (r['mac-address'] ?? '').toUpperCase(),
+						address: r.address ?? '',
+						hostname,
+						agentCircuitId,
+						status: r.status ?? ''
+					};
+				});
+			});
+		},
+
+		async listHotspotActive(): Promise<HotspotActiveEntry[]> {
+			return withConn(async (conn) => {
+				const rows = await conn.write('/ip/hotspot/active/print');
+				// `bytes-in`/`bytes-out` absent = firmware doesn't expose per-session counters (the AC4
+				// degradation signal). NEVER coerce an absent counter to 0 — leave it null.
+				const counter = (v: unknown): number | null => {
+					if (typeof v !== 'string' || v === '') return null;
+					const n = Number(v);
+					return Number.isFinite(n) ? n : null;
+				};
+				return rows.map((r) => ({
+					mac: (r['mac-address'] ?? '').toUpperCase(),
+					address: r.address ?? '',
+					bytesIn: counter(r['bytes-in']),
+					bytesOut: counter(r['bytes-out'])
+				}));
+			});
+		},
+
+		async pingHosts(
+			addresses: string[],
+			opts?: { timeoutMs?: number }
+		): Promise<Array<{ address: string; aliveMs: number | null }>> {
+			if (addresses.length === 0) return [];
+			const timeoutMs = opts?.timeoutMs ?? AP_PING_TIMEOUT_MS;
+			return withConn(async (conn) => {
+				const pingOne = async (address: string): Promise<{ address: string; aliveMs: number | null }> => {
+					try {
+						// `=count=2`: two echoes so a single dropped packet doesn't read as down. Bounded by
+						// withTimeout so a host that never replies can't stall the batch; a reject/timeout →
+						// aliveMs null (never throws for an unreachable host — R1 / the pingHosts contract).
+						const pings = await withTimeout(
+							conn.write('/ping', [`=address=${address}`, '=count=2']),
+							timeoutMs,
+							`ping ${address}`
+						);
+						const times = pings
+							.map((p) => rttToMs(p.time))
+							.filter((n): n is number => n != null);
+						const aliveMs = times.length
+							? Math.round(times.reduce((a, b) => a + b, 0) / times.length)
+							: null;
+						return { address, aliveMs };
+					} catch {
+						return { address, aliveMs: null };
+					}
+				};
+				// Bounded concurrency (chunks of AP_PING_CONCURRENCY) — see the constant's doc (R1).
+				const out: Array<{ address: string; aliveMs: number | null }> = [];
+				for (let i = 0; i < addresses.length; i += AP_PING_CONCURRENCY) {
+					const chunk = addresses.slice(i, i + AP_PING_CONCURRENCY);
+					out.push(...(await Promise.all(chunk.map(pingOne))));
+				}
+				return out;
+			});
 		}
 	};
 
@@ -831,6 +974,13 @@ interface RosConn {
 	write(menu: string, params?: string[]): Promise<Array<Record<string, string>>>;
 	/** node-routeros connections are EventEmitters; attach to swallow async socket errors. */
 	on?(event: string, listener: (...args: unknown[]) => void): void;
+	/** node-routeros assigns this internal Connector (its own EventEmitter) synchronously inside
+	 * connect(). Its `destroy()` clears listeners just before the socket re-emits 'error', so
+	 * connectHardened re-arms an 'error' listener across `removeAllListeners` to prevent the crash. */
+	connector?: {
+		on?(event: string, listener: (...args: unknown[]) => void): void;
+		removeAllListeners?(event?: string): unknown;
+	};
 }
 
 async function openConn(config: MikrotikConfig): Promise<RosConn> {
@@ -850,7 +1000,8 @@ async function openConn(config: MikrotikConfig): Promise<RosConn> {
 	// See withConn: without an 'error' listener a socket timeout becomes an uncaught
 	// exception that crashes the server. The awaited connect()/write() still reject.
 	conn.on?.('error', () => {});
-	await conn.connect();
+	// Bound the connect + contain the socket-destroy crash (see connectHardened).
+	await connectHardened(conn);
 	return conn;
 }
 

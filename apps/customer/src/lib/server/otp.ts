@@ -106,8 +106,9 @@ function otpMessage(code: string): string {
 /**
  * THE single SMS delivery seam (wired into the phoneNumber plugin's `sendOTP`). Dispatches to the
  * configured gateway so we can switch providers without touching the auth flow — set `SMS_PROVIDER`
- * to `itexmo` (default), `unisms`, or `smsgate`. The phone arrives E.164 (+639171234567); each
- * provider adapts it (iTexMo wants the local 09… form; UniSMS and SMS Gate take E.164 as-is).
+ * to `cast` (default), `itexmo`, `unisms`, or `smsgate`. The phone arrives E.164 (+639171234567);
+ * each provider adapts it (iTexMo wants the local 09… form; Cast, UniSMS and SMS Gate take E.164
+ * as-is).
  *
  * `smsgate` is a TEMPORARY stopgap (an Android phone running SMS Gate in Cloud mode, reached via
  * api.sms-gate.app) used while iTexMo account approval is pending — remove it once iTexMo is live.
@@ -117,10 +118,65 @@ function otpMessage(code: string): string {
  * silently swallowed (that would let anyone "log in" with no code).
  */
 export async function sendOtp(phone: string, code: string): Promise<void> {
-	const provider = (env.SMS_PROVIDER ?? 'itexmo').trim().toLowerCase();
+	const provider = (env.SMS_PROVIDER ?? 'cast').trim().toLowerCase();
 	if (provider === 'smsgate') return sendViaSMSGate(phone, code);
 	if (provider === 'unisms') return sendViaUniSMS(phone, code);
-	return sendViaITexMo(phone, code);
+	if (provider === 'itexmo') return sendViaITexMo(phone, code);
+	return sendViaCast(phone, code);
+}
+
+/**
+ * Cast (https://api.cast.ph) OTP API — the dedicated, higher-priority OTP pool (NOT /sms/send).
+ * Config (customer env):
+ *   CAST_API_KEY   — REQUIRED. Sent as the x-api-key header. Live keys start cast_, sandbox cast_test_.
+ *   CAST_SENDER_ID — optional; only needed if the account has more than one approved sender id.
+ */
+async function sendViaCast(phone: string, code: string): Promise<void> {
+	const apiKey = env.CAST_API_KEY;
+
+	if (!apiKey) {
+		if (dev) {
+			console.info(`[otp] Cast not configured — code for ${phone}: ${code}`);
+			return;
+		}
+		throw new Error('Cast not configured: set CAST_API_KEY');
+	}
+
+	// `phone` is already E.164 (+63…) and Cast takes it as-is — no reformatting.
+	const payload: Record<string, unknown> = { to: phone, message: otpMessage(code) };
+	const senderId = env.CAST_SENDER_ID;
+	if (senderId) payload.sender_id = senderId;
+
+	let res: Response;
+	try {
+		res = await fetch('https://api.cast.ph/api/v1/otp/send', {
+			method: 'POST',
+			headers: { 'content-type': 'application/json', 'x-api-key': apiKey },
+			body: JSON.stringify(payload),
+			signal: AbortSignal.timeout(10_000)
+		});
+	} catch (err) {
+		throw new Error(`Cast SMS send failed: ${err instanceof Error ? err.message : String(err)}`, { cause: err });
+	}
+
+	// A non-2xx OR a body without `success: true` means the code never went out. Surface the stable
+	// machine-readable error_code when the gateway supplies one.
+	const body = (await res.json().catch(() => null)) as
+		| { success?: boolean; error?: string; error_code?: string }
+		| null;
+	if (!res.ok || !body?.success) {
+		throw new Error(
+			`Cast SMS rejected (${res.status})${body?.error_code ? ` [${body.error_code}]` : ''}: ${body?.error ?? 'no success flag'}`
+		);
+	}
+
+	// Dev-only proof-of-send: sandbox sends deliver no real SMS, so echo Cast's response plus the
+	// message body to the console. Guarded by `dev` — the message contains the OTP code and must
+	// never reach a production log.
+	if (dev) {
+		console.info(`[otp] Cast accepted: ${JSON.stringify(body)}`);
+		console.info(`[otp] Cast message to ${phone}: ${otpMessage(code)}`);
+	}
 }
 
 /**

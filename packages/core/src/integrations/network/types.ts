@@ -5,6 +5,20 @@
  * controller API, RADIUS CoA, or a router grant_url) is chosen by the impl.
  */
 
+/**
+ * Thrown by `withTimeout()` in `mikrotik.ts` and `adminAccess.ts` when a router call exceeds its
+ * bound wall time (the router is unreachable/hung). Classified by `observability.ts`'s `beforeSend`
+ * to Sentry `warning` level (NOT dropped) because the cron `Sentry.withMonitor('customer-network-
+ * revoke')` check-in already alerts on this failure — this is a low-noise breadcrumb, not silence.
+ * `instanceof` survives the `traceMethods`/`connectHardened` wrappers (they re-throw unchanged).
+ */
+export class RouterUnreachableError extends Error {
+	constructor(message: string, options?: ErrorOptions) {
+		super(message, options);
+		this.name = 'RouterUnreachableError';
+	}
+}
+
 export interface GrantInput {
 	macAddress: string;
 	/** How long access should last; the controller may enforce its own timeout. */
@@ -46,6 +60,40 @@ export interface NetworkApSample {
 	 * the outage sweep treat a "link up but uplink dead" AP as down. Undefined = signal unavailable
 	 * (stub/dev); consumers assume reachable so a missing probe never triggers a false outage. */
 	wanReachable?: boolean;
+}
+
+/**
+ * One raw DHCP lease as the router reports it — provider-agnostic, NO interpretation. The service
+ * layer (`networkHealth.ts`) decides which leases are APs, how to attribute clients, etc.
+ */
+export interface DhcpLeaseEntry {
+	/** Device MAC, UPPERCASED by the provider. */
+	mac: string;
+	/** Leased IP address. */
+	address: string;
+	/** DHCP host-name, or null when the lease carries none. */
+	hostname: string | null;
+	/** Raw OLT-inserted Option 82 agent-circuit-id string, or null when absent (empty string is
+	 * normalised to null by the provider — a unicast renewal that omits Option 82). */
+	agentCircuitId: string | null;
+	/** Raw lease status as the router prints it (e.g. `bound`, `waiting`, `offered`). */
+	status: string;
+}
+
+/**
+ * One raw active-hotspot-client entry as the router reports it — provider-agnostic, NO
+ * interpretation. `bytesIn`/`bytesOut` are cumulative session byte counters, or null when the
+ * firmware doesn't expose them (the AC4 degradation signal — never coerce absent to 0).
+ */
+export interface HotspotActiveEntry {
+	/** Device MAC, UPPERCASED by the provider. */
+	mac: string;
+	/** Client IP address. */
+	address: string;
+	/** Cumulative bytes received this session, or null when the counter is absent. */
+	bytesIn: number | null;
+	/** Cumulative bytes sent this session, or null when the counter is absent. */
+	bytesOut: number | null;
 }
 
 /** Input for applying (or clearing) an aggregate per-AP bandwidth cap on the router. */
@@ -164,6 +212,30 @@ export interface NetworkController {
 	 * admin view. Optional: stub/dev omit it.
 	 */
 	listRouterLog?(opts?: { limit?: number }): Promise<RouterLogEntry[]>;
+	/**
+	 * RAW DHCP lease table (Phase A per-AP visibility). Returns every lease with its Option 82
+	 * agent-circuit-id passed through verbatim — NO interpretation (AP recognition, attribution, and
+	 * grouping all live in `networkHealth.ts`). Optional: stub/dev and controllers that can't sample
+	 * leases omit it (the AP portion of the health refresh is then skipped entirely). Must not throw
+	 * for an unreachable router — the caller degrades to interface-only refresh.
+	 */
+	listDhcpLeases?(): Promise<DhcpLeaseEntry[]>;
+	/**
+	 * RAW active-hotspot-client table (Phase A per-AP traffic + client attribution). Returns each
+	 * active client with cumulative byte counters, or null counters when the firmware hides them
+	 * (the AC4 degradation signal). NO interpretation. Optional: stub/dev omit it.
+	 */
+	listHotspotActive?(): Promise<HotspotActiveEntry[]>;
+	/**
+	 * ICMP-ping a batch of hosts for per-AP liveness (Phase A). MUST run the pings CONCURRENTLY and
+	 * MUST bound each host by `timeoutMs` (default 1500ms); MUST NEVER throw for an unreachable host —
+	 * an unreachable/timed-out host resolves to `aliveMs: null`. Optional: stub/dev omit it (the
+	 * service falls back to lease `status === 'bound'` for liveness).
+	 */
+	pingHosts?(
+		addresses: string[],
+		opts?: { timeoutMs?: number }
+	): Promise<Array<{ address: string; aliveMs: number | null }>>;
 }
 
 /** One line of the router's system log (`/log` in MikroTik). */

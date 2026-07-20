@@ -131,7 +131,15 @@ const SEED_APS = [
 	{ name: 'AP — Cafe Patio', online: true, uptimePct: '97.10', latencyMs: 48, users: 12, throughputMbps: 22, latitude: '14.555200', longitude: '121.025100', address: 'Cafe Patio', interfaceName: 'wlan3-patio' }, // degraded (latency>=40)
 	{ name: 'AP — Rooftop Deck', online: true, uptimePct: '99.90', latencyMs: 9, users: 4, throughputMbps: 95, latitude: null, longitude: null, address: null, interfaceName: 'wlan4-roof' }, // unmapped
 	{ name: 'AP — Parking Lobby', online: false, uptimePct: '0.00', latencyMs: null, users: 0, throughputMbps: 0, latitude: '14.554300', longitude: '121.024200', address: 'Basement Parking', interfaceName: 'ether5-parking' }, // offline
-	{ name: 'AP — Annex Hall', online: true, uptimePct: '98.40', latencyMs: 22, users: 9, throughputMbps: 47, latitude: '14.555500', longitude: '121.025400', address: 'Annex Hall', interfaceName: 'wlan6-annex' }
+	{ name: 'AP — Annex Hall', online: true, uptimePct: '98.40', latencyMs: 22, users: 9, throughputMbps: 47, latitude: '14.555500', longitude: '121.025400', address: 'Annex Hall', interfaceName: 'wlan6-annex' },
+	// Phase A per-AP visibility fixtures (auto-discovered AP rows: mac + apCircuitId +
+	// attributionSource='circuit-id'). OAP3000G-A/B share one circuit-id → they render as a single
+	// shared-ONU GROUP card. OAP3000G-C is a solo AP (distinct circuit-id). OAP3000G-D is offline
+	// (throughputMbps null → the card shows "—" for traffic).
+	{ name: 'OAP3000G-A', online: true, uptimePct: '100.00', latencyMs: 3, users: 5, throughputMbps: 12, mac: 'E4:67:1E:AA:00:01', apCircuitId: 'OLT-9:0/1/0/4:16.3.70', attributionSource: 'circuit-id' },
+	{ name: 'OAP3000G-B', online: true, uptimePct: '100.00', latencyMs: 4, users: 3, throughputMbps: 8, mac: 'E4:67:1E:AA:00:02', apCircuitId: 'OLT-9:0/1/0/4:16.3.70', attributionSource: 'circuit-id' },
+	{ name: 'OAP3000G-C', online: true, uptimePct: '100.00', latencyMs: 5, users: 7, throughputMbps: 19, mac: 'E4:67:1E:AA:00:03', apCircuitId: 'OLT-9:0/1/0/5:16.3.71', attributionSource: 'circuit-id' },
+	{ name: 'OAP3000G-D', online: false, uptimePct: '0.00', latencyMs: null, users: 0, throughputMbps: null, mac: 'E4:67:1E:AA:00:04', apCircuitId: 'OLT-9:0/1/0/6:16.3.72', attributionSource: 'circuit-id' }
 ] satisfies (typeof networkHealth.$inferInsert)[];
 
 const STAFF = [
