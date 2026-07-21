@@ -1,6 +1,6 @@
 import type { DB } from '@veent/db';
 import { ADMIN_BYPASS_TAG, type NetworkController } from '../integrations/network';
-import { RouterUnreachableError } from '../integrations/network/types';
+import { withTimeout } from '../integrations/network/types';
 import { hasLiveAccessForMac } from './sessions';
 
 /**
@@ -103,25 +103,6 @@ const macByIpCache = new Map<string, { mac: string; at: number }>();
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
-function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
-	return new Promise<T>((resolve, reject) => {
-		const t = setTimeout(
-			() => reject(new RouterUnreachableError(`resolveMacByIp timed out after ${ms}ms`)),
-			ms
-		);
-		p.then(
-			(v) => {
-				clearTimeout(t);
-				resolve(v);
-			},
-			(e) => {
-				clearTimeout(t);
-				reject(e);
-			}
-		);
-	});
-}
-
 export async function resolveDeviceMac(
 	network: NetworkController,
 	ipAddress: string | null | undefined
@@ -142,7 +123,11 @@ export async function resolveDeviceMac(
 	for (let attempt = 0; attempt < RESOLVE_ATTEMPTS; attempt++) {
 		if (attempt > 0) await sleep(RESOLVE_RETRY_BACKOFF_MS);
 		try {
-			const mac = await withTimeout(Promise.resolve(network.resolveMacByIp(ip)), RESOLVE_TIMEOUT_MS);
+			const mac = await withTimeout(
+				Promise.resolve(network.resolveMacByIp(ip)),
+				RESOLVE_TIMEOUT_MS,
+				'resolveMacByIp'
+			);
 			if (mac) {
 				macByIpCache.set(ip, { mac, at: now });
 				return mac;
