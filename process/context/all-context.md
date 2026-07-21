@@ -1,6 +1,6 @@
 # veent-wifiportal - All Context
 
-Last updated: 2026-07-21 (per-ap-visibility Phase A closed and archived to `process/general-plans/completed/per-ap-visibility_16-07-26/` — feature shipped; the two field-observation gates (byte-counter monotonicity, live down-AP negative case) accepted as prod-observation known-gaps, tracked in general-plans backlog; migration count unchanged at 49, no schema touched)
+Last updated: 2026-07-21 (per-ap-visibility Phase A closed and archived to `process/general-plans/completed/per-ap-visibility_16-07-26/` — feature shipped; per-AP guest throughput (G14) RESOLVED as not measurable by design — paid guests are granted via `ip-binding type=bypassed`, which skips hotspot byte accounting entirely, so the honest `'—'` Mbps column is correct and permanent (not a firmware gap); the live down-AP negative case (G16) remains an accepted prod-observation known-gap, tracked in general-plans backlog; migration count unchanged at 49, no schema touched)
 
 This file is the root context entrypoint for the repo.
 
