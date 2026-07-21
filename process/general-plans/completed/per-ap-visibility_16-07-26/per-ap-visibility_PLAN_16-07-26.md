@@ -8,7 +8,7 @@ feature: general-plans
 # Per-AP Visibility — Phase A (Router-Side DHCP Option 82) — PLAN
 
 **Date**: 16-07-26
-**Status**: Ready for VALIDATE (not started)
+**Status**: ✅ SHIPPED — closed 21-07-26 (see `## Closeout — 21-07-26` at end of file)
 **Complexity**: COMPLEX
 **Branch:** `feat/multi-controller`
 **SPEC:** `process/general-plans/active/per-ap-visibility_16-07-26/per-ap-visibility_SPEC_16-07-26.md` (locked — 5 user stories, 12 ACs)
@@ -421,3 +421,67 @@ Execute start:
 ## Next Step
 
 VALIDATE complete — validate-contract above is `Gate: PASS`. Say **'ENTER EXECUTE MODE'** to implement, following the section order 1→2→3→4 (Section 5 after 3) with per-section gates. The orchestrator emits the /goal block (above) before routing to vc-execute-agent.
+
+## Closeout — 21-07-26
+
+**Decision: FEATURE CODE IS COMPLETE AND SHIPPED.** All 5 sections implemented and merged onto
+`feat/multi-controller`; every Fully-Automated and Hybrid gate is green (G1–G13, G15, G17, `bun run
+check`, `bun run test` across all 4 packages, G11 e2e 4/4). Live-router follow-up (E4, E5) both
+CONFIRMED with no code change needed — see `live-verification_REPORT_17-07-26.md`.
+
+**SPEC Achievement (12 ACs):**
+
+| AC | Criterion | Status | Evidence |
+|---|---|---|---|
+| AC1 | AP auto-discovery | ✅ met | G1, Fully-Automated |
+| AC2 | Per-AP up/down status | ✅ met | G2, Fully-Automated; live-confirmed 17-07-26 (E4/E5 + post-bypass positive case) |
+| AC3 | Per-AP client count | ✅ met | G3, Fully-Automated |
+| AC4 (mechanism) | Per-AP traffic figure | Known-Gap (as SPEC-designed) | Agent-Probe G14 INCONCLUSIVE — 0 active hotspot sessions in both live sample windows (16-07 and 17-07). Not a code defect; ships correctly either way (see AC4 shipped row). |
+| AC4 (shipped) | Honest `'—'` degradation when counters absent | ✅ met | G15, Fully-Automated |
+| AC5 | Shared-relay honesty (AP group) | ✅ met | G4 + G11 e2e, Fully-Automated/Hybrid |
+| AC6 | Attribution tolerates missing circuit-id | ✅ met | G5, Fully-Automated |
+| AC7 | Unattributable devices counted network-wide | ✅ met | G6, Fully-Automated |
+| AC8 | AP identity keyed on MAC | ✅ met | G7, Fully-Automated |
+| AC9 | Staleness banner extends per-AP | ✅ met | integration suite, Fully-Automated |
+| AC10 | Guest-session-to-AP lookup | ✅ met | integration suite, Fully-Automated |
+| AC11 | Existing /networks features preserved | ✅ met | G11 e2e, Fully-Automated |
+| AC12 | Live-network up/down sanity (one genuinely-offline AP reads offline, one genuinely-online AP reads online) | Known-Gap — accepted | POSITIVE case CONFIRMED 17-07-26 (AP-Pabayo + AP-Headend, previously false-DOWN due to walled-garden ICMP block, now correctly read UP after ip-binding bypass — see live-verification report re-probe section). NEGATIVE case NOT reproduced this session (AP-Corrales unexpectedly showed live traffic, not offline) — a true "genuinely-down AP reads DOWN" observation remains unconfirmed. |
+
+**Accepted known-gaps (both are field/live-network observations, not code defects — user
+decision 21-07-26, both already tracked in backlog):**
+
+1. **G14 (AC4 mechanism) — byte-counter monotonicity INCONCLUSIVE.** Root cause: 0 active hotspot
+   guest sessions during both live sample windows, not a code issue. The degradation branch (AC4
+   shipped) is fully implemented and gate-proven offline. Tracked:
+   `process/general-plans/backlog/per-ap-traffic-counter-reprobe_NOTE_16-07-26.md` — re-probe
+   opportunistically once a real guest session exists.
+2. **G16/AC12 negative case — "genuinely-down AP reads DOWN" unconfirmed.** Root cause of the
+   original false-DOWN symptom (walled-garden `hs-unauth-to` ICMP rejection of un-bypassed hotspot
+   clients) is fully diagnosed and MITIGATED — shipped as
+   `docs/mikrotik/ap-liveness-bypass.md` (operator runbook: bypass every new AP MAC in
+   `/ip/hotspot/ip-binding`) plus a static transaction-wrapping tripwire test
+   (`packages/core/src/services/networkHealth.transaction-tripwire.spec.ts`, protects the E3
+   name-collision retry design so a future code change can't silently break it). A code-level
+   "never-freeze-on-never-up-AP" safeguard was investigated and found impossible as designed
+   (`online_since`/`offline_since` are current-state stamps, not history) — two viable
+   defense-in-depth candidates are recorded for later. Tracked:
+   `process/general-plans/backlog/ap-outage-false-down-code-safeguard_NOTE_21-07-26.md`. Needs a
+   human on-site to confirm AP-Corrales's actual physical state before AC12 can be fully closed;
+   low urgency (no evidence of a live regressed-bypass case).
+
+**Closeout classification:** Ready for UPDATE PROCESS archival — user-confirmed 21-07-26. Both
+open ACs are Agent-Probe-by-design (per the locked SPEC, not a testing shortfall) and are already
+backed by dedicated backlog notes plus a shipped operational mitigation; nothing further is
+code-actionable from this plan.
+
+**Commit checkpoint:** N/A — all Phase A implementation code was already committed prior to this
+session (`feat/multi-controller`, per `AP false-down outage guard` and `AP name-collision retry`
+follow-up sessions, both already merged/archived). This UPDATE PROCESS session performs
+process-only changes (plan archival + context/memory reconciliation) — no execution commit needed.
+
+**Regression status:** N/A for this closeout (no code changed this session). The regression
+surface for Phase A's actual code was checked in the two follow-up sessions
+(`ap-name-collision-retry_20-07-26`, `ap-false-down-outage-guard_21-07-26`), both already archived.
+
+**Drift score:** LOW (2 signals: context-doc update expected, feature-folder structural change —
+task folder moves from active/ to completed/). "UPDATE PROCESS available if you want."

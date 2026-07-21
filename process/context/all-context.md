@@ -1,6 +1,6 @@
 # veent-wifiportal - All Context
 
-Last updated: 2026-07-21 (AP false-DOWN outage guard closed — added `docs/mikrotik/ap-liveness-bypass.md` runbook, static transaction-wrapping tripwire test; migration count unchanged at 49, no schema touched)
+Last updated: 2026-07-21 (per-ap-visibility Phase A closed and archived to `process/general-plans/completed/per-ap-visibility_16-07-26/` — feature shipped; the two field-observation gates (byte-counter monotonicity, live down-AP negative case) accepted as prod-observation known-gaps, tracked in general-plans backlog; migration count unchanged at 49, no schema touched)
 
 This file is the root context entrypoint for the repo.
 
