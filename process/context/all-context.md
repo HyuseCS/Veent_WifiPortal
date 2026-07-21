@@ -440,8 +440,9 @@ Approved feature folders under `process/features/`:
   20-07-26 (`completed/ims-e2e-spec-modernization_20-07-26/`) — all 12 admin e2e specs (23 tests)
   green; see `process/context/tests/all-tests.md`. **Currently open backlog:** manager-board
   pagination and repo-wide lint drift (partial). (M2 secret rotation and the Maya/TEST_ENV coverage
-  question are both resolved and archived/superseded — see `completed/ims-audit-remediation_10-07-26/`
-  and `process/general-plans/backlog/customer-locator-e2e-harness-integration-gaps_NOTE_20-07-26.md`.)
+  question are both resolved and archived/superseded — see `completed/ims-audit-remediation_10-07-26/`;
+  the customer/locator e2e harness credential-tripwire gap that investigation surfaced is now tracked
+  in `process/context/tests/all-tests.md` §Known Gaps, not a standalone backlog note.)
 - **admin-staff-governance** (`process/features/admin-staff-governance/`) — staff accounts, roles,
   2FA/step-up auth, invite/promote/owner-change/wipe workflows. Mature, no imminent task; created
   now because governance work is a high-risk class (auth/identity, trust-boundary) and will need
