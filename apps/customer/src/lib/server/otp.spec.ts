@@ -8,6 +8,15 @@ const state = vi.hoisted(() => ({
 	env: {} as Record<string, string | undefined>
 }));
 
+// sendOtp now appends to customer_otp_delivery_log after a gateway accept. Chain-mock the
+// Drizzle verbs (db.insert().values()) it uses; `values` resolves unless a test overrides it.
+const insertValues = vi.hoisted(() => vi.fn());
+vi.mock('$lib/server/db', () => ({
+	db: { insert: () => ({ values: insertValues }) }
+}));
+vi.mock('@veent/db/schema', () => ({ customerOtpDeliveryLog: {} }));
+vi.mock('@veent/core', () => ({ captureHandled: vi.fn() }));
+
 vi.mock('$app/environment', () => ({
 	get dev() {
 		return state.dev;
@@ -22,6 +31,7 @@ vi.mock('$env/dynamic/private', () => ({
 }));
 
 import { sendOtp } from './otp';
+import { captureHandled } from '@veent/core';
 
 const PHONE = '+639171234567';
 const CODE = '123456';
@@ -52,7 +62,15 @@ beforeEach(() => {
 	state.env = {};
 	vi.unstubAllGlobals();
 	vi.clearAllMocks();
+	insertValues.mockResolvedValue(undefined);
 });
+
+/**
+ * The delivery-log insert is fire-and-forget (`void`-ed), so it is NOT part of sendOtp's own
+ * await chain — sendOtp can resolve before the insert's promise settles. Flush the microtask
+ * queue before asserting on it, or the assertion races the thing it is meant to prove.
+ */
+const flush = () => new Promise((r) => setImmediate(r));
 
 describe('sendOtp (iTexMo)', () => {
 	// Cast is the coded default now, so iTexMo must be selected explicitly.
@@ -185,5 +203,123 @@ describe('sendOtp (Cast — default provider)', () => {
 
 		await expect(sendOtp(PHONE, CODE)).rejects.toThrow(/Cast not configured/);
 		expect(fetchFn).not.toHaveBeenCalled();
+	});
+});
+
+/**
+ * Delivery-log persistence. A gateway ACCEPT is not a DELIVERY, so every accepted send is
+ * recorded for the sweep cron to re-check against Cast's DLR endpoint.
+ */
+describe('sendOtp — delivery-log persistence', () => {
+	it('(a) records the provider, Cast message id and MASKED phone after a successful accept', async () => {
+		state.env.CAST_API_KEY = 'cast_test_key';
+		mockFetch({ ok: true, ...castOk });
+
+		await sendOtp(PHONE, CODE);
+		await flush();
+
+		expect(insertValues).toHaveBeenCalledTimes(1);
+		const row = insertValues.mock.calls[0][0];
+		expect(row.provider).toBe('cast');
+		expect(row.providerMessageId).toBe('CAST123');
+		// Masked only — the raw E.164 number must never be persisted.
+		expect(row.phoneMasked).toBe('+63 ••• ••• 4567');
+		expect(row.phoneMasked).not.toContain('9171234');
+	});
+
+	it('records a row with a null message id for a provider that returns none (iTexMo)', async () => {
+		state.env.SMS_PROVIDER = 'itexmo';
+		configure();
+		mockFetch({ ok: true });
+
+		await sendOtp(PHONE, CODE);
+		await flush();
+
+		expect(insertValues).toHaveBeenCalledTimes(1);
+		expect(insertValues.mock.calls[0][0]).toMatchObject({
+			provider: 'itexmo',
+			providerMessageId: null
+		});
+	});
+
+	it('(b) does NOT fail the OTP send when the delivery-log insert fails', async () => {
+		state.env.CAST_API_KEY = 'cast_test_key';
+		mockFetch({ ok: true, ...castOk });
+		insertValues.mockRejectedValue(new Error('db down'));
+
+		// The whole point: a logging failure degrades to a Sentry warning, never a failed login.
+		await expect(sendOtp(PHONE, CODE)).resolves.toBeUndefined();
+
+		// Must flush first — the insert is void-ed, so its catch handler has not run yet when
+		// sendOtp resolves. Asserting here without the flush would pass even if the rejection
+		// escaped the try/catch entirely, laundering the exact bug this test exists to catch.
+		await flush();
+		expect(captureHandled).toHaveBeenCalledTimes(1);
+		expect(captureHandled).toHaveBeenCalledWith(
+			expect.any(Error),
+			expect.objectContaining({ tags: { area: 'otp-send-log' } })
+		);
+	});
+
+	it('does not write a row when the gateway rejects the send', async () => {
+		state.env.CAST_API_KEY = 'cast_test_key';
+		mockFetch({ ok: true, json: async () => ({ success: false, error: 'no credits' }) });
+
+		await expect(sendOtp(PHONE, CODE)).rejects.toThrow();
+		await flush();
+
+		expect(insertValues).not.toHaveBeenCalled();
+	});
+});
+
+/** (c) Provider dispatch: a typo must fail loudly instead of silently routing to Cast. */
+describe('sendOtp — provider dispatch', () => {
+	it('throws on an unrecognized non-empty SMS_PROVIDER and never calls a gateway', async () => {
+		state.env.CAST_API_KEY = 'cast_test_key';
+		state.env.SMS_PROVIDER = 'twilio';
+		const fetchFn = mockFetch({ ok: true, ...castOk });
+
+		await expect(sendOtp(PHONE, CODE)).rejects.toThrow(/Unrecognized SMS_PROVIDER: "twilio"/);
+		expect(fetchFn).not.toHaveBeenCalled();
+	});
+
+	it.each([undefined, '', '   ', 'cast', 'CAST'])(
+		'routes SMS_PROVIDER=%p to Cast',
+		async (value) => {
+			state.env.CAST_API_KEY = 'cast_test_key';
+			if (value !== undefined) state.env.SMS_PROVIDER = value;
+			const fetchFn = mockFetch({ ok: true, ...castOk });
+
+			await sendOtp(PHONE, CODE);
+
+			expect(fetchFn.mock.calls[0][0]).toBe('https://api.cast.ph/api/v1/otp/send');
+		}
+	);
+
+	it.each([
+		['smsgate', 'https://api.sms-gate.app/3rdparty/v1/messages'],
+		['unisms', 'https://unismsapi.com/api/sms'],
+		['itexmo', 'https://api.itexmo.com/api/broadcast-otp']
+	])('still routes SMS_PROVIDER=%s to its own gateway', async (provider, url) => {
+		state.env.SMS_PROVIDER = provider;
+		configure();
+		state.env.UNISMS_SECRET_KEY = 'sk_test';
+		state.env.UNISMS_SENDER_ID = 'VEENT';
+		state.env.SMSGATE_USERNAME = 'u';
+		state.env.SMSGATE_PASSWORD = 'p';
+		const fetchFn = mockFetch({
+			ok: true,
+			json: async () => ({
+				Error: false,
+				Accepted: 1,
+				message: { status: 'queued' },
+				id: 'sg-1',
+				state: 'Pending'
+			})
+		});
+
+		await sendOtp(PHONE, CODE);
+
+		expect(fetchFn.mock.calls[0][0]).toBe(url);
 	});
 });

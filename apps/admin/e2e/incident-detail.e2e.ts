@@ -54,9 +54,16 @@ async function assign(issueId: number, adminUserId: string): Promise<void> {
  */
 async function loginNonManager(email: string): Promise<Page> {
 	const browser = await chromium.launch();
-	const page = await browser.newPage({ baseURL: TEST_ORIGIN });
+	// Explicitly empty storage state: contexts created inside a test body otherwise inherit the
+	// project-level use.storageState (the banked owner session), which redirects /login → /dashboard.
+	const context = await browser.newContext({
+		baseURL: TEST_ORIGIN,
+		storageState: { cookies: [], origins: [] }
+	});
+	const page = await context.newPage();
 	try {
 		await page.goto('/login');
+		await expect(page).toHaveURL(/\/login$/); // fail fast if auth state leaked in
 		await page.fill('input[name="email"]', email);
 		await page.fill('input[name="password"]', STAFF_PASSWORD);
 		await page.getByRole('button', { name: 'Sign In' }).click();

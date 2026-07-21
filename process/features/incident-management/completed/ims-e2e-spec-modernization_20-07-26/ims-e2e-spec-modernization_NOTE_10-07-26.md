@@ -1,11 +1,24 @@
 ---
 name: plan:ims-e2e-spec-modernization
-description: "Modernize IMS e2e specs: post-L6a ARIA, loginNonManager timeout, live-trace the :113 assertion, add Report-an-issue tile coverage"
+description: "CLOSED 20-07-26 — see process/features/incident-management/completed/ims-e2e-spec-modernization_20-07-26/. Modernize IMS e2e specs: post-L6a ARIA, loginNonManager timeout, live-trace the :113 assertion, add Report-an-issue tile coverage"
 date: 10-07-26
 feature: incident-management
 ---
 
-# Backlog: IMS e2e spec modernization
+# CLOSED — see `process/features/incident-management/completed/ims-e2e-spec-modernization_20-07-26/ims-e2e-spec-modernization_PLAN_20-07-26.md`
+
+All 3 fix-scope items below shipped 20-07-26 (Gate: PASS after 1 PVL cycle; EVL: full admin e2e
+suite 23/23 passed). The `loginNonManager` timeout (item 2 in Fix scope) was disproven during
+fresh RESEARCH — it was a `storageState` leak, not slowness; see the archived plan's Decision Log.
+The `:113` "2 unread" assertion (item 4) is now proven correct — it was a cross-test leak from a
+different test aborting early, not a count-logic bug. The self-report tile (item 5) now has 4
+e2e tests in `apps/admin/e2e/incident-self-report.e2e.ts`.
+
+This stub is left here only as a pointer — no action needed on this file.
+
+---
+
+# Backlog: IMS e2e spec modernization (original, historical)
 
 **Priority:** Medium (test-infra debt; no app regression — all residuals are test-side)
 
