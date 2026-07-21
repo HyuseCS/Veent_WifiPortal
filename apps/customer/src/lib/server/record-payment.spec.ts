@@ -15,29 +15,46 @@ import { recordPaymentTransaction } from '@veent/core';
  * webhook path actually sees in production; the bare `.code` case pins driver-direct errors.
  */
 function fakeDb(insertError?: unknown) {
-	const calls = { updates: 0, inserts: 0 };
+	const calls = {
+		updates: 0,
+		inserts: 0,
+		// Captured for the AC1 durable-attribution assertions: the row handed to insert().values()
+		// and the `set` object handed to onConflictDoUpdate (the update path).
+		insertedRow: undefined as Record<string, unknown> | undefined,
+		updateSet: undefined as Record<string, unknown> | undefined
+	};
 	const db = {
 		update: () => ({
-			set: () => ({
+			set: (s: Record<string, unknown>) => ({
 				where: () => {
 					calls.updates++;
+					calls.updateSet = s;
 					return Promise.resolve([]);
 				}
 			})
 		}),
 		insert: () => ({
-			values: () => ({
-				onConflictDoUpdate: () => {
-					calls.inserts++;
-					return insertError ? Promise.reject(insertError) : Promise.resolve([]);
-				}
-			})
+			values: (row: Record<string, unknown>) => {
+				calls.insertedRow = row;
+				return {
+					onConflictDoUpdate: (arg: { set: Record<string, unknown> }) => {
+						calls.inserts++;
+						calls.updateSet = arg.set;
+						return insertError ? Promise.reject(insertError) : Promise.resolve([]);
+					}
+				};
+			}
 		})
 	} as never;
 	return { db, calls };
 }
 
-const attribution = { userId: 'u1', packageId: 1, networkId: null };
+const attribution = {
+	userId: 'u1',
+	packageId: 1,
+	networkId: null,
+	apCircuitId: 'OLT-9 xpon 0/1/0/4'
+};
 const evt = (overrides: Record<string, unknown> = {}) =>
 	({
 		externalTransactionId: 'pay_123',
@@ -97,5 +114,29 @@ describe('recordPaymentTransaction — referenceNo dedupe (R18)', () => {
 		await expect(recordPaymentTransaction(db, evt(), attribution)).rejects.toMatchObject({
 			code: '08006'
 		});
+	});
+});
+
+describe('recordPaymentTransaction — durable AP attribution (AC1)', () => {
+	it('persists apCircuitId on the inserted row', async () => {
+		const { db, calls } = fakeDb();
+		await recordPaymentTransaction(db, evt(), attribution);
+		expect(calls.insertedRow?.apCircuitId).toBe('OLT-9 xpon 0/1/0/4');
+	});
+
+	it('persists apCircuitId INSERT-only — never in the onConflict update set (location fixed at checkout)', async () => {
+		const { db, calls } = fakeDb();
+		await recordPaymentTransaction(db, evt(), attribution);
+		// The location twin (networkId) is INSERT-only by design; apCircuitId must follow the same
+		// rule so a later Maya resend / status transition can't overwrite the checkout-time AP fact.
+		expect(calls.updateSet).toBeDefined();
+		expect(calls.updateSet).not.toHaveProperty('apCircuitId');
+		expect(calls.updateSet).not.toHaveProperty('networkId');
+	});
+
+	it('records null apCircuitId when the checkout was unattributed', async () => {
+		const { db, calls } = fakeDb();
+		await recordPaymentTransaction(db, evt(), { ...attribution, apCircuitId: null });
+		expect(calls.insertedRow?.apCircuitId).toBeNull();
 	});
 });

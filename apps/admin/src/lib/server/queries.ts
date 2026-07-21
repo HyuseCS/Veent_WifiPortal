@@ -12,6 +12,7 @@ import {
 	customerProfile,
 	networkSessions,
 	creditLedger,
+	pointsLedger,
 	packages,
 	paymentTransactions,
 	adminUser,
@@ -21,13 +22,14 @@ import {
 	routerModel,
 	isNetworkHealthStale
 } from '@veent/db';
-import { SESSION_STATUS, LEDGER_TYPE } from '@veent/core';
+import { SESSION_STATUS, LEDGER_TYPE, resolveApCircuitLabel } from '@veent/core';
 import type {
 	ActiveSession,
 	AdminUserRow,
 	ApRevenueSlice,
 	ConnectionLog,
 	DashboardSnapshot,
+	GrantAttributionRow,
 	Kpi,
 	NetworkAp,
 	PaymentMethodSlice,
@@ -38,6 +40,30 @@ import type {
 	StatusTone,
 	TransactionRow
 } from '$lib/types';
+
+/**
+ * Batch-resolve durable AP circuit-id strings to their display labels (friendly name / raw string /
+ * "Unattributed") — one lookup per UNIQUE circuit-id on the page, NOT one per row (avoids N+1
+ * against network_health). Null circuit-ids never hit the DB. Returns circuit-id → label.
+ */
+async function resolveApCircuitLabels(
+	db: DB,
+	circuitIds: readonly (string | null)[]
+): Promise<Map<string, string>> {
+	const unique = [...new Set(circuitIds.filter((c): c is string => c != null))];
+	const map = new Map<string, string>();
+	await Promise.all(
+		unique.map(async (cid) => {
+			map.set(cid, await resolveApCircuitLabel(db, cid));
+		})
+	);
+	return map;
+}
+
+/** The label for one row's circuit-id, using a pre-resolved batch map. */
+function apCircuitLabelOf(circuitId: string | null, labels: Map<string, string>): string {
+	return circuitId == null ? 'Unattributed' : (labels.get(circuitId) ?? circuitId);
+}
 
 const peso = (n: number) => `₱${Math.round(n).toLocaleString('en-PH')}`;
 
@@ -711,6 +737,7 @@ export async function listTransactions(
 				createdAt: paymentTransactions.createdAt,
 				networkId: paymentTransactions.networkId,
 				apNameRaw: networkHealth.name,
+				apCircuitId: paymentTransactions.apCircuitId,
 				userName: customerUser.name,
 				packageName: packages.name
 			})
@@ -723,6 +750,9 @@ export async function listTransactions(
 			.limit(pageSize)
 			.offset((page - 1) * pageSize)
 	]);
+
+	// Durable AP labels resolved once per unique circuit-id on this page (not per row).
+	const circuitLabels = await resolveApCircuitLabels(db, rows.map((r) => r.apCircuitId));
 
 	return {
 		total: counted?.n ?? 0,
@@ -740,9 +770,99 @@ export async function listTransactions(
 			packageName: r.packageName,
 			// null networkId → unattributed (render as —); pruned AP → "AP #<id>".
 			apName: r.networkId == null ? null : (r.apNameRaw ?? `AP #${r.networkId}`),
+			// Durable attribution from the stored circuit-id string — survives AP rename/prune.
+			apCircuitLabel: apCircuitLabelOf(r.apCircuitId, circuitLabels),
 			createdAt: r.createdAt.toISOString()
 		}))
 	};
+}
+
+/**
+ * Recent credit/points/free-time grant records with durable AP attribution — the non-Maya
+ * purchase/grant paths (AC7). Reads the three durable stores directly (credit_ledger spends,
+ * points_ledger spends, free-time network_sessions rows with no package), each now carrying
+ * `ap_circuit_id`, and resolves the batched label. Read-only, newest first, bounded by `limit`.
+ * Surfaced as a small section on the existing Finance transactions page (no new route).
+ */
+export async function listRecentGrantAttribution(
+	db: DB,
+	opts: { limit?: number } = {}
+): Promise<GrantAttributionRow[]> {
+	const limit = opts.limit ?? 50;
+
+	const [credits, points, freeTime] = await Promise.all([
+		db
+			.select({
+				amount: creditLedger.amount,
+				apCircuitId: creditLedger.apCircuitId,
+				createdAt: creditLedger.createdAt,
+				who: customerUser.name
+			})
+			.from(creditLedger)
+			.leftJoin(customerUser, eq(customerUser.id, creditLedger.userId))
+			.where(eq(creditLedger.type, LEDGER_TYPE.spend))
+			.orderBy(desc(creditLedger.createdAt))
+			.limit(limit),
+		db
+			.select({
+				amount: pointsLedger.amount,
+				apCircuitId: pointsLedger.apCircuitId,
+				createdAt: pointsLedger.createdAt,
+				who: customerUser.name
+			})
+			.from(pointsLedger)
+			.leftJoin(customerUser, eq(customerUser.id, pointsLedger.userId))
+			.where(eq(pointsLedger.type, 'spend'))
+			.orderBy(desc(pointsLedger.createdAt))
+			.limit(limit),
+		db
+			.select({
+				apCircuitId: networkSessions.apCircuitId,
+				createdAt: networkSessions.startedAt,
+				who: customerUser.name
+			})
+			.from(networkSessions)
+			.leftJoin(customerUser, eq(customerUser.id, networkSessions.userId))
+			.where(isNull(networkSessions.packageId))
+			.orderBy(desc(networkSessions.startedAt))
+			.limit(limit)
+	]);
+
+	const combined: Array<{ kind: GrantAttributionRow['kind']; detail: string; apCircuitId: string | null; createdAt: Date; who: string | null }> = [
+		...credits.map((r) => ({
+			kind: 'credit' as const,
+			detail: `${peso(Math.abs(Number(r.amount)))} credits`,
+			apCircuitId: r.apCircuitId,
+			createdAt: r.createdAt,
+			who: r.who
+		})),
+		...points.map((r) => ({
+			kind: 'points' as const,
+			detail: `${Math.abs(r.amount)} points`,
+			apCircuitId: r.apCircuitId,
+			createdAt: r.createdAt,
+			who: r.who
+		})),
+		...freeTime.map((r) => ({
+			kind: 'free-time' as const,
+			detail: 'Free time',
+			apCircuitId: r.apCircuitId,
+			createdAt: r.createdAt,
+			who: r.who
+		}))
+	];
+
+	combined.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+	const top = combined.slice(0, limit);
+
+	const circuitLabels = await resolveApCircuitLabels(db, top.map((r) => r.apCircuitId));
+	return top.map((r) => ({
+		kind: r.kind,
+		who: r.who ?? '—',
+		detail: r.detail,
+		apCircuitLabel: apCircuitLabelOf(r.apCircuitId, circuitLabels),
+		createdAt: r.createdAt.toISOString()
+	}));
 }
 
 /** Create a new operator-placed AP from the map ("a place where there is a router").

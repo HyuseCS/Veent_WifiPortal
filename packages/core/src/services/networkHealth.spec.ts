@@ -1,5 +1,19 @@
 import { describe, it, expect } from 'vitest';
-import { isNameUniqueViolation } from './networkHealth';
+import { isNameUniqueViolation, resolveApCircuitLabel } from './networkHealth';
+import type { DB } from '@veent/db';
+
+/**
+ * Minimal fake DB for the read-only `resolveApCircuitLabel` join. The function issues exactly one
+ * `db.select({...}).from(...).where(...).orderBy(...).limit(1)` chain that awaits to a row array;
+ * this chainable stub returns whatever rows it was seeded with (`[]` = no matching AP row, i.e. the
+ * AP was pruned). No real Postgres needed — matches the fake-object style used across these specs.
+ */
+function fakeLabelDb(rows: Array<{ name: string }>): DB {
+	const chain: Record<string, unknown> = {};
+	for (const m of ['select', 'from', 'where', 'orderBy']) chain[m] = () => chain;
+	chain.limit = () => Promise.resolve(rows);
+	return chain as unknown as DB;
+}
 
 /**
  * AC3 discriminator matrix for `isNameUniqueViolation` — no DB, fabricated driver-shaped errors
@@ -63,5 +77,33 @@ describe('isNameUniqueViolation (AC3 matrix)', () => {
 	it('null / undefined → false', () => {
 		expect(isNameUniqueViolation(null)).toBe(false);
 		expect(isNameUniqueViolation(undefined)).toBe(false);
+	});
+});
+
+/**
+ * AC4/AC5 — read-time label resolver for durable purchase/grant AP attribution. Proves the label
+ * tracks a rename (join key is the immutable circuit-id) and falls back to the raw string on prune,
+ * never blank / erroring / numeric.
+ */
+describe('resolveApCircuitLabel (AC4/AC5)', () => {
+	const CID = 'OLT-9 xpon 0/1/0/4';
+
+	it('AC4 — AP still exists → current friendly name (survives rename via stable circuit-id)', async () => {
+		// First resolution while the AP is named "AP-Pabayo".
+		expect(await resolveApCircuitLabel(fakeLabelDb([{ name: 'AP-Pabayo' }]), CID)).toBe('AP-Pabayo');
+		// Same circuit-id after the AP was renamed → new friendly name, no stored value changed.
+		expect(await resolveApCircuitLabel(fakeLabelDb([{ name: 'AP-Pabayo-North' }]), CID)).toBe(
+			'AP-Pabayo-North'
+		);
+	});
+
+	it('AC5 — AP row pruned/deleted → falls back to the raw circuit-id string, no throw', async () => {
+		expect(await resolveApCircuitLabel(fakeLabelDb([]), CID)).toBe(CID);
+	});
+
+	it('null circuit-id → "Unattributed" (no DB access)', async () => {
+		// Passing a db that would throw if touched proves the null short-circuit runs first.
+		const explodingDb = { select() { throw new Error('should not query'); } } as unknown as DB;
+		expect(await resolveApCircuitLabel(explodingDb, null)).toBe('Unattributed');
 	});
 });

@@ -206,11 +206,49 @@ export async function resolveCheckoutNetworkId(
 	event: RequestEvent,
 	userId: string
 ): Promise<number | null> {
+	return (await resolveCheckoutLocation(event, userId)).networkId;
+}
+
+/** The durable circuit-id STRING stored on a resolved AP row (network_health.id). Best-effort:
+ * returns null when the row has no circuit-id or the lookup fails — attribution never blocks. */
+async function apCircuitIdForNetworkId(networkId: number): Promise<string | null> {
+	try {
+		const [row] = await db
+			.select({ apCircuitId: networkHealth.apCircuitId })
+			.from(networkHealth)
+			.where(eq(networkHealth.id, networkId))
+			.limit(1);
+		return row?.apCircuitId ?? null;
+	} catch {
+		return null;
+	}
+}
+
+/**
+ * Resolve BOTH the network_health.id reference (`networkId`, unchanged legacy behavior) AND the
+ * durable circuit-id STRING (`apCircuitId`) a checkout should be attributed to, from the SAME
+ * 5-fallback chain as the historical `resolveCheckoutNetworkId`.
+ *
+ * The circuit-id string is the durable, rename/prune-surviving fact stamped on the
+ * payment_checkouts row (copied to payment_transactions at webhook/reconcile time). It is resolved
+ * for tiers 1-2 (ap-param, device-mac → a live network_health row whose apCircuitId we read); tiers
+ * 3-5 (active-session, last-known, dev-fallback) resolve a networkId but return `apCircuitId: null`
+ * — network_sessions/customer_profile do not durably cache the circuit-id string today
+ * (KNOWN-GAP, see the plan's Test Infra Improvement Notes). Best-effort throughout: never blocks or
+ * fails the checkout.
+ */
+export async function resolveCheckoutLocation(
+	event: RequestEvent,
+	userId: string
+): Promise<{ networkId: number | null; apCircuitId: string | null }> {
 	const ctx = getPortalContext(event);
 
 	if (ctx?.ap) {
 		const byAp = await resolveNetworkIdByApName(db, ctx.ap);
-		if (byAp !== null) return logResolved('ap-param', { ap: ctx.ap }, byAp);
+		if (byAp !== null) {
+			const apCircuitId = await apCircuitIdForNetworkId(byAp);
+			return { networkId: logResolved('ap-param', { ap: ctx.ap }, byAp), apCircuitId };
+		}
 		console.warn('[topup] portal ap-param matched no network_health row', { ap: ctx.ap });
 	}
 
@@ -227,7 +265,13 @@ export async function resolveCheckoutNetworkId(
 			apName = null;
 		}
 		const byMac = apName ? await resolveNetworkIdByApName(db, apName) : null;
-		if (byMac !== null) return logResolved('device-mac', { mac: maskMac(mac), apName }, byMac);
+		if (byMac !== null) {
+			const apCircuitId = await apCircuitIdForNetworkId(byMac);
+			return {
+				networkId: logResolved('device-mac', { mac: maskMac(mac), apName }, byMac),
+				apCircuitId
+			};
+		}
 		console.warn('[topup] MAC→AP unresolved', { mac: maskMac(mac), apName });
 	}
 
@@ -243,14 +287,20 @@ export async function resolveCheckoutNetworkId(
 		)
 		.orderBy(desc(networkSessions.startedAt))
 		.limit(1);
-	if (active?.networkId != null) return logResolved('active-session', {}, active.networkId);
+	if (active?.networkId != null) {
+		// KNOWN-GAP: no durable circuit-id cached on network_sessions today → apCircuitId null.
+		return { networkId: logResolved('active-session', {}, active.networkId), apCircuitId: null };
+	}
 
 	const [profile] = await db
 		.select({ lastNetworkId: customerProfile.lastNetworkId })
 		.from(customerProfile)
 		.where(eq(customerProfile.userId, userId))
 		.limit(1);
-	if (profile?.lastNetworkId != null) return logResolved('last-known', {}, profile.lastNetworkId);
+	if (profile?.lastNetworkId != null) {
+		// KNOWN-GAP: no durable circuit-id cached on customer_profile today → apCircuitId null.
+		return { networkId: logResolved('last-known', {}, profile.lastNetworkId), apCircuitId: null };
+	}
 
 	if (dev) {
 		const [anyAp] = await db
@@ -258,7 +308,7 @@ export async function resolveCheckoutNetworkId(
 			.from(networkHealth)
 			.orderBy(asc(networkHealth.id))
 			.limit(1);
-		if (anyAp) return logResolved('dev-fallback', {}, anyAp.id);
+		if (anyAp) return { networkId: logResolved('dev-fallback', {}, anyAp.id), apCircuitId: null };
 	}
 
 	console.warn('[topup] AP unresolved — payment will be unattributed by location', { userId });
@@ -269,5 +319,5 @@ export async function resolveCheckoutNetworkId(
 		tags: { area: 'payment', scope: 'attribution-miss' },
 		extra: { userId }
 	});
-	return null;
+	return { networkId: null, apCircuitId: null };
 }

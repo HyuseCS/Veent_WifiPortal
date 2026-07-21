@@ -32,7 +32,7 @@
 		const q = query.trim().toLowerCase();
 		if (!q) return transactions;
 		return transactions.filter((tx) =>
-			`${tx.buyerName} ${tx.buyerEmail ?? ''} ${tx.receiptNo ?? ''} ${tx.apName ?? ''}`
+			`${tx.buyerName} ${tx.buyerEmail ?? ''} ${tx.receiptNo ?? ''} ${tx.apCircuitLabel}`
 				.toLowerCase()
 				.includes(q)
 		);
@@ -62,7 +62,7 @@
 			if (key === 'amount') return amountNum(a.amount) - amountNum(b.amount);
 			if (key === 'method') return a.fundSourceType.localeCompare(b.fundSourceType);
 			if (key === 'buyer') return a.buyerName.localeCompare(b.buyerName);
-			if (key === 'apName') return (a.apName ?? '').localeCompare(b.apName ?? '');
+			if (key === 'apName') return a.apCircuitLabel.localeCompare(b.apCircuitLabel);
 			return (a.receiptNo ?? '').localeCompare(b.receiptNo ?? ''); // receipt
 		})
 	);
@@ -176,7 +176,7 @@
 			<td
 				data-label="Access point"
 				class="px-4 py-2.5 text-ink"
-				class:tc-skip={!tx.apName}>{tx.apName ?? '—'}</td
+				class:tc-skip={tx.apCircuitLabel === 'Unattributed'}>{tx.apCircuitLabel}</td
 			>
 			<td
 				data-label="Receipt"

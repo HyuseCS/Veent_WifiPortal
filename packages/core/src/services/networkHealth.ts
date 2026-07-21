@@ -546,3 +546,78 @@ export async function resolveNetworkIdForMac(
 		return null;
 	}
 }
+
+/**
+ * Read-time label for a durable AP circuit-id string (purchase/grant attribution display).
+ * - `null` circuit-id → `'Unattributed'` (AP was unresolvable at purchase/grant time).
+ * - circuit-id that still matches a live `network_health` AP row → that AP's current friendly
+ *   name (so the label tracks a later rename — the join key is the immutable circuit-id).
+ * - circuit-id with no matching AP row (pruned/decommissioned) → the raw circuit-id string as-is
+ *   (never blank, never an opaque numeric id).
+ *
+ * Pure read, no side effects. Best-effort by contract: attribution is advisory staff-review data,
+ * never a gate. `?mac=`/AP signals remain client-influenceable — this label is NOT tamper-proof.
+ */
+export async function resolveApCircuitLabel(
+	db: DB,
+	circuitId: string | null
+): Promise<string> {
+	if (!circuitId) return 'Unattributed';
+	const [ap] = await db
+		.select({ name: networkHealth.name })
+		.from(networkHealth)
+		.where(eq(networkHealth.apCircuitId, circuitId))
+		.orderBy(networkHealth.id)
+		.limit(1);
+	return ap?.name ?? circuitId;
+}
+
+/**
+ * Resolve the durable AP circuit-id STRING a device MAC is currently on. The string twin of
+ * `resolveNetworkIdForMac` — returns the immutable circuit-id fact (for durable attribution
+ * storage) instead of a `network_health.id` reference. Never throws — returns null when nothing
+ * maps (every failure path is internally caught), so callers can resolve it BEFORE opening a
+ * money-moving/access-granting transaction without any risk of blocking or rolling it back (AC6).
+ *
+ * Fast path: the client-attribution cache (MAC → circuit-id) already holds the raw string — return
+ * it directly, no router call. Fallback: today's router MAC→AP lookup, then read that AP row's
+ * `apCircuitId`. Avoids a second live MikroTik round-trip on the common (cache-hit) path.
+ */
+export async function resolveCircuitIdForMac(
+	db: DB,
+	network: NetworkController,
+	macAddress: string
+): Promise<string | null> {
+	const mac = macAddress.toUpperCase();
+	// Fast path: durable attribution cache holds the circuit-id string directly.
+	try {
+		const [cached] = await db
+			.select({ circuitId: networkClientAttribution.circuitId })
+			.from(networkClientAttribution)
+			.where(eq(networkClientAttribution.mac, mac))
+			.limit(1);
+		if (cached?.circuitId) return cached.circuitId;
+	} catch {
+		// Cache lookup failed — fall through to the router path (best-effort).
+	}
+	// Fallback: router MAC→AP lookup → that AP row's stored circuit-id string.
+	if (!network.resolveApForMac) return null;
+	try {
+		const apName = await network.resolveApForMac(macAddress);
+		if (!apName) return null;
+		const [byIface] = await db
+			.select({ apCircuitId: networkHealth.apCircuitId })
+			.from(networkHealth)
+			.where(eq(networkHealth.interfaceName, apName))
+			.limit(1);
+		if (byIface?.apCircuitId != null) return byIface.apCircuitId;
+		const [byName] = await db
+			.select({ apCircuitId: networkHealth.apCircuitId })
+			.from(networkHealth)
+			.where(eq(networkHealth.name, apName))
+			.limit(1);
+		return byName?.apCircuitId ?? null;
+	} catch {
+		return null;
+	}
+}

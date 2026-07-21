@@ -1,0 +1,34 @@
+{
+  "snippets": [
+    {
+      "file": "packages/db/drizzle/0049_nosy_galactus.sql",
+      "lines": "1-5",
+      "description": "The migration — 5x additive nullable TEXT ADD COLUMN, no FK/index/default/drop.",
+      "content": "ALTER TABLE \"credit_ledger\" ADD COLUMN \"ap_circuit_id\" text; ALTER TABLE \"network_sessions\" ADD COLUMN \"ap_circuit_id\" text; ALTER TABLE \"payment_checkouts\" ADD COLUMN \"ap_circuit_id\" text; ALTER TABLE \"payment_transactions\" ADD COLUMN \"ap_circuit_id\" text; ALTER TABLE \"points_ledger\" ADD COLUMN \"ap_circuit_id\" text;"
+    },
+    {
+      "file": "packages/core/src/services/sessions.ts",
+      "lines": "resolveApCircuitPreTx + startPaidAccessAndBindDevice + startFreeAccessAndBindDevice",
+      "description": "AC6 load-bearing guarantee: circuit-id resolved via resolveApCircuitPreTx (try/catch-wrapped) BEFORE db.transaction opens in both grant entrypoints; threaded as a plain string param into spendCreditsTx/spendPointsTx and bindMacTx. No resolveCircuitIdForMac call inside any db.transaction callback.",
+      "content": "const apCircuitId = await resolveApCircuitPreTx(db, network, input.macAddress); const outcome = await db.transaction(async (tx) => { ...spend({..., apCircuitId})...bindMacTx(tx, now, {..., apCircuitId})... });"
+    },
+    {
+      "file": "packages/core/src/services/reconcilePayments.ts",
+      "lines": "PaymentAttribution interface + recordPaymentTransaction row",
+      "description": "apCircuitId REQUIRED on PaymentAttribution (compile-time forcing function); written INSERT-only on the payment_transactions row (excluded from the onConflict `detail` update set, same as networkId — location fixed at checkout).",
+      "content": "interface PaymentAttribution { userId; packageId; networkId; apCircuitId: string | null }  row = { ..., apCircuitId: attribution.apCircuitId }  // not in `detail`"
+    },
+    {
+      "file": "packages/core/src/services/credits.ts + points.ts",
+      "lines": "spendCreditsTx / spendPointsTx",
+      "description": "Ledger spend rows now persist apCircuitId (?? null). Conditional-debit overspend guards and all existing money math UNCHANGED.",
+      "content": "tx.insert(creditLedger).values({ ..., amount: -input.amount, type: LEDGER_TYPE.spend, apCircuitId: input.apCircuitId ?? null });"
+    },
+    {
+      "file": "apps/admin/src/lib/server/queries.ts",
+      "lines": "apLabel/revenueByAp (654-682) UNCHANGED; listTransactions + new listRecentGrantAttribution",
+      "description": "AC8: existing revenueByAp/apLabel Maya breakdown NOT edited. New durable label resolution batched (one lookup per unique circuit-id per page, no N+1).",
+      "content": "resolveApCircuitLabels(db, rows.map(r => r.apCircuitId)) → apCircuitLabelOf(circuitId, labels)"
+    }
+  ]
+}

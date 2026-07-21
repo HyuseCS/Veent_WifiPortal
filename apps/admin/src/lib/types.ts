@@ -252,6 +252,25 @@ export interface TransactionRow {
 	packageName: string | null;
 	/** AP the payment came from — name, "AP #<id>" if pruned, or null if unattributed. */
 	apName: string | null;
+	/** Durable AP attribution label from the stored circuit-id string: current friendly name,
+	 * raw circuit-id if the AP was pruned/renamed away, or "Unattributed". Survives AP prune where
+	 * `apName` (network_id reference) degrades to "AP #<id>". */
+	apCircuitLabel: string;
+	/** ISO timestamp. */
+	createdAt: string;
+}
+
+/** One credit/points/free-time grant record with durable AP attribution, for the admin Finance
+ * grant-attribution section (AC7 — the non-Maya purchase/grant paths). */
+export interface GrantAttributionRow {
+	/** 'credit' | 'points' | 'free-time' — which grant path this record came from. */
+	kind: 'credit' | 'points' | 'free-time';
+	/** Buyer/guest display name (or '—'). */
+	who: string;
+	/** Human-readable detail: spend amount for credit/points, or 'Free time' for free grants. */
+	detail: string;
+	/** Durable AP attribution label (friendly name / raw circuit-id / "Unattributed"). */
+	apCircuitLabel: string;
 	/** ISO timestamp. */
 	createdAt: string;
 }

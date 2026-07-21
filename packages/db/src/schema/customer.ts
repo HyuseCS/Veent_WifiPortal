@@ -121,6 +121,13 @@ export const creditLedger = pgTable(
 		// (business rule #3). NULL for non-webhook entries (Postgres allows many
 		// NULLs under a unique constraint), so manual/promo credits don't collide.
 		externalTransactionId: text('external_transaction_id').unique(),
+		// Durable AP attribution: the raw DHCP circuit-id STRING the buyer was on at spend time
+		// (not a network_health.id reference), resolved best-effort BEFORE the spend transaction
+		// opens. Immutable fact — survives the AP being renamed or pruned from network_health.
+		// Null = AP was unresolvable at spend time ("Unattributed"). Read-time label resolution
+		// (resolveApCircuitLabel) joins network_health.ap_circuit_id for a current friendly name,
+		// else shows this raw string. No FK/index (attribution is read rarely).
+		apCircuitId: text('ap_circuit_id'),
 		createdAt: timestamp('created_at').notNull().defaultNow()
 	},
 	(t) => [index('credit_ledger_user_id_idx').on(t.userId)]
@@ -148,6 +155,9 @@ export const pointsLedger = pgTable(
 		// Unique so a retried payment webhook can't earn points twice (mirrors credit_ledger).
 		// NULL for spends (Postgres allows many NULLs under a unique constraint).
 		externalTransactionId: text('external_transaction_id').unique(),
+		// Durable AP attribution for a points spend — same rationale/shape as credit_ledger.
+		// Raw circuit-id string, resolved best-effort pre-transaction; null = "Unattributed".
+		apCircuitId: text('ap_circuit_id'),
 		createdAt: timestamp('created_at').notNull().defaultNow()
 	},
 	(t) => [index('points_ledger_user_id_idx').on(t.userId)]
@@ -187,6 +197,12 @@ export const paymentTransactions = pgTable(
 		// null/cascade settled payment history on prune). Null = location was unresolvable
 		// (foreign webhook with no checkout, wired/dev device); reported as "Unattributed".
 		networkId: integer('network_id'),
+		// Durable AP attribution: the raw circuit-id STRING copied from the matching
+		// payment_checkouts row at webhook/reconcile time (alongside network_id). Unlike
+		// network_id (a network_health.id reference that renders "AP #<id>" once the AP is
+		// pruned), this string survives rename/prune. INSERT-only, never in an onConflict
+		// update set. Null = unresolvable at checkout ("Unattributed").
+		apCircuitId: text('ap_circuit_id'),
 		createdAt: timestamp('created_at').notNull().defaultNow()
 	},
 	(t) => [
@@ -236,6 +252,10 @@ export const paymentCheckouts = pgTable(
 		// payment is attributed to a location. Loose link (no FK) for the same reason as
 		// network_sessions.network_id. Null when no AP could be resolved at checkout.
 		networkId: integer('network_id'),
+		// Durable AP attribution: raw circuit-id STRING resolved at checkout alongside network_id
+		// (same 5-fallback chain), copied onto payment_transactions at webhook/reconcile time.
+		// Survives AP rename/prune where network_id degrades. Null = unresolvable at checkout.
+		apCircuitId: text('ap_circuit_id'),
 		// Throttle for the on-return poll so a fast-refreshing page can't hammer the gateway.
 		lastPolledAt: timestamp('last_polled_at'),
 		createdAt: timestamp('created_at').notNull().defaultNow(),
@@ -263,6 +283,11 @@ export const networkSessions = pgTable(
 		// reconciled/pruned by the health sweep, so a hard reference would fight it.
 		// Null when the controller couldn't resolve an AP (stub/dev, wired client).
 		networkId: integer('network_id'),
+		// Durable AP attribution: raw circuit-id STRING resolved best-effort BEFORE the grant
+		// transaction opens and threaded into bindMacTx. Carries AP identity for free-time grants
+		// (which write no ledger row) and for credit/points tier buys. Survives AP rename/prune
+		// where network_id degrades. Null = unresolvable at grant time ("Unattributed").
+		apCircuitId: text('ap_circuit_id'),
 		status: text('status').notNull(),
 		startedAt: timestamp('started_at').notNull().defaultNow(),
 		// Device-binding registry: one active row per (user, MAC) = "this device is
