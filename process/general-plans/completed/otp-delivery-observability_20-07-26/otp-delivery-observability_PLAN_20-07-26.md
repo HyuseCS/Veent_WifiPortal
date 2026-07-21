@@ -35,12 +35,17 @@ see prompt context. This PLAN operationalizes those decisions; it does not re-op
 
 ## Goals
 
-1. Every OTP send attempt (all 4 providers) writes an append-only row recording provider,
-   provider message id (nullable), masked phone, and delivery status.
+1. Each successful gateway-accepted OTP send (all 4 providers) writes an append-only row recording
+   provider, provider message id (nullable), masked phone, and delivery status. A send that throws
+   before gateway acceptance is not logged (the row is written only after the gateway accepts).
 2. A 5-minute sweep cron checks Cast's DLR status endpoint for pending Cast rows and classifies
    them as `rejected` (alert), still-pending (no action), or `unknown` (30-min give-up, no alert).
-3. A confirmed-rejected send fires exactly one stable-fingerprint Sentry `captureHandled` warning
-   per message — never per-message-id-unique, so a full outage groups into one rising-count issue.
+3. A confirmed-rejected send fires one stable-fingerprint Sentry `captureHandled` warning per
+   message — never per-message-id-unique, so a full outage groups into one rising-count issue.
+   (Once-per-row holds under non-overlapping sweep runs: the alert fires on seeing `REJECTD` and the
+   status update does not atomically gate it, so two overlapping sweep runs could double-alert a row.
+   Acceptable because a single external scheduler triggers the sweep on a 5-minute cadence and each
+   run is fast — no lock added by design.)
 4. Rows are pruned unconditionally after 48h regardless of status, in the same sweep run.
 5. `sendOtp`'s provider dispatch throws on an unrecognized non-empty `SMS_PROVIDER` instead of
    silently falling through to Cast; unset/empty still defaults to Cast (unchanged).
@@ -158,7 +163,7 @@ depends on the other. Phase 4 is fully independent. No phase depends on a later 
 | Row reaches 30 minutes from `created_at` with no `REJECTD`/`undelivered` classification | Set `status = 'unknown'`, stop sweeping this row (excluded by the `created_at > now() - 30min` sweep filter — a row past cutoff is naturally excluded, no separate "stop" flag needed), fire NO alert |
 | Sweep endpoint itself throws (e.g. malformed row, unexpected schema drift) | `Sentry.withMonitor` never-throw pattern (copied from `apps/customer/src/routes/api/payments/reconcile/+server.ts`) — the monitor check-in still completes; error still bubbles to `handleError` per the existing cron pattern, never silently swallowed at the route level |
 | Prune step (48h delete) runs after a sweep-loop error | Prune is a separate, always-executed step — wrap sweep-loop body in its own try/catch that logs+continues per-row, so one bad row doesn't abort the whole sweep, and the prune DELETE runs unconditionally after the loop regardless of per-row outcomes |
-| `SMS_PROVIDER` set to an unrecognized non-empty value (Q5) | `sendOtp` throws synchronously before any network call — was previously silently routed to Cast |
+| `SMS_PROVIDER` set to an unrecognized non-empty value (Q5) | `sendOtp` rejects before any network call — it is `async`, so the `throw` surfaces as a rejected promise; was previously silently routed to Cast |
 | `SMS_PROVIDER` unset or empty-after-trim | Unchanged — defaults to `cast` (standing team decision, do not regress) |
 
 ## Decisions Locked (from INNOVATE — do not re-open)
@@ -405,9 +410,11 @@ native runner silently no-ops `vi.setSystemTime`, which several of these tests n
 
 ## Resume and Execution Handoff
 
-1. **Selected plan file path:** `process/general-plans/active/otp-delivery-observability_20-07-26/otp-delivery-observability_PLAN_20-07-26.md`
-2. **Last completed phase or step:** None — plan just written, no EXECUTE has started.
-3. **Validate-contract status:** pending — VALIDATE has not yet run.
+1. **Selected plan file path:** `process/general-plans/completed/otp-delivery-observability_20-07-26/otp-delivery-observability_PLAN_20-07-26.md`
+2. **Last completed phase or step:** SHIPPED — all phases executed; plan archived 20-07-26.
+3. **Validate-contract status:** PASS (completed before EXECUTE); see the closeout report in this folder.
+
+> Historical handoff below is retained for provenance only — this plan is complete; the resume steps no longer apply.
 4. **Supporting context files loaded:** `process/context/all-context.md`,
    `process/context/database/all-database.md`, `process/context/tests/all-tests.md`,
    `process/context/planning/all-planning.md`, `process/development-protocols/implementation-standards.md`,

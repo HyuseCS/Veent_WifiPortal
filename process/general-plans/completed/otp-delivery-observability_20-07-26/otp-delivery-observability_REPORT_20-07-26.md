@@ -3,7 +3,7 @@ phase: otp-delivery-observability
 date: 2026-07-20
 status: COMPLETE
 feature: general-plans
-plan: process/general-plans/active/otp-delivery-observability_20-07-26/otp-delivery-observability_PLAN_20-07-26.md
+plan: process/general-plans/completed/otp-delivery-observability_20-07-26/otp-delivery-observability_PLAN_20-07-26.md
 ---
 
 # OTP Delivery Observability — EXECUTE Report
@@ -96,7 +96,11 @@ Carried forward from the contract's "what this does not prove", unchanged by thi
 - Real Cast DLR response-shape stability is unproven (mocked `fetch`).
 - The committed `0048_*.sql` is not proven to replay via `db:migrate` on a clean chain — pre-existing
   repo-wide push-managed-dev-DB limitation.
-- Concurrent/overlapping sweep invocations are untested (low risk: append-only, no unique constraint).
+- Concurrent/overlapping sweep invocations are untested. Row integrity is safe (append-only, no
+  unique constraint), but the alert path has no atomic claim: it fires on seeing `REJECTD` and the
+  `status = 'rejected'` update does not gate it, so two genuinely-overlapping runs could double-alert
+  one row. Accepted as a known gap — a single external scheduler on the 5-min cadence keeps runs from
+  overlapping in prod; no lock was added.
 - Sentry's real server-side grouping is not proven — only that the `Error.message` is byte-identical.
 
 New, minor: the sweep's 30-minute window is enforced in the SQL predicate, so the unit test asserts
@@ -105,7 +109,7 @@ be needed to prove the window boundary in SQL.
 
 ## Closeout Packet
 
-- **Plan:** `process/general-plans/active/otp-delivery-observability_20-07-26/otp-delivery-observability_PLAN_20-07-26.md`
+- **Plan:** `process/general-plans/completed/otp-delivery-observability_20-07-26/otp-delivery-observability_PLAN_20-07-26.md`
 - **Finished:** all 4 phases; all 9 acceptance criteria have a passing gate.
 - **Verified:** 162 automated assertions green (117 customer suite incl. the 45 new), typecheck clean,
   migration applied and inspected, E1 guard empirically proven non-vacuous.

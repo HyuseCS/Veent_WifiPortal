@@ -15,7 +15,8 @@ metadata:
 Fix options 1 (poll DLR), 2 (persist message_id for reconciliation), and 3 (alert on aggregate
 failure) are **shipped for Cast** — see
 `process/general-plans/completed/otp-delivery-observability_20-07-26/otp-delivery-observability_PLAN_20-07-26.md`.
-A new `customer_otp_delivery_log` table records every send attempt (all 4 providers); a 5-minute
+A new `customer_otp_delivery_log` table records each successful gateway-accepted OTP send (all 4
+providers write a row only after the gateway accepts; a send that throws before acceptance is not logged); a 5-minute
 cron sweep (`apps/customer/src/routes/api/otp/sweep-delivery/`) checks Cast's DLR endpoint and
 fires a stable-fingerprint Sentry alert on confirmed carrier rejection.
 

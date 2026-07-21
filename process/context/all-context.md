@@ -196,8 +196,11 @@ Notes:
   (`bun run dev:cron`) hitting those endpoints. GOTCHA: `dev-cron.ts` has a single global 1-minute
   interval — `otp/sweep-delivery` is designed for a 5-minute prod cadence
   (`Sentry.withMonitor(..., { schedule: { value: '*/5 * * * *' } })`) but dev fires it every minute;
-  harmless (idempotent, wall-clock windows) but the real 5-minute schedule must be set on the
-  external prod scheduler, not inferred from dev-cron's interval.
+  harmless under non-overlapping runs (wall-clock windows; the 48h prune is idempotent) but the real
+  5-minute schedule must be set on the external prod scheduler, not inferred from dev-cron's interval.
+  Note: the sweep's reject-alert path has no atomic claim, so genuinely concurrent/overlapping runs
+  could double-alert one row — relied on being avoided by the single external prod scheduler, not by a
+  lock (see `otp-delivery-observability_20-07-26` REPORT known-gaps).
 - No `svelte.config.js`/`.mjs` in any app — all SvelteKit config lives inline in each app's
   `vite.config.ts`, inside the `sveltekit({...})` plugin options.
 - Entry points: `apps/{admin,customer,locator}/src/hooks.server.ts` + `hooks.client.ts` (Sentry

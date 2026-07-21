@@ -14,9 +14,9 @@ metadata:
 
 The **silent-fallthrough half** of this note is fixed — see
 `process/general-plans/completed/otp-delivery-observability_20-07-26/otp-delivery-observability_PLAN_20-07-26.md`
-Phase 4. `sendOtp`'s dispatch (`apps/customer/src/lib/server/otp.ts`) now throws synchronously on
-any unrecognized non-empty `SMS_PROVIDER` value instead of silently falling through to Cast.
-Unset/blank still defaults to `cast` — unchanged, by design.
+Phase 4. `sendOtp`'s dispatch (`apps/customer/src/lib/server/otp.ts`) now rejects (it is `async`, so
+the `throw` surfaces as a rejected promise) on any unrecognized non-empty `SMS_PROVIDER` value
+instead of silently falling through to Cast. Unset/blank still defaults to `cast` — unchanged, by design.
 
 **Fix options 1 and 2 were deliberately NOT done, on purpose, not by oversight:**
 - **Option 1** (revert/change the coded default away from Cast) — not done. `SMS_PROVIDER ?? 'cast'`
