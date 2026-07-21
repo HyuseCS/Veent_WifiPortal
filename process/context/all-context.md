@@ -1,6 +1,6 @@
 # veent-wifiportal - All Context
 
-Last updated: 2026-07-20 (added OTP delivery-observability table/endpoint, migration count 49, cron endpoint list; IMS e2e spec modernization closed — 12 admin e2e specs/23 tests green, storageState-merge gotcha documented in tests/all-tests.md)
+Last updated: 2026-07-21 (AP false-DOWN outage guard closed — added `docs/mikrotik/ap-liveness-bypass.md` runbook, static transaction-wrapping tripwire test; migration count unchanged at 49, no schema touched)
 
 This file is the root context entrypoint for the repo.
 
@@ -310,12 +310,26 @@ easy to find).
 
 ### MikroTik / RouterOS
 - `node-routeros` dependency (`packages/core`)
-- `docs/mikrotik/*.md` (7 files) — RouterOS templating/config reference
+- `docs/mikrotik/*.md` (7 files) — RouterOS templating/config reference, including
+  `ap-liveness-bypass.md` (added 21-07-26) — every new physical AP MAC must be
+  `type=bypassed` in `/ip/hotspot/ip-binding` or the hotspot's `hs-unauth-to` rule rejects
+  the router's ICMP to it and the admin dashboard reads a healthy AP as permanently DOWN
+  (false-DOWN → risks freezing paid guests via outage auto-pausing). This is currently THE
+  primary mitigation for that bug.
 - `packages/core` probe/setup scripts
 - `apps/admin/scripts/setup-router.ts`
 - `apps/admin/src/routes/api/network/`
 - Gotcha: RouterOS templating, walled-garden constraints, OS captive-probe endpoints, and CNA
   mini-browser behavior are easy to break during cleanups — see Gotchas below.
+- Guard: `packages/core/src/services/networkHealth.transaction-tripwire.spec.ts` (static
+  source-text test, added 21-07-26) fails if either admin call site of `refreshNetworkHealth`
+  (`apps/admin/src/routes/(app)/networks/+page.server.ts`,
+  `apps/admin/src/routes/api/network/health/refresh/+server.ts`) gets wrapped in
+  `db.transaction(` — that would break the AP name-collision standalone-statement retry (see
+  `network_health` note below). A code-level "never-freeze-on-never-up-AP" guard was found
+  impossible as designed (`online_since`/`offline_since` are current-state stamps, not
+  history — see `process/general-plans/backlog/ap-outage-false-down-code-safeguard_NOTE_21-07-26.md`);
+  deferred, runbook is the shipped mitigation.
 
 ### Maya payments
 - `packages/core/src/integrations/payments/maya.ts` — hand-rolled HTTP client, no SDK

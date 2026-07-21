@@ -37,8 +37,12 @@ One of:
 1. Add a runtime guard: if `db` passed into `refreshNetworkHealth`/`refreshAccessPoints` is
    already inside a transaction context, throw or warn (requires a way to detect "currently in a
    tx" with the current drizzle+postgres.js setup — worth a short feasibility check first).
-2. Add a lint/grep-based CI check (once CI exists — repo currently has none, see
-   `all-context.md` §Team and Workflow) asserting no `db.transaction` wraps either call site.
+2. **IMPLEMENTED (21-07-26)** as a vitest source-text assertion rather than a CI lint check
+   (repo still has no CI). The spec
+   `packages/core/src/services/networkHealth.transaction-tripwire.spec.ts` reads both call sites
+   and asserts each contains `refreshNetworkHealth(` (non-vacuous positive anchor) AND does NOT
+   contain `db.transaction(`. It runs in the normal `vitest run` suite, so a wrapper regression
+   fails the test on the next local/pre-commit run. Convert to a CI lint check too once CI exists.
 3. At minimum, strengthen the JSDoc on both call sites (not just the service function) so an
    editor touching `+page.server.ts` or `health/refresh/+server.ts` sees the constraint before
    adding a transaction wrapper.
@@ -48,6 +52,7 @@ lost; do not action reflexively.
 
 ## Pointers
 
+- `packages/core/src/services/networkHealth.transaction-tripwire.spec.ts` — the static source-text guard (option 2, IMPLEMENTED 21-07-26)
 - `packages/core/src/services/networkHealth.ts` — `isNameUniqueViolation`, `upsertApRow` JSDoc
 - `apps/admin/src/routes/(app)/networks/+page.server.ts:55`
 - `apps/admin/src/routes/api/network/health/refresh/+server.ts:29`
