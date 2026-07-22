@@ -1,6 +1,19 @@
 # veent-wifiportal - All Context
 
-Last updated: 2026-07-10
+Last updated: 2026-07-22 (manager-board-lazy-events closed and archived to
+`process/features/incident-management/completed/manager-board-lazy-events_22-07-26/` — admin's
+manager `/issues` board no longer eager-loads every issue's full event history on page load; it
+now fetches one issue's timeline lazily on row-expand via the existing `/issues/[id]/detail`
+endpoint (mirrors `IssueDetailModal.svelte`'s fetch pattern), with per-id caching and a
+graceful-failure UI state. `listIssueEventsByIssue` (the eager batch query) removed as a now-dead
+export from `apps/admin/src/lib/server/issues.ts`; `listIssueEvents` (backs the detail endpoint) is
+untouched. Admin-only, no schema/migration/endpoint-contract change. User-verified in-browser
+22-07-26. This closes L3 Option 2 of `manager-board-pagination` backlog note — Option 1 (row
+pagination) remains open/deferred.)
+
+Last updated: 2026-07-22 (unified-transaction-history closed and archived to `process/general-plans/completed/unified-transaction-history_21-07-26/` — admin Finance's `/finance/transactions` page now renders ONE merged, deduped, chronological activity list via a new `listUnifiedTransactions` query, replacing the old split of a Maya-only `listTransactions` table + a separate grant-attribution `<details>` section; `listRecentGrantAttribution`/`GrantAttributionRow` retired in favor of `listUnifiedTransactions`/`UnifiedTransactionRow`; CSV export gained an opt-in `?scope=unified|maya` toggle (default unchanged, byte-identical); KPI/revenue functions untouched (AC7); user browser-verified 22-07-26. Deviation: added `@electric-sql/pglite` as an `apps/admin` test-only devDependency (not previously used by admin) for a real-SQL AC3 anti-join negative-control test — user-approved. `TransactionRow` still exists (kept, not replaced, per plan deviation) because `listTransactions`/CSV `scope=maya` still use it. Migration count unchanged at 49, no schema touched.)
+
+Last updated: 2026-07-21 (per-ap-visibility Phase A closed and archived to `process/general-plans/completed/per-ap-visibility_16-07-26/` — feature shipped; per-AP guest throughput (G14) RESOLVED as not measurable by design — paid guests are granted via `ip-binding type=bypassed`, which skips hotspot byte accounting entirely, so the honest `'—'` Mbps column is correct and permanent (not a firmware gap); the live down-AP negative case (G16) remains an accepted prod-observation known-gap, tracked in general-plans backlog; migration count unchanged at 49, no schema touched)
 
 This file is the root context entrypoint for the repo.
 
@@ -181,7 +194,7 @@ veent_wifiportal/
 │   └── locator/          -- veent-locator: public hotspot map, no auth (src/, static/, playwright.config.ts)
 ├── packages/
 │   ├── core/              -- @veent/core: business services + integration providers (src/, scripts/)
-│   └── db/                -- @veent/db: sole Drizzle/Postgres schema source (src/, drizzle/ ← 47 migrations)
+│   └── db/                -- @veent/db: sole Drizzle/Postgres schema source (src/, drizzle/ ← 49 migrations)
 ├── docs/                   -- assets/, design/, dev/, mikrotik/, problems/, runbooks/, use-cases/
 ├── scripts/                 -- dev-cron.ts, idempotent-migrations.ts, setup-prod.ts, ...
 ├── process/                 -- this context/plan/development-protocol system
@@ -191,9 +204,16 @@ veent_wifiportal/
 Notes:
 - No `apps/cron` package. Cron = (a) HTTP endpoints hit by an EXTERNAL scheduler in prod
   (`apps/customer/src/routes/api/network/revoke`, `apps/customer/src/routes/api/payments/reconcile`,
-  `apps/admin/src/routes/api/network/health/refresh`), each guarded by an `x-cron-secret` header;
-  (b) `scripts/dev-cron.ts` at repo root — dev-only poller (`bun run dev:cron`) hitting those
-  endpoints once/minute.
+  `apps/customer/src/routes/api/otp/sweep-delivery`, `apps/admin/src/routes/api/network/health/refresh`),
+  each guarded by an `x-cron-secret` header; (b) `scripts/dev-cron.ts` at repo root — dev-only poller
+  (`bun run dev:cron`) hitting those endpoints. GOTCHA: `dev-cron.ts` has a single global 1-minute
+  interval — `otp/sweep-delivery` is designed for a 5-minute prod cadence
+  (`Sentry.withMonitor(..., { schedule: { value: '*/5 * * * *' } })`) but dev fires it every minute;
+  harmless under non-overlapping runs (wall-clock windows; the 48h prune is idempotent) but the real
+  5-minute schedule must be set on the external prod scheduler, not inferred from dev-cron's interval.
+  Note: the sweep's reject-alert path has no atomic claim, so genuinely concurrent/overlapping runs
+  could double-alert one row — relied on being avoided by the single external prod scheduler, not by a
+  lock (see `otp-delivery-observability_20-07-26` REPORT known-gaps).
 - No `svelte.config.js`/`.mjs` in any app — all SvelteKit config lives inline in each app's
   `vite.config.ts`, inside the `sveltekit({...})` plugin options.
 - Entry points: `apps/{admin,customer,locator}/src/hooks.server.ts` + `hooks.client.ts` (Sentry
@@ -218,7 +238,9 @@ Exact resolved versions from `bun.lock`:
   `uqr` 0.1.3 (admin 2FA QR)
 - **Testing:** `vitest` 4.1.9; `@vitest/browser-playwright` ^4.1.8; `vitest-browser-svelte` ^2.1.1;
   `@playwright/test` 1.61.0; `svelte-check` ^4.6.0; `typescript` ^6.0.3;
-  `@electric-sql/pglite` ^0.2.17 (in-memory Postgres for packages/core tests)
+  `@electric-sql/pglite` ^0.2.17 (in-memory Postgres for packages/core tests; also added as an
+  `apps/admin` test-only devDependency 21-07-26 for the unified-transaction-history AC3 anti-join
+  negative-control test)
 - **Lint/format:** `eslint` ^10.4.1 (flat config) + `eslint-plugin-svelte` ^3.19.0; `prettier` ^3.8.3
   + svelte + tailwindcss plugins
 - **Package manager:** bun (workspaces: `apps/*`, `packages/*`)
@@ -238,6 +260,19 @@ navigation; `try/catch` around external calls (SMS, Maya) so downstream outage d
 `recordEvent(tx, ...)` appends an `admin_issue_event` row in the SAME transaction — never a
 fire-and-forget log write.
 
+**Unique-constraint-violation discriminator (drizzle cause-chain walk):** drizzle-orm wraps driver
+errors in `DrizzleQueryError`, so a Postgres SQLSTATE (e.g. `23505` unique_violation) lives on the
+bounded `.cause` chain, not on the caught error directly — walk `err.code ?? err.cause?.code ??
+err.cause?.cause?.code` (2-3 levels deep is enough; never substring-match the error message). The
+constraint-name field differs by driver: postgres.js exposes `constraint_name`, PGlite/
+node-postgres-shaped errors expose `constraint` — check both. Canonical implementations:
+`packages/core/src/services/reconcilePayments.ts:104-112` (unit-tested in
+`apps/customer/src/lib/server/record-payment.spec.ts`) and
+`packages/core/src/services/networkHealth.ts` (`isNameUniqueViolation`, added 20-07-26 for the AP
+name-collision retry — see `process/general-plans/completed/ap-name-collision-retry_20-07-26/`).
+Reuse this pattern rather than re-deriving the cause-chain shape for any new unique-violation
+handling.
+
 **Rate limiting:** `packages/core/src/services/rateLimit.ts` → `consumeRateLimit(db, {key, max,
 windowMs})`, a Postgres sliding-window implementation that is race-safe (`INSERT ... ON CONFLICT`
 + `SELECT FOR UPDATE` in a transaction). Per-app thin wrappers:
@@ -251,11 +286,11 @@ real provider (mikrotik/maya/resend) plus a `stub.ts` fallback, selected by env.
 into each app's Sentry `beforeSend`.
 
 **Migrations:** `packages/db/drizzle.config.ts` is the single source of truth; schema lives in
-`packages/db/src/schema/index.ts`; 47 `.sql` migrations in `packages/db/drizzle/` (added
-`0046_oval_lorna_dane.sql` 2026-07-10, IMS audit remediation H2 — relaxes
-`admin_issue_event_type_ck` to add `note_edited`). Root scripts
-proxy `db:push/generate/migrate/studio/seed` → `bun run --filter @veent/db`. GOTCHA: dev DB is
-push-managed — see Gotchas below.
+`packages/db/src/schema/index.ts`; 49 `.sql` migrations in `packages/db/drizzle/` (newest:
+`0048_lying_firedrake.sql` 2026-07-20, adds `customer_otp_delivery_log` for OTP delivery
+observability — applied via direct `psql` DDL, not `db:push`, per the push-managed-dev-DB gotcha).
+Root scripts proxy `db:push/generate/migrate/studio/seed` → `bun run --filter @veent/db`. GOTCHA:
+dev DB is push-managed — see Gotchas below.
 
 **Naming / route groups:** admin's `(app)/` route group wraps authed routes (content, dashboard,
 finance, issues, map, networks, profile, sentry, staff, users); public/pre-auth routes sit outside
@@ -278,7 +313,9 @@ auth.ts` (cookiePrefix `veent-portal`) vs `apps/admin/src/lib/server/auth.ts` (c
 `radius-admin`); each reads its own `BETTER_AUTH_SECRET`. Schema via a shared `_auth-factory.ts`
 builder → `auth-admin.ts` / `auth-customer.ts` in packages/db. No direct customer↔admin imports —
 sharing happens only through `@veent/db` (single Postgres, `customer_*`/`admin_*` tables + shared
-`rate_limits`, `network_health`) and `@veent/core` services (accounts, credits, points, sessions,
+`rate_limits`, `network_health`, plus `customer_otp_delivery_log` — an append-only, no-unique-
+constraint OTP send-attempt log, provider-agnostic columns but only Cast is swept — see "SMS / OTP
+delivery observability" below) and `@veent/core` services (accounts, credits, points, sessions,
 staff, adminAccess, checkoutAccess, outage, reconcilePayments, rateLimit, settings, networkHealth,
 freeTime). Admin also has network-level isolation hints (`ADMIN_WG_HOSTS`/`ADMIN_WG_IPS` —
 WireGuard).
@@ -291,12 +328,26 @@ easy to find).
 
 ### MikroTik / RouterOS
 - `node-routeros` dependency (`packages/core`)
-- `docs/mikrotik/*.md` (7 files) — RouterOS templating/config reference
+- `docs/mikrotik/*.md` (7 files) — RouterOS templating/config reference, including
+  `ap-liveness-bypass.md` (added 21-07-26) — every new physical AP MAC must be
+  `type=bypassed` in `/ip/hotspot/ip-binding` or the hotspot's `hs-unauth-to` rule rejects
+  the router's ICMP to it and the admin dashboard reads a healthy AP as permanently DOWN
+  (false-DOWN → risks freezing paid guests via outage auto-pausing). This is currently THE
+  primary mitigation for that bug.
 - `packages/core` probe/setup scripts
 - `apps/admin/scripts/setup-router.ts`
 - `apps/admin/src/routes/api/network/`
 - Gotcha: RouterOS templating, walled-garden constraints, OS captive-probe endpoints, and CNA
   mini-browser behavior are easy to break during cleanups — see Gotchas below.
+- Guard: `packages/core/src/services/networkHealth.transaction-tripwire.spec.ts` (static
+  source-text test, added 21-07-26) fails if either admin call site of `refreshNetworkHealth`
+  (`apps/admin/src/routes/(app)/networks/+page.server.ts`,
+  `apps/admin/src/routes/api/network/health/refresh/+server.ts`) gets wrapped in
+  `db.transaction(` — that would break the AP name-collision standalone-statement retry (see
+  `network_health` note below). A code-level "never-freeze-on-never-up-AP" guard was found
+  impossible as designed (`online_since`/`offline_since` are current-state stamps, not
+  history — see `process/general-plans/backlog/ap-outage-false-down-code-safeguard_NOTE_21-07-26.md`);
+  deferred, runbook is the shipped mitigation.
 
 ### Maya payments
 - `packages/core/src/integrations/payments/maya.ts` — hand-rolled HTTP client, no SDK
@@ -312,6 +363,28 @@ easy to find).
 - Admin routes: `(app)/issues/**`, `(app)/sentry/**`
 - PII scrubbing: shared `scrubEvent` redactor wired into each app's Sentry `beforeSend` (drops
   secrets, masks emails/MACs/phones)
+- Error classification: `beforeSend` in `packages/core/src/observability.ts` downgrades
+  `RouterUnreachableError` (thrown by both `withTimeout()` helpers in `mikrotik.ts`/`adminAccess.ts`
+  on router-call timeout) to `event.level = 'warning'` instead of `error` — the cron
+  `Sentry.withMonitor('customer-network-revoke')` check-in already alerts on the failure, so this
+  is noise reduction, not silence; `scrubEvent` still runs on every branch.
+
+### SMS / OTP delivery observability
+- `customer_otp_delivery_log` (`packages/db/src/schema/customer.ts`, migration `0048`) — append-only
+  OTP send-attempt log, no unique constraint; every provider writes a row on synchronous gateway
+  accept (`apps/customer/src/lib/server/otp.ts`, `logDeliveryAttempt`, insert **must** be awaited
+  inside its own try/catch — an un-awaited insert's rejection escapes as an unhandled promise
+  rejection on the guest-login path, not just a missed log line).
+- `apps/customer/src/routes/api/otp/sweep-delivery/+server.ts` (cron-only, `requireCron()`) — the
+  ONLY provider with real DLR observability is **Cast** (`GET /api/v1/sms/status/{message_id}`);
+  `itexmo`/`unisms`/`smsgate` rows are written (satisfy the `provider` discriminator) but never
+  swept — unobservable by design, not a gap in this implementation. Alerts (`captureHandled`,
+  constant-message Sentry fingerprint) fire only on `dlr_status === 'REJECTD'` / `status ===
+  'undelivered'` within a 30-min window; unresolved rows age out to `unknown` with no alert. Rows
+  are pruned unconditionally after 48h every sweep run, regardless of sweep-loop outcome.
+- See `process/general-plans/completed/otp-delivery-observability_20-07-26/` for the full plan;
+  Cast DLR response-shape stability past the one observed `REJECTD` shape remains unproven (blocked
+  on Cast activating a real sender ID for live traffic).
 
 ### Resend email
 - `resend` dependency in `packages/core`
@@ -370,9 +443,21 @@ Approved feature folders under `process/features/`:
   `apps/admin/src/lib/server/{issues.ts,issueNotify.ts,notifications.ts,sentry/*}`,
   `lib/server/emails/issue-assigned.ts`,
   `packages/db/src/schema/{admin-issue.ts,admin-issue-event.ts}`.
-  **6 non-blocking backlog items filed** under `process/features/incident-management/backlog/`
-  (Sentry host pinning, sentryIssueId provenance, manager-board pagination, IMS e2e spec
-  modernization, repo-wide lint prettier-config drift, M2 secret rotation).
+  Follow-up session (20-07-26) closed 3 of those items: sentryIssueId provenance verification
+  (M4d, `completed/sentry-issueid-provenance_20-07-26/`) — `?/track` now round-trips the Sentry API
+  before persisting a "Tracked from Sentry" incident, fail-closed on lookup failure; also fixed a
+  standalone hygiene finding where `apps/admin/e2e` was leaking live Sentry credentials (see
+  `process/context/tests/all-tests.md`). Sentry permalink host pinning
+  (`completed/sentry-permalink-host-pinning_20-07-26/`) — `httpsUrl()` now pins the permalink host
+  to `sentry.io`/regional subdomains. Repo-wide lint prettier-config drift — partially closed (the
+  crashing bad path is fixed; 297 files of pre-existing style drift remain, tracked in
+  `backlog/repo-wide-lint-prettier-drift_NOTE_10-07-26.md`). IMS e2e spec modernization closed
+  20-07-26 (`completed/ims-e2e-spec-modernization_20-07-26/`) — all 12 admin e2e specs (23 tests)
+  green; see `process/context/tests/all-tests.md`. **Currently open backlog:** manager-board
+  pagination and repo-wide lint drift (partial). (M2 secret rotation and the Maya/TEST_ENV coverage
+  question are both resolved and archived/superseded — see `completed/ims-audit-remediation_10-07-26/`;
+  the customer/locator e2e harness credential-tripwire gap that investigation surfaced is now tracked
+  in `process/context/tests/all-tests.md` §Known Gaps, not a standalone backlog note.)
 - **admin-staff-governance** (`process/features/admin-staff-governance/`) — staff accounts, roles,
   2FA/step-up auth, invite/promote/owner-change/wipe workflows. Mature, no imminent task; created
   now because governance work is a high-risk class (auth/identity, trust-boundary) and will need

@@ -72,10 +72,25 @@ export interface NetworkAp {
 	/** True when no fresh router sample has landed within the staleness ceiling — the metrics
 	 * shown are last-known, not live. Drives a "Stale" chip instead of a misleading "Healthy". */
 	stale: boolean;
+	/** ISO timestamp of the last router sample for this AP (null if never sampled). Feeds the
+	 * page-level "router unreachable, last synced X ago" banner. */
+	syncedAt: string | null;
 	uptime: string;
 	latency: string;
 	users: number;
+	/** Pre-formatted throughput ("47 Mbps"), or "—" when this AP's firmware doesn't expose per-AP
+	 * byte counters (honest AC4 degradation — the number is genuinely unavailable, not zero). */
 	throughput: string;
+	/** Physical-AP MAC for an auto-discovered AP row (Phase A), or null for interface/pinned rows. */
+	mac: string | null;
+	/** OLT Option 82 agent-circuit-id this AP is on; the group key. Null on non-AP rows. */
+	apCircuitId: string | null;
+	/** How this row's attribution was derived: 'circuit-id' marks an auto-discovered AP row; null =
+	 * an interface/pinned row (KPI throughput/latency sums are computed over these only). */
+	attributionSource: string | null;
+	/** Display names of the OTHER APs sharing this AP's circuit-id (a shared-ONU group the router
+	 * can't split). Empty for solo APs and non-AP rows. */
+	groupPeers: string[];
 	/** Operator-entered location for the public locator map; null until set. Raw
 	 * numeric strings (decimal degrees), kept as-is for round-tripping into the form. */
 	latitude: string | null;
@@ -237,8 +252,48 @@ export interface TransactionRow {
 	packageName: string | null;
 	/** AP the payment came from — name, "AP #<id>" if pruned, or null if unattributed. */
 	apName: string | null;
+	/** Durable AP attribution label from the stored circuit-id string: current friendly name,
+	 * raw circuit-id if the AP was pruned/renamed away, or "Unattributed". Survives AP prune where
+	 * `apName` (network_id reference) degrades to "AP #<id>". */
+	apCircuitLabel: string;
 	/** ISO timestamp. */
 	createdAt: string;
+}
+
+/**
+ * One row in the unified Finance activity list — the merged superset covering all customer-facing
+ * money/points/access events. Replaces the old split of a Maya payments table + grant-attribution
+ * section. Maya-only fields are populated ONLY on `kind: 'maya-payment'` rows and are explicitly
+ * `null` (rendered "n/a", never blank) on every other kind (AC8).
+ */
+export interface UnifiedTransactionRow {
+	/** Which activity path this row came from. */
+	kind: 'maya-payment' | 'credit-topup' | 'credit-spend' | 'points-spend' | 'free-time';
+	/** Stable per-row key for list rendering. */
+	id: string;
+	/** ISO timestamp. */
+	createdAt: string;
+	/** Buyer/guest display name, or '—' if none. */
+	who: string;
+	/** Durable AP attribution label (friendly name / raw circuit-id / "Unattributed"). */
+	apCircuitLabel: string;
+	/** Pre-formatted peso string for money kinds; null for points/free-time. */
+	amount: string | null;
+	/** Human-readable amount/points/description per kind. */
+	detail: string;
+	/** Points earned as a side effect of this Maya payment — a badge, ONLY set on maya-payment
+	 * rows that have a matching points-earn row. Never a standalone row. */
+	pointsEarned?: number;
+	// ── Maya-only fields — populated ONLY on kind: 'maya-payment', else explicitly null (AC8) ──
+	/** Raw gateway status (e.g. "PAYMENT_SUCCESS"). */
+	status: string | null;
+	/** Badge tone derived from status. */
+	statusTone: StatusTone | null;
+	receiptNo: string | null;
+	buyerEmail: string | null;
+	fundSourceType: string | null;
+	fundSourceMasked: string | null;
+	packageName: string | null;
 }
 
 /** A pending owner demotion/removal request awaiting unanimous owner approval.

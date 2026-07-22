@@ -7,7 +7,30 @@ import { getFreeTimeStatus } from './freeTime';
 import { getSessionLimits } from './settings';
 import { spendCreditsTx, type Tx } from './credits';
 import { spendPointsTx } from './points';
-import { resolveNetworkIdForMac } from './networkHealth';
+import {
+	resolveNetworkIdForMac,
+	resolveCircuitIdForMac,
+	resolveApNameSnapshot
+} from './networkHealth';
+
+/**
+ * Resolve the durable AP circuit-id STRING for a device MAC BEFORE a grant transaction opens, so a
+ * slow/failed AP lookup can never block, delay, or roll back the money-moving grant (AC6). Wrapped
+ * in try/catch as a mandatory second layer: resolveCircuitIdForMac already contracts never to
+ * throw, but the AC6 forced-failure test deliberately makes it reject — this wrapper guarantees the
+ * grant still commits (returning null attribution) even then. NEVER call this inside db.transaction.
+ */
+async function resolveApCircuitPreTx(
+	db: DB,
+	network: NetworkController,
+	macAddress: string
+): Promise<string | null> {
+	try {
+		return await resolveCircuitIdForMac(db, network, macAddress);
+	} catch {
+		return null;
+	}
+}
 
 function expiry(durationMinutes: number, now: Date) {
 	return new Date(now.getTime() + durationMinutes * 60 * 1000);
@@ -64,6 +87,14 @@ async function bindMacTx(
 		packageId?: number;
 		/** Per-account device cap (operator-tunable; fetched by the caller via getSessionLimits). */
 		maxDevices: number;
+		/** Durable AP circuit-id STRING resolved best-effort BEFORE this transaction opened. Stamped
+		 * on the network_sessions row so free-time grants (no ledger row) and tier buys carry AP
+		 * attribution. undefined = caller didn't resolve one (plain re-bind) → existing value kept;
+		 * null = resolved-but-unattributed → stored as null on a new row. */
+		apCircuitId?: string | null;
+		/** Frozen AP label (display_name ?? name) resolved best-effort BEFORE this transaction, stamped
+		 * alongside apCircuitId. Same undefined/null semantics as apCircuitId. */
+		apNameSnapshot?: string | null;
 	}
 ): Promise<BindPlan> {
 	// Canonicalize the MAC to uppercase at the DB-binding boundary so the same physical device
@@ -124,7 +155,11 @@ async function bindMacTx(
 			.set({
 				expiresAt: newWindow,
 				lastSeenAt: now,
-				...(opts.packageId !== undefined ? { packageId: opts.packageId } : {})
+				...(opts.packageId !== undefined ? { packageId: opts.packageId } : {}),
+				// Only overwrite the durable AP fact when the caller actually resolved one for THIS
+				// grant — a plain re-bind (undefined) must not wipe a previously-captured circuit-id.
+				...(opts.apCircuitId !== undefined ? { apCircuitId: opts.apCircuitId } : {}),
+				...(opts.apNameSnapshot !== undefined ? { apNameSnapshot: opts.apNameSnapshot } : {})
 			})
 			.where(eq(networkSessions.id, existing.id));
 		rowId = existing.id;
@@ -161,7 +196,10 @@ async function bindMacTx(
 				startedAt: now,
 				boundAt: now,
 				lastSeenAt: now,
-				expiresAt: newWindow
+				expiresAt: newWindow,
+				// Durable AP attribution captured pre-transaction; null when unattributed.
+				apCircuitId: opts.apCircuitId ?? null,
+				apNameSnapshot: opts.apNameSnapshot ?? null
 			})
 			.returning({ id: networkSessions.id });
 		rowId = row.id;
@@ -353,6 +391,11 @@ export async function startPaidAccessAndBindDevice(
 	const now = new Date();
 	const { maxDevicesPerAccount } = await getSessionLimits(db);
 	const usePoints = input.currency === 'points';
+	// Resolve the durable AP circuit-id BEFORE the transaction opens (AC6): best-effort, never
+	// blocks/fails the grant. Same pre-tx slot as now/maxDevicesPerAccount above. The frozen name
+	// label rides in the same slot, derived from the resolved circuit-id.
+	const apCircuitId = await resolveApCircuitPreTx(db, network, input.macAddress);
+	const apNameSnapshot = await resolveApNameSnapshot(db, apCircuitId);
 
 	const outcome = await db.transaction(async (tx) => {
 		// Debit the chosen wallet. Both are conditional (`balance >= amount`) so an insufficient
@@ -361,12 +404,16 @@ export async function startPaidAccessAndBindDevice(
 			? await spendPointsTx(tx, {
 					userId: input.userId,
 					amount: input.amount,
-					packageId: input.packageId
+					packageId: input.packageId,
+					apCircuitId,
+					apNameSnapshot
 				})
 			: await spendCreditsTx(tx, {
 					userId: input.userId,
 					amount: input.amount,
-					packageId: input.packageId
+					packageId: input.packageId,
+					apCircuitId,
+					apNameSnapshot
 				});
 		if (!spend.ok) return { ok: false as const, balance: spend.balance };
 
@@ -376,7 +423,9 @@ export async function startPaidAccessAndBindDevice(
 			addMinutes: input.durationMinutes,
 			requireLiveWindow: false,
 			packageId: input.packageId,
-			maxDevices: maxDevicesPerAccount
+			maxDevices: maxDevicesPerAccount,
+			apCircuitId,
+			apNameSnapshot
 		});
 		// requireLiveWindow is false, so plan is never `skip`.
 		if (plan.skip) throw new Error('startPaidAccessAndBindDevice: unexpected skip');
@@ -690,6 +739,11 @@ export async function startFreeAccessAndBindDevice(
 	const now = new Date();
 
 	const limits = await getSessionLimits(db);
+	// Resolve the durable AP circuit-id BEFORE the transaction opens (AC6): best-effort, never
+	// blocks/fails the free-time grant. Free time writes no ledger row, so this is the ONLY durable
+	// AP fact for the grant — stamped onto the network_sessions row via bindMacTx.
+	const apCircuitId = await resolveApCircuitPreTx(db, network, input.macAddress);
+	const apNameSnapshot = await resolveApNameSnapshot(db, apCircuitId);
 	const outcome = await db.transaction(async (tx) => {
 		// Atomic cooldown claim: the conditional WHERE is the race guard. A plain
 		// SELECT-then-UPDATE lets parallel free-time requests all read the same stale
@@ -732,7 +786,9 @@ export async function startFreeAccessAndBindDevice(
 			macAddress: input.macAddress,
 			addMinutes: limits.freeTimeMinutes,
 			requireLiveWindow: false,
-			maxDevices: limits.maxDevicesPerAccount
+			maxDevices: limits.maxDevicesPerAccount,
+			apCircuitId,
+			apNameSnapshot
 		});
 		// requireLiveWindow is false, so plan is never `skip`.
 		if (plan.skip) throw new Error('startFreeAccessAndBindDevice: unexpected skip');

@@ -1,0 +1,34 @@
+{
+  "scenarios": [
+    {
+      "scenario": "A slow/failed MikroTik circuit-id lookup stalls or rolls back a paid grant (charges a guest without granting access, or blocks the transaction).",
+      "ruled_out": true,
+      "rationale": "resolveApCircuitPreTx resolves the circuit-id BEFORE db.transaction opens, wrapped in try/catch returning null on any throw. Proven: forced-rejection runtime test (FREE + PAID) commits spend+grant with attribution null; negative control confirmed the test goes red if the guard is removed; static tripwire asserts resolution precedes db.transaction( in both grant functions."
+    },
+    {
+      "scenario": "A later Maya webhook resend / status transition overwrites the checkout-time AP fact with a wrong/foreign location.",
+      "ruled_out": true,
+      "rationale": "apCircuitId is written INSERT-only on payment_transactions — excluded from the onConflict `detail` update set (asserted by record-payment.spec.ts). Location is fixed at checkout, same as networkId."
+    },
+    {
+      "scenario": "A tampered/client-influenced ?mac= or ap signal makes AP attribution appear authoritative and is trusted for access/pricing/fraud decisions.",
+      "ruled_out": true,
+      "rationale": "Attribution is stored and displayed as best-effort staff-review data only; it never gates access, pricing, or credit decisions. MAC-trust residual carried forward unchanged; no code comment/UI copy describes it as tamper-proof or server-authoritative."
+    },
+    {
+      "scenario": "The migration corrupts or locks existing billing/session data, or a hard reference cascades/nulls settled history on AP prune.",
+      "ruled_out": true,
+      "rationale": "Migration is purely additive: 5 nullable TEXT columns, no default (no table rewrite), no FK (no cascade), no index, no drops. Durable STRING storage (not a network_health.id reference) means AP prune cannot degrade or null the stored fact. Verified per-column on dev DB."
+    },
+    {
+      "scenario": "A required-field interface change (PaymentAttribution.apCircuitId) silently drops attribution at an un-updated call site.",
+      "ruled_out": true,
+      "rationale": "REQUIRED (not optional) is a deliberate compile-time forcing function. All 3 call sites (webhook, reconcilePendingPayments, reconcileCheckout) updated in this change; `bun run check` + core tsc pass, so no call site compiles without passing it. Interface is internal to @veent/core (no external consumer)."
+    },
+    {
+      "scenario": "N+1 query storm: resolving the AP label per transaction row hammers network_health on a 50-row Finance page.",
+      "ruled_out": true,
+      "rationale": "resolveApCircuitLabels batches — one lookup per UNIQUE circuit-id per page, null circuit-ids never hit the DB, mapped back per row via apCircuitLabelOf."
+    }
+  ]
+}

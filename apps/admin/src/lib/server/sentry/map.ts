@@ -11,14 +11,28 @@ function str(v: unknown): string {
 	return typeof v === 'string' ? v : v == null ? '' : String(v);
 }
 
+/** Trusted permalink origin. Sentry serves regional hosts (de./us./…), so subdomains count. */
+const SENTRY_HOST = 'sentry.io';
+
 /**
- * Coerce to string, but only pass through absolute https URLs — anything else becomes ''.
+ * Coerce to string, but only pass through absolute https URLs whose host is pinned to
+ * `sentry.io` (or a regional subdomain such as `de.sentry.io`) — anything else becomes ''.
  * The permalink is rendered as an `href` on an admin page; the source is trusted (the Sentry
- * API), but a poisoned/compromised response must not be able to inject a `javascript:` URL.
+ * API), but a poisoned/compromised response — or a tampered `?/track` POST — must not be able
+ * to inject a `javascript:` URL or point staff at an attacker-controlled host. The suffix check
+ * is anchored on a leading dot, so `https://sentry.io.evil.com` is rejected. Never throws: a
+ * malformed URL degrades to ''.
  */
 export function httpsUrl(v: unknown): string {
 	const s = str(v);
-	return s.startsWith('https://') ? s : '';
+	if (!s.startsWith('https://')) return '';
+	let host: string;
+	try {
+		host = new URL(s).hostname;
+	} catch {
+		return '';
+	}
+	return host === SENTRY_HOST || host.endsWith(`.${SENTRY_HOST}`) ? s : '';
 }
 
 export interface SentrySnapshotInput {
@@ -37,7 +51,8 @@ export interface SentrySnapshotInput {
  *
  * - `issueId`  must be 1–32 digits (Sentry issue ids are numeric).
  * - `shortId`  must be 0–64 of `[A-Za-z0-9._-]` (e.g. `RADIUS-3F`); may be empty.
- * - `permalink` may be empty, otherwise it must be an absolute `https://` URL (reuses httpsUrl).
+ * - `permalink` may be empty, otherwise it must be an absolute `https://` URL whose host is pinned
+ *   to `sentry.io` or a regional subdomain (reuses httpsUrl).
  * - `title`    is capped at 500 chars.
  */
 export function validateSentrySnapshot(input: SentrySnapshotInput): SentrySnapshotInput | null {

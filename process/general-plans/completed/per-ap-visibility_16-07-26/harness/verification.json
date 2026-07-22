@@ -1,0 +1,19 @@
+{
+  "phase": "EVL",
+  "plan": "process/general-plans/active/per-ap-visibility_16-07-26/per-ap-visibility_PLAN_16-07-26.md",
+  "run_at": "2026-07-16",
+  "runner": "vc-tester (EVL confirmation run — independent re-run of validate-contract gates)",
+  "gates": [
+    { "id": 1, "cmd": "cd packages/core && bun run test", "status": "PASS", "detail": "5 files, 43 tests passed" },
+    { "id": 2, "cmd": "cd packages/core && bunx vitest run src/services/networkHealth.integration.spec.ts", "status": "PASS", "detail": "13 tests passed (G1-G10, G12, G13, G15)" },
+    { "id": 3, "cmd": "cd packages/core && bunx vitest run src/services/outage.integration.spec.ts", "status": "PASS", "detail": "6 tests passed (G13 regression)" },
+    { "id": 4, "cmd": "cd packages/core && bunx vitest run src/integrations/network/mikrotik.spec.ts", "status": "PASS", "detail": "5 tests passed (G17 concurrency/timeout)" },
+    { "id": 5, "cmd": "cd apps/admin && bun run check", "status": "PASS", "detail": "2306 files, 0 errors 0 warnings" },
+    { "id": 6, "cmd": "bun run check (root, all apps)", "status": "PASS", "detail": "locator/customer/admin all 0 errors" },
+    { "id": 7, "cmd": "bun run test (root fan-out)", "status": "PASS", "detail": "core 43, locator 6, customer 79, admin 140 — all passed" },
+    { "id": 8, "cmd": "bunx eslint apps/admin packages/core packages/db + prettier --check", "status": "PRE_EXISTING_FAIL", "detail": "17 eslint errors all in untouched files (svelte/no-navigation-without-resolve, no-at-html-tags); NetworkHealthCard.svelte:225 href={mapHref} is pre-existing (existed in HEAD at line 192). prettier fails repo-wide with layout.css ENOENT plugin drift (all 212 files, documented known gap F.1). No NEW failures in changed files." },
+    { "id": 9, "cmd": "cd apps/admin && bun run test:e2e -- e2e/networks.e2e.ts", "status": "PASS", "detail": "precondition met (local Postgres radius_admin_test + Chromium); 4/4 tests passed in 33s" }
+  ],
+  "overall": "DONE",
+  "notes": "All Fully-Automated and Hybrid gates green. Live-router agent-probes G14/G16 deferred by design (not run). No new failures attributable to changed files; gate 8 failures are pre-existing repo drift documented in the plan."
+}

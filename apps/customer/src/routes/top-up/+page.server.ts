@@ -14,7 +14,7 @@ import { db } from '$lib/server/db';
 import { network } from '$lib/server/network';
 import { rateLimit } from '$lib/server/rateLimit';
 import { payments } from '$lib/server/payments';
-import { resolveCheckoutNetworkId, resolveMacForUser } from '$lib/server/network-location';
+import { resolveCheckoutLocation, resolveMacForUser } from '$lib/server/network-location';
 import type { Actions, PageServerLoad } from './$types';
 
 /**
@@ -177,7 +177,10 @@ export const actions: Actions = {
 		// Attribute this payment to the AP the buyer is on now, while we still have the
 		// captive-portal context / live session — the webhook (server-to-server, no device)
 		// can't, and a failed payment never reaches a grant. Best-effort: null is fine.
-		const networkId = await resolveCheckoutNetworkId(event, user.id);
+		const { networkId, apCircuitId, apNameSnapshot } = await resolveCheckoutLocation(
+			event,
+			user.id
+		);
 		let redirectUrl: string;
 		try {
 			const checkout = await payments.createCheckout({
@@ -212,7 +215,9 @@ export const actions: Actions = {
 					packageId: pkg.id,
 					referenceId,
 					amount: String(pkg.fiatCost ?? 0),
-					networkId
+					networkId,
+					apCircuitId,
+					apNameSnapshot
 				});
 			} catch (e) {
 				console.warn('[topup] failed to record pending checkout:', (e as Error).message);

@@ -1,6 +1,9 @@
 import { env } from '$env/dynamic/private';
 import { dev } from '$app/environment';
 import { createHmac, timingSafeEqual } from 'node:crypto';
+import { captureHandled } from '@veent/core';
+import { customerOtpDeliveryLog } from '@veent/db/schema';
+import { db } from '$lib/server/db';
 
 /**
  * OTP support for the captive portal.
@@ -106,8 +109,9 @@ function otpMessage(code: string): string {
 /**
  * THE single SMS delivery seam (wired into the phoneNumber plugin's `sendOTP`). Dispatches to the
  * configured gateway so we can switch providers without touching the auth flow — set `SMS_PROVIDER`
- * to `itexmo` (default), `unisms`, or `smsgate`. The phone arrives E.164 (+639171234567); each
- * provider adapts it (iTexMo wants the local 09… form; UniSMS and SMS Gate take E.164 as-is).
+ * to `cast` (default), `itexmo`, `unisms`, or `smsgate`. The phone arrives E.164 (+639171234567);
+ * each provider adapts it (iTexMo wants the local 09… form; Cast, UniSMS and SMS Gate take E.164
+ * as-is).
  *
  * `smsgate` is a TEMPORARY stopgap (an Android phone running SMS Gate in Cloud mode, reached via
  * api.sms-gate.app) used while iTexMo account approval is pending — remove it once iTexMo is live.
@@ -117,10 +121,103 @@ function otpMessage(code: string): string {
  * silently swallowed (that would let anyone "log in" with no code).
  */
 export async function sendOtp(phone: string, code: string): Promise<void> {
-	const provider = (env.SMS_PROVIDER ?? 'itexmo').trim().toLowerCase();
+	const provider = (env.SMS_PROVIDER ?? 'cast').trim().toLowerCase();
+	// Explicit `cast` branch + a throw for anything unrecognized. The previous fall-through
+	// silently routed a typo'd SMS_PROVIDER to Cast, so a misconfigured box looked healthy while
+	// sending through the wrong gateway. Unset/blank STILL defaults to Cast (standing decision):
+	// `?? 'cast'` covers unset, and the `=== ''` guard covers an explicitly blank/whitespace value.
+	if (provider === '' || provider === 'cast') return sendViaCast(phone, code);
 	if (provider === 'smsgate') return sendViaSMSGate(phone, code);
 	if (provider === 'unisms') return sendViaUniSMS(phone, code);
-	return sendViaITexMo(phone, code);
+	if (provider === 'itexmo') return sendViaITexMo(phone, code);
+	throw new Error(`Unrecognized SMS_PROVIDER: "${provider}"`);
+}
+
+/**
+ * Append one row to the OTP delivery log after a gateway ACCEPTS a message. Fire-and-forget at
+ * the call site (`void logDeliveryAttempt(...)`) so a slow insert never adds latency to the
+ * guest's login request.
+ *
+ * NEVER THROWS, and never rejects. This is the guest-authentication path: a logging failure must
+ * degrade to a Sentry warning, never to a failed login. The insert is deliberately `await`-ed
+ * INSIDE the try — a Drizzle query builder is a thenable, so an un-awaited insert's rejection
+ * would escape this try/catch entirely and become an unhandled promise rejection on the login
+ * path. Do not "simplify" the await away.
+ *
+ * PII: stores `maskPhone()` output only, never the raw E.164 number.
+ */
+async function logDeliveryAttempt(
+	provider: string,
+	providerMessageId: string | null,
+	phone: string
+): Promise<void> {
+	try {
+		await db.insert(customerOtpDeliveryLog).values({
+			provider,
+			providerMessageId,
+			phoneMasked: maskPhone(phone)
+		});
+	} catch (err) {
+		captureHandled(err, { level: 'warning', tags: { area: 'otp-send-log' } });
+	}
+}
+
+/**
+ * Cast (https://api.cast.ph) OTP API — the dedicated, higher-priority OTP pool (NOT /sms/send).
+ * Config (customer env):
+ *   CAST_API_KEY   — REQUIRED. Sent as the x-api-key header. Live keys start cast_, sandbox cast_test_.
+ *   CAST_SENDER_ID — optional; only needed if the account has more than one approved sender id.
+ */
+async function sendViaCast(phone: string, code: string): Promise<void> {
+	const apiKey = env.CAST_API_KEY;
+
+	if (!apiKey) {
+		if (dev) {
+			console.info(`[otp] Cast not configured — code for ${phone}: ${code}`);
+			return;
+		}
+		throw new Error('Cast not configured: set CAST_API_KEY');
+	}
+
+	// `phone` is already E.164 (+63…) and Cast takes it as-is — no reformatting.
+	const payload: Record<string, unknown> = { to: phone, message: otpMessage(code) };
+	const senderId = env.CAST_SENDER_ID;
+	if (senderId) payload.sender_id = senderId;
+
+	let res: Response;
+	try {
+		res = await fetch('https://api.cast.ph/api/v1/otp/send', {
+			method: 'POST',
+			headers: { 'content-type': 'application/json', 'x-api-key': apiKey },
+			body: JSON.stringify(payload),
+			signal: AbortSignal.timeout(10_000)
+		});
+	} catch (err) {
+		throw new Error(`Cast SMS send failed: ${err instanceof Error ? err.message : String(err)}`, { cause: err });
+	}
+
+	// A non-2xx OR a body without `success: true` means the code never went out. Surface the stable
+	// machine-readable error_code when the gateway supplies one.
+	const body = (await res.json().catch(() => null)) as
+		| { success?: boolean; error?: string; error_code?: string; message_id?: string }
+		| null;
+	if (!res.ok || !body?.success) {
+		throw new Error(
+			`Cast SMS rejected (${res.status})${body?.error_code ? ` [${body.error_code}]` : ''}: ${body?.error ?? 'no success flag'}`
+		);
+	}
+
+	// Gateway accepted — record the attempt so the sweep cron can later ask Cast whether the
+	// CARRIER actually delivered it. Fire-and-forget; logDeliveryAttempt never throws.
+	void logDeliveryAttempt('cast', body.message_id ?? null, phone);
+
+	// Dev-only proof-of-send: sandbox sends deliver no real SMS, so echo Cast's response plus the
+	// message body to the console. Guarded by `dev` — the message contains the OTP code and must
+	// never reach a production log.
+	if (dev) {
+		console.info(`[otp] Cast accepted: ${JSON.stringify(body)}`);
+		console.info(`[otp] Cast message to ${phone}: ${otpMessage(code)}`);
+	}
 }
 
 /**
@@ -182,6 +279,10 @@ async function sendViaITexMo(phone: string, code: string): Promise<void> {
 	if (!body || body.Error || (body.Accepted ?? 0) < 1) {
 		throw new Error(`iTexMo SMS rejected: ${body?.Message ?? 'no recipient accepted'}`);
 	}
+
+	// Row written for every provider (satisfies the `provider` discriminator), but only Cast is
+	// ever swept — it's the only gateway with a DLR status endpoint. No message id to record here.
+	void logDeliveryAttempt('itexmo', null, phone);
 }
 
 /**
@@ -230,6 +331,8 @@ async function sendViaUniSMS(phone: string, code: string): Promise<void> {
 	if (!body?.message || body.message.status === 'failed') {
 		throw new Error(`UniSMS SMS rejected: ${body?.message?.fail_reason ?? 'no message returned'}`);
 	}
+
+	void logDeliveryAttempt('unisms', null, phone);
 }
 
 /**
@@ -287,4 +390,6 @@ async function sendViaSMSGate(phone: string, code: string): Promise<void> {
 	if (!body?.id || body.state === 'Failed') {
 		throw new Error(`SMS Gate rejected: ${body?.state ?? 'no message id returned'}`);
 	}
+
+	void logDeliveryAttempt('smsgate', null, phone);
 }

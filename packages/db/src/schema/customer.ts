@@ -121,6 +121,16 @@ export const creditLedger = pgTable(
 		// (business rule #3). NULL for non-webhook entries (Postgres allows many
 		// NULLs under a unique constraint), so manual/promo credits don't collide.
 		externalTransactionId: text('external_transaction_id').unique(),
+		// Durable AP attribution: the raw DHCP circuit-id STRING the buyer was on at spend time
+		// (not a network_health.id reference), resolved best-effort BEFORE the spend transaction
+		// opens. Immutable fact — survives the AP being renamed or pruned from network_health.
+		// Null = AP was unresolvable at spend time ("Unattributed"). Read-time label resolution
+		// (resolveApCircuitLabel) joins network_health.ap_circuit_id for a current friendly name,
+		// else shows this raw string. No FK/index (attribution is read rarely).
+		apCircuitId: text('ap_circuit_id'),
+		// Frozen AP label (display_name ?? name) captured pre-transaction at write time. Finance shows
+		// this as-was name; a later AP rename never rewrites it. Null = unresolvable → live fallback.
+		apNameSnapshot: text('ap_name_snapshot'),
 		createdAt: timestamp('created_at').notNull().defaultNow()
 	},
 	(t) => [index('credit_ledger_user_id_idx').on(t.userId)]
@@ -148,6 +158,12 @@ export const pointsLedger = pgTable(
 		// Unique so a retried payment webhook can't earn points twice (mirrors credit_ledger).
 		// NULL for spends (Postgres allows many NULLs under a unique constraint).
 		externalTransactionId: text('external_transaction_id').unique(),
+		// Durable AP attribution for a points spend — same rationale/shape as credit_ledger.
+		// Raw circuit-id string, resolved best-effort pre-transaction; null = "Unattributed".
+		apCircuitId: text('ap_circuit_id'),
+		// Frozen AP label (display_name ?? name) captured pre-transaction — same rationale as
+		// credit_ledger. Null = unresolvable → live fallback.
+		apNameSnapshot: text('ap_name_snapshot'),
 		createdAt: timestamp('created_at').notNull().defaultNow()
 	},
 	(t) => [index('points_ledger_user_id_idx').on(t.userId)]
@@ -187,6 +203,15 @@ export const paymentTransactions = pgTable(
 		// null/cascade settled payment history on prune). Null = location was unresolvable
 		// (foreign webhook with no checkout, wired/dev device); reported as "Unattributed".
 		networkId: integer('network_id'),
+		// Durable AP attribution: the raw circuit-id STRING copied from the matching
+		// payment_checkouts row at webhook/reconcile time (alongside network_id). Unlike
+		// network_id (a network_health.id reference that renders "AP #<id>" once the AP is
+		// pruned), this string survives rename/prune. INSERT-only, never in an onConflict
+		// update set. Null = unresolvable at checkout ("Unattributed").
+		apCircuitId: text('ap_circuit_id'),
+		// Frozen AP label (display_name ?? name) copied INSERT-only from the checkout, same as
+		// ap_circuit_id. The as-was name for Finance; immune to later AP renames. Null → live fallback.
+		apNameSnapshot: text('ap_name_snapshot'),
 		createdAt: timestamp('created_at').notNull().defaultNow()
 	},
 	(t) => [
@@ -236,6 +261,13 @@ export const paymentCheckouts = pgTable(
 		// payment is attributed to a location. Loose link (no FK) for the same reason as
 		// network_sessions.network_id. Null when no AP could be resolved at checkout.
 		networkId: integer('network_id'),
+		// Durable AP attribution: raw circuit-id STRING resolved at checkout alongside network_id
+		// (same 5-fallback chain), copied onto payment_transactions at webhook/reconcile time.
+		// Survives AP rename/prune where network_id degrades. Null = unresolvable at checkout.
+		apCircuitId: text('ap_circuit_id'),
+		// Frozen AP label (display_name ?? name) captured at checkout, copied onto payment_transactions
+		// alongside ap_circuit_id. The as-was name for Finance. Null = unresolvable → live fallback.
+		apNameSnapshot: text('ap_name_snapshot'),
 		// Throttle for the on-return poll so a fast-refreshing page can't hammer the gateway.
 		lastPolledAt: timestamp('last_polled_at'),
 		createdAt: timestamp('created_at').notNull().defaultNow(),
@@ -263,6 +295,14 @@ export const networkSessions = pgTable(
 		// reconciled/pruned by the health sweep, so a hard reference would fight it.
 		// Null when the controller couldn't resolve an AP (stub/dev, wired client).
 		networkId: integer('network_id'),
+		// Durable AP attribution: raw circuit-id STRING resolved best-effort BEFORE the grant
+		// transaction opens and threaded into bindMacTx. Carries AP identity for free-time grants
+		// (which write no ledger row) and for credit/points tier buys. Survives AP rename/prune
+		// where network_id degrades. Null = unresolvable at grant time ("Unattributed").
+		apCircuitId: text('ap_circuit_id'),
+		// Frozen AP label (display_name ?? name) captured pre-transaction at grant time — same
+		// rationale as ap_circuit_id. Null = unresolvable → live fallback.
+		apNameSnapshot: text('ap_name_snapshot'),
 		status: text('status').notNull(),
 		startedAt: timestamp('started_at').notNull().defaultNow(),
 		// Device-binding registry: one active row per (user, MAC) = "this device is
@@ -355,3 +395,41 @@ export const appSettings = pgTable('app_settings', {
 	pointsEarnRate: integer('points_earn_rate').notNull().default(10),
 	updatedAt: timestamp('updated_at').notNull().defaultNow()
 });
+
+/**
+ * Append-only log of every OTP send attempt, written from the send seam
+ * (`apps/customer/src/lib/server/otp.ts`) after the gateway accepts a message.
+ *
+ * Exists because a gateway ACCEPT is not a DELIVERY: Cast accepts every OTP and the carrier
+ * can still reject 100% of them (`dlr_status: "REJECTD"`) — the guest is told "code sent" and
+ * nothing arrives, with no log and no alert. The 5-minute sweep cron
+ * (`/api/otp/sweep-delivery`) re-checks Cast's DLR status endpoint for `pending` rows and
+ * classifies them `rejected` (alerts) or `unknown` (30-min give-up, no alert).
+ *
+ * Deliberate design notes:
+ *  - Provider-agnostic shape: all four providers write a row, only Cast is swept (only Cast has
+ *    a DLR endpoint). `provider_message_id` is NULLABLE — the other providers return no id.
+ *  - NO unique constraint. This is an attempt log, not an idempotency table; a resend is a new
+ *    row. A 23505 on the guest-LOGIN path would lock a guest out, so there is nothing to retry.
+ *  - PII: `phone_masked` stores `maskPhone()` output only, never raw E.164. Rows are pruned
+ *    unconditionally after 48h on every sweep run.
+ */
+export const customerOtpDeliveryLog = pgTable(
+	'customer_otp_delivery_log',
+	{
+		id: serial('id').primaryKey(),
+		provider: text('provider').notNull(),
+		providerMessageId: text('provider_message_id'),
+		phoneMasked: text('phone_masked').notNull(),
+		// pending | rejected | unknown
+		status: text('status').notNull().default('pending'),
+		createdAt: timestamp('created_at').notNull().defaultNow()
+	},
+	(t) => [
+		index('customer_otp_delivery_log_provider_status_created_idx').on(
+			t.provider,
+			t.status,
+			t.createdAt
+		)
+	]
+);

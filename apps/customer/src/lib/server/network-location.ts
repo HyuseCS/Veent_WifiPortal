@@ -3,7 +3,13 @@ import { dev } from '$app/environment';
 import { env } from '$env/dynamic/private';
 import { and, asc, desc, eq, isNotNull, isNull, ne, or } from 'drizzle-orm';
 import { customerProfile, networkHealth, networkSessions } from '@veent/db';
-import { SESSION_STATUS, resolveDeviceMac, resolveNetworkIdByApName, captureHandled } from '@veent/core';
+import {
+	SESSION_STATUS,
+	resolveDeviceMac,
+	resolveNetworkIdByApName,
+	resolveCircuitIdForMac,
+	captureHandled
+} from '@veent/core';
 import { db } from '$lib/server/db';
 import { network } from '$lib/server/network';
 import { getDeviceMac, getPortalContext, persistResolvedMac } from '$lib/server/portal';
@@ -206,11 +212,108 @@ export async function resolveCheckoutNetworkId(
 	event: RequestEvent,
 	userId: string
 ): Promise<number | null> {
+	return (await resolveCheckoutLocation(event, userId)).networkId;
+}
+
+/** The durable AP attribution stored on a resolved AP row (network_health.id): the circuit-id STRING
+ * plus the frozen display label (display_name ?? name) to snapshot onto the checkout. Best-effort:
+ * returns nulls when the row is missing or the lookup fails — attribution never blocks a checkout. */
+async function apAttributionForNetworkId(
+	networkId: number
+): Promise<{ apCircuitId: string | null; apNameSnapshot: string | null }> {
+	try {
+		const [row] = await db
+			.select({
+				apCircuitId: networkHealth.apCircuitId,
+				name: networkHealth.name,
+				displayName: networkHealth.displayName
+			})
+			.from(networkHealth)
+			.where(eq(networkHealth.id, networkId))
+			.limit(1);
+		return {
+			apCircuitId: row?.apCircuitId ?? null,
+			apNameSnapshot: row?.displayName ?? row?.name ?? null
+		};
+	} catch {
+		return { apCircuitId: null, apNameSnapshot: null };
+	}
+}
+
+/** The PHYSICAL AP row (network_health.id + attribution) carrying a durable circuit-id string.
+ * Deterministic lowest-id member so a shared-ONU group resolves to the same representative the grant
+ * path (`resolveNetworkIdForMac`) picks. Best-effort: null when nothing matches or the lookup fails. */
+async function apRowForCircuitId(
+	circuitId: string
+): Promise<{ networkId: number; apCircuitId: string; apNameSnapshot: string | null } | null> {
+	try {
+		const [row] = await db
+			.select({
+				id: networkHealth.id,
+				name: networkHealth.name,
+				displayName: networkHealth.displayName
+			})
+			.from(networkHealth)
+			.where(eq(networkHealth.apCircuitId, circuitId))
+			.orderBy(asc(networkHealth.id))
+			.limit(1);
+		if (!row) return null;
+		return {
+			networkId: row.id,
+			apCircuitId: circuitId,
+			apNameSnapshot: row.displayName ?? row.name ?? null
+		};
+	} catch {
+		return null;
+	}
+}
+
+/**
+ * Resolve BOTH the network_health.id reference (`networkId`, unchanged legacy behavior) AND the
+ * durable circuit-id STRING (`apCircuitId`) a checkout should be attributed to, from the SAME
+ * 5-fallback chain as the historical `resolveCheckoutNetworkId`.
+ *
+ * The circuit-id string is the durable, rename/prune-surviving fact stamped on the
+ * payment_checkouts row (copied to payment_transactions at webhook/reconcile time). It is resolved
+ * for tiers 1-2 (ap-param, device-mac → a live network_health row whose apCircuitId we read); tiers
+ * 3-5 (active-session, last-known, dev-fallback) resolve a networkId but return `apCircuitId: null`
+ * — network_sessions/customer_profile do not durably cache the circuit-id string today
+ * (KNOWN-GAP, see the plan's Test Infra Improvement Notes). Best-effort throughout: never blocks or
+ * fails the checkout.
+ */
+export async function resolveCheckoutLocation(
+	event: RequestEvent,
+	userId: string
+): Promise<{ networkId: number | null; apCircuitId: string | null; apNameSnapshot: string | null }> {
 	const ctx = getPortalContext(event);
+	const mac = await resolveMac(event);
+
+	// Highest priority: the device's own Option 82 circuit-id → the PHYSICAL AP row. This is the same
+	// durable signal the grant path trusts (`resolveCircuitIdForMac`). On a shared hotspot bridge that
+	// fronts multiple physical APs, the circuit-id distinguishes the real AP the guest is under, where
+	// the interface-name tiers below all collapse onto the shared bridge (e.g. `bridge1_WiFi_Project`).
+	// Best-effort: on no cid / no matching AP row it falls through to the tiers below (prior behavior).
+	if (mac) {
+		// resolveCircuitIdForMac never throws by contract; the .catch is a belt-and-suspenders guard.
+		const circuitId = await resolveCircuitIdForMac(db, network, mac).catch(() => null);
+		if (circuitId) {
+			const ap = await apRowForCircuitId(circuitId);
+			if (ap) {
+				return {
+					networkId: logResolved('device-circuit-id', { mac: maskMac(mac), circuitId }, ap.networkId),
+					apCircuitId: ap.apCircuitId,
+					apNameSnapshot: ap.apNameSnapshot
+				};
+			}
+		}
+	}
 
 	if (ctx?.ap) {
 		const byAp = await resolveNetworkIdByApName(db, ctx.ap);
-		if (byAp !== null) return logResolved('ap-param', { ap: ctx.ap }, byAp);
+		if (byAp !== null) {
+			const attribution = await apAttributionForNetworkId(byAp);
+			return { networkId: logResolved('ap-param', { ap: ctx.ap }, byAp), ...attribution };
+		}
 		console.warn('[topup] portal ap-param matched no network_health row', { ap: ctx.ap });
 	}
 
@@ -218,7 +321,6 @@ export async function resolveCheckoutNetworkId(
 	// can show the interface name the router returned vs. whether it matched a row — the usual
 	// real-router culprit (e.g. a CAPsMAN cap interface that differs from the hotspot interface
 	// stored in network_health.name).
-	const mac = await resolveMac(event);
 	if (mac) {
 		let apName: string | null;
 		try {
@@ -227,7 +329,13 @@ export async function resolveCheckoutNetworkId(
 			apName = null;
 		}
 		const byMac = apName ? await resolveNetworkIdByApName(db, apName) : null;
-		if (byMac !== null) return logResolved('device-mac', { mac: maskMac(mac), apName }, byMac);
+		if (byMac !== null) {
+			const attribution = await apAttributionForNetworkId(byMac);
+			return {
+				networkId: logResolved('device-mac', { mac: maskMac(mac), apName }, byMac),
+				...attribution
+			};
+		}
 		console.warn('[topup] MAC→AP unresolved', { mac: maskMac(mac), apName });
 	}
 
@@ -243,14 +351,29 @@ export async function resolveCheckoutNetworkId(
 		)
 		.orderBy(desc(networkSessions.startedAt))
 		.limit(1);
-	if (active?.networkId != null) return logResolved('active-session', {}, active.networkId);
+	if (active?.networkId != null) {
+		// KNOWN-GAP: no durable circuit-id cached on network_sessions today → apCircuitId null (and so
+		// no name snapshot → read side falls back to live resolution / "Unattributed").
+		return {
+			networkId: logResolved('active-session', {}, active.networkId),
+			apCircuitId: null,
+			apNameSnapshot: null
+		};
+	}
 
 	const [profile] = await db
 		.select({ lastNetworkId: customerProfile.lastNetworkId })
 		.from(customerProfile)
 		.where(eq(customerProfile.userId, userId))
 		.limit(1);
-	if (profile?.lastNetworkId != null) return logResolved('last-known', {}, profile.lastNetworkId);
+	if (profile?.lastNetworkId != null) {
+		// KNOWN-GAP: no durable circuit-id cached on customer_profile today → apCircuitId null.
+		return {
+			networkId: logResolved('last-known', {}, profile.lastNetworkId),
+			apCircuitId: null,
+			apNameSnapshot: null
+		};
+	}
 
 	if (dev) {
 		const [anyAp] = await db
@@ -258,7 +381,12 @@ export async function resolveCheckoutNetworkId(
 			.from(networkHealth)
 			.orderBy(asc(networkHealth.id))
 			.limit(1);
-		if (anyAp) return logResolved('dev-fallback', {}, anyAp.id);
+		if (anyAp)
+			return {
+				networkId: logResolved('dev-fallback', {}, anyAp.id),
+				apCircuitId: null,
+				apNameSnapshot: null
+			};
 	}
 
 	console.warn('[topup] AP unresolved — payment will be unattributed by location', { userId });
@@ -269,5 +397,5 @@ export async function resolveCheckoutNetworkId(
 		tags: { area: 'payment', scope: 'attribution-miss' },
 		extra: { userId }
 	});
-	return null;
+	return { networkId: null, apCircuitId: null, apNameSnapshot: null };
 }

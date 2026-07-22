@@ -1,0 +1,36 @@
+# Never copy host installs / build outputs — bun reinstalls inside the image and vite rebuilds.
+node_modules
+**/node_modules
+.svelte-kit
+**/.svelte-kit
+build
+**/build
+dist
+**/dist
+
+# Secrets & local env — exclude every real .env (root + nested apps/*) but KEEP the committed
+# example templates (the build stage seeds .env from them for build-time module validation).
+**/.env
+**/.env.*
+!**/.env.example
+!**/.env.prod.example
+deploy/
+
+# E2E auth state / test artifacts
+apps/*/e2e/.auth
+**/test-results
+**/playwright-report
+
+# Repo/process cruft not needed in an image
+.git
+.github
+.githooks
+process/
+docs/
+graphify-out/
+.vscode
+.idea
+.DS_Store
+
+# Vite timestamp junk
+vite.config.js.timestamp-*

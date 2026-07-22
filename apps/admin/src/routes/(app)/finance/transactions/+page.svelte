@@ -15,7 +15,10 @@
 <div class="flex flex-col gap-2 h-full">
 	{#if loading}
 		<!-- Table silhouette: a toolbar bar + several rows so the period switch paints instantly. -->
-		<div class="flex animate-pulse flex-col gap-3 rounded-xl border border-border bg-bg p-4 shadow-sm" aria-hidden="true">
+		<div
+			class="flex animate-pulse flex-col gap-3 rounded-xl border border-border bg-bg p-4 shadow-sm"
+			aria-hidden="true"
+		>
 			<div class="h-9 w-full max-w-xs rounded-lg bg-surface"></div>
 			{#each Array.from({ length: 8 }, (_, i) => i) as i (i)}
 				<div class="h-10 w-full rounded bg-surface"></div>

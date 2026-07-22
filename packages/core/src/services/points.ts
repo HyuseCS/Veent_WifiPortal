@@ -91,7 +91,13 @@ export interface SpendPointsResult {
  */
 export async function spendPointsTx(
 	tx: Tx,
-	input: { userId: string; amount: number; packageId?: number }
+	input: {
+		userId: string;
+		amount: number;
+		packageId?: number;
+		apCircuitId?: string | null;
+		apNameSnapshot?: string | null;
+	}
 ): Promise<SpendPointsResult> {
 	if (input.amount <= 0) throw new Error('spendPoints: amount must be positive');
 
@@ -118,7 +124,12 @@ export async function spendPointsTx(
 		userId: input.userId,
 		packageId: input.packageId,
 		amount: -input.amount,
-		type: POINTS_LEDGER_TYPE.spend
+		type: POINTS_LEDGER_TYPE.spend,
+		// Durable AP attribution: resolved best-effort pre-transaction, threaded in as a string.
+		// null = "Unattributed". Mirrors spendCreditsTx.
+		apCircuitId: input.apCircuitId ?? null,
+		// Frozen AP label captured alongside the circuit-id — the as-was name for Finance.
+		apNameSnapshot: input.apNameSnapshot ?? null
 	});
 
 	return { ok: true, balance: Number(updated.balance) };

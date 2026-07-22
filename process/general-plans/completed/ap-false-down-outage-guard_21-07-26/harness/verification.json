@@ -1,0 +1,26 @@
+{
+  "context": "EVL confirmation run",
+  "date": "2026-07-21",
+  "plan": "process/general-plans/active/ap-false-down-outage-guard_21-07-26/ap-false-down-outage-guard_PLAN_21-07-26.md",
+  "gates": [
+    {
+      "id": "AC1",
+      "command": "bunx vitest run packages/core/src/services/networkHealth.transaction-tripwire.spec.ts",
+      "result": "PASS",
+      "detail": "1 file passed, 2 tests passed (264ms). Spec confirmed non-vacuous: asserts refreshNetworkHealth( PRESENT and db.transaction( ABSENT per call site; readFileSync throws on missing path."
+    }
+  ],
+  "deliverables": [
+    { "path": "packages/core/src/services/networkHealth.transaction-tripwire.spec.ts", "state": "NEW", "lines": 45, "ok": true },
+    { "path": "docs/mikrotik/ap-liveness-bypass.md", "state": "NEW", "lines": 62, "ok": true },
+    { "path": "process/general-plans/backlog/ap-outage-false-down-code-safeguard_NOTE_21-07-26.md", "state": "NEW", "lines": 67, "ok": true, "detail": "Records DEAD online_since IS NOT NULL approach + F1 reason + 2 candidate approaches (ever_served column; bypass-state router read)." },
+    { "path": "process/general-plans/backlog/ap-name-retry-transaction-tripwire_NOTE_20-07-26.md", "state": "EDIT", "lines": 59, "ok": true, "detail": "Option 2 marked IMPLEMENTED (21-07-26)." }
+  ],
+  "scope_check": {
+    "outage_ts_modified": false,
+    "networkHealth_service_modified": false,
+    "migration_or_schema_modified": false,
+    "result": "CLEAN — only the 4 expected files plus task-folder plan/report artifacts changed"
+  },
+  "status": "DONE"
+}

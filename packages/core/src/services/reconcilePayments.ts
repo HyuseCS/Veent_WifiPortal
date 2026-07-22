@@ -21,6 +21,14 @@ export interface PaymentAttribution {
 	userId: string | null;
 	packageId: number | null;
 	networkId: number | null;
+	// Durable AP circuit-id STRING copied from the matching checkout — the rename/prune-surviving
+	// twin of networkId. REQUIRED (not optional) as a deliberate compile-time forcing function: every
+	// call site of recordPaymentTransaction MUST pass it, so no attribution path can silently drop it.
+	// Internal to @veent/core (3 known call sites, all updated together) — not a public breaking change.
+	apCircuitId: string | null;
+	// Frozen AP label copied from the matching checkout — the as-was name Finance freezes onto the
+	// transaction. REQUIRED (same forcing-function rationale as apCircuitId). null = unresolvable.
+	apNameSnapshot: string | null;
 }
 
 /**
@@ -54,7 +62,11 @@ export async function recordPaymentTransaction(
 		buyerEmail: evt.buyerEmail ?? null,
 		userId: attribution.userId,
 		packageId: attribution.packageId,
-		networkId: attribution.networkId
+		networkId: attribution.networkId,
+		// Durable AP fact, INSERT-only (left out of the `detail` update set below, same as networkId) —
+		// the location is fixed at checkout and must never be overwritten by a later resend/transition.
+		apCircuitId: attribution.apCircuitId,
+		apNameSnapshot: attribution.apNameSnapshot
 	};
 	// Gateway-supplied detail a later event (Maya resend or a PENDING→SUCCESS transition) may
 	// legitimately backfill. Shared by the id-conflict upsert and the referenceNo dedupe below.
@@ -351,7 +363,9 @@ export async function reconcilePendingPayments(
 			referenceId: paymentCheckouts.referenceId,
 			userId: paymentCheckouts.userId,
 			packageId: paymentCheckouts.packageId,
-			networkId: paymentCheckouts.networkId
+			networkId: paymentCheckouts.networkId,
+			apCircuitId: paymentCheckouts.apCircuitId,
+			apNameSnapshot: paymentCheckouts.apNameSnapshot
 		})
 		.from(paymentCheckouts)
 		.where(
@@ -372,7 +386,9 @@ export async function reconcilePendingPayments(
 			await recordPaymentTransaction(db, evt, {
 				userId: c.userId,
 				packageId: c.packageId,
-				networkId: c.networkId
+				networkId: c.networkId,
+				apCircuitId: c.apCircuitId,
+				apNameSnapshot: c.apNameSnapshot
 			});
 			if (evt.status === 'paid') {
 				const r = await creditCheckoutIfUnsettled(db, {
@@ -436,7 +452,9 @@ export async function reconcileCheckout(
 			id: paymentCheckouts.id,
 			userId: paymentCheckouts.userId,
 			packageId: paymentCheckouts.packageId,
-			networkId: paymentCheckouts.networkId
+			networkId: paymentCheckouts.networkId,
+			apCircuitId: paymentCheckouts.apCircuitId,
+			apNameSnapshot: paymentCheckouts.apNameSnapshot
 		});
 	if (!claimed) return { credited: false }; // settled already, or polled too recently
 
@@ -449,7 +467,9 @@ export async function reconcileCheckout(
 			await recordPaymentTransaction(db, evt, {
 				userId: claimed.userId,
 				packageId: claimed.packageId,
-				networkId: claimed.networkId
+				networkId: claimed.networkId,
+				apCircuitId: claimed.apCircuitId,
+				apNameSnapshot: claimed.apNameSnapshot
 			});
 		}
 		if (evt?.status === 'paid') {

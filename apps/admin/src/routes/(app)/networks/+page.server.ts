@@ -1,8 +1,14 @@
 import { fail } from '@sveltejs/kit';
 import { dev } from '$app/environment';
-import { refreshNetworkHealth, countOutagePausedAccounts, STAFF_ROLE } from '@veent/core';
+import {
+	refreshNetworkHealth,
+	countOutagePausedAccounts,
+	STAFF_ROLE,
+	MANAGER_ROLES,
+	type StaffRole
+} from '@veent/core';
 import { db } from '$lib/server/db';
-import { requireOwner as ownerGate } from '$lib/server/auth-guard';
+import { requireOwner as ownerGate, requireManager } from '$lib/server/auth-guard';
 import { network } from '$lib/server/network';
 import { mailer } from '$lib/server/email';
 import { checkAdminEmailLimit } from '$lib/server/emailRateLimit';
@@ -13,6 +19,7 @@ import {
 	listNetworkHealth,
 	setNetworkInterface,
 	setApRouterConfig,
+	setApDisplayName,
 	wipeNetworks,
 	deleteNetworkPlace
 } from '$lib/server/queries';
@@ -62,7 +69,13 @@ export const load: PageServerLoad = async (event) => {
 	// Guests whose paid time is currently frozen because their AP is down (the outage auto-pause).
 	// Cheap count — awaited directly so the outage banner renders with the page shell.
 	const outagePausedGuests = await countOutagePausedAccounts(db);
-	return { networks, outagePausedGuests, isOwner: user.role === STAFF_ROLE.owner };
+	return {
+		networks,
+		outagePausedGuests,
+		isOwner: user.role === STAFF_ROLE.owner,
+		// Managers (owner + system_admin — the same roles that manage Sentry issues) may rename APs.
+		canManage: MANAGER_ROLES.includes(user.role as StaffRole)
+	};
 };
 
 export const actions: Actions = {
@@ -131,6 +144,28 @@ export const actions: Actions = {
 			}
 		}
 		return { ok: true, action: 'setApConfig', id, warning };
+	},
+
+	/** Manager-only (owner + system_admin): set an AP's operator display name. Writes only the
+	 *  `display_name` override — the sweep-managed `name` is left alone so the label survives every
+	 *  router refresh. Blank clears the override (revert to the router-derived name). */
+	setApName: async (event) => {
+		const denied = await requireManager(event.locals.user?.id, 'You do not have permission to rename access points.');
+		if (denied) return denied;
+
+		const form = await event.request.formData();
+		const raw = form.get('id');
+		const id = Number(raw);
+		if (typeof raw !== 'string' || !Number.isInteger(id) || id <= 0) {
+			return fail(400, { action: 'setApName', error: 'Invalid access point.' });
+		}
+
+		const name = String(form.get('displayName') ?? '').trim();
+		if (name.length > 120) {
+			return fail(400, { action: 'setApName', id, error: 'Name is too long (max 120 characters).' });
+		}
+		await setApDisplayName(db, id, name || null);
+		return { ok: true, action: 'setApName', id };
 	},
 
 	/** Delete a single access point. Owner-only (a stray-pin cleanup is still destructive —

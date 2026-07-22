@@ -3,12 +3,12 @@ name: context:all-tests
 description: "Test runners, exact commands, the admin e2e throwaway-DB harness quirks, and known coverage gaps — the tests group entrypoint/router"
 keywords: test, tests, vitest, playwright, e2e, unit test, svelte-check, lint, coverage, test:seed, radius_admin_test, TEST_ENV, browser test, requireAssertions
 related: []
-date: 10-07-26
+date: 20-07-26
 ---
 
 # veent-wifiportal - All Tests
 
-Last updated: 2026-07-10
+Last updated: 2026-07-20
 
 Attach this file first when the task involves testing, verification, or test debugging.
 
@@ -126,6 +126,13 @@ is built on. `bun test` (no args, root `package.json` alias) is fine — it fans
 run --filter ... test`, which is `vitest run` per app; the trap is only `bun test <file>`
 called directly.
 
+**Gotcha — cwd matters for `bunx vitest run <file>`.** There is no root `vitest.config.*` —
+each app's `$lib` alias comes only from that app's `vite.config.ts` (`sveltekit()` plugin
+options). Run `bunx vitest run <path>` from **inside the target app's directory**
+(`cd apps/admin && bunx vitest run 'src/routes/(app)/sentry/track-provenance.test.ts'`), not from
+the repo root — running from root risks vitest picking up the wrong (or no) project config and
+failing `$lib` alias resolution. Confirmed during the M4d Sentry-provenance EVL run (20-07-26).
+
 **Admin harness scripts** (`apps/admin/scripts/`):
 
 | Command | What it does |
@@ -152,15 +159,42 @@ called directly.
   - `DATABASE_URL` → the throwaway DB
   - `NETWORK_CONTROLLER='stub'` → never touches a real MikroTik router
   - `RESEND_API_KEY=''` + `EMAIL_FROM=''` → blanks Resend to force the console-stub mailer
+  - `SENTRY_AUTH_TOKEN=''` + `SENTRY_ORG_SLUG=''` + `SENTRY_PROJECT_ID=''` (added 20-07-26, M4d) →
+    blanks Sentry; before this fix the e2e webserver silently inherited real credentials from
+    `apps/admin/.env` and made live, authenticated calls to the production Sentry org — see Known
+    Gaps below for the general lesson this exposed
+  - **Maya payments — investigated and closed 20-07-26.** `apps/admin` has no Maya code path
+    at all (verified by exhaustive grep — only inert comments/string-label hits); admin never
+    calls Maya, so there was nothing for `TEST_ENV` to cover. The real exposure this
+    investigation found was in `apps/customer`/`apps/locator` instead — see Known Gaps below.
 - **2FA is mandatory in the flow.** `global-setup.ts` does a real Chromium login, walks through mandatory 2FA enrollment (`/enroll-2fa`), then caches `storageState` at `e2e/.auth/owner.json` plus the TOTP secret at `e2e/.auth/owner-totp.txt` for reuse across specs. TOTP itself is generated via a small stdlib helper (`e2e/totp.ts`), no external TOTP library.
 - **`webServer` builds + previews, doesn't reuse.** Playwright's `webServer` runs `npm run build && npm run preview` on port `4173` with `reuseExistingServer: false` (deliberate — always a clean build/preview). `webServer.timeout` is 180s, test `timeout` is 60s.
 - **Serial execution only.** `workers: 1`, `fullyParallel: false` — governance specs mutate shared state; each spec self-seeds via `config.ts` helpers rather than relying on isolation between workers.
-- **10 admin e2e specs today:** `content-mfa`, `finance-export`, `incident-detail`, `incident-notifications`, `incident-sentry`, `incident-timeline`, `invite`, `owner-change`, `promote`, `wipe`.
+- **12 admin e2e specs today (23 tests, all green as of 20-07-26):** `content-mfa`, `finance-export`,
+  `incident-detail`, `incident-notifications`, `incident-self-report`, `incident-sentry`,
+  `incident-timeline`, `invite`, `networks`, `owner-change`, `promote`, `wipe`.
+- **`playwright.config.ts:17` merges `storageState: OWNER_STORAGE_STATE` into EVERY context by
+  default — including `browser.newContext()`/`newPage()` calls made INSIDE a test body**, not just
+  the top-level `page` fixture. A spec that needs a genuinely unauthenticated or non-owner session
+  (e.g. a raw CSRF-tamper POST, or a non-manager login flow) must explicitly pass
+  `storageState: { cookies: [], origins: [] }` (imperative `newContext({...})` form) or
+  `test.use({...})` (declarative form) — otherwise the "fresh" context silently inherits the banked
+  owner session, which previously caused a 60s test timeout that looked like a slow login rather
+  than a state leak (root-caused and fixed 20-07-26 in `ims-e2e-spec-modernization_20-07-26`).
 
 **Unit test DB dependence:**
 
 - Unit tests need **no DB at all** — everything (including `$env/dynamic/private`) is mocked via `vi.mock`.
-- The one exception: `packages/core/src/services/outage.integration.spec.ts` uses an **in-process PGlite** instance (real-Postgres semantics, still zero external dependencies) — safe to run blind, no setup required.
+- The exception: two specs use an **in-process PGlite** instance (real-Postgres semantics, still
+  zero external dependencies, safe to run blind, no setup required) —
+  `packages/core/src/services/outage.integration.spec.ts` and
+  `packages/core/src/services/networkHealth.integration.spec.ts`. PGlite applies the real
+  migration chain (`migrate()` over `packages/db/drizzle/`), so it genuinely enforces committed
+  unique/check constraints — a name-key `network_health_name_key` unique violation was empirically
+  confirmed (20-07-26) to raise a real, catchable `23505` through drizzle exactly like production
+  Postgres (`DrizzleQueryError` → `.cause` with `{ code: '23505', constraint: '...' }`), so
+  constraint-violation retry/discriminator logic can be genuinely PGlite-tested rather than assumed
+  or faked. See the shared discriminator pattern in `all-context.md` §Key Patterns and Conventions.
 
 **Client (browser) Vitest project:**
 
@@ -170,16 +204,35 @@ called directly.
 **Quality gates:**
 
 - **Lint:** single root `eslint.config.js` flat config (`@eslint/js` + `typescript-eslint` + `eslint-plugin-svelte` + `eslint-config-prettier`). No per-package configs.
-- **Format:** `.prettierrc` — tabs, single quotes, no trailing commas, `printWidth: 100`, `svelte` + `tailwindcss` plugins, `tailwindStylesheet: ./src/routes/layout.css`.
+- **Format:** `.prettierrc` — tabs, single quotes, no trailing commas, `printWidth: 100`, `svelte` + `tailwindcss` plugins, `tailwindStylesheet: apps/admin/src/routes/layout.css` (repo-root-relative; fixed 20-07-26 — previously `./src/routes/layout.css`, which was root-relative to a path that doesn't exist and crashed prettier with ENOENT at the repo root). Note: this path only feeds Tailwind class **sort order**, not correctness — customer/locator files sort against admin's theme, which is cosmetic, not a bug.
 
 ## Known Gaps
 
 - `packages/db` has **zero tests** and no test script — not covered by any root command.
 - `apps/locator` has exactly **1 unit test** (`lib/clusters.test.ts`) and **no e2e specs**.
-- `apps/customer` and `apps/locator` have Playwright e2e configs wired but **no specs** — only `apps/admin` has actual e2e coverage.
+- `apps/customer` and `apps/locator` have Playwright e2e configs wired but **no specs** — only `apps/admin` has actual e2e coverage. As of 20-07-26, `apps/customer/playwright.config.ts` carries a credential tripwire in `webServer.env`, but its protection is **not uniform — do not call it "fail-closed" across the board**: SMS (`CAST_*`/`ITEXMO_*`/`UNISMS_*`/`SMSGATE_*`, all four blanked) is genuinely fail-closed — `sendOtp` throws before any network call because `dev` is `false` in a preview build. Maya is only **fail-rejected**: `basicAuth('')` still builds a valid (empty-credential) auth header, so the checkout request is actually sent and comes back `401` — the payload leaves the machine, it is not prevented. `MAYA_SANDBOX` is pinned `'true'` (it cannot be blanked — `payments.ts` hard-throws on anything but `'true'`/`'false'`) so an escaping request lands on sandbox rather than production, but that is a weaker guarantee than "never leaves the machine." MikroTik (`NETWORK_CONTROLLER: 'stub'`) is a real stub — no call attempted. Neither `DATABASE_URL` nor Sentry vars are touched by the tripwire — a future customer e2e spec still runs against the real dev DB and ships events to real Sentry. `apps/locator`'s config was left unchanged — its env schema has no external credentials to leak. Open prerequisites before any customer e2e spec is written: a payments stub (Maya is only fail-rejected, not contained), a preview-reachable SMS stub, and a throwaway-DB harness mirroring admin's `radius_admin_test` pattern — plus Sentry DSN blanking.
 - The **client (browser) Vitest project** is wired in all 3 apps (`@vitest/browser-playwright` + `vitest-browser-svelte`, real headless Chromium) but has **zero `.svelte.test.ts` files** anywhere — no component-level test currently exists.
 - **No coverage tooling** configured anywhere (no `@vitest/coverage-*` dep, no coverage config).
 - **No CI** — `.github/workflows` is absent; the recommended gate order (`check` → `lint` → `test` → admin `test:e2e`) is manual only.
 - **No confirmed pre-commit hooks** — a `.githooks/` directory exists at the repo root, but it is not confirmed wired via `core.hooksPath`; verify before relying on it to catch anything automatically.
-- **Root `bun run lint` fails repo-wide** — the `.prettierrc` `tailwindStylesheet: ./src/routes/layout.css` path (line 165 above) is app-relative and breaks when lint is invoked from the monorepo root. Confirmed pre-existing during IMS audit-remediation EVL (2026-07-10), unrelated to that work. Backlog: `process/features/incident-management/backlog/repo-wide-lint-prettier-drift_NOTE_10-07-26.md`.
-- **3/10 admin E2E specs have known-flaky residuals** as of 2026-07-10 (`incident-detail`, `incident-notifications`, `incident-timeline`): stale `role="menuitem"` queries after an intentional a11y change (dropdown → labelled list) plus a notification-click flow that now opens a modal instead of navigating; a `loginNonManager` 2FA-enroll helper that times out near the 60s test cap; and a "2 unread" count assertion that needs a live trace (app logic verified correct by inspection in all 3 cases — no app regression). Backlog: `process/features/incident-management/backlog/ims-e2e-spec-modernization_NOTE_10-07-26.md`.
+- **Root `bun run lint` still fails repo-wide, but the cause changed 20-07-26.** The original crash
+  (bad `tailwindStylesheet` path, ENOENT) is fixed — see Quality Gates above. Root `bun run lint`
+  now fails because `prettier --check .` reports 297 files with genuine pre-existing style/format
+  drift (not a crash), so `&& eslint .` never runs and eslint remains unverified at the repo root.
+  Backlog: `process/features/incident-management/backlog/repo-wide-lint-prettier-drift_NOTE_10-07-26.md`
+  (updated 20-07-26 with the narrowed remaining scope).
+- **`TEST_ENV` (and the customer tripwire) have no enforcement that new external integrations get
+  added to them.** `TEST_ENV` currently covers DB, router, mailer, and (as of 20-07-26) Sentry —
+  each added reactively after being found missing, not proactively. Admin's Maya coverage question
+  was investigated 20-07-26 and closed (admin has no Maya code path); the same investigation found
+  a real gap in `apps/customer`/`apps/locator` instead (see above) and shipped a tripwire for it.
+  The structural fix — a lint/test rule cross-referencing integration modules against
+  harness-env overrides, so this class of gap can't recur silently — is still unimplemented (open,
+  no separate backlog note — tracked here in §Known Gaps).
+- **RESOLVED 20-07-26** (was: "3/10 admin E2E specs have known-flaky residuals" as of 2026-07-10).
+  `incident-notifications.e2e.ts` was rewritten for the post-L6a labelled-region roles and the
+  modal-based notification-click flow; the `loginNonManager` "timeout" theory was disproven (it
+  was the `storageState`-merge leak documented above, not slowness — `incident-detail.e2e.ts` was
+  otherwise unaffected); the `:113` "2 unread" count was a cross-test leak, not a count-logic bug.
+  All 12 admin e2e specs (23 tests) are green. Closed:
+  `process/features/incident-management/backlog/ims-e2e-spec-modernization_NOTE_10-07-26.md`.

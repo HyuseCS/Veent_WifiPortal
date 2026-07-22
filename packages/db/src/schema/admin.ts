@@ -14,6 +14,7 @@ import {
 	pgTable,
 	serial,
 	integer,
+	bigint,
 	text,
 	boolean,
 	numeric,
@@ -106,6 +107,12 @@ export const routerModel = pgTable(
 export const networkHealth = pgTable('network_health', {
 	id: serial('id').primaryKey(),
 	name: text('name').notNull(),
+	// Operator-set display name. `name` is the sweep's working identity — the natural key the health
+	// upsert writes on (interface rows) and re-derives from the DHCP hostname every refresh (AP rows),
+	// so a custom name written to `name` is clobbered/pruned on the next sample. `display_name` is the
+	// human label the sweep never touches: the UI and durable AP attribution show `display_name ?? name`.
+	// Null = no override (fall back to the router-derived `name`).
+	displayName: text('display_name'),
 	online: boolean('online').notNull().default(true),
 	// Whether the router's uplink/WAN was reachable at the last sample (shared across a router's
 	// interfaces). `online` is the raw per-AP LINK state; an AP with `online=true` but `wan_ok=false`
@@ -123,7 +130,10 @@ export const networkHealth = pgTable('network_health', {
 	uptimePct: numeric('uptime_pct', { precision: 5, scale: 2 }).notNull().default('0'),
 	latencyMs: integer('latency_ms'),
 	users: integer('users').notNull().default(0),
-	throughputMbps: integer('throughput_mbps').notNull().default(0),
+	// Per-AP/interface throughput in Mbps. NULLABLE for Phase A per-AP visibility: an AP row whose
+	// firmware doesn't expose hotspot byte counters carries `null` = "traffic unavailable" (the card
+	// shows "—"). Interface/pinned rows and every existing writer still write a number; default 0.
+	throughputMbps: integer('throughput_mbps').default(0),
 	lastSampleAt: timestamp('last_sample_at').notNull().defaultNow(),
 	latitude: numeric('latitude', { precision: 9, scale: 6 }),
 	longitude: numeric('longitude', { precision: 9, scale: 6 }),
@@ -150,12 +160,30 @@ export const networkHealth = pgTable('network_health', {
 	// all). Kilobits/s; null = uncapped. Operator-set from the admin Networks card and
 	// preserved across the health sweep (see refreshNetworkHealth — telemetry-only upsert).
 	maxDownKbps: integer('max_down_kbps'),
-	maxUpKbps: integer('max_up_kbps')
+	maxUpKbps: integer('max_up_kbps'),
+	// ── Phase A per-AP visibility (router-side DHCP Option 82) ─────────────────────────────────
+	// Physical-AP identity for auto-discovered AP rows. NULL on interface/pinned rows (today's
+	// semantics). Unique (Postgres allows multiple NULLs) so an AP row is keyed on MAC, not IP —
+	// a lease IP change updates the same row. Uppercased at write time.
+	mac: text('mac'),
+	// Raw OLT-inserted Option 82 agent-circuit-id string (e.g. "OLT-9 xpon 0/1/0/4:16.3.70"). The
+	// join key between a client lease and its AP; APs sharing an ONU carry the same value (grouped
+	// at render time). NULL on non-AP rows.
+	apCircuitId: text('ap_circuit_id'),
+	// How this row's identity/attribution was derived. Phase A writes 'circuit-id'; 'ap-api' is
+	// reserved vocabulary for Phase B (Fatap AP API). NULL = interface/pinned row (not an AP row).
+	attributionSource: text('attribution_source'),
+	// Last cumulative attributed hotspot byte sum for this AP (Section 5 traffic-delta basis).
+	// NULL until the first counter sample lands, or permanently NULL when firmware hides counters.
+	trafficBytes: bigint('traffic_bytes', { mode: 'number' })
 }, (t) => [
 	// `name` is the natural key the health sweep upserts on (one row per router interface /
 	// map pin). Unique so concurrent sweeps can't race two rows for the same AP, and so the
 	// service can use onConflictDoUpdate instead of select-then-insert.
 	uniqueIndex('network_health_name_key').on(t.name),
+	// AP rows are keyed on `mac` (physical-AP identity). Unique so an AP-lease IP change updates the
+	// same row (AC8); Postgres permits multiple NULLs, so interface/pinned rows are unaffected.
+	uniqueIndex('network_health_mac_key').on(t.mac),
 	// A cap is either unset or a positive rate — a zero/negative Kbps is always corrupt.
 	// Mirrors the router_model range check; guards direct inserts and future migrations.
 	check('network_health_max_down_kbps_positive', sql`${t.maxDownKbps} IS NULL OR ${t.maxDownKbps} > 0`),
@@ -183,4 +211,21 @@ export const adminBypassDevice = pgTable('admin_bypass_device', {
 		.references(() => adminSession.token, { onDelete: 'cascade' }),
 	mac: text('mac').notNull(),
 	updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow()
+});
+
+/**
+ * Durable last-known-circuit-per-client cache (Phase A per-AP visibility). Maps a client device MAC
+ * to the OLT Option 82 agent-circuit-id observed on its most recent DHCP lease that carried one.
+ *
+ * Exists because a unicast DHCP renewal often OMITS the agent-circuit-id (only the initial
+ * broadcast DISCOVER passes through the OLT relay that inserts Option 82). Without a cache, a
+ * renewing device would fall out of its AP's client count until it re-broadcasts. The cache holds
+ * the last-known circuit so attribution tolerates those gaps (SPEC AC6); a blank/absent circuit-id
+ * never overwrites a cached value. Internal to the @veent/core service layer — no app reads it
+ * directly. Harmless when AP rows don't exist (a lookup simply finds no matching AP).
+ */
+export const networkClientAttribution = pgTable('network_client_attribution', {
+	mac: text('mac').primaryKey(),
+	circuitId: text('circuit_id').notNull(),
+	updatedAt: timestamp('updated_at').notNull().defaultNow()
 });
