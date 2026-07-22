@@ -116,15 +116,28 @@
 
 				<div class="my-1 h-px bg-border" aria-hidden="true"></div>
 
+				<p class="px-3 py-1.5 text-[11px] font-semibold tracking-wider text-muted uppercase">
+					Export CSV
+				</p>
 				<a
 					role="menuitem"
-					href="/finance/export?period={period}"
+					href="/finance/export?period={period}&scope=maya"
 					download
 					onclick={() => (open = false)}
 					class="flex min-h-11 items-center gap-2 rounded-md px-3 text-sm text-ink hover:bg-surface"
 				>
 					<Download class="h-4 w-4" aria-hidden="true" />
-					Export CSV
+					Maya payments
+				</a>
+				<a
+					role="menuitem"
+					href="/finance/export?period={period}&scope=unified"
+					download
+					onclick={() => (open = false)}
+					class="flex min-h-11 items-center gap-2 rounded-md px-3 text-sm text-ink hover:bg-surface"
+				>
+					<Download class="h-4 w-4" aria-hidden="true" />
+					All activity
 				</a>
 			</div>
 		{/if}

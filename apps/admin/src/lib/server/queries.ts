@@ -5,7 +5,21 @@
  *
  * These back the `load()` functions that replace `$lib/mocks`.
  */
-import { and, asc, desc, eq, gt, gte, inArray, isNotNull, isNull, lte, ne, sql, type SQL } from 'drizzle-orm';
+import {
+	and,
+	asc,
+	desc,
+	eq,
+	gt,
+	gte,
+	inArray,
+	isNotNull,
+	isNull,
+	lte,
+	ne,
+	sql,
+	type SQL
+} from 'drizzle-orm';
 import {
 	type DB,
 	customerUser,
@@ -29,7 +43,6 @@ import type {
 	ApRevenueSlice,
 	ConnectionLog,
 	DashboardSnapshot,
-	GrantAttributionRow,
 	Kpi,
 	NetworkAp,
 	PaymentMethodSlice,
@@ -38,7 +51,8 @@ import type {
 	StaffRole,
 	StaffStatus,
 	StatusTone,
-	TransactionRow
+	TransactionRow,
+	UnifiedTransactionRow
 } from '$lib/types';
 
 /**
@@ -778,91 +792,293 @@ export async function listTransactions(
 }
 
 /**
- * Recent credit/points/free-time grant records with durable AP attribution — the non-Maya
- * purchase/grant paths (AC7). Reads the three durable stores directly (credit_ledger spends,
- * points_ledger spends, free-time network_sessions rows with no package), each now carrying
- * `ap_circuit_id`, and resolves the batched label. Read-only, newest first, bounded by `limit`.
- * Surfaced as a small section on the existing Finance transactions page (no new route).
+ * One merged, deduped, chronological activity list for the admin Finance page (supersedes the old
+ * split of `listTransactions` + `listRecentGrantAttribution`). Merges five sources app-side:
+ *   1. Maya payments (payment_transactions, full status/receipt/buyer/fund-source detail)
+ *   2. Standalone credit top-ups (credit_ledger topup rows NOT mirrored from a Maya payment)
+ *   3. Credit spends (credit_ledger spend rows)
+ *   4. Points spends (points_ledger spend rows)
+ *   5. Free-time grants (network_sessions with no package)
+ * The period filter applies uniformly to all five (AC5). A Maya payment that also wrote a mirrored
+ * credit-ledger topup (same tx id) is shown ONCE — the topup source anti-joins it out (AC3).
+ * Points earned as a side effect of a Maya payment are annotated as a badge on the originating
+ * payment row, never a standalone row. Read-only, newest first, page-1-only (each source is
+ * independently capped at `pageSize`).
  */
-export async function listRecentGrantAttribution(
+export async function listUnifiedTransactions(
 	db: DB,
-	opts: { limit?: number } = {}
-): Promise<GrantAttributionRow[]> {
-	const limit = opts.limit ?? 50;
+	opts: DateRange & { page?: number; pageSize?: number }
+): Promise<{ rows: UnifiedTransactionRow[]; total: number }> {
+	const pageSize = opts.pageSize ?? 50;
 
-	const [credits, points, freeTime] = await Promise.all([
-		db
-			.select({
-				amount: creditLedger.amount,
-				apCircuitId: creditLedger.apCircuitId,
-				createdAt: creditLedger.createdAt,
-				who: customerUser.name
-			})
-			.from(creditLedger)
-			.leftJoin(customerUser, eq(customerUser.id, creditLedger.userId))
-			.where(eq(creditLedger.type, LEDGER_TYPE.spend))
-			.orderBy(desc(creditLedger.createdAt))
-			.limit(limit),
-		db
-			.select({
-				amount: pointsLedger.amount,
-				apCircuitId: pointsLedger.apCircuitId,
-				createdAt: pointsLedger.createdAt,
-				who: customerUser.name
-			})
-			.from(pointsLedger)
-			.leftJoin(customerUser, eq(customerUser.id, pointsLedger.userId))
-			.where(eq(pointsLedger.type, 'spend'))
-			.orderBy(desc(pointsLedger.createdAt))
-			.limit(limit),
-		db
-			.select({
-				apCircuitId: networkSessions.apCircuitId,
-				createdAt: networkSessions.startedAt,
-				who: customerUser.name
-			})
-			.from(networkSessions)
-			.leftJoin(customerUser, eq(customerUser.id, networkSessions.userId))
-			.where(isNull(networkSessions.packageId))
-			.orderBy(desc(networkSessions.startedAt))
-			.limit(limit)
-	]);
+	// Per-source inline range conditions against each source's OWN timestamp column. rangeWhere()
+	// is Maya-only (it hardcodes paymentTransactions columns + the attributed-user rule), so the
+	// four non-Maya sources build their own small condition arrays here instead of reusing it.
+	const rangeOn = (
+		col:
+			| typeof creditLedger.createdAt
+			| typeof pointsLedger.createdAt
+			| typeof networkSessions.startedAt
+	): SQL[] => {
+		const c: SQL[] = [];
+		if (opts.from) c.push(gte(col, opts.from));
+		if (opts.to) c.push(lte(col, opts.to));
+		return c;
+	};
+	const creditRange = rangeOn(creditLedger.createdAt);
+	const pointsRange = rangeOn(pointsLedger.createdAt);
+	const sessionRange = rangeOn(networkSessions.startedAt);
 
-	const combined: Array<{ kind: GrantAttributionRow['kind']; detail: string; apCircuitId: string | null; createdAt: Date; who: string | null }> = [
-		...credits.map((r) => ({
-			kind: 'credit' as const,
-			detail: `${peso(Math.abs(Number(r.amount)))} credits`,
-			apCircuitId: r.apCircuitId,
-			createdAt: r.createdAt,
-			who: r.who
-		})),
-		...points.map((r) => ({
-			kind: 'points' as const,
-			detail: `${Math.abs(r.amount)} points`,
-			apCircuitId: r.apCircuitId,
-			createdAt: r.createdAt,
-			who: r.who
-		})),
-		...freeTime.map((r) => ({
-			kind: 'free-time' as const,
-			detail: 'Free time',
-			apCircuitId: r.apCircuitId,
-			createdAt: r.createdAt,
-			who: r.who
-		}))
-	];
+	// AC3 dedupe: a Maya payment writes a mirrored credit_ledger `topup` row sharing the SAME id
+	// (payment_transactions.id === credit_ledger.external_transaction_id). Suppress those topups —
+	// the Maya row already represents the money. A manual/promo topup has a NULL (or non-matching)
+	// external_transaction_id, so NOT EXISTS keeps it (AC4).
+	const noMayaMirror = sql`not exists (select 1 from ${paymentTransactions} pt where pt.id = ${creditLedger.externalTransactionId})`;
 
-	combined.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
-	const top = combined.slice(0, limit);
+	const [maya, topups, creditSpends, pointsSpends, freeTime, pointsEarn, counts] =
+		await Promise.all([
+			db
+				.select({
+					id: paymentTransactions.id,
+					status: paymentTransactions.status,
+					amount: paymentTransactions.amount,
+					fundSourceType: paymentTransactions.fundSourceType,
+					fundSourceMasked: paymentTransactions.fundSourceMasked,
+					receiptNo: paymentTransactions.receiptNo,
+					buyerName: paymentTransactions.buyerName,
+					buyerEmail: paymentTransactions.buyerEmail,
+					createdAt: paymentTransactions.createdAt,
+					apCircuitId: paymentTransactions.apCircuitId,
+					userName: customerUser.name,
+					packageName: packages.name
+				})
+				.from(paymentTransactions)
+				.leftJoin(customerUser, eq(customerUser.id, paymentTransactions.userId))
+				.leftJoin(packages, eq(packages.id, paymentTransactions.packageId))
+				.where(and(...rangeWhere(opts)))
+				.orderBy(desc(paymentTransactions.createdAt))
+				.limit(pageSize),
+			db
+				.select({
+					id: creditLedger.id,
+					amount: creditLedger.amount,
+					apCircuitId: creditLedger.apCircuitId,
+					createdAt: creditLedger.createdAt,
+					who: customerUser.name
+				})
+				.from(creditLedger)
+				.leftJoin(customerUser, eq(customerUser.id, creditLedger.userId))
+				.where(and(eq(creditLedger.type, LEDGER_TYPE.topup), noMayaMirror, ...creditRange))
+				.orderBy(desc(creditLedger.createdAt))
+				.limit(pageSize),
+			db
+				.select({
+					id: creditLedger.id,
+					amount: creditLedger.amount,
+					apCircuitId: creditLedger.apCircuitId,
+					createdAt: creditLedger.createdAt,
+					who: customerUser.name
+				})
+				.from(creditLedger)
+				.leftJoin(customerUser, eq(customerUser.id, creditLedger.userId))
+				.where(and(eq(creditLedger.type, LEDGER_TYPE.spend), ...creditRange))
+				.orderBy(desc(creditLedger.createdAt))
+				.limit(pageSize),
+			db
+				.select({
+					id: pointsLedger.id,
+					amount: pointsLedger.amount,
+					apCircuitId: pointsLedger.apCircuitId,
+					createdAt: pointsLedger.createdAt,
+					who: customerUser.name
+				})
+				.from(pointsLedger)
+				.leftJoin(customerUser, eq(customerUser.id, pointsLedger.userId))
+				.where(and(eq(pointsLedger.type, 'spend'), ...pointsRange))
+				.orderBy(desc(pointsLedger.createdAt))
+				.limit(pageSize),
+			db
+				.select({
+					id: networkSessions.id,
+					apCircuitId: networkSessions.apCircuitId,
+					createdAt: networkSessions.startedAt,
+					who: customerUser.name
+				})
+				.from(networkSessions)
+				.leftJoin(customerUser, eq(customerUser.id, networkSessions.userId))
+				.where(and(isNull(networkSessions.packageId), ...sessionRange))
+				.orderBy(desc(networkSessions.startedAt))
+				.limit(pageSize),
+			// Points-earn: badge lookup, never a standalone row. Keyed by the shared Maya tx id.
+			// ponytail: an `earn` row with a NULL external_transaction_id is unreachable by the current
+			// write path (earnPointsTx only fires inside a settled-payment tx with a non-null id), so it
+			// would silently not surface as a badge — documented, not handled.
+			db
+				.select({
+					externalTransactionId: pointsLedger.externalTransactionId,
+					amount: pointsLedger.amount
+				})
+				.from(pointsLedger)
+				.where(
+					and(
+						eq(pointsLedger.type, 'earn'),
+						isNotNull(pointsLedger.externalTransactionId),
+						...pointsRange
+					)
+				),
+			// Total = sum of the 5 source counts (same predicate as each list query). Points-earn is
+			// NEVER counted — badges are not rows.
+			Promise.all([
+				db
+					.select({ n: sql<number>`count(*)::int` })
+					.from(paymentTransactions)
+					.where(and(...rangeWhere(opts))),
+				db
+					.select({ n: sql<number>`count(*)::int` })
+					.from(creditLedger)
+					.where(and(eq(creditLedger.type, LEDGER_TYPE.topup), noMayaMirror, ...creditRange)),
+				db
+					.select({ n: sql<number>`count(*)::int` })
+					.from(creditLedger)
+					.where(and(eq(creditLedger.type, LEDGER_TYPE.spend), ...creditRange)),
+				db
+					.select({ n: sql<number>`count(*)::int` })
+					.from(pointsLedger)
+					.where(and(eq(pointsLedger.type, 'spend'), ...pointsRange)),
+				db
+					.select({ n: sql<number>`count(*)::int` })
+					.from(networkSessions)
+					.where(and(isNull(networkSessions.packageId), ...sessionRange))
+			])
+		]);
 
-	const circuitLabels = await resolveApCircuitLabels(db, top.map((r) => r.apCircuitId));
-	return top.map((r) => ({
-		kind: r.kind,
-		who: r.who ?? '—',
-		detail: r.detail,
-		apCircuitLabel: apCircuitLabelOf(r.apCircuitId, circuitLabels),
-		createdAt: r.createdAt.toISOString()
-	}));
+	const total = counts.reduce((sum, [row]) => sum + (row?.n ?? 0), 0);
+
+	// Points-earn badge map: shared Maya tx id → total points earned on that payment.
+	const earnByTxId = new Map<string, number>();
+	for (const e of pointsEarn) {
+		if (e.externalTransactionId == null) continue;
+		earnByTxId.set(
+			e.externalTransactionId,
+			(earnByTxId.get(e.externalTransactionId) ?? 0) + e.amount
+		);
+	}
+
+	// Merge all five sources into the superset row shape (Maya-only fields explicit null off-Maya).
+	const combined: Array<UnifiedTransactionRow & { _createdAt: Date; _apCircuitId: string | null }> =
+		[
+			...maya.map((r) => ({
+				kind: 'maya-payment' as const,
+				id: r.id,
+				createdAt: '',
+				who: r.buyerName || r.userName || '—',
+				apCircuitLabel: '',
+				amount: peso(Number(r.amount)),
+				detail: r.packageName ?? 'Maya payment',
+				status: r.status,
+				statusTone: statusTone(r.status),
+				receiptNo: r.receiptNo,
+				buyerEmail: r.buyerEmail,
+				fundSourceType: fundSourceLabel(r.fundSourceType),
+				fundSourceMasked: r.fundSourceMasked,
+				packageName: r.packageName,
+				_createdAt: r.createdAt,
+				_apCircuitId: r.apCircuitId
+			})),
+			...topups.map((r) => ({
+				kind: 'credit-topup' as const,
+				id: `credit-${r.id}`,
+				createdAt: '',
+				who: r.who ?? '—',
+				apCircuitLabel: '',
+				amount: peso(Number(r.amount)),
+				detail: 'Credit top-up',
+				status: null,
+				statusTone: null,
+				receiptNo: null,
+				buyerEmail: null,
+				fundSourceType: null,
+				fundSourceMasked: null,
+				packageName: null,
+				_createdAt: r.createdAt,
+				_apCircuitId: r.apCircuitId
+			})),
+			...creditSpends.map((r) => ({
+				kind: 'credit-spend' as const,
+				id: `credit-${r.id}`,
+				createdAt: '',
+				who: r.who ?? '—',
+				apCircuitLabel: '',
+				amount: peso(Math.abs(Number(r.amount))),
+				detail: 'Credit spend',
+				status: null,
+				statusTone: null,
+				receiptNo: null,
+				buyerEmail: null,
+				fundSourceType: null,
+				fundSourceMasked: null,
+				packageName: null,
+				_createdAt: r.createdAt,
+				_apCircuitId: r.apCircuitId
+			})),
+			...pointsSpends.map((r) => ({
+				kind: 'points-spend' as const,
+				id: `points-${r.id}`,
+				createdAt: '',
+				who: r.who ?? '—',
+				apCircuitLabel: '',
+				amount: null,
+				detail: `${Math.abs(r.amount)} points`,
+				status: null,
+				statusTone: null,
+				receiptNo: null,
+				buyerEmail: null,
+				fundSourceType: null,
+				fundSourceMasked: null,
+				packageName: null,
+				_createdAt: r.createdAt,
+				_apCircuitId: r.apCircuitId
+			})),
+			...freeTime.map((r) => ({
+				kind: 'free-time' as const,
+				id: `session-${r.id}`,
+				createdAt: '',
+				who: r.who ?? '—',
+				apCircuitLabel: '',
+				amount: null,
+				detail: 'Free time',
+				status: null,
+				statusTone: null,
+				receiptNo: null,
+				buyerEmail: null,
+				fundSourceType: null,
+				fundSourceMasked: null,
+				packageName: null,
+				_createdAt: r.createdAt,
+				_apCircuitId: r.apCircuitId
+			}))
+		];
+
+	combined.sort((a, b) => b._createdAt.getTime() - a._createdAt.getTime());
+	const top = combined.slice(0, pageSize);
+
+	// Batch-resolve AP labels across ALL merged+sliced rows in one call (avoids N+1).
+	const circuitLabels = await resolveApCircuitLabels(
+		db,
+		top.map((r) => r._apCircuitId)
+	);
+
+	const rows: UnifiedTransactionRow[] = top.map(({ _createdAt, _apCircuitId, ...row }) => {
+		const earned = row.kind === 'maya-payment' ? earnByTxId.get(row.id) : undefined;
+		return {
+			...row,
+			createdAt: _createdAt.toISOString(),
+			apCircuitLabel: apCircuitLabelOf(_apCircuitId, circuitLabels),
+			...(earned ? { pointsEarned: earned } : {})
+		};
+	});
+
+	return { rows, total };
 }
 
 /** Create a new operator-placed AP from the map ("a place where there is a router").
