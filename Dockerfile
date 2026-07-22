@@ -43,6 +43,13 @@ FROM base AS build
 ARG APP
 RUN test -n "${APP}" || (echo "ERROR: build requires --build-arg APP=admin|customer|locator" && exit 1)
 COPY . .
+# Build-time-only dummy env. SvelteKit evaluates server modules during `vite build`: createDb()
+# guards on a connection string and better-auth throws on a default secret — both read
+# $env/dynamic/private, which resolves from process.env at build. Neither value connects or signs
+# anything; the image runs on the REAL env injected at runtime (compose env_file). These live in the
+# build stage only and never reach the runtime image (separate FROM). validateEnv skips while building.
+ENV DATABASE_URL="postgres://build:build@localhost:5432/build" \
+    BETTER_AUTH_SECRET="docker-build-only-dummy-secret-0000000000"
 RUN bun run --filter "./apps/${APP}" build
 
 # ── proddeps: production-only install (dev deps like vite/svelte/playwright pruned) ─────────
