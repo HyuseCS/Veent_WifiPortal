@@ -10,9 +10,14 @@ metadata:
 
 # Maya checkout attributes to the shared bridge, not the physical AP
 
-> **Status: diagnosed, fix deferred (user chose "just diagnose" 22-07-26).** No code change made.
-> Revisit after the AP-name-snapshot feature (`tx-ap-name-snapshot_22-07-26`) commits — the fix
-> builds on `resolveCheckoutLocation`, which that feature just changed.
+> **Status: RESOLVED 22-07-26.** Fixed in `apps/customer/src/lib/server/network-location.ts`:
+> `resolveCheckoutLocation` now resolves the device's Option 82 circuit-id FIRST
+> (`resolveCircuitIdForMac` → new `apRowForCircuitId` helper → physical AP row), before the
+> interface-name `?ap=`/`resolveApForMac` tiers. So a Maya checkout on a shared hotspot bridge now
+> attributes to the real physical AP (network_id + ap_circuit_id + ap_name_snapshot), matching the
+> grant path. Falls back to the interface tiers when no circuit-id resolves (prior behavior). Tests:
+> `network-location.spec.ts` "circuit-id beats interface-name (physical AP)". Existing (pre-fix) rows
+> keep their old interface attribution — no backfill. Original diagnosis retained below for the record.
 
 ## Symptom (live-observed 22-07-26)
 
