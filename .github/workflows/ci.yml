@@ -35,6 +35,16 @@ jobs:
       - name: Install
         run: bun install --frozen-lockfile
 
+      # svelte-check types $env/dynamic/private from the .env present when `svelte-kit sync` runs.
+      # CI has none, so every key resolves to `string | undefined` and `createDb(env.DATABASE_URL)`
+      # fails typecheck. Seed each app's KEYS from its committed .env.example (placeholder values —
+      # check/build never read real secrets; they only need the keys to exist).
+      - name: Seed .env for type generation
+        run: |
+          cp apps/admin/.env.example apps/admin/.env
+          cp apps/customer/.env.example apps/customer/.env
+          cp apps/locator/.env.example apps/locator/.env
+
       - name: Typecheck (svelte-check)
         run: bun run check
 
