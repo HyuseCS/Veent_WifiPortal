@@ -341,25 +341,6 @@ export async function listIssueEvents(db: DB, issueId: number): Promise<IssueEve
 	return rows.map(mapEventRow);
 }
 
-/**
- * Timelines for many incidents in one query, grouped by issue id (newest-first per issue).
- * Backs the manager board's expanded-row preview without an N+1 per row.
- */
-export async function listIssueEventsByIssue(
-	db: DB,
-	issueIds: number[]
-): Promise<Record<number, IssueEventRow[]>> {
-	const grouped: Record<number, IssueEventRow[]> = {};
-	if (issueIds.length === 0) return grouped;
-	const rows = await selectEvents(db)
-		.where(inArray(adminIssueEvent.issueId, issueIds))
-		.orderBy(desc(adminIssueEvent.createdAt), desc(adminIssueEvent.id));
-	for (const r of rows) {
-		(grouped[r.issueId] ??= []).push(mapEventRow(r));
-	}
-	return grouped;
-}
-
 /** Turn a raw event into a human sentence; labels resolved here so Svelte stays dumb. */
 export function eventSummary(
 	type: IssueEventType,

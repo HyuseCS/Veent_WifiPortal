@@ -10,6 +10,12 @@ metadata:
 
 # Per-AP guest throughput: alternative source (optional, not started)
 
+> **PARKED — not on the actionable list (22-07-26).** Not in our control right now: throughput is
+> unmeasurable by design under the current bypass-grant model, and every alternative source needs
+> either external creds (Fatap Phase B) or a new integration domain (Huawei OLT). Do not surface
+> this as tackleable work; revisit only if per-AP throughput becomes a real product need OR Phase B
+> creds arrive.
+
 ## Why this exists
 
 Per-ap-visibility Phase A's G14 gate was resolved 21-07-26: per-AP guest throughput is NOT

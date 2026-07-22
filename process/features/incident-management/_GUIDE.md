@@ -48,12 +48,14 @@ footer, notification bell list moved into the `(app)` layout, and notification c
 `NotificationModal.svelte` preview instead of navigating.
 
 **Known gaps (backlog, non-blocking):** repo-wide `bun run lint` fails on a pre-existing
-`.prettierrc` path drift (unrelated to IMS); manager-board pagination (L3) is a ceiling comment
-only. IMS e2e spec modernization (the L6a a11y/modal-click rewrite + self-report tile coverage)
+`.prettierrc` path drift (unrelated to IMS); manager-board pagination (L3 Option 1, row
+pagination) remains deferred. IMS e2e spec modernization (the L6a a11y/modal-click rewrite + self-report tile coverage)
 shipped 20-07-26 — `completed/ims-e2e-spec-modernization_20-07-26/`, all 12 admin e2e specs green.
 Sentry-permalink host pinning and `sentryIssueId` API-provenance checks were also already closed —
-see `completed/`. See `process/features/incident-management/backlog/` for the remaining filed
-notes.
+see `completed/`. Manager-board lazy event timeline (L3 Option 2) shipped 22-07-26 —
+`completed/manager-board-lazy-events_22-07-26/` — board no longer eager-loads every issue's event
+history; fetches lazily per-issue on row-expand via the existing `/issues/[id]/detail` endpoint.
+See `process/features/incident-management/backlog/` for the remaining filed notes.
 
 ## Folder Contents
 

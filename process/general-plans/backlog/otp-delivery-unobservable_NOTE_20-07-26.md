@@ -10,6 +10,12 @@ metadata:
 
 # OTP delivery is unobservable (silent accept-then-drop)
 
+> **PARKED — not on the actionable list (22-07-26).** The root cause (Cast rejecting 100% of sends)
+> is blocked on Cast activating a real sender ID — not in our control. Observability + resend already
+> shipped; the remaining guest-UX options (alternate-channel resend, "delivery uncertain" messaging)
+> are only worth building once Cast can actually deliver. Do not surface this as tackleable work;
+> revisit when Cast's sender ID is live.
+
 ## Resolution status (20-07-26)
 
 Fix options 1 (poll DLR), 2 (persist message_id for reconciliation), and 3 (alert on aggregate

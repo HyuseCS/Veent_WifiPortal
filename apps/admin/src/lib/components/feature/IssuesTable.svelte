@@ -3,10 +3,12 @@
 	import ChevronDown from 'lucide-svelte/icons/chevron-down';
 	import ChevronRight from 'lucide-svelte/icons/chevron-right';
 	import ClipboardList from 'lucide-svelte/icons/clipboard-list';
+	import LoaderCircle from 'lucide-svelte/icons/loader-circle';
 	import Pencil from 'lucide-svelte/icons/pencil';
 	import Plus from 'lucide-svelte/icons/plus';
 	import Search from 'lucide-svelte/icons/search';
 	import Trash2 from 'lucide-svelte/icons/trash-2';
+	import TriangleAlert from 'lucide-svelte/icons/triangle-alert';
 	import X from 'lucide-svelte/icons/x';
 	import type { Component } from 'svelte';
 	import { SvelteSet } from 'svelte/reactivity';
@@ -22,13 +24,10 @@
 	// route enforces manager access — this component is only rendered when canManage.
 	let {
 		issues,
-		events,
 		onedit,
 		onnew
 	}: {
 		issues: AdminIssueRow[];
-		/** Audit timeline per issue id (newest-first), for the expanded-row history. */
-		events: Record<number, IssueEventRow[]>;
 		onedit: (issue: AdminIssueRow) => void;
 		onnew: () => void;
 	} = $props();
@@ -39,9 +38,37 @@
 	let confirmingId = $state<number | null>(null); // delete confirm
 	const expanded = new SvelteSet<number>(); // rows showing full detail (reactive on mutation)
 
+	// Expanded-row audit timeline, fetched lazily per issue from /issues/[id]/detail (the assignee
+	// modal does the same) instead of eager-loading every issue's full history on page load.
+	let eventsCache = $state<Record<number, IssueEventRow[]>>({}); // id → fetched events (cache)
+	let loadingIds = $state<Record<number, boolean>>({}); // id → fetch in flight
+	let failedIds = $state<Record<number, boolean>>({}); // id → fetch failed
+
+	async function fetchEvents(id: number) {
+		if (id in eventsCache || loadingIds[id]) return; // cached or in-flight → skip (no refetch)
+		loadingIds[id] = true;
+		failedIds[id] = false;
+		try {
+			// ponytail: no AbortController — the board's fetch is a one-shot per-id guarded by the
+			// cache/in-flight check, so there is no stale-superseding-request race to abort (unlike the
+			// single-$effect modal).
+			const r = await fetch(`/issues/${id}/detail`);
+			if (!r.ok) throw new Error(String(r.status));
+			const d = (await r.json()) as { events: IssueEventRow[] };
+			eventsCache[id] = d.events;
+		} catch {
+			failedIds[id] = true; // degrade gracefully, never throw out of the row
+		} finally {
+			loadingIds[id] = false;
+		}
+	}
+
 	function toggleExpand(id: number) {
 		if (expanded.has(id)) expanded.delete(id);
-		else expanded.add(id);
+		else {
+			expanded.add(id);
+			void fetchEvents(id);
+		}
 	}
 
 	// Whole-row navigation to the detail page. Clicks that land on an interactive control (the
@@ -229,7 +256,20 @@
 						{/if}
 						<div class="border-t border-border pt-3">
 							<span class="mb-2 block font-medium text-ink">History</span>
-							<Timeline events={events[issue.id] ?? []} />
+							{#if loadingIds[issue.id]}
+								<div class="flex items-center gap-2 py-2 text-sm text-muted">
+									<LoaderCircle class="h-4 w-4 animate-spin" aria-hidden="true" /> Loading history…
+								</div>
+							{:else if failedIds[issue.id]}
+								<div
+									class="flex items-center gap-2 rounded-lg border border-border bg-surface p-3 text-sm text-muted"
+								>
+									<TriangleAlert class="h-4 w-4 shrink-0" aria-hidden="true" />
+									Couldn't load the history. Everything above is still current.
+								</div>
+							{:else}
+								<Timeline events={eventsCache[issue.id] ?? []} />
+							{/if}
 						</div>
 					</div>
 				</td>
