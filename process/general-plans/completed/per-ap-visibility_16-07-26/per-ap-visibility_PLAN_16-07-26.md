@@ -436,7 +436,7 @@ CONFIRMED with no code change needed — see `live-verification_REPORT_17-07-26.
 | AC1 | AP auto-discovery | ✅ met | G1, Fully-Automated |
 | AC2 | Per-AP up/down status | ✅ met | G2, Fully-Automated; live-confirmed 17-07-26 (E4/E5 + post-bypass positive case) |
 | AC3 | Per-AP client count | ✅ met | G3, Fully-Automated |
-| AC4 (mechanism) | Per-AP traffic figure | Known-Gap (as SPEC-designed) | Agent-Probe G14 INCONCLUSIVE — 0 active hotspot sessions in both live sample windows (16-07 and 17-07). Not a code defect; ships correctly either way (see AC4 shipped row). |
+| AC4 (mechanism) | Per-AP traffic figure | Known-Gap — RESOLVED (root cause identified 21-07-26) | Agent-Probe G14 re-probed with an actively-streaming guest session: NOT MEASURABLE — structural, not firmware. Paid guests are granted via `ip-binding type=bypassed`, which skips the hotspot subsystem entirely, so `/ip hotspot active` never accounts their traffic under any firmware. The honest `'—'` degradation (see AC4 shipped row) is correct and permanent under the current grant model. See `live-verification_REPORT_17-07-26.md` §"G14 field verdict — RESOLVED (21-07-26)". |
 | AC4 (shipped) | Honest `'—'` degradation when counters absent | ✅ met | G15, Fully-Automated |
 | AC5 | Shared-relay honesty (AP group) | ✅ met | G4 + G11 e2e, Fully-Automated/Hybrid |
 | AC6 | Attribution tolerates missing circuit-id | ✅ met | G5, Fully-Automated |
@@ -450,11 +450,16 @@ CONFIRMED with no code change needed — see `live-verification_REPORT_17-07-26.
 **Accepted known-gaps (both are field/live-network observations, not code defects — user
 decision 21-07-26, both already tracked in backlog):**
 
-1. **G14 (AC4 mechanism) — byte-counter monotonicity INCONCLUSIVE.** Root cause: 0 active hotspot
-   guest sessions during both live sample windows, not a code issue. The degradation branch (AC4
-   shipped) is fully implemented and gate-proven offline. Tracked:
-   `process/general-plans/backlog/per-ap-traffic-counter-reprobe_NOTE_16-07-26.md` — re-probe
-   opportunistically once a real guest session exists.
+1. **G14 (AC4 mechanism) — RESOLVED 21-07-26, reclassified from "field-observation pending" to
+   "not measurable by design."** A live re-probe with an actively-streaming subscribed guest
+   session (the case the earlier two windows lacked) found `/ip hotspot active` structurally empty
+   for paid guests: they are granted via `ip-binding type=bypassed`, which skips hotspot
+   accounting entirely — not a firmware-missing-counters issue as originally assumed. The
+   degradation branch (AC4 shipped, honest `'—'`) is correct and PERMANENT under the current grant
+   model, not merely pending re-observation. Per-AP up/down and client-count are unaffected. Full
+   verdict: `live-verification_REPORT_17-07-26.md` §"G14 field verdict — RESOLVED (21-07-26)". The
+   re-probe backlog note (`per-ap-traffic-counter-reprobe_NOTE_16-07-26.md`) is closed as
+   superseded by this finding.
 2. **G16/AC12 negative case — "genuinely-down AP reads DOWN" unconfirmed.** Root cause of the
    original false-DOWN symptom (walled-garden `hs-unauth-to` ICMP rejection of un-bypassed hotspot
    clients) is fully diagnosed and MITIGATED — shipped as

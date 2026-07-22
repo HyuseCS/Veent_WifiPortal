@@ -141,6 +141,10 @@ No hard-stop-class deviations. No auth/billing/schema-beyond-plan/API/container 
 ## Follow-up stubs created
 
 - `process/general-plans/backlog/per-ap-traffic-counter-reprobe_NOTE_16-07-26.md` (G14 re-probe + E4/E5/G16).
+  **RESOLVED and removed 21-07-26** — G14 re-probed with an active guest session and found
+  structurally not measurable (bypass-grant model skips hotspot accounting for paid guests, not a
+  firmware limitation as assumed here). See `live-verification_REPORT_17-07-26.md` §"G14 field
+  verdict — RESOLVED (21-07-26)" and the PLAN's Closeout section for the full verdict.
 
 ## CONTEXT_PARTIAL
 

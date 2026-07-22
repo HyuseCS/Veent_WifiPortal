@@ -1,0 +1,7 @@
+{
+  "riskClass": "billing or credits",
+  "secondaryRiskClass": "schema/data migration or destructive data mutation",
+  "workDescription": "Add durable per-purchase/grant AP attribution: nullable ap_circuit_id TEXT columns on 5 tables (migration 0049, additive), a read-time label resolver, pre-transaction circuit-id resolution threaded into Maya top-ups + credit/points tier buys + free-time grants, and admin Finance display. No money-math, grant-atomicity, spend guards, or existing networkId behavior changed.",
+  "approver": "vc-execute-agent (implementation) + inline validate-contract Gate: PASS (VALIDATE)",
+  "mustStopBeforeFinalize": true
+}

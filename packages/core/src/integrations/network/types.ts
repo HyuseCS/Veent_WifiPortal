@@ -19,6 +19,26 @@ export class RouterUnreachableError extends Error {
 	}
 }
 
+/** Reject if `p` doesn't settle within `ms` — bounds a single router call's wall time. */
+export function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
+	return new Promise<T>((resolve, reject) => {
+		const t = setTimeout(
+			() => reject(new RouterUnreachableError(`${label} timed out after ${ms}ms`)),
+			ms
+		);
+		p.then(
+			(v) => {
+				clearTimeout(t);
+				resolve(v);
+			},
+			(e) => {
+				clearTimeout(t);
+				reject(e);
+			}
+		);
+	});
+}
+
 export interface GrantInput {
 	macAddress: string;
 	/** How long access should last; the controller may enforce its own timeout. */

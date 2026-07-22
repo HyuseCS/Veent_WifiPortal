@@ -209,4 +209,16 @@ describe('startFreeAccessAndBindDevice atomicity', () => {
 		expect(res.reason).toBe('not_eligible');
 		expect((network as { grant: ReturnType<typeof vi.fn> }).grant).not.toHaveBeenCalled();
 	});
+
+	// AC6 — AP-circuit resolution never blocks the grant. Here the fake db exposes no `select`, so
+	// `resolveCircuitIdForMac`'s cache lookup fails and (with a network lacking `resolveApForMac`)
+	// resolution yields null — the grant still commits. The forced-THROW variant (proving the
+	// pre-tx try/catch wrapper) lives in packages/core/src/services/sessions.spec.ts.
+	it('AC6: completes the grant even when the AP circuit-id cannot be resolved', async () => {
+		const { db } = fakeDb(freeBindAwaits(6));
+		const network = { grant: vi.fn().mockResolvedValue(undefined), revoke: vi.fn() } as never;
+		const res = await startFreeAccessAndBindDevice(db, network, freeInput);
+		expect(res.ok).toBe(true);
+		expect((network as { grant: ReturnType<typeof vi.fn> }).grant).toHaveBeenCalledOnce();
+	});
 });

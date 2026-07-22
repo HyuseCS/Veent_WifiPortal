@@ -412,3 +412,60 @@ different, currently-down AP to exercise the negative case before AC12 is fully 
 Same as the original run: every call was `/print` or `/ping`; zero `/set`/`/add`/`/remove` issued
 by this probe (the ip-binding entries were added by the user via Winbox, outside this session); no
 repo source files touched; `MIKROTIK_USER`/`MIKROTIK_PASSWORD` not printed anywhere above.
+
+---
+
+## G14 field verdict — RESOLVED (21-07-26)
+
+**Trigger:** operator ran a read-only probe on the live router with a subscribed, actively-streaming
+guest phone (host-name `Pixel-6a`, MAC `2E:47:8F:2D:35:8F`, `10.210.55.26`, behind AP-Pabayo /
+circuit-id `OLT-9 xpon 0/1/0/4`) — the "real active guest session" case that both prior G14 windows
+(16-07 and 17-07) lacked.
+
+**Verdict: G14 is NOT MEASURABLE — structural, not a firmware limitation, and permanent under the
+current grant model.**
+
+```
+/ip hotspot active print   ->  EMPTY, even with the guest actively streaming
+/ip hotspot host print     ->  guest present, flags=P (bypassed), no bytes-in/bytes-out fields
+                                no host present with flags=A (authorized)
+```
+
+**Root cause:** paid guests are granted via `ip-binding type=bypassed` (see
+`packages/core/src/integrations/network/mikrotik.ts:47-48`, `~768`: "We grant via bypassed
+ip-bindings (not hotspot logins)"). Bypassed devices skip the hotspot subsystem entirely — RouterOS
+never accounts their traffic on `/ip hotspot active`, so no byte counters exist there for a paid
+guest under any firmware. `aggregateByCircuit`
+(`packages/core/src/services/networkHealth.ts:423`) sources bytes exclusively from
+`listHotspotActive()` → `/ip/hotspot/active/print` (`mikrotik.ts:860`), which is structurally
+empty of paid-guest rows by design.
+
+**Correction to the original assumption:** the shipped honest `'—'` degradation (G15) is and
+remains CORRECT, but the reason recorded at PLAN/EXECUTE time ("firmware doesn't expose
+bytes-in/bytes-out counters", see `per-ap-visibility_PLAN_16-07-26.md` line 85) is the WRONG
+explanation for THIS deployment. Firmware-missing-counters is a real, separate possible cause in
+general, but it is not what is happening here — the operative reason is the bypass-based grant
+model routing paid guests around the hotspot's accounting path entirely.
+
+**Scope:** only the per-AP **throughput (Mbps)** column is affected and will show `'—'`
+permanently for paid guests under the current grant model. Per-AP **up/down** health and per-AP
+**client count** (grouped by circuit-id) are unaffected and continue to work correctly — this
+verdict does not change AC1/AC2/AC3/AC5–AC11 in any way.
+
+**Bonus confirmation (E5, incidental):** the same probe re-confirmed the Option 82 key is
+`agent-circuit-id` exactly as assumed (`DHCP_OPTION82_CIRCUIT_KEY`), with live lease
+`agent-circuit-id="OLT-9 xpon 0/1/0/4:16.3.70"` matching the guest's AP. No code change. Also
+confirmed the per-AP grouping design is sound: `server=` on a DHCP lease is the DHCP/OLT server
+name (not the AP); AP identity is the circuit-id's PON port — the feature correctly groups by
+circuit-id, not `server`.
+
+**Disposition:** G14 is reclassified from "field-observation pending" to **RESOLVED — not
+measurable by design**. No code change is needed or possible to make per-AP guest throughput
+measurable through the hotspot subsystem under the current bypass-based grant model. The re-probe
+backlog note (`per-ap-traffic-counter-reprobe_NOTE_16-07-26.md`) is closed as superseded by this
+finding — see `per-ap-visibility_PLAN_16-07-26.md` Closeout section for the updated AC4 status. If
+per-AP guest throughput is wanted in the future, it needs an alternative traffic source (see
+`process/general-plans/backlog/` for any follow-up note filed alongside this verdict).
+
+G16 (dashboard up/down sanity, AP-Corrales negative case) was NOT re-probed this session and
+remains open/unchanged.

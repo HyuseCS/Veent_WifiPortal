@@ -157,13 +157,21 @@ describe('sentryOptions', () => {
 		return opts.beforeSend(event, hint) as ErrorEvent;
 	};
 
+	// Minimal ErrorEvent + matching EventHint for the message+originalException classification
+	// shape (Cases A/B). Case C tests the no-hint exception.values fallback and stays inline.
+	const buildErrorEvent = (
+		error: Error,
+		message: string
+	): { event: ErrorEvent; hint: EventHint } => ({
+		event: { message } as ErrorEvent,
+		hint: { originalException: error } as EventHint
+	});
+
 	it('Case A: downgrades RouterUnreachableError to warning via hint.originalException, PII still scrubbed', () => {
-		const event = {
-			message: 'router died for juan@example.com'
-		} as ErrorEvent;
-		const hint = {
-			originalException: new RouterUnreachableError('connect timed out after 5000ms')
-		} as EventHint;
+		const { event, hint } = buildErrorEvent(
+			new RouterUnreachableError('connect timed out after 5000ms'),
+			'router died for juan@example.com'
+		);
 		const out = beforeSend(event, hint);
 		expect(out.level).toBe('warning');
 		// PII scrub runs on the matched (downgraded) branch.
@@ -172,10 +180,7 @@ describe('sentryOptions', () => {
 	});
 
 	it('Case B: leaves a normal Error untouched, PII still scrubbed', () => {
-		const event = {
-			message: 'normal bug for juan@example.com'
-		} as ErrorEvent;
-		const hint = { originalException: new Error('normal bug') } as EventHint;
+		const { event, hint } = buildErrorEvent(new Error('normal bug'), 'normal bug for juan@example.com');
 		const out = beforeSend(event, hint);
 		// Level unchanged — a real bug stays at error level (input had no level → stays undefined).
 		expect(out.level).toBeUndefined();

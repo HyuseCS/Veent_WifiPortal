@@ -1,6 +1,6 @@
 ---
 name: note:otp-delivery-unobservable
-description: "PARTIALLY RESOLVED 20-07-26 — Cast delivery observability shipped (see process/general-plans/completed/otp-delivery-observability_20-07-26/). Options 1-3 done for Cast only; itexmo/unisms/smsgate remain unobservable by design. Option 4 (guest-facing fallback) still open."
+description: "PARTIALLY RESOLVED — Options 1-3 (Cast DLR observability) shipped 20-07-26; Option 4 RESEND shipped in apps/customer/src/routes/auth/verify/ (45s cooldown, rate-limited). Remaining open: Option 4 alternate-channel resend + 'delivery uncertain' messaging (DLR-aware guest UX). itexmo/unisms/smsgate remain unobservable by design."
 date: 20-07-26
 metadata:
   node_type: memory
@@ -24,11 +24,18 @@ fires a stable-fingerprint Sentry alert on confirmed carrier rejection.
 never swept — only Cast has a DLR status endpoint, so those three providers remain unobservable by
 design, not by oversight.
 
-**Option 4 (guest-facing fallback when delivery is known to have failed — resend, alternate
-channel, "delivery uncertain" messaging) was explicitly OUT OF SCOPE for that plan and remains
-open.** No guest-facing UX change has been made; a guest whose OTP is confirmed-rejected still just
-waits on a code that will never arrive. This is the one item from this note's original fix-option
-list that still needs a decision and a plan.
+**Option 4 (guest-facing fallback) is PARTIALLY shipped.** The **resend** sub-option is DONE —
+`apps/customer/src/routes/auth/verify/` has a "Resend code" control (45s client cooldown countdown,
+native form POST `?/resend` action) that re-sends via the current `SMS_PROVIDER` and shares the same
+`enforceOtpSendLimit` budget as the initial send (no bypass; 429 with friendly retry message when
+over budget). Kept as-is by decision 22-07-26 (the 45s cooldown was deliberately not changed).
+
+**Still open (the genuine remainder):** the *DLR-aware* sub-options — (a) **alternate-channel
+resend** (fall back to a different provider when Cast is the known-bad one), and (b) **"delivery
+uncertain" messaging** (wire the guest UI to the confirmed DLR-rejection signal so a guest whose OTP
+is confirmed-rejected is told delivery may have failed, rather than silently offered a resend for a
+code that will never arrive). Both need a decision and a plan. Resend-route test coverage is also a
+gap (the `resend`/`verify` form actions have no asserting route-level spec).
 
 ---
 

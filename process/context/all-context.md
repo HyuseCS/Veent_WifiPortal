@@ -1,6 +1,8 @@
 # veent-wifiportal - All Context
 
-Last updated: 2026-07-21 (per-ap-visibility Phase A closed and archived to `process/general-plans/completed/per-ap-visibility_16-07-26/` — feature shipped; the two field-observation gates (byte-counter monotonicity, live down-AP negative case) accepted as prod-observation known-gaps, tracked in general-plans backlog; migration count unchanged at 49, no schema touched)
+Last updated: 2026-07-22 (unified-transaction-history closed and archived to `process/general-plans/completed/unified-transaction-history_21-07-26/` — admin Finance's `/finance/transactions` page now renders ONE merged, deduped, chronological activity list via a new `listUnifiedTransactions` query, replacing the old split of a Maya-only `listTransactions` table + a separate grant-attribution `<details>` section; `listRecentGrantAttribution`/`GrantAttributionRow` retired in favor of `listUnifiedTransactions`/`UnifiedTransactionRow`; CSV export gained an opt-in `?scope=unified|maya` toggle (default unchanged, byte-identical); KPI/revenue functions untouched (AC7); user browser-verified 22-07-26. Deviation: added `@electric-sql/pglite` as an `apps/admin` test-only devDependency (not previously used by admin) for a real-SQL AC3 anti-join negative-control test — user-approved. `TransactionRow` still exists (kept, not replaced, per plan deviation) because `listTransactions`/CSV `scope=maya` still use it. Migration count unchanged at 49, no schema touched.)
+
+Last updated: 2026-07-21 (per-ap-visibility Phase A closed and archived to `process/general-plans/completed/per-ap-visibility_16-07-26/` — feature shipped; per-AP guest throughput (G14) RESOLVED as not measurable by design — paid guests are granted via `ip-binding type=bypassed`, which skips hotspot byte accounting entirely, so the honest `'—'` Mbps column is correct and permanent (not a firmware gap); the live down-AP negative case (G16) remains an accepted prod-observation known-gap, tracked in general-plans backlog; migration count unchanged at 49, no schema touched)
 
 This file is the root context entrypoint for the repo.
 
@@ -225,7 +227,9 @@ Exact resolved versions from `bun.lock`:
   `uqr` 0.1.3 (admin 2FA QR)
 - **Testing:** `vitest` 4.1.9; `@vitest/browser-playwright` ^4.1.8; `vitest-browser-svelte` ^2.1.1;
   `@playwright/test` 1.61.0; `svelte-check` ^4.6.0; `typescript` ^6.0.3;
-  `@electric-sql/pglite` ^0.2.17 (in-memory Postgres for packages/core tests)
+  `@electric-sql/pglite` ^0.2.17 (in-memory Postgres for packages/core tests; also added as an
+  `apps/admin` test-only devDependency 21-07-26 for the unified-transaction-history AC3 anti-join
+  negative-control test)
 - **Lint/format:** `eslint` ^10.4.1 (flat config) + `eslint-plugin-svelte` ^3.19.0; `prettier` ^3.8.3
   + svelte + tailwindcss plugins
 - **Package manager:** bun (workspaces: `apps/*`, `packages/*`)
@@ -440,8 +444,9 @@ Approved feature folders under `process/features/`:
   20-07-26 (`completed/ims-e2e-spec-modernization_20-07-26/`) — all 12 admin e2e specs (23 tests)
   green; see `process/context/tests/all-tests.md`. **Currently open backlog:** manager-board
   pagination and repo-wide lint drift (partial). (M2 secret rotation and the Maya/TEST_ENV coverage
-  question are both resolved and archived/superseded — see `completed/ims-audit-remediation_10-07-26/`
-  and `process/general-plans/backlog/customer-locator-e2e-harness-integration-gaps_NOTE_20-07-26.md`.)
+  question are both resolved and archived/superseded — see `completed/ims-audit-remediation_10-07-26/`;
+  the customer/locator e2e harness credential-tripwire gap that investigation surfaced is now tracked
+  in `process/context/tests/all-tests.md` §Known Gaps, not a standalone backlog note.)
 - **admin-staff-governance** (`process/features/admin-staff-governance/`) — staff accounts, roles,
   2FA/step-up auth, invite/promote/owner-change/wipe workflows. Mature, no imminent task; created
   now because governance work is a high-risk class (auth/identity, trust-boundary) and will need

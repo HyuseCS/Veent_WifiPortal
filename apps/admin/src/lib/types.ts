@@ -252,8 +252,48 @@ export interface TransactionRow {
 	packageName: string | null;
 	/** AP the payment came from — name, "AP #<id>" if pruned, or null if unattributed. */
 	apName: string | null;
+	/** Durable AP attribution label from the stored circuit-id string: current friendly name,
+	 * raw circuit-id if the AP was pruned/renamed away, or "Unattributed". Survives AP prune where
+	 * `apName` (network_id reference) degrades to "AP #<id>". */
+	apCircuitLabel: string;
 	/** ISO timestamp. */
 	createdAt: string;
+}
+
+/**
+ * One row in the unified Finance activity list — the merged superset covering all customer-facing
+ * money/points/access events. Replaces the old split of a Maya payments table + grant-attribution
+ * section. Maya-only fields are populated ONLY on `kind: 'maya-payment'` rows and are explicitly
+ * `null` (rendered "n/a", never blank) on every other kind (AC8).
+ */
+export interface UnifiedTransactionRow {
+	/** Which activity path this row came from. */
+	kind: 'maya-payment' | 'credit-topup' | 'credit-spend' | 'points-spend' | 'free-time';
+	/** Stable per-row key for list rendering. */
+	id: string;
+	/** ISO timestamp. */
+	createdAt: string;
+	/** Buyer/guest display name, or '—' if none. */
+	who: string;
+	/** Durable AP attribution label (friendly name / raw circuit-id / "Unattributed"). */
+	apCircuitLabel: string;
+	/** Pre-formatted peso string for money kinds; null for points/free-time. */
+	amount: string | null;
+	/** Human-readable amount/points/description per kind. */
+	detail: string;
+	/** Points earned as a side effect of this Maya payment — a badge, ONLY set on maya-payment
+	 * rows that have a matching points-earn row. Never a standalone row. */
+	pointsEarned?: number;
+	// ── Maya-only fields — populated ONLY on kind: 'maya-payment', else explicitly null (AC8) ──
+	/** Raw gateway status (e.g. "PAYMENT_SUCCESS"). */
+	status: string | null;
+	/** Badge tone derived from status. */
+	statusTone: StatusTone | null;
+	receiptNo: string | null;
+	buyerEmail: string | null;
+	fundSourceType: string | null;
+	fundSourceMasked: string | null;
+	packageName: string | null;
 }
 
 /** A pending owner demotion/removal request awaiting unanimous owner approval.

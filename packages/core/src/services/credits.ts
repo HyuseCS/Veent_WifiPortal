@@ -154,7 +154,7 @@ export interface SpendCreditsResult {
  */
 export async function spendCreditsTx(
 	tx: Tx,
-	input: { userId: string; amount: number; packageId?: number }
+	input: { userId: string; amount: number; packageId?: number; apCircuitId?: string | null }
 ): Promise<SpendCreditsResult> {
 	if (input.amount <= 0) throw new Error('spendCredits: amount must be positive');
 
@@ -181,7 +181,10 @@ export async function spendCreditsTx(
 		userId: input.userId,
 		packageId: input.packageId,
 		amount: -input.amount,
-		type: LEDGER_TYPE.spend
+		type: LEDGER_TYPE.spend,
+		// Durable AP attribution: resolved best-effort BEFORE the grant transaction opened and
+		// threaded in as a plain string. null = AP was unresolvable ("Unattributed").
+		apCircuitId: input.apCircuitId ?? null
 	});
 
 	return { ok: true, balance: Number(updated.balance) };

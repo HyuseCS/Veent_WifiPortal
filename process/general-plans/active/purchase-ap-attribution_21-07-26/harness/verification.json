@@ -1,0 +1,82 @@
+{
+  "steps": [
+    {
+      "step": "Migration 0049 generated additively (5 nullable TEXT ADD COLUMN, no FK/index/default/drop)",
+      "command": "bun run db:generate  (emitted drizzle/0049_nosy_galactus.sql)",
+      "result": "PASS",
+      "notes": "Filename 0049 confirms 49 prior files (0000-0048); matches VALIDATE correction."
+    },
+    {
+      "step": "Migration applied to dev DB via direct psql DDL (push-managed-DB gotcha — NOT db:push/db:migrate)",
+      "command": "psql -h localhost -p 5432 -U root -d local -c 'ALTER TABLE ... ADD COLUMN IF NOT EXISTS ap_circuit_id text' (x5)",
+      "result": "PASS",
+      "notes": "5x ALTER TABLE returned."
+    },
+    {
+      "step": "Column presence verified per table (boundary/inspection)",
+      "command": "information_schema.columns WHERE column_name='ap_circuit_id' for all 5 tables",
+      "result": "PASS",
+      "notes": "credit_ledger, network_sessions, payment_checkouts, payment_transactions, points_ledger — all: text, is_nullable=YES."
+    },
+    {
+      "step": "AC1 — Maya checkout persists durable apCircuitId INSERT-only; resolveCheckoutLocation per fallback tier",
+      "command": "cd apps/customer && bunx vitest run src/lib/server/record-payment.spec.ts src/lib/server/network-location.spec.ts",
+      "result": "PASS",
+      "notes": "record-payment 9 tests (incl. INSERT-only + not in update set); network-location 7 tests (tiers 1/1-no-cid/3/unresolved)."
+    },
+    {
+      "step": "AC2 — spendCreditsTx/spendPointsTx persist apCircuitId (and null when omitted; no leak on insufficient)",
+      "command": "cd packages/core && bunx vitest run src/services/credits.spec.ts src/services/points.spec.ts",
+      "result": "PASS",
+      "notes": "6 tests."
+    },
+    {
+      "step": "AC3 — startFreeAccessAndBindDevice writes apCircuitId onto network_sessions",
+      "command": "cd packages/core && bunx vitest run src/services/sessions.spec.ts",
+      "result": "PASS",
+      "notes": "AC3 write assertion green."
+    },
+    {
+      "step": "AC4/AC5 — label resolver: current name after rename; raw string after prune; null → Unattributed",
+      "command": "cd packages/core && bunx vitest run src/services/networkHealth.spec.ts",
+      "result": "PASS",
+      "notes": "13 tests total (incl. 3 new AC4/AC5)."
+    },
+    {
+      "step": "AC6 (runtime) — forced resolveCircuitIdForMac rejection STILL commits spend+grant (FREE + PAID), attribution null",
+      "command": "cd packages/core && bunx vitest run src/services/sessions.spec.ts ; cd apps/customer && bunx vitest run src/lib/server/grant-atomic.spec.ts",
+      "result": "PASS",
+      "notes": "NEGATIVE-CONTROL performed: removed the try/catch guard in resolveApCircuitPreTx → both AC6 tests went RED with 'router circuit lookup exploded' propagating out; restored guard → green. grant-atomic 8 tests green (7 prior + 1 new AC6 resolution-unavailable case), no regression."
+    },
+    {
+      "step": "AC6 (static tripwire) — resolveApCircuitPreTx( appears before db.transaction( in both grant functions",
+      "command": "cd packages/core && bunx vitest run src/services/sessions.transaction-tripwire.spec.ts",
+      "result": "PASS",
+      "notes": "2 tests; per-function line-order design (not whole-file), positive anchors non-vacuous."
+    },
+    {
+      "step": "AC7 (automated leg) — admin query maps friendly/raw/Unattributed across credit/points/free-time",
+      "command": "cd apps/admin && bunx vitest run src/lib/server/queries.spec.ts",
+      "result": "PASS",
+      "notes": "2 tests. Agent-Probe leg (rendered admin page) + human verification handoff STILL PENDING — Hybrid gate second half."
+    },
+    {
+      "step": "AC8 (regression) — revenueByAp/apLabel unchanged",
+      "command": "source inspection + full suite",
+      "result": "PASS",
+      "notes": "apLabel()/revenueByAp() bytes UNTOUCHED (verified by diff). No pre-existing revenueByAp unit test to re-run; protected structurally + full-suite green."
+    },
+    {
+      "step": "Full regression — typecheck (all apps + core) and full vitest suite",
+      "command": "bun run check ; cd packages/core && bunx tsc --noEmit ; bun run test",
+      "result": "PASS",
+      "notes": "check: 0 errors across 3 apps. core tsc: exit 0. Suite: core 76, locator 6, customer 125, admin 151 — all pass. (Note: bare `bun test` uses bun's native runner and mis-reports; `bun run test` = vitest fan-out is the real gate.)"
+    },
+    {
+      "step": "Lint (scoped per plan step 26 — no NEW errors from this plan's files)",
+      "command": "bunx eslint <touched files> ; bunx prettier --check <touched files>",
+      "result": "PASS",
+      "notes": "eslint exit 0 on all touched source. Prettier: all EDITED existing files were already drifted at HEAD (pre-existing 297-file repo-wide drift); my 2 new drifted spec files were formatted. No NEW lint failures introduced."
+    }
+  ]
+}
