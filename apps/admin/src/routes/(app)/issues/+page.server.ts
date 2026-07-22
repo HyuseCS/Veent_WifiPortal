@@ -9,7 +9,6 @@ import {
 	listIssues,
 	listIssuesForAssignee,
 	listOpenPool,
-	listIssueEventsByIssue,
 	isAssignee,
 	getIssue,
 	createIssue,
@@ -55,13 +54,6 @@ export const load: PageServerLoad = async (event) => {
 			issues,
 			// Managers work the full board (which already lists the pool as "Open"); no separate pool feed.
 			pool: [] as AdminIssueRow[],
-			// Timelines for the expanded-row preview, grouped by issue (one query, no N+1).
-			// CEILING (L3): this ships EVERY issue plus the FULL event history of every issue on each
-			// visit, and the append-only event table only grows. Fine at current volume; the upgrade
-			// path when it stops being fine is to paginate listIssues() and fetch event history lazily
-			// on row-expand via the existing /issues/[id]/detail endpoint (the assignee modal already
-			// does exactly this). Tracked as a backlog item — no pagination now.
-			events: await listIssueEventsByIssue(db, issues.map((i) => i.id)),
 			assignableStaff: staff
 				.filter((s) => s.status === STAFF_STATUS.active)
 				.map((s) => ({ id: s.id, name: s.name, roleLabel: s.roleLabel })),
@@ -85,7 +77,6 @@ export const load: PageServerLoad = async (event) => {
 		currentUserId: user.id,
 		issues,
 		pool,
-		events: {} as Record<number, import('$lib/server/issues').IssueEventRow[]>,
 		assignableStaff: [] as { id: string; name: string; roleLabel: string }[],
 		networks: networks.map((n) => ({ id: n.id, name: n.name })),
 		sentryConfigured: false,
