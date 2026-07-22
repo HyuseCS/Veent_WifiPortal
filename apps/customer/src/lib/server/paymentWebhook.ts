@@ -99,7 +99,8 @@ export async function handlePaymentWebhook(event: RequestEvent): Promise<Respons
 					userId: paymentCheckouts.userId,
 					packageId: paymentCheckouts.packageId,
 					networkId: paymentCheckouts.networkId,
-					apCircuitId: paymentCheckouts.apCircuitId
+					apCircuitId: paymentCheckouts.apCircuitId,
+					apNameSnapshot: paymentCheckouts.apNameSnapshot
 				})
 				.from(paymentCheckouts)
 				.where(eq(paymentCheckouts.referenceId, ref))
@@ -135,7 +136,8 @@ export async function handlePaymentWebhook(event: RequestEvent): Promise<Respons
 		userId: attributedUserId,
 		packageId: attributedPackageId,
 		networkId: co?.networkId ?? null,
-		apCircuitId: co?.apCircuitId ?? null
+		apCircuitId: co?.apCircuitId ?? null,
+		apNameSnapshot: co?.apNameSnapshot ?? null
 	});
 
 	// Only successful payments add credits; others are recorded above and acknowledged.

@@ -83,37 +83,51 @@ describe('resolveCheckoutLocation — durable circuit-id per fallback tier (AC1)
 		resetDb();
 	});
 
-	it('tier 1 (ap-param): resolves networkId AND the AP row circuit-id string', async () => {
+	it('tier 1 (ap-param): resolves networkId, circuit-id, AND the frozen name snapshot (display_name wins)', async () => {
 		(getPortalContext as ReturnType<typeof vi.fn>).mockReturnValue({ ap: 'iface-1' });
 		(resolveNetworkIdByApName as ReturnType<typeof vi.fn>).mockResolvedValue(7);
-		// apCircuitIdForNetworkId's single network_health lookup returns the stored circuit-id.
-		selectQueue.push([{ apCircuitId: 'OLT-9 xpon 0/1/0/4' }]);
+		// apAttributionForNetworkId's single network_health lookup returns circuit-id + name + displayName.
+		selectQueue.push([
+			{ apCircuitId: 'OLT-9 xpon 0/1/0/4', name: 'AP-Pabayo', displayName: 'Front Desk' }
+		]);
 		const loc = await resolveCheckoutLocation(locEvt, 'u1');
-		expect(loc).toEqual({ networkId: 7, apCircuitId: 'OLT-9 xpon 0/1/0/4' });
+		expect(loc).toEqual({
+			networkId: 7,
+			apCircuitId: 'OLT-9 xpon 0/1/0/4',
+			apNameSnapshot: 'Front Desk'
+		});
 	});
 
-	it('tier 1 with a network_health row carrying no circuit-id → networkId set, apCircuitId null', async () => {
+	it('tier 1 falls back to name when no display_name override is set', async () => {
 		(getPortalContext as ReturnType<typeof vi.fn>).mockReturnValue({ ap: 'iface-1' });
 		(resolveNetworkIdByApName as ReturnType<typeof vi.fn>).mockResolvedValue(7);
-		selectQueue.push([{ apCircuitId: null }]);
+		selectQueue.push([{ apCircuitId: 'CID', name: 'AP-Pabayo', displayName: null }]);
 		const loc = await resolveCheckoutLocation(locEvt, 'u1');
-		expect(loc).toEqual({ networkId: 7, apCircuitId: null });
+		expect(loc).toEqual({ networkId: 7, apCircuitId: 'CID', apNameSnapshot: 'AP-Pabayo' });
 	});
 
-	it('tier 3 (active-session): networkId resolved, apCircuitId null (known-gap fallback)', async () => {
+	it('tier 1 with a network_health row carrying no circuit-id/name → networkId set, others null', async () => {
+		(getPortalContext as ReturnType<typeof vi.fn>).mockReturnValue({ ap: 'iface-1' });
+		(resolveNetworkIdByApName as ReturnType<typeof vi.fn>).mockResolvedValue(7);
+		selectQueue.push([{ apCircuitId: null, name: null, displayName: null }]);
+		const loc = await resolveCheckoutLocation(locEvt, 'u1');
+		expect(loc).toEqual({ networkId: 7, apCircuitId: null, apNameSnapshot: null });
+	});
+
+	it('tier 3 (active-session): networkId resolved, circuit-id + snapshot null (known-gap fallback)', async () => {
 		// No ap param, no MAC (network stub has no resolveMacByIp) → falls to the active-session query.
 		(getPortalContext as ReturnType<typeof vi.fn>).mockReturnValue({});
 		selectQueue.push([{ networkId: 5 }]); // active network_sessions row
 		const loc = await resolveCheckoutLocation(locEvt, 'u1');
-		expect(loc).toEqual({ networkId: 5, apCircuitId: null });
+		expect(loc).toEqual({ networkId: 5, apCircuitId: null, apNameSnapshot: null });
 	});
 
-	it('fully unresolved (dev=false): both null, attribution-miss captured', async () => {
+	it('fully unresolved (dev=false): all null, attribution-miss captured', async () => {
 		(getPortalContext as ReturnType<typeof vi.fn>).mockReturnValue({});
 		selectQueue.push([]); // active-session: none
 		selectQueue.push([]); // last-known profile: none
 		const loc = await resolveCheckoutLocation(locEvt, 'u1');
-		expect(loc).toEqual({ networkId: null, apCircuitId: null });
+		expect(loc).toEqual({ networkId: null, apCircuitId: null, apNameSnapshot: null });
 		expect(captureHandled).toHaveBeenCalledTimes(1);
 	});
 });

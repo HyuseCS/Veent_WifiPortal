@@ -128,6 +128,9 @@ export const creditLedger = pgTable(
 		// (resolveApCircuitLabel) joins network_health.ap_circuit_id for a current friendly name,
 		// else shows this raw string. No FK/index (attribution is read rarely).
 		apCircuitId: text('ap_circuit_id'),
+		// Frozen AP label (display_name ?? name) captured pre-transaction at write time. Finance shows
+		// this as-was name; a later AP rename never rewrites it. Null = unresolvable → live fallback.
+		apNameSnapshot: text('ap_name_snapshot'),
 		createdAt: timestamp('created_at').notNull().defaultNow()
 	},
 	(t) => [index('credit_ledger_user_id_idx').on(t.userId)]
@@ -158,6 +161,9 @@ export const pointsLedger = pgTable(
 		// Durable AP attribution for a points spend — same rationale/shape as credit_ledger.
 		// Raw circuit-id string, resolved best-effort pre-transaction; null = "Unattributed".
 		apCircuitId: text('ap_circuit_id'),
+		// Frozen AP label (display_name ?? name) captured pre-transaction — same rationale as
+		// credit_ledger. Null = unresolvable → live fallback.
+		apNameSnapshot: text('ap_name_snapshot'),
 		createdAt: timestamp('created_at').notNull().defaultNow()
 	},
 	(t) => [index('points_ledger_user_id_idx').on(t.userId)]
@@ -203,6 +209,9 @@ export const paymentTransactions = pgTable(
 		// pruned), this string survives rename/prune. INSERT-only, never in an onConflict
 		// update set. Null = unresolvable at checkout ("Unattributed").
 		apCircuitId: text('ap_circuit_id'),
+		// Frozen AP label (display_name ?? name) copied INSERT-only from the checkout, same as
+		// ap_circuit_id. The as-was name for Finance; immune to later AP renames. Null → live fallback.
+		apNameSnapshot: text('ap_name_snapshot'),
 		createdAt: timestamp('created_at').notNull().defaultNow()
 	},
 	(t) => [
@@ -256,6 +265,9 @@ export const paymentCheckouts = pgTable(
 		// (same 5-fallback chain), copied onto payment_transactions at webhook/reconcile time.
 		// Survives AP rename/prune where network_id degrades. Null = unresolvable at checkout.
 		apCircuitId: text('ap_circuit_id'),
+		// Frozen AP label (display_name ?? name) captured at checkout, copied onto payment_transactions
+		// alongside ap_circuit_id. The as-was name for Finance. Null = unresolvable → live fallback.
+		apNameSnapshot: text('ap_name_snapshot'),
 		// Throttle for the on-return poll so a fast-refreshing page can't hammer the gateway.
 		lastPolledAt: timestamp('last_polled_at'),
 		createdAt: timestamp('created_at').notNull().defaultNow(),
@@ -288,6 +300,9 @@ export const networkSessions = pgTable(
 		// (which write no ledger row) and for credit/points tier buys. Survives AP rename/prune
 		// where network_id degrades. Null = unresolvable at grant time ("Unattributed").
 		apCircuitId: text('ap_circuit_id'),
+		// Frozen AP label (display_name ?? name) captured pre-transaction at grant time — same
+		// rationale as ap_circuit_id. Null = unresolvable → live fallback.
+		apNameSnapshot: text('ap_name_snapshot'),
 		status: text('status').notNull(),
 		startedAt: timestamp('started_at').notNull().defaultNow(),
 		// Device-binding registry: one active row per (user, MAC) = "this device is

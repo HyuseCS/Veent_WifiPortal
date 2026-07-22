@@ -177,7 +177,10 @@ export const actions: Actions = {
 		// Attribute this payment to the AP the buyer is on now, while we still have the
 		// captive-portal context / live session — the webhook (server-to-server, no device)
 		// can't, and a failed payment never reaches a grant. Best-effort: null is fine.
-		const { networkId, apCircuitId } = await resolveCheckoutLocation(event, user.id);
+		const { networkId, apCircuitId, apNameSnapshot } = await resolveCheckoutLocation(
+			event,
+			user.id
+		);
 		let redirectUrl: string;
 		try {
 			const checkout = await payments.createCheckout({
@@ -213,7 +216,8 @@ export const actions: Actions = {
 					referenceId,
 					amount: String(pkg.fiatCost ?? 0),
 					networkId,
-					apCircuitId
+					apCircuitId,
+					apNameSnapshot
 				});
 			} catch (e) {
 				console.warn('[topup] failed to record pending checkout:', (e as Error).message);

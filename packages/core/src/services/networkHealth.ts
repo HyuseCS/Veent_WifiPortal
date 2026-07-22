@@ -575,6 +575,26 @@ export async function resolveApCircuitLabel(
 }
 
 /**
+ * Resolve the AP label to FREEZE onto a transaction/grant row at write time — the "as-was" name a
+ * later AP rename must never rewrite. Returns the same `display_name ?? name ?? circuitId` label as
+ * `resolveApCircuitLabel`, or null when there is no circuit-id (→ read side falls back to live
+ * resolution / "Unattributed"). Failure-safe by contract: MUST be called PRE-transaction (never
+ * inside a money/grant `db.transaction`), and swallows any lookup error to null so freezing the name
+ * can never block or roll back the underlying purchase/grant. Mirrors `resolveApCircuitPreTx`.
+ */
+export async function resolveApNameSnapshot(
+	db: DB,
+	circuitId: string | null
+): Promise<string | null> {
+	if (!circuitId) return null;
+	try {
+		return await resolveApCircuitLabel(db, circuitId);
+	} catch {
+		return null;
+	}
+}
+
+/**
  * Resolve the durable AP circuit-id STRING a device MAC is currently on. The string twin of
  * `resolveNetworkIdForMac` — returns the immutable circuit-id fact (for durable attribution
  * storage) instead of a `network_health.id` reference. Never throws — returns null when nothing

@@ -766,6 +766,7 @@ export async function listTransactions(
 				networkId: paymentTransactions.networkId,
 				apNameRaw: networkHealth.name,
 				apDisplayName: networkHealth.displayName,
+				apNameSnapshot: paymentTransactions.apNameSnapshot,
 				apCircuitId: paymentTransactions.apCircuitId,
 				userName: customerUser.name,
 				packageName: packages.name
@@ -797,11 +798,13 @@ export async function listTransactions(
 			buyerName: r.buyerName || r.userName || '—',
 			buyerEmail: r.buyerEmail,
 			packageName: r.packageName,
-			// null networkId → unattributed (render as —); pruned AP → "AP #<id>". Operator display
-			// name wins over the sweep-managed `name`.
-			apName: r.networkId == null ? null : (r.apDisplayName ?? r.apNameRaw ?? `AP #${r.networkId}`),
-			// Durable attribution from the stored circuit-id string — survives AP rename/prune.
-			apCircuitLabel: apCircuitLabelOf(r.apCircuitId, circuitLabels),
+			// Frozen snapshot (name as-was at purchase) wins; else null networkId → unattributed
+			// (render as —), pruned AP → "AP #<id>". Operator display name wins over sweep `name`.
+			apName:
+				r.apNameSnapshot ??
+				(r.networkId == null ? null : (r.apDisplayName ?? r.apNameRaw ?? `AP #${r.networkId}`)),
+			// Frozen snapshot wins; else durable circuit-id resolution (survives AP rename/prune).
+			apCircuitLabel: r.apNameSnapshot ?? apCircuitLabelOf(r.apCircuitId, circuitLabels),
 			createdAt: r.createdAt.toISOString()
 		}))
 	};
@@ -865,6 +868,7 @@ export async function listUnifiedTransactions(
 					buyerEmail: paymentTransactions.buyerEmail,
 					createdAt: paymentTransactions.createdAt,
 					apCircuitId: paymentTransactions.apCircuitId,
+					apNameSnapshot: paymentTransactions.apNameSnapshot,
 					userName: customerUser.name,
 					packageName: packages.name
 				})
@@ -879,6 +883,7 @@ export async function listUnifiedTransactions(
 					id: creditLedger.id,
 					amount: creditLedger.amount,
 					apCircuitId: creditLedger.apCircuitId,
+					apNameSnapshot: creditLedger.apNameSnapshot,
 					createdAt: creditLedger.createdAt,
 					who: customerUser.name
 				})
@@ -892,6 +897,7 @@ export async function listUnifiedTransactions(
 					id: creditLedger.id,
 					amount: creditLedger.amount,
 					apCircuitId: creditLedger.apCircuitId,
+					apNameSnapshot: creditLedger.apNameSnapshot,
 					createdAt: creditLedger.createdAt,
 					who: customerUser.name
 				})
@@ -905,6 +911,7 @@ export async function listUnifiedTransactions(
 					id: pointsLedger.id,
 					amount: pointsLedger.amount,
 					apCircuitId: pointsLedger.apCircuitId,
+					apNameSnapshot: pointsLedger.apNameSnapshot,
 					createdAt: pointsLedger.createdAt,
 					who: customerUser.name
 				})
@@ -917,6 +924,7 @@ export async function listUnifiedTransactions(
 				.select({
 					id: networkSessions.id,
 					apCircuitId: networkSessions.apCircuitId,
+					apNameSnapshot: networkSessions.apNameSnapshot,
 					createdAt: networkSessions.startedAt,
 					who: customerUser.name
 				})
@@ -981,7 +989,13 @@ export async function listUnifiedTransactions(
 	}
 
 	// Merge all five sources into the superset row shape (Maya-only fields explicit null off-Maya).
-	const combined: Array<UnifiedTransactionRow & { _createdAt: Date; _apCircuitId: string | null }> =
+	const combined: Array<
+		UnifiedTransactionRow & {
+			_createdAt: Date;
+			_apCircuitId: string | null;
+			_apNameSnapshot: string | null;
+		}
+	> =
 		[
 			...maya.map((r) => ({
 				kind: 'maya-payment' as const,
@@ -999,7 +1013,8 @@ export async function listUnifiedTransactions(
 				fundSourceMasked: r.fundSourceMasked,
 				packageName: r.packageName,
 				_createdAt: r.createdAt,
-				_apCircuitId: r.apCircuitId
+				_apCircuitId: r.apCircuitId,
+				_apNameSnapshot: r.apNameSnapshot
 			})),
 			...topups.map((r) => ({
 				kind: 'credit-topup' as const,
@@ -1017,7 +1032,8 @@ export async function listUnifiedTransactions(
 				fundSourceMasked: null,
 				packageName: null,
 				_createdAt: r.createdAt,
-				_apCircuitId: r.apCircuitId
+				_apCircuitId: r.apCircuitId,
+				_apNameSnapshot: r.apNameSnapshot
 			})),
 			...creditSpends.map((r) => ({
 				kind: 'credit-spend' as const,
@@ -1035,7 +1051,8 @@ export async function listUnifiedTransactions(
 				fundSourceMasked: null,
 				packageName: null,
 				_createdAt: r.createdAt,
-				_apCircuitId: r.apCircuitId
+				_apCircuitId: r.apCircuitId,
+				_apNameSnapshot: r.apNameSnapshot
 			})),
 			...pointsSpends.map((r) => ({
 				kind: 'points-spend' as const,
@@ -1053,7 +1070,8 @@ export async function listUnifiedTransactions(
 				fundSourceMasked: null,
 				packageName: null,
 				_createdAt: r.createdAt,
-				_apCircuitId: r.apCircuitId
+				_apCircuitId: r.apCircuitId,
+				_apNameSnapshot: r.apNameSnapshot
 			})),
 			...freeTime.map((r) => ({
 				kind: 'free-time' as const,
@@ -1071,7 +1089,8 @@ export async function listUnifiedTransactions(
 				fundSourceMasked: null,
 				packageName: null,
 				_createdAt: r.createdAt,
-				_apCircuitId: r.apCircuitId
+				_apCircuitId: r.apCircuitId,
+				_apNameSnapshot: r.apNameSnapshot
 			}))
 		];
 
@@ -1084,15 +1103,18 @@ export async function listUnifiedTransactions(
 		top.map((r) => r._apCircuitId)
 	);
 
-	const rows: UnifiedTransactionRow[] = top.map(({ _createdAt, _apCircuitId, ...row }) => {
-		const earned = row.kind === 'maya-payment' ? earnByTxId.get(row.id) : undefined;
-		return {
-			...row,
-			createdAt: _createdAt.toISOString(),
-			apCircuitLabel: apCircuitLabelOf(_apCircuitId, circuitLabels),
-			...(earned ? { pointsEarned: earned } : {})
-		};
-	});
+	const rows: UnifiedTransactionRow[] = top.map(
+		({ _createdAt, _apCircuitId, _apNameSnapshot, ...row }) => {
+			const earned = row.kind === 'maya-payment' ? earnByTxId.get(row.id) : undefined;
+			return {
+				...row,
+				createdAt: _createdAt.toISOString(),
+				// Frozen snapshot (name as-was at the transaction) wins; else live circuit-id resolution.
+				apCircuitLabel: _apNameSnapshot ?? apCircuitLabelOf(_apCircuitId, circuitLabels),
+				...(earned ? { pointsEarned: earned } : {})
+			};
+		}
+	);
 
 	return { rows, total };
 }

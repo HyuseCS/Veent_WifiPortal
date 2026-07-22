@@ -27,21 +27,23 @@ describe('spendPointsTx — durable AP attribution (AC2)', () => {
 			userId: 'u1',
 			amount: 10,
 			packageId: 2,
-			apCircuitId: 'OLT-9 xpon 0/1/0/4'
+			apCircuitId: 'OLT-9 xpon 0/1/0/4',
+			apNameSnapshot: 'AP-Pabayo'
 		});
 		expect(res).toEqual({ ok: true, balance: 40 });
 		expect(writes[0]).toMatchObject({
 			amount: -10,
 			type: 'spend',
-			apCircuitId: 'OLT-9 xpon 0/1/0/4'
+			apCircuitId: 'OLT-9 xpon 0/1/0/4',
+			apNameSnapshot: 'AP-Pabayo'
 		});
 	});
 
-	it('writes null apCircuitId when omitted', async () => {
+	it('writes null apCircuitId + apNameSnapshot when omitted', async () => {
 		const writes: unknown[] = [];
 		const tx = recordingTx([[{ balance: 40 }]], writes);
 		await spendPointsTx(tx, { userId: 'u1', amount: 10, packageId: 2 });
-		expect(writes[0]).toMatchObject({ apCircuitId: null });
+		expect(writes[0]).toMatchObject({ apCircuitId: null, apNameSnapshot: null });
 	});
 
 	it('does not write a ledger row on insufficient points', async () => {
