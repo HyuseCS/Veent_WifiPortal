@@ -294,12 +294,8 @@ export async function resolveCheckoutLocation(
 	// the interface-name tiers below all collapse onto the shared bridge (e.g. `bridge1_WiFi_Project`).
 	// Best-effort: on no cid / no matching AP row it falls through to the tiers below (prior behavior).
 	if (mac) {
-		let circuitId: string | null = null;
-		try {
-			circuitId = await resolveCircuitIdForMac(db, network, mac);
-		} catch {
-			circuitId = null;
-		}
+		// resolveCircuitIdForMac never throws by contract; the .catch is a belt-and-suspenders guard.
+		const circuitId = await resolveCircuitIdForMac(db, network, mac).catch(() => null);
 		if (circuitId) {
 			const ap = await apRowForCircuitId(circuitId);
 			if (ap) {
