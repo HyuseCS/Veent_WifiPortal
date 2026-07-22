@@ -21,6 +21,7 @@ Thumbs.db
 .env
 .env.*
 !.env.example
+!.env.prod.example
 !.env.test
 
 # Generated production service config (contains secrets) — see scripts/setup-prod.ts

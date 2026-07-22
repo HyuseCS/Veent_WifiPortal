@@ -1,0 +1,113 @@
+name: CI
+
+# PRs targeting staging OR main only. (publish.yml handles the post-merge push builds.)
+on:
+  pull_request:
+    branches: [staging, main]
+
+# Cancel superseded runs on the same PR.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  BUN_VERSION: '1.3.14'
+
+jobs:
+  # Cheap → expensive: check → lint → test → build. All blocking EXCEPT prettier (non-blocking:
+  # the repo carries ~297 files of pre-existing format drift — a hard gate would red-X every PR).
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Cache bun install cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
+
+      - name: Install
+        run: bun install --frozen-lockfile
+
+      - name: Typecheck (svelte-check)
+        run: bun run check
+
+      # eslint BLOCKS; prettier is advisory only (pre-existing drift) — never fails the job.
+      - name: Format check (prettier — non-blocking)
+        continue-on-error: true
+        run: bunx prettier --check .
+
+      - name: Lint (eslint — blocking)
+        run: bunx eslint .
+
+      - name: Unit tests
+        run: bun run test
+
+      # Token-less build: validateEnv early-returns while building; Sentry source-map upload
+      # stays off without SENTRY_AUTH_TOKEN. No secrets required.
+      - name: Build all apps
+        run: bun run build
+
+  # Admin Playwright e2e — ONLY on PRs whose base branch is `main` (merge-to-main gate).
+  # Runs against a throwaway Postgres service container; TEST_ENV (apps/admin/e2e/config.ts)
+  # blanks Sentry/Resend and stubs the router, so no live provider is ever touched.
+  admin-e2e:
+    if: github.base_ref == 'main'
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: root
+          POSTGRES_PASSWORD: root
+          POSTGRES_DB: radius_admin_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U root -d radius_admin_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      # Matches the config.ts default; set explicitly so the throwaway DB is unambiguous.
+      E2E_DATABASE_URL: postgres://root:root@localhost:5432/radius_admin_test
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Cache bun install cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
+
+      - name: Install
+        run: bun install --frozen-lockfile
+
+      - name: Install Playwright Chromium + system deps
+        run: bunx playwright install --with-deps chromium
+        working-directory: apps/admin
+
+      # webServer builds + previews with TEST_ENV (throwaway DB, stub router, blanked
+      # Sentry/Resend). globalSetup seeds via DROP SCHEMA + migrate, then enrolls owner 2FA.
+      - name: Admin e2e
+        run: bun run test:e2e
+        working-directory: apps/admin
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: apps/admin/playwright-report
+          retention-days: 7
