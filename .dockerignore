@@ -8,11 +8,12 @@ build
 dist
 **/dist
 
-# Secrets & local env
-.env
-.env.*
-!.env.example
-!.env.prod.example
+# Secrets & local env — exclude every real .env (root + nested apps/*) but KEEP the committed
+# example templates (the build stage seeds .env from them for build-time module validation).
+**/.env
+**/.env.*
+!**/.env.example
+!**/.env.prod.example
 deploy/
 
 # E2E auth state / test artifacts
