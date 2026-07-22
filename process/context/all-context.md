@@ -1,5 +1,16 @@
 # veent-wifiportal - All Context
 
+Last updated: 2026-07-22 (manager-board-lazy-events closed and archived to
+`process/features/incident-management/completed/manager-board-lazy-events_22-07-26/` — admin's
+manager `/issues` board no longer eager-loads every issue's full event history on page load; it
+now fetches one issue's timeline lazily on row-expand via the existing `/issues/[id]/detail`
+endpoint (mirrors `IssueDetailModal.svelte`'s fetch pattern), with per-id caching and a
+graceful-failure UI state. `listIssueEventsByIssue` (the eager batch query) removed as a now-dead
+export from `apps/admin/src/lib/server/issues.ts`; `listIssueEvents` (backs the detail endpoint) is
+untouched. Admin-only, no schema/migration/endpoint-contract change. User-verified in-browser
+22-07-26. This closes L3 Option 2 of `manager-board-pagination` backlog note — Option 1 (row
+pagination) remains open/deferred.)
+
 Last updated: 2026-07-22 (unified-transaction-history closed and archived to `process/general-plans/completed/unified-transaction-history_21-07-26/` — admin Finance's `/finance/transactions` page now renders ONE merged, deduped, chronological activity list via a new `listUnifiedTransactions` query, replacing the old split of a Maya-only `listTransactions` table + a separate grant-attribution `<details>` section; `listRecentGrantAttribution`/`GrantAttributionRow` retired in favor of `listUnifiedTransactions`/`UnifiedTransactionRow`; CSV export gained an opt-in `?scope=unified|maya` toggle (default unchanged, byte-identical); KPI/revenue functions untouched (AC7); user browser-verified 22-07-26. Deviation: added `@electric-sql/pglite` as an `apps/admin` test-only devDependency (not previously used by admin) for a real-SQL AC3 anti-join negative-control test — user-approved. `TransactionRow` still exists (kept, not replaced, per plan deviation) because `listTransactions`/CSV `scope=maya` still use it. Migration count unchanged at 49, no schema touched.)
 
 Last updated: 2026-07-21 (per-ap-visibility Phase A closed and archived to `process/general-plans/completed/per-ap-visibility_16-07-26/` — feature shipped; per-AP guest throughput (G14) RESOLVED as not measurable by design — paid guests are granted via `ip-binding type=bypassed`, which skips hotspot byte accounting entirely, so the honest `'—'` Mbps column is correct and permanent (not a firmware gap); the live down-AP negative case (G16) remains an accepted prod-observation known-gap, tracked in general-plans backlog; migration count unchanged at 49, no schema touched)
