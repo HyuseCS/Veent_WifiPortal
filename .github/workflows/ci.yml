@@ -35,15 +35,16 @@ jobs:
       - name: Install
         run: bun install --frozen-lockfile
 
-      # svelte-check types $env/dynamic/private from the .env present when `svelte-kit sync` runs.
-      # CI has none, so every key resolves to `string | undefined` and `createDb(env.DATABASE_URL)`
-      # fails typecheck. Seed each app's KEYS from its committed .env.example (placeholder values —
-      # check/build never read real secrets; they only need the keys to exist).
-      - name: Seed .env for type generation
+      # svelte-check types $env/dynamic/private from the .env present when `svelte-kit sync` runs,
+      # and `build` evaluates better-auth, which THROWS on a default/empty BETTER_AUTH_SECRET. Seed
+      # each app's KEYS from its committed .env.example, then inject a CI-only dummy secret (it never
+      # signs anything real; the >=32-char boot check is skipped while building). No real secrets.
+      - name: Seed .env (types + secret-less build)
         run: |
-          cp apps/admin/.env.example apps/admin/.env
-          cp apps/customer/.env.example apps/customer/.env
-          cp apps/locator/.env.example apps/locator/.env
+          for app in admin customer locator; do cp "apps/$app/.env.example" "apps/$app/.env"; done
+          for app in admin customer; do
+            sed -i 's|^BETTER_AUTH_SECRET=.*|BETTER_AUTH_SECRET=ci-only-dummy-secret-0000000000000000000000|' "apps/$app/.env"
+          done
 
       - name: Typecheck (svelte-check)
         run: bun run check
