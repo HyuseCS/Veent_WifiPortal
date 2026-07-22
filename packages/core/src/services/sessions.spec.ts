@@ -17,6 +17,11 @@ vi.mock('./networkHealth', async (importOriginal) => {
 	return {
 		...actual,
 		resolveCircuitIdForMac: vi.fn(),
+		// Cid-aware, mirroring the real helper (null cid → null snapshot) so the AC6 rejection cases
+		// still see a null name snapshot without a real network_health select.
+		resolveApNameSnapshot: vi.fn((_db: unknown, cid: string | null) =>
+			Promise.resolve(cid ? 'AP-Pabayo' : null)
+		),
 		resolveNetworkIdForMac: vi.fn().mockResolvedValue(null) // afterBind → attributeAp no-op
 	};
 });
@@ -104,10 +109,12 @@ describe('startFreeAccessAndBindDevice — durable AP attribution (AC3)', () => 
 		const { db } = fakeDb(freeBindAwaits(1), writes);
 		const res = await startFreeAccessAndBindDevice(db, okNetwork(), freeInput);
 		expect(res.ok).toBe(true);
-		// The single insert into network_sessions carries the durable circuit-id.
+		// The single insert into network_sessions carries the durable circuit-id AND the frozen name.
 		expect(
 			writes.values.some(
-				(v) => (v as { apCircuitId?: string }).apCircuitId === 'OLT-9 xpon 0/1/0/4'
+				(v) =>
+					(v as { apCircuitId?: string }).apCircuitId === 'OLT-9 xpon 0/1/0/4' &&
+					(v as { apNameSnapshot?: string }).apNameSnapshot === 'AP-Pabayo'
 			)
 		).toBe(true);
 	});

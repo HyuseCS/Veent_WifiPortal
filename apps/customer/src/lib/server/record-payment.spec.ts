@@ -53,7 +53,8 @@ const attribution = {
 	userId: 'u1',
 	packageId: 1,
 	networkId: null,
-	apCircuitId: 'OLT-9 xpon 0/1/0/4'
+	apCircuitId: 'OLT-9 xpon 0/1/0/4',
+	apNameSnapshot: 'AP-Pabayo'
 };
 const evt = (overrides: Record<string, unknown> = {}) =>
 	({
@@ -138,5 +139,24 @@ describe('recordPaymentTransaction — durable AP attribution (AC1)', () => {
 		const { db, calls } = fakeDb();
 		await recordPaymentTransaction(db, evt(), { ...attribution, apCircuitId: null });
 		expect(calls.insertedRow?.apCircuitId).toBeNull();
+	});
+
+	it('persists the frozen apNameSnapshot on the inserted row', async () => {
+		const { db, calls } = fakeDb();
+		await recordPaymentTransaction(db, evt(), attribution);
+		expect(calls.insertedRow?.apNameSnapshot).toBe('AP-Pabayo');
+	});
+
+	it('persists apNameSnapshot INSERT-only — never in the onConflict update set (name frozen at checkout)', async () => {
+		const { db, calls } = fakeDb();
+		await recordPaymentTransaction(db, evt(), attribution);
+		expect(calls.updateSet).toBeDefined();
+		expect(calls.updateSet).not.toHaveProperty('apNameSnapshot');
+	});
+
+	it('records null apNameSnapshot when the checkout had no resolvable name', async () => {
+		const { db, calls } = fakeDb();
+		await recordPaymentTransaction(db, evt(), { ...attribution, apNameSnapshot: null });
+		expect(calls.insertedRow?.apNameSnapshot).toBeNull();
 	});
 });

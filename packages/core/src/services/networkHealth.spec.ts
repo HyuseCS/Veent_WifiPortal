@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { isNameUniqueViolation, resolveApCircuitLabel } from './networkHealth';
+import { isNameUniqueViolation, resolveApCircuitLabel, resolveApNameSnapshot } from './networkHealth';
 import type { DB } from '@veent/db';
 
 /**
@@ -8,7 +8,7 @@ import type { DB } from '@veent/db';
  * this chainable stub returns whatever rows it was seeded with (`[]` = no matching AP row, i.e. the
  * AP was pruned). No real Postgres needed — matches the fake-object style used across these specs.
  */
-function fakeLabelDb(rows: Array<{ name: string }>): DB {
+function fakeLabelDb(rows: Array<{ name: string; displayName?: string | null }>): DB {
 	const chain: Record<string, unknown> = {};
 	for (const m of ['select', 'from', 'where', 'orderBy']) chain[m] = () => chain;
 	chain.limit = () => Promise.resolve(rows);
@@ -97,6 +97,12 @@ describe('resolveApCircuitLabel (AC4/AC5)', () => {
 		);
 	});
 
+	it('operator display_name wins over the sweep-managed name (durable rename override)', async () => {
+		expect(
+			await resolveApCircuitLabel(fakeLabelDb([{ name: 'OAP3000G-1a2b', displayName: 'Front Desk' }]), CID)
+		).toBe('Front Desk');
+	});
+
 	it('AC5 — AP row pruned/deleted → falls back to the raw circuit-id string, no throw', async () => {
 		expect(await resolveApCircuitLabel(fakeLabelDb([]), CID)).toBe(CID);
 	});
@@ -105,5 +111,35 @@ describe('resolveApCircuitLabel (AC4/AC5)', () => {
 		// Passing a db that would throw if touched proves the null short-circuit runs first.
 		const explodingDb = { select() { throw new Error('should not query'); } } as unknown as DB;
 		expect(await resolveApCircuitLabel(explodingDb, null)).toBe('Unattributed');
+	});
+});
+
+/**
+ * `resolveApNameSnapshot` — the write-time freeze helper. Same label as resolveApCircuitLabel, but
+ * null (not "Unattributed") for a null circuit-id, and failure-safe (throw → null) so freezing the
+ * name can never fail a purchase/grant.
+ */
+describe('resolveApNameSnapshot (write-time freeze)', () => {
+	const CID = 'OLT-9 xpon 0/1/0/4';
+
+	it('null circuit-id → null (no DB access, read side falls back to live)', async () => {
+		const explodingDb = { select() { throw new Error('should not query'); } } as unknown as DB;
+		expect(await resolveApNameSnapshot(explodingDb, null)).toBeNull();
+	});
+
+	it('resolves display_name ?? name for the current AP', async () => {
+		expect(
+			await resolveApNameSnapshot(fakeLabelDb([{ name: 'OAP3000G-1a2b', displayName: 'Front Desk' }]), CID)
+		).toBe('Front Desk');
+		expect(await resolveApNameSnapshot(fakeLabelDb([{ name: 'AP-Pabayo' }]), CID)).toBe('AP-Pabayo');
+	});
+
+	it('lookup throws → null (never blocks the grant)', async () => {
+		const explodingDb = {
+			select() {
+				throw new Error('db down');
+			}
+		} as unknown as DB;
+		expect(await resolveApNameSnapshot(explodingDb, CID)).toBeNull();
 	});
 });

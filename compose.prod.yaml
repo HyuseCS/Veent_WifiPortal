@@ -1,0 +1,136 @@
+# Full single-VM production stack: Postgres + one-shot migrate + 3 apps + cron sidecar.
+#
+# This is SEPARATE from compose.yaml (dev-Postgres-only, backs `bun run db:start`) — do not
+# conflate them. Bring the stack up with:
+#
+#   cp .env.prod.example .env      # then fill in real secrets
+#   docker compose -f compose.prod.yaml build
+#   docker compose -f compose.prod.yaml up -d
+#
+# The VM sits on the same LAN as the MikroTik router; admin reaches it via the RouterOS API
+# (MIKROTIK_HOST = router LAN IP). No WireGuard, no tunnel. See docs/runbooks/deploy.md.
+#
+# Only genuinely per-app values are mapped via `environment:` (ORIGIN, PORT, and the
+# customer/admin-distinct BETTER_AUTH_SECRET + CRON_SECRET). Everything shared (DATABASE_URL,
+# MAYA_*, SMS, RESEND, MIKROTIK_*, SENTRY_*) rides the common env_file; unused keys are ignored.
+
+services:
+  db:
+    image: postgres:17
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - pgbackups:/backups
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    # No host port published by default — only the app/cron containers reach it over the
+    # compose network. Uncomment to inspect from the host with psql.
+    # ports: ['5432:5432']
+
+  migrate:
+    build:
+      context: .
+      target: migrate
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+    restart: 'no' # one-shot: runs drizzle-kit migrate, then exits 0
+
+  customer:
+    build:
+      context: .
+      args:
+        APP: customer
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    env_file: .env
+    environment:
+      PORT: 3001
+      ORIGIN: ${CUSTOMER_ORIGIN}
+      TUNNEL_ORIGIN: ${TUNNEL_ORIGIN}
+      BETTER_AUTH_SECRET: ${CUSTOMER_BETTER_AUTH_SECRET}
+      CRON_SECRET: ${CUSTOMER_CRON_SECRET}
+    ports:
+      - '3001:3001'
+    restart: always
+
+  admin:
+    build:
+      context: .
+      args:
+        APP: admin
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    env_file: .env
+    environment:
+      PORT: 3002
+      ORIGIN: ${ADMIN_ORIGIN}
+      BETTER_AUTH_SECRET: ${ADMIN_BETTER_AUTH_SECRET}
+      CRON_SECRET: ${ADMIN_CRON_SECRET}
+    ports:
+      - '3002:3002'
+    restart: always
+
+  locator:
+    build:
+      context: .
+      args:
+        APP: locator
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      PORT: 3003
+      ORIGIN: ${LOCATOR_ORIGIN}
+    ports:
+      - '3003:3003'
+    restart: always
+
+  # Cron sidecar — mirrors scripts/setup-prod.ts crontab + dev-cron.ts targets. A plain
+  # sleep-loop (not crond) so container env reaches each job without crond's env quirks.
+  # ponytail: sleep-loop over a crontab file — one job set, one cadence knob, no cron daemon.
+  cron:
+    image: alpine:3
+    restart: always
+    depends_on:
+      customer:
+        condition: service_started
+      admin:
+        condition: service_started
+    environment:
+      CUSTOMER_CRON_SECRET: ${CUSTOMER_CRON_SECRET}
+      ADMIN_CRON_SECRET: ${ADMIN_CRON_SECRET}
+    # $$ escapes compose interpolation so the shell (not compose) expands the variable.
+    command:
+      - /bin/sh
+      - -c
+      - |
+        apk add --no-cache curl >/dev/null
+        echo "[cron] started — revoke/reconcile/health every 60s, otp-sweep every 5m"
+        n=0
+        while true; do
+          curl -fsS -m 20 -X POST -H "x-cron-secret: $$CUSTOMER_CRON_SECRET" http://customer:3001/api/network/revoke      || echo "[cron] revoke failed"
+          curl -fsS -m 20 -X POST -H "x-cron-secret: $$CUSTOMER_CRON_SECRET" http://customer:3001/api/payments/reconcile  || echo "[cron] reconcile failed"
+          curl -fsS -m 20 -X POST -H "x-cron-secret: $$ADMIN_CRON_SECRET"    http://admin:3002/api/network/health/refresh || echo "[cron] health failed"
+          if [ $$((n % 5)) -eq 0 ]; then
+            curl -fsS -m 20 -X POST -H "x-cron-secret: $$CUSTOMER_CRON_SECRET" http://customer:3001/api/otp/sweep-delivery || echo "[cron] otp-sweep failed"
+          fi
+          n=$$((n + 1))
+          sleep 60
+        done
+
+volumes:
+  pgdata:
+  pgbackups:

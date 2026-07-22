@@ -564,12 +564,34 @@ export async function resolveApCircuitLabel(
 ): Promise<string> {
 	if (!circuitId) return 'Unattributed';
 	const [ap] = await db
-		.select({ name: networkHealth.name })
+		.select({ name: networkHealth.name, displayName: networkHealth.displayName })
 		.from(networkHealth)
 		.where(eq(networkHealth.apCircuitId, circuitId))
 		.orderBy(networkHealth.id)
 		.limit(1);
-	return ap?.name ?? circuitId;
+	// Prefer the operator display name over the sweep-managed `name` (durable attribution shows the
+	// same label operators renamed the AP to); fall back to the raw circuit-id when no row matches.
+	return ap?.displayName ?? ap?.name ?? circuitId;
+}
+
+/**
+ * Resolve the AP label to FREEZE onto a transaction/grant row at write time — the "as-was" name a
+ * later AP rename must never rewrite. Returns the same `display_name ?? name ?? circuitId` label as
+ * `resolveApCircuitLabel`, or null when there is no circuit-id (→ read side falls back to live
+ * resolution / "Unattributed"). Failure-safe by contract: MUST be called PRE-transaction (never
+ * inside a money/grant `db.transaction`), and swallows any lookup error to null so freezing the name
+ * can never block or roll back the underlying purchase/grant. Mirrors `resolveApCircuitPreTx`.
+ */
+export async function resolveApNameSnapshot(
+	db: DB,
+	circuitId: string | null
+): Promise<string | null> {
+	if (!circuitId) return null;
+	try {
+		return await resolveApCircuitLabel(db, circuitId);
+	} catch {
+		return null;
+	}
 }
 
 /**

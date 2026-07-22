@@ -68,6 +68,7 @@ async function seedMaya(o: {
 	status?: string;
 	createdAt: Date;
 	apCircuitId?: string | null;
+	apNameSnapshot?: string | null;
 	fundSourceType?: string | null;
 	receiptNo?: string | null;
 	buyerName?: string | null;
@@ -80,6 +81,7 @@ async function seedMaya(o: {
 		status: o.status ?? 'PAYMENT_SUCCESS',
 		createdAt: o.createdAt,
 		apCircuitId: o.apCircuitId ?? null,
+		apNameSnapshot: o.apNameSnapshot ?? null,
 		fundSourceType: o.fundSourceType ?? 'card',
 		receiptNo: o.receiptNo ?? 'R-1',
 		buyerName: o.buyerName ?? null,
@@ -120,13 +122,19 @@ async function seedPoints(o: {
 		apCircuitId: o.apCircuitId ?? null
 	});
 }
-async function seedFreeTime(o: { userId: string; startedAt: Date; apCircuitId?: string | null }) {
+async function seedFreeTime(o: {
+	userId: string;
+	startedAt: Date;
+	apCircuitId?: string | null;
+	apNameSnapshot?: string | null;
+}) {
 	await db.insert(networkSessions).values({
 		userId: o.userId,
 		packageId: null,
 		status: 'active',
 		startedAt: o.startedAt,
-		apCircuitId: o.apCircuitId ?? null
+		apCircuitId: o.apCircuitId ?? null,
+		apNameSnapshot: o.apNameSnapshot ?? null
 	});
 }
 
@@ -322,5 +330,50 @@ describe('listUnifiedTransactions — real Postgres merge', () => {
 			expect(r.fundSourceMasked).toBeNull();
 			expect(r.packageName).toBeNull();
 		}
+	});
+});
+
+/**
+ * AP name-snapshot freeze: a row's stored ap_name_snapshot is shown VERBATIM and wins over live
+ * resolution, so a later AP rename never rewrites history. Rows without a snapshot fall back to
+ * today's live resolution (the mocked resolveApCircuitLabel: 'live-1' → 'AP-Pabayo', else raw
+ * cid, null → 'Unattributed'). The read path is uniform across all 5 sources; proven on the Maya
+ * (revenue) source plus a free-time session as a representative non-Maya source.
+ */
+describe('listUnifiedTransactions — AP name-snapshot freeze', () => {
+	beforeEach(async () => {
+		await seedUser('u1', 'Alice');
+	});
+
+	it('shows the frozen snapshot even when the live AP name (cid live-1) differs — rename does not rewrite history', async () => {
+		// cid 'live-1' resolves live to 'AP-Pabayo', but this row was frozen as 'AP-Pabayo (old name)'.
+		await seedMaya({
+			id: 'm1',
+			userId: 'u1',
+			createdAt: T(5),
+			apCircuitId: 'live-1',
+			apNameSnapshot: 'AP-Pabayo (old name)'
+		});
+		await seedFreeTime({
+			userId: 'u1',
+			startedAt: T(4),
+			apCircuitId: 'live-1',
+			apNameSnapshot: 'AP-Pabayo (old name)'
+		});
+		const { rows } = await listUnifiedTransactions(db, {});
+		expect(rows.find((r) => r.kind === 'maya-payment')!.apCircuitLabel).toBe('AP-Pabayo (old name)');
+		expect(rows.find((r) => r.kind === 'free-time')!.apCircuitLabel).toBe('AP-Pabayo (old name)');
+	});
+
+	it('falls back to live resolution when no snapshot is stored (old rows unchanged)', async () => {
+		await seedMaya({ id: 'm2', userId: 'u1', createdAt: T(5), apCircuitId: 'live-1' }); // snapshot null
+		const { rows } = await listUnifiedTransactions(db, {});
+		expect(rows.find((r) => r.kind === 'maya-payment')!.apCircuitLabel).toBe('AP-Pabayo');
+	});
+
+	it('null snapshot + null circuit-id → "Unattributed" (unchanged)', async () => {
+		await seedMaya({ id: 'm3', userId: 'u1', createdAt: T(5), apCircuitId: null });
+		const { rows } = await listUnifiedTransactions(db, {});
+		expect(rows.find((r) => r.kind === 'maya-payment')!.apCircuitLabel).toBe('Unattributed');
 	});
 });

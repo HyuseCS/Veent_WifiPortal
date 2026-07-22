@@ -7,6 +7,7 @@ export { default as KpiCarousel } from './KpiCarousel.svelte';
 export { default as RevenueChart } from './RevenueChart.svelte';
 export { default as DonutChart } from './DonutChart.svelte';
 export { default as NetworkHealthCard } from './NetworkHealthCard.svelte';
+export { default as NetworkApModal } from './NetworkApModal.svelte';
 export { default as UsersTable } from './UsersTable.svelte';
 export { default as TransactionsTable } from './TransactionsTable.svelte';
 export { default as FinanceHeaderControls } from './FinanceHeaderControls.svelte';
