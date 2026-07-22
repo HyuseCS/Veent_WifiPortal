@@ -3,7 +3,13 @@ import { dev } from '$app/environment';
 import { env } from '$env/dynamic/private';
 import { and, asc, desc, eq, isNotNull, isNull, ne, or } from 'drizzle-orm';
 import { customerProfile, networkHealth, networkSessions } from '@veent/db';
-import { SESSION_STATUS, resolveDeviceMac, resolveNetworkIdByApName, captureHandled } from '@veent/core';
+import {
+	SESSION_STATUS,
+	resolveDeviceMac,
+	resolveNetworkIdByApName,
+	resolveCircuitIdForMac,
+	captureHandled
+} from '@veent/core';
 import { db } from '$lib/server/db';
 import { network } from '$lib/server/network';
 import { getDeviceMac, getPortalContext, persistResolvedMac } from '$lib/server/portal';
@@ -234,6 +240,34 @@ async function apAttributionForNetworkId(
 	}
 }
 
+/** The PHYSICAL AP row (network_health.id + attribution) carrying a durable circuit-id string.
+ * Deterministic lowest-id member so a shared-ONU group resolves to the same representative the grant
+ * path (`resolveNetworkIdForMac`) picks. Best-effort: null when nothing matches or the lookup fails. */
+async function apRowForCircuitId(
+	circuitId: string
+): Promise<{ networkId: number; apCircuitId: string; apNameSnapshot: string | null } | null> {
+	try {
+		const [row] = await db
+			.select({
+				id: networkHealth.id,
+				name: networkHealth.name,
+				displayName: networkHealth.displayName
+			})
+			.from(networkHealth)
+			.where(eq(networkHealth.apCircuitId, circuitId))
+			.orderBy(asc(networkHealth.id))
+			.limit(1);
+		if (!row) return null;
+		return {
+			networkId: row.id,
+			apCircuitId: circuitId,
+			apNameSnapshot: row.displayName ?? row.name ?? null
+		};
+	} catch {
+		return null;
+	}
+}
+
 /**
  * Resolve BOTH the network_health.id reference (`networkId`, unchanged legacy behavior) AND the
  * durable circuit-id STRING (`apCircuitId`) a checkout should be attributed to, from the SAME
@@ -252,6 +286,31 @@ export async function resolveCheckoutLocation(
 	userId: string
 ): Promise<{ networkId: number | null; apCircuitId: string | null; apNameSnapshot: string | null }> {
 	const ctx = getPortalContext(event);
+	const mac = await resolveMac(event);
+
+	// Highest priority: the device's own Option 82 circuit-id → the PHYSICAL AP row. This is the same
+	// durable signal the grant path trusts (`resolveCircuitIdForMac`). On a shared hotspot bridge that
+	// fronts multiple physical APs, the circuit-id distinguishes the real AP the guest is under, where
+	// the interface-name tiers below all collapse onto the shared bridge (e.g. `bridge1_WiFi_Project`).
+	// Best-effort: on no cid / no matching AP row it falls through to the tiers below (prior behavior).
+	if (mac) {
+		let circuitId: string | null = null;
+		try {
+			circuitId = await resolveCircuitIdForMac(db, network, mac);
+		} catch {
+			circuitId = null;
+		}
+		if (circuitId) {
+			const ap = await apRowForCircuitId(circuitId);
+			if (ap) {
+				return {
+					networkId: logResolved('device-circuit-id', { mac: maskMac(mac), circuitId }, ap.networkId),
+					apCircuitId: ap.apCircuitId,
+					apNameSnapshot: ap.apNameSnapshot
+				};
+			}
+		}
+	}
 
 	if (ctx?.ap) {
 		const byAp = await resolveNetworkIdByApName(db, ctx.ap);
@@ -266,7 +325,6 @@ export async function resolveCheckoutLocation(
 	// can show the interface name the router returned vs. whether it matched a row — the usual
 	// real-router culprit (e.g. a CAPsMAN cap interface that differs from the hotspot interface
 	// stored in network_health.name).
-	const mac = await resolveMac(event);
 	if (mac) {
 		let apName: string | null;
 		try {

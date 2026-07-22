@@ -131,3 +131,45 @@ describe('resolveCheckoutLocation — durable circuit-id per fallback tier (AC1)
 		expect(captureHandled).toHaveBeenCalledTimes(1);
 	});
 });
+
+/**
+ * Circuit-id-first resolution: the device's own Option 82 circuit-id (the grant path's signal)
+ * takes precedence over the interface-name `?ap=` tier, so a Maya checkout on a shared hotspot
+ * bridge attributes to the real PHYSICAL AP — not the shared bridge interface. Regression fix for
+ * `maya-checkout-ap-attribution-interface-not-physical`.
+ */
+describe('resolveCheckoutLocation — circuit-id beats interface-name (physical AP)', () => {
+	const locEvt = { getClientAddress: () => '10.0.0.5' } as never;
+	const CID = 'OLT-9 xpon 0/1/0/4:16.3.70';
+	beforeEach(() => {
+		vi.clearAllMocks();
+		resetDb();
+	});
+
+	it('resolves the device circuit-id → physical AP and does NOT consult the ?ap= interface', async () => {
+		// Portal carries BOTH the guest MAC and the shared-bridge ap-param. The circuit-id tier must win.
+		(getPortalContext as ReturnType<typeof vi.fn>).mockReturnValue({
+			mac: 'AA:BB:CC:DD:EE:01',
+			ap: 'bridge1_WiFi_Project'
+		});
+		selectQueue.push([{ circuitId: CID }]); // resolveCircuitIdForMac cache hit
+		selectQueue.push([{ id: 14, name: 'OAP3000G-FC6G', displayName: 'AP-PABAYO' }]); // apRowForCircuitId
+		const loc = await resolveCheckoutLocation(locEvt, 'u1');
+		expect(loc).toEqual({ networkId: 14, apCircuitId: CID, apNameSnapshot: 'AP-PABAYO' });
+		// ap-param path never reached — the shared bridge must NOT win over the device's circuit-id.
+		expect(resolveNetworkIdByApName).not.toHaveBeenCalled();
+	});
+
+	it('falls back to the ?ap= tier when the device has no resolvable circuit-id', async () => {
+		(getPortalContext as ReturnType<typeof vi.fn>).mockReturnValue({
+			mac: 'AA:BB:CC:DD:EE:01',
+			ap: 'iface-1'
+		});
+		(resolveNetworkIdByApName as ReturnType<typeof vi.fn>).mockResolvedValue(7);
+		selectQueue.push([]); // resolveCircuitIdForMac cache miss → null (stub has no resolveApForMac)
+		selectQueue.push([{ apCircuitId: 'CID-x', name: 'AP-x', displayName: null }]); // apAttributionForNetworkId(7)
+		const loc = await resolveCheckoutLocation(locEvt, 'u1');
+		expect(loc).toEqual({ networkId: 7, apCircuitId: 'CID-x', apNameSnapshot: 'AP-x' });
+		expect(resolveNetworkIdByApName).toHaveBeenCalledOnce();
+	});
+});
