@@ -4,18 +4,18 @@
 	import ChevronUp from 'lucide-svelte/icons/chevron-up';
 	import ChevronsUpDown from 'lucide-svelte/icons/chevrons-up-down';
 	import type { Component } from 'svelte';
-	import type { TransactionRow, StatusTone } from '$lib/types';
+	import type { UnifiedTransactionRow, StatusTone } from '$lib/types';
 	import { createSort } from '$lib/sortable.svelte';
 	import { EmptyState, SearchInput, StatusBadge, Table } from '$lib/components/ui';
 	import TableSortControl from './TableSortControl.svelte';
 
 	// The Finance transactions panel. Mirrors <UsersTable>: client-side search + clickable-header
 	// sort run purely over the already-loaded `transactions` (no extra loads / DB hits), composed
-	// through <Table>'s toolbar/footer snippets so the table chrome stays shared. Status is
-	// reachable via the Status column sorter, so the old status-filter pills were dropped (mirrors
-	// <UsersTable>). `total` is the server-side match count (for the "showing X of Y" footer /
-	// pagination hint); `transactions` is the first page already fetched in the page load.
-	let { transactions, total }: { transactions: TransactionRow[]; total: number } = $props();
+	// through <Table>'s toolbar/footer snippets so the table chrome stays shared. Rows are the
+	// unified activity superset (Maya payments + credit/points/free-time events), so Maya-only
+	// fields (status/method/receipt/email) are null on non-Maya kinds and render "n/a". `total` is
+	// the server-side match count; `transactions` is the first page already fetched in the load.
+	let { transactions, total }: { transactions: UnifiedTransactionRow[]; total: number } = $props();
 
 	// Human label for a raw gateway status, e.g. "PAYMENT_SUCCESS" → "Success".
 	const cleanStatus = (status: string) => {
@@ -26,20 +26,29 @@
 		return s.charAt(0).toUpperCase() + s.slice(1);
 	};
 
+	// Human label per activity kind (AC2 — every row is clearly typed).
+	const kindLabel: Record<UnifiedTransactionRow['kind'], string> = {
+		'maya-payment': 'Maya payment',
+		'credit-topup': 'Credit top-up',
+		'credit-spend': 'Credit spend',
+		'points-spend': 'Points spent',
+		'free-time': 'Free time'
+	};
+
 	let query = $state('');
 
 	const filtered = $derived.by(() => {
 		const q = query.trim().toLowerCase();
 		if (!q) return transactions;
 		return transactions.filter((tx) =>
-			`${tx.buyerName} ${tx.buyerEmail ?? ''} ${tx.receiptNo ?? ''} ${tx.apCircuitLabel}`
+			`${tx.who} ${tx.buyerEmail ?? ''} ${tx.receiptNo ?? ''} ${tx.apCircuitLabel} ${kindLabel[tx.kind]}`
 				.toLowerCase()
 				.includes(q)
 		);
 	});
 
 	// Clickable-header sorting (shared $lib/sortable). `null` key keeps the server order.
-	type SortKey = 'date' | 'status' | 'amount' | 'method' | 'buyer' | 'apName' | 'receipt';
+	type SortKey = 'date' | 'kind' | 'status' | 'amount' | 'method' | 'buyer' | 'apName' | 'receipt';
 	// Logical status order via tone (online/success → warning → blocked), not alphabetical.
 	const toneRank: Record<StatusTone, number> = { online: 0, warning: 1, blocked: 2 };
 	// `amount` is a pre-formatted peso string ("₱1,200") — parse digits back for numeric sort.
@@ -47,6 +56,7 @@
 	// First-click direction per column (e.g. newest / biggest first).
 	const sort = createSort<SortKey>({
 		date: 'desc',
+		kind: 'asc',
 		status: 'asc',
 		amount: 'desc',
 		method: 'asc',
@@ -55,13 +65,22 @@
 		receipt: 'asc'
 	});
 
+	// Null-guard every comparator: amount/status/statusTone/fundSourceType are null on non-Maya /
+	// non-money kinds — an unguarded .localeCompare / array-index on null throws at click time and
+	// crashes the sort (browser-visible).
 	const sorted = $derived(
 		sort.apply(filtered, (a, b, key) => {
 			if (key === 'date') return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
-			if (key === 'status') return toneRank[a.statusTone] - toneRank[b.statusTone];
-			if (key === 'amount') return amountNum(a.amount) - amountNum(b.amount);
-			if (key === 'method') return a.fundSourceType.localeCompare(b.fundSourceType);
-			if (key === 'buyer') return a.buyerName.localeCompare(b.buyerName);
+			if (key === 'kind') return kindLabel[a.kind].localeCompare(kindLabel[b.kind]);
+			if (key === 'status')
+				return (
+					(a.statusTone ? toneRank[a.statusTone] : -1) -
+					(b.statusTone ? toneRank[b.statusTone] : -1)
+				);
+			if (key === 'amount')
+				return (a.amount ? amountNum(a.amount) : 0) - (b.amount ? amountNum(b.amount) : 0);
+			if (key === 'method') return (a.fundSourceType ?? '').localeCompare(b.fundSourceType ?? '');
+			if (key === 'buyer') return a.who.localeCompare(b.who);
 			if (key === 'apName') return a.apCircuitLabel.localeCompare(b.apCircuitLabel);
 			return (a.receiptNo ?? '').localeCompare(b.receiptNo ?? ''); // receipt
 		})
@@ -70,6 +89,7 @@
 	// Header config: `key` makes a column a clickable sort toggle.
 	const headers: { label: string; key: SortKey }[] = [
 		{ label: 'Date', key: 'date' },
+		{ label: 'Type', key: 'kind' },
 		{ label: 'Status', key: 'status' },
 		{ label: 'Amount', key: 'amount' },
 		{ label: 'Method', key: 'method' },
@@ -155,20 +175,30 @@
 
 	{#each sorted as tx (tx.id)}
 		<tr class="hover:bg-surface">
-			<td data-label="Date" class="px-4 py-2.5 whitespace-nowrap text-ink">{fmtDate(tx.createdAt)}</td>
-			<td data-label="Status" class="px-4 py-2.5">
-				<StatusBadge tone={tx.statusTone} label={cleanStatus(tx.status)} />
-			</td>
-			<td data-label="Amount" class="px-4 py-2.5 font-mono font-semibold text-ink max-sm:text-base"
-				>{tx.amount}</td
+			<td data-label="Date" class="px-4 py-2.5 whitespace-nowrap text-ink"
+				>{fmtDate(tx.createdAt)}</td
 			>
-			<td data-label="Method" class="px-4 py-2.5 text-ink">
-				{tx.fundSourceType}{#if tx.fundSourceMasked}<span class="ml-1 font-mono text-xs text-muted"
-						>•{tx.fundSourceMasked}</span
+			<td data-label="Type" class="px-4 py-2.5 whitespace-nowrap text-ink">{kindLabel[tx.kind]}</td>
+			<td data-label="Status" class="px-4 py-2.5">
+				{#if tx.status && tx.statusTone}
+					<StatusBadge tone={tx.statusTone} label={cleanStatus(tx.status)} />
+				{:else}
+					<span class="text-xs text-muted">n/a</span>
+				{/if}
+			</td>
+			<td data-label="Amount" class="px-4 py-2.5 font-mono font-semibold text-ink max-sm:text-base">
+				{tx.amount ?? tx.detail}{#if tx.pointsEarned}<span
+						class="ml-1.5 rounded bg-surface px-1.5 py-0.5 font-sans text-[11px] font-medium text-muted"
+						>+{tx.pointsEarned} pts</span
 					>{/if}
 			</td>
+			<td data-label="Method" class="px-4 py-2.5 text-ink">
+				{#if tx.fundSourceType}{tx.fundSourceType}{#if tx.fundSourceMasked}<span
+							class="ml-1 font-mono text-xs text-muted">•{tx.fundSourceMasked}</span
+						>{/if}{:else}<span class="text-xs text-muted">n/a</span>{/if}
+			</td>
 			<td data-label="Buyer" class="px-4 py-2.5 text-ink tc-full">
-				<span class="block min-w-0 truncate max-sm:text-base">{tx.buyerName}</span>
+				<span class="block min-w-0 truncate max-sm:text-base">{tx.who}</span>
 				{#if tx.buyerEmail}<span class="block min-w-0 truncate text-xs text-muted"
 						>{tx.buyerEmail}</span
 					>{/if}
@@ -181,7 +211,7 @@
 			<td
 				data-label="Receipt"
 				class="px-4 py-2.5 font-mono text-xs text-muted"
-				class:tc-skip={!tx.receiptNo}>{tx.receiptNo ?? '—'}</td
+				class:tc-skip={!tx.receiptNo}>{tx.receiptNo ?? 'n/a'}</td
 			>
 		</tr>
 	{/each}
