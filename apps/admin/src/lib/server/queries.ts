@@ -434,12 +434,14 @@ export async function listNetworkHealth(db: DB, now: Date = new Date()): Promise
 	// Group peers: AP rows sharing a non-null circuit-id (attributionSource='circuit-id') form a
 	// shared-ONU group the router can't split. Precompute each circuit-id's member names so a card
 	// can name the OTHER APs it shares an ONU with (AC5). Non-AP rows never participate.
+	// Operator display name wins over the sweep-managed `name` everywhere the label is shown.
+	const label = (r: (typeof rows)[number]): string => r.displayName ?? r.name;
 	const namesByCircuit = new Map<string, string[]>();
 	for (const r of rows) {
 		if (r.attributionSource === 'circuit-id' && r.apCircuitId) {
 			const list = namesByCircuit.get(r.apCircuitId);
-			if (list) list.push(r.name);
-			else namesByCircuit.set(r.apCircuitId, [r.name]);
+			if (list) list.push(label(r));
+			else namesByCircuit.set(r.apCircuitId, [label(r)]);
 		}
 	}
 
@@ -463,7 +465,7 @@ export async function listNetworkHealth(db: DB, now: Date = new Date()): Promise
 		}
 		return {
 			id: String(r.id),
-			name: r.name,
+			name: label(r),
 			tone,
 			status,
 			stale,
@@ -480,7 +482,7 @@ export async function listNetworkHealth(db: DB, now: Date = new Date()): Promise
 			attributionSource: r.attributionSource,
 			groupPeers:
 				r.attributionSource === 'circuit-id' && r.apCircuitId
-					? (namesByCircuit.get(r.apCircuitId) ?? []).filter((n) => n !== r.name)
+					? (namesByCircuit.get(r.apCircuitId) ?? []).filter((n) => n !== label(r))
 					: [],
 			latitude: r.latitude,
 			longitude: r.longitude,
@@ -494,6 +496,18 @@ export async function listNetworkHealth(db: DB, now: Date = new Date()): Promise
 			logs: logsByNetwork.get(r.id) ?? []
 		};
 	});
+}
+
+/** Set (or clear) an AP's operator display name — the human label shown on the card and in
+ * durable transaction attribution. Writes ONLY `display_name`; the sweep-managed `name` is left
+ * untouched, so the override survives every router refresh. Blank/null clears it (revert to the
+ * router-derived name). */
+export async function setApDisplayName(
+	db: DB,
+	id: number,
+	displayName: string | null
+): Promise<void> {
+	await db.update(networkHealth).set({ displayName }).where(eq(networkHealth.id, id));
 }
 
 /** Bind (or clear) the router AP/interface whose clients count toward this pin.
@@ -751,6 +765,7 @@ export async function listTransactions(
 				createdAt: paymentTransactions.createdAt,
 				networkId: paymentTransactions.networkId,
 				apNameRaw: networkHealth.name,
+				apDisplayName: networkHealth.displayName,
 				apCircuitId: paymentTransactions.apCircuitId,
 				userName: customerUser.name,
 				packageName: packages.name
@@ -782,8 +797,9 @@ export async function listTransactions(
 			buyerName: r.buyerName || r.userName || '—',
 			buyerEmail: r.buyerEmail,
 			packageName: r.packageName,
-			// null networkId → unattributed (render as —); pruned AP → "AP #<id>".
-			apName: r.networkId == null ? null : (r.apNameRaw ?? `AP #${r.networkId}`),
+			// null networkId → unattributed (render as —); pruned AP → "AP #<id>". Operator display
+			// name wins over the sweep-managed `name`.
+			apName: r.networkId == null ? null : (r.apDisplayName ?? r.apNameRaw ?? `AP #${r.networkId}`),
 			// Durable attribution from the stored circuit-id string — survives AP rename/prune.
 			apCircuitLabel: apCircuitLabelOf(r.apCircuitId, circuitLabels),
 			createdAt: r.createdAt.toISOString()

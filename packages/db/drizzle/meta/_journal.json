@@ -351,6 +351,13 @@
       "when": 1784614750369,
       "tag": "0049_nosy_galactus",
       "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1784696294713,
+      "tag": "0050_brown_shen",
+      "breakpoints": true
     }
   ]
 }

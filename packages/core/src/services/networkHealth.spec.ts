@@ -8,7 +8,7 @@ import type { DB } from '@veent/db';
  * this chainable stub returns whatever rows it was seeded with (`[]` = no matching AP row, i.e. the
  * AP was pruned). No real Postgres needed — matches the fake-object style used across these specs.
  */
-function fakeLabelDb(rows: Array<{ name: string }>): DB {
+function fakeLabelDb(rows: Array<{ name: string; displayName?: string | null }>): DB {
 	const chain: Record<string, unknown> = {};
 	for (const m of ['select', 'from', 'where', 'orderBy']) chain[m] = () => chain;
 	chain.limit = () => Promise.resolve(rows);
@@ -95,6 +95,12 @@ describe('resolveApCircuitLabel (AC4/AC5)', () => {
 		expect(await resolveApCircuitLabel(fakeLabelDb([{ name: 'AP-Pabayo-North' }]), CID)).toBe(
 			'AP-Pabayo-North'
 		);
+	});
+
+	it('operator display_name wins over the sweep-managed name (durable rename override)', async () => {
+		expect(
+			await resolveApCircuitLabel(fakeLabelDb([{ name: 'OAP3000G-1a2b', displayName: 'Front Desk' }]), CID)
+		).toBe('Front Desk');
 	});
 
 	it('AC5 — AP row pruned/deleted → falls back to the raw circuit-id string, no throw', async () => {

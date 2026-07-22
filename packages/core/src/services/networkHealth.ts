@@ -564,12 +564,14 @@ export async function resolveApCircuitLabel(
 ): Promise<string> {
 	if (!circuitId) return 'Unattributed';
 	const [ap] = await db
-		.select({ name: networkHealth.name })
+		.select({ name: networkHealth.name, displayName: networkHealth.displayName })
 		.from(networkHealth)
 		.where(eq(networkHealth.apCircuitId, circuitId))
 		.orderBy(networkHealth.id)
 		.limit(1);
-	return ap?.name ?? circuitId;
+	// Prefer the operator display name over the sweep-managed `name` (durable attribution shows the
+	// same label operators renamed the AP to); fall back to the raw circuit-id when no row matches.
+	return ap?.displayName ?? ap?.name ?? circuitId;
 }
 
 /**

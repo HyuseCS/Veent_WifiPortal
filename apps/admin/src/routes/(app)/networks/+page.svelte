@@ -3,6 +3,7 @@
 	import { Card, FilterTabs, Button } from '$lib/components/ui';
 	import {
 		NetworkHealthCard,
+		NetworkApModal,
 		RouterLogPanel,
 		CoverageMap,
 		KpiCard,
@@ -233,13 +234,24 @@
 		return units;
 	});
 
-	// Selecting a card flies the coverage map to that AP (and rings the card), and
+	// Selecting an AP on the coverage map flies to it (and rings the matching card), and
 	// scrolls the map into view so the focus is visible on small/scrolled layouts.
 	let selectedId = $state<string | null>(null);
 	let mapEl = $state<HTMLDivElement>();
 	function focusAp(id: string) {
 		selectedId = id;
 		mapEl?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+	}
+
+	// Clicking a card opens the AP detail modal (all details + owner controls + display-name edit).
+	// We keep the whole render unit so the modal gets the shared-ONU group too. The modal is a
+	// top-layer dialog with its own local state and a frozen snapshot, so a live SSE frame reflowing
+	// the grid behind it can't touch it — no edit-lock needed (holding it churned the CoverageMap).
+	let detailUnit = $state<RenderUnit | null>(null);
+	let detailOpen = $state(false);
+	function openUnit(unit: RenderUnit) {
+		detailUnit = unit;
+		detailOpen = true;
 	}
 
 	// Alerts KPI drill-down: filter the AP grid to the offending APs and scroll the grid
@@ -436,9 +448,7 @@
 					ap={unit.ap}
 					group={unit.group}
 					selected={unit.ap.id === selectedId}
-					canDelete={data.isOwner}
-					canConfigure={data.isOwner}
-					onfocus={focusAp}
+					onopen={() => openUnit(unit)}
 				/>
 			{/each}
 		</section>
@@ -446,6 +456,15 @@
 	</div>
 </div>
 {/if}
+
+<NetworkApModal
+	ap={detailUnit?.ap ?? null}
+	group={detailUnit?.group}
+	bind:open={detailOpen}
+	canManage={data.canManage}
+	canDelete={data.isOwner}
+	canConfigure={data.isOwner}
+/>
 
 {#if data.isOwner}
 	<WipeDialog

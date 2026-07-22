@@ -107,6 +107,12 @@ export const routerModel = pgTable(
 export const networkHealth = pgTable('network_health', {
 	id: serial('id').primaryKey(),
 	name: text('name').notNull(),
+	// Operator-set display name. `name` is the sweep's working identity — the natural key the health
+	// upsert writes on (interface rows) and re-derives from the DHCP hostname every refresh (AP rows),
+	// so a custom name written to `name` is clobbered/pruned on the next sample. `display_name` is the
+	// human label the sweep never touches: the UI and durable AP attribution show `display_name ?? name`.
+	// Null = no override (fall back to the router-derived `name`).
+	displayName: text('display_name'),
 	online: boolean('online').notNull().default(true),
 	// Whether the router's uplink/WAN was reachable at the last sample (shared across a router's
 	// interfaces). `online` is the raw per-AP LINK state; an AP with `online=true` but `wan_ok=false`
