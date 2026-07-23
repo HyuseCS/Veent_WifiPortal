@@ -25,7 +25,8 @@ Thumbs.db
 !.env.test
 
 # Generated production service config (contains secrets) — see scripts/setup-prod.ts
-deploy/
+# Anchored to repo root so it does NOT swallow docs/deploy/ (the deployment guide).
+/deploy/
 
 # Vite
 vite.config.js.timestamp-*
