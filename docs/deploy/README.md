@@ -271,6 +271,27 @@ cadence in prod — schedule it separately, not every minute.
 
 ---
 
+# Maya / e-wallet return path (walled garden) — hard-won prod requirements
+
+Two live-testing failures, both operator config (not code):
+
+- **`ORIGIN` must be the guest-reachable, walled-gardened portal origin — never `localhost`.** The
+  customer app builds the buyer's Maya `successUrl`/`cancelUrl` from `event.url.origin` (driven by the
+  `ORIGIN` env). At Maya-redirect time the guest device is still captive (the webhook grant is
+  mid-flight) and can only reach walled-garden hosts, so `ORIGIN` MUST be the LAN portal address that
+  is in the hotspot walled garden (e.g. `http://10.210.59.11:3001`). If `ORIGIN` is `localhost` or any
+  non-walled-gardened host, the post-payment return dies with `ERR_CONNECTION_CLOSED`. `TUNNEL_ORIGIN`
+  is separate: it is ONLY the public HTTPS address for the Maya→server webhook, never the browser return.
+
+- **GCash / e-wallet payment hosts must be reachable in the walled garden by IP, not just hostname.**
+  MikroTik `dst-host` (hostname) walled-garden rules do NOT reliably match GCash's HTTPS traffic
+  (`payments.gcash.com` plus its Ant/Alipay sub-resources on `*.alipay.com`, `*.alipayobjects.com`,
+  `*.alicdn.com`). Symptom: `dst-host` rules present with `hits=0`, no dynamic IP entries, and
+  `ERR_CONNECTION_CLOSED` loading `payments.gcash.com`. Ensure these gateways are reachable pre-auth
+  via IP-based walled-garden allows and/or forcing hotspot DNS through the router. Cross-reference:
+  `apps/admin/scripts/setup-router.ts` `PAYMENT_HOSTS`, and the still-open follow-up to productionize
+  GCash/Alipay walled-garden entries there.
+
 # Shared references
 
 - **[router-api-ssl.md](router-api-ssl.md)** — MikroTik api-ssl cert, walled garden, `login.html`,
