@@ -12,8 +12,12 @@ vi.mock('$env/dynamic/private', () => ({ env: {} }));
 // stub whose terminal await shifts one result off `selectQueue`, so a test drives each query's
 // result in order regardless of which table/columns it selects.
 const selectQueue: unknown[][] = [];
+// Records every db.update().set(...) call so provenance/no-entrench tests can assert whether a MAC
+// was persisted (live path / empty-seed) or NOT (fallback over a populated last_known_mac — AC5).
+const updateCalls: Array<{ set: unknown }> = [];
 function resetDb() {
 	selectQueue.length = 0;
+	updateCalls.length = 0;
 }
 vi.mock('$lib/server/db', () => {
 	const chain: Record<string, unknown> = {};
@@ -21,7 +25,12 @@ vi.mock('$lib/server/db', () => {
 	chain.limit = () => Promise.resolve(selectQueue.shift() ?? []);
 	return {
 		db: {
-			update: () => ({ set: () => ({ where: async () => {} }) }),
+			update: () => ({
+				set: (v: unknown) => {
+					updateCalls.push({ set: v });
+					return { where: async () => {} };
+				}
+			}),
 			select: () => chain
 		}
 	};
@@ -37,8 +46,8 @@ vi.mock('@veent/core', async (importOriginal) => {
 	return { ...actual, captureHandled: vi.fn(), resolveNetworkIdByApName: vi.fn() };
 });
 
-import { resolveMacTrusted, resolveCheckoutLocation } from './network-location';
-import { getPortalContext } from '$lib/server/portal';
+import { resolveMacTrusted, resolveMacForUser, resolveCheckoutLocation } from './network-location';
+import { getPortalContext, getDeviceMac } from '$lib/server/portal';
 import { captureHandled, resolveNetworkIdByApName } from '@veent/core';
 
 const SERVER_MAC = 'AA:BB:CC:DD:EE:01';
@@ -171,5 +180,60 @@ describe('resolveCheckoutLocation — circuit-id beats interface-name (physical 
 		const loc = await resolveCheckoutLocation(locEvt, 'u1');
 		expect(loc).toEqual({ networkId: 7, apCircuitId: 'CID-x', apNameSnapshot: 'AP-x' });
 		expect(resolveNetworkIdByApName).toHaveBeenCalledOnce();
+	});
+});
+
+/**
+ * MAC-trust grant fix — `resolveMacForUser` now returns LIVE-vs-FALLBACK provenance and a fallback
+ * (device-cookie) MAC must never overwrite a populated durable `last_known_mac` (AC1, AC2, AC5).
+ */
+describe('resolveMacForUser — live/fallback provenance + no-entrench (AC1/AC2/AC5)', () => {
+	const provEvt = { getClientAddress: () => '10.0.0.5' } as never;
+	beforeEach(() => {
+		vi.clearAllMocks();
+		resetDb();
+	});
+
+	it('13a: live hit (portal cookie) ⇒ { live: true } and persists the MAC', async () => {
+		(getPortalContext as ReturnType<typeof vi.fn>).mockReturnValue({ mac: SERVER_MAC });
+		const r = await resolveMacForUser(provEvt, 'u1');
+		expect(r).toEqual({ mac: SERVER_MAC, live: true });
+		// live branch always persists (rememberAccountMac) — the durable fallback is refreshed.
+		expect(updateCalls.length).toBe(1);
+	});
+
+	it('13b: all live miss + device cookie ⇒ { mac: <device>, live: false }', async () => {
+		(getPortalContext as ReturnType<typeof vi.fn>).mockReturnValue({}); // no portal mac
+		(getDeviceMac as ReturnType<typeof vi.fn>).mockReturnValue('CC:CC:CC:CC:CC:CC');
+		// seedAccountMac reads accountMac first; empty queue ⇒ null ⇒ seed proceeds.
+		const r = await resolveMacForUser(provEvt, 'u1');
+		expect(r).toEqual({ mac: 'CC:CC:CC:CC:CC:CC', live: false });
+	});
+
+	it('13c: fallback (device cookie) does NOT overwrite a populated last_known_mac (AC5 no-entrench)', async () => {
+		(getPortalContext as ReturnType<typeof vi.fn>).mockReturnValue({}); // no portal mac
+		(getDeviceMac as ReturnType<typeof vi.fn>).mockReturnValue('CC:CC:CC:CC:CC:CC');
+		selectQueue.push([{ mac: 'EE:EE:EE:EE:EE:EE' }]); // accountMac read → already populated
+		const r = await resolveMacForUser(provEvt, 'u1');
+		expect(r).toEqual({ mac: 'CC:CC:CC:CC:CC:CC', live: false });
+		// Negative control: the durable value existed, so NO update must run — a fallback never entrenches.
+		expect(updateCalls.length).toBe(0);
+	});
+
+	it('13c-seed: fallback seeds ONLY when last_known_mac is empty', async () => {
+		(getPortalContext as ReturnType<typeof vi.fn>).mockReturnValue({}); // no portal mac
+		(getDeviceMac as ReturnType<typeof vi.fn>).mockReturnValue('CC:CC:CC:CC:CC:CC');
+		selectQueue.push([]); // accountMac read → null (no durable value yet)
+		await resolveMacForUser(provEvt, 'u1');
+		// Empty durable value → seed proceeds (exactly one persist of the device MAC).
+		expect(updateCalls.length).toBe(1);
+		expect(updateCalls[0].set).toEqual({ lastKnownMac: 'CC:CC:CC:CC:CC:CC' });
+	});
+
+	it('13d: live hit still persists (rememberAccountMac unchanged on the live branch)', async () => {
+		(getPortalContext as ReturnType<typeof vi.fn>).mockReturnValue({ mac: SERVER_MAC });
+		await resolveMacForUser(provEvt, 'u1');
+		expect(updateCalls.length).toBe(1);
+		expect(updateCalls[0].set).toEqual({ lastKnownMac: SERVER_MAC });
 	});
 });

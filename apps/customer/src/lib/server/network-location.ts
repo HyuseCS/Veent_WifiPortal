@@ -84,7 +84,7 @@ export async function resolveMacTrusted(
 	userId: string,
 	claimedMac?: string | null
 ): Promise<string | null> {
-	const mac = await resolveMacForUser(event, userId);
+	const { mac } = await resolveMacForUser(event, userId);
 	const claimed = String(claimedMac ?? '').toUpperCase();
 	if (claimed && MAC_RE.test(claimed) && mac && claimed !== mac.toUpperCase()) {
 		console.warn('[mac-trust] posted MAC differs from server-resolved — using server', {
@@ -128,28 +128,34 @@ export async function lastKnownMac(userId: string): Promise<string | null> {
  * fallback only fills the gap; a user who genuinely switched devices reconnects through the
  * portal to refresh it.
  */
-export async function resolveMacForUser(event: RequestEvent, userId: string): Promise<string | null> {
-	const live = await resolveMac(event);
-	if (live) {
+export async function resolveMacForUser(
+	event: RequestEvent,
+	userId: string
+): Promise<{ mac: string | null; live: boolean }> {
+	const detected = await resolveMac(event);
+	if (detected) {
 		// Durably remember the freshly-seen MAC on the account (keyed by userId, NOT a cookie) so a
 		// later cross-browser hop — the Maya return lands in the system browser with no portal
 		// cookie — can still recover it without making the buyer reconnect through the portal.
-		await rememberAccountMac(userId, live);
-		return live;
+		// `live: true` = this MAC came from a live detector (portal cookie or router IP→MAC), so a
+		// caller may trust it as proof this device is actually connected right now.
+		await rememberAccountMac(userId, detected);
+		return { mac: detected, live: true };
 	}
 	// Live detection missed (no portal cookie + IP→MAC defeated by the hotspot NAT). Try the
 	// device-scoped cookie next: it's account-independent and survives sign-out, so a SECOND account
 	// logging in on the same browser recovers this device's MAC even though its per-user fallbacks
 	// are empty (docs/problems/second-account-mac-not-captured.md). Seed it onto the new account so
-	// subsequent cross-browser hops (e.g. the Maya return) have the durable per-user signal too.
+	// subsequent cross-browser hops (e.g. the Maya return) have the durable per-user signal too —
+	// but only when the account has NO durable MAC yet (a fallback must not entrench over live truth).
 	const device = getDeviceMac(event);
 	if (device) {
-		await rememberAccountMac(userId, device);
-		return device;
+		await seedAccountMac(userId, device);
+		return { mac: device, live: false };
 	}
 	// Last resort: the durable account MAC — covers a buyer seen earlier but with no session row yet
 	// (e.g. topped up before ever binding a device) — then the most-recent session's MAC.
-	return (await accountMac(userId)) ?? (await lastKnownMac(userId));
+	return { mac: (await accountMac(userId)) ?? (await lastKnownMac(userId)), live: false };
 }
 
 /** Read the durable per-account MAC (`customer_profile.last_known_mac`). */
@@ -183,6 +189,22 @@ async function rememberAccountMac(userId: string, mac: string): Promise<void> {
 		// Low-priority: best-effort write, self-heals on the next resolution. Watch the rate, not the event.
 		captureHandled(e, { level: 'warning', tags: { area: 'network', scope: 'mac-persist' } });
 	}
+}
+
+/**
+ * Seed the durable per-account MAC from a FALLBACK (non-live) source — but ONLY when the account has
+ * no durable MAC stored yet. A fallback MAC (device cookie) is a guess, not proof of connection, so
+ * it must never overwrite an existing `last_known_mac` that a live resolution wrote (AC5 — stops a
+ * wrong/stale fallback from entrenching itself and turning a bad binding into a closed loop). When a
+ * durable value already exists we leave it untouched; a genuine device change is corrected by the
+ * next LIVE resolution (portal reconnect) via `rememberAccountMac`, not by a fallback.
+ */
+async function seedAccountMac(userId: string, mac: string): Promise<void> {
+	// ponytail: read-guard in JS (reuse existing accountMac) rather than a second SQL branch — the
+	// TOCTOU window is harmless (both racers would seed the same fallback MAC) and it keeps the
+	// no-entrench rule unit-testable against the mocked db.
+	if (await accountMac(userId)) return;
+	await rememberAccountMac(userId, mac);
 }
 
 /** One structured success line per resolution, tagged with the branch that won — feeds the
