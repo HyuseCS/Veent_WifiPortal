@@ -334,6 +334,56 @@ describe('listUnifiedTransactions — real Postgres merge', () => {
 });
 
 /**
+ * AC2/AC3 — same-day cross-write-convention windowing (the timestamptz migration's core fix).
+ *
+ * Pre-migration, money rows (credit_ledger/payment_transactions) stored Manila WALL-CLOCK while
+ * session/free-time rows (network_sessions.started_at) stored UTC WALL-CLOCK — the two were skewed
+ * ~8h, so a single Manila-day period window could not include both. Now every column is a real
+ * timestamptz instant, and period.ts emits real Manila-day boundary instants, so a money row and a
+ * session row in the SAME real Manila day window together — and a row in the NEXT Manila day is
+ * correctly excluded even though its UTC calendar date is the same.
+ *
+ * Manila day 2026-07-21 → window [2026-07-20T16:00:00Z, 2026-07-21T15:59:59.999Z] (real instants,
+ * −8h from Manila midnight, no DST — matches parsePeriod's math).
+ */
+describe('listUnifiedTransactions — same-day cross-convention windowing (timestamptz)', () => {
+	// Manila-day 2026-07-21 real-instant boundaries (what parsePeriod now produces).
+	const from = new Date('2026-07-20T16:00:00.000Z'); // Manila 07-21 00:00
+	const to = new Date('2026-07-21T15:59:59.999Z'); // Manila 07-21 23:59:59.999
+
+	it('AC2/AC3: a Maya payment and a free-time session in the same real Manila day both window in', async () => {
+		await seedUser('u1', 'Alice');
+		// Both late-evening Manila 07-21 (23:30 / 23:45 Manila = 15:30 / 15:45 UTC) — same real day.
+		// Pre-migration these two conventions were skewed apart and could not both fall in one window.
+		await seedMaya({
+			id: 'pay-eve',
+			userId: 'u1',
+			createdAt: new Date('2026-07-21T15:30:00.000Z')
+		});
+		await seedFreeTime({ userId: 'u1', startedAt: new Date('2026-07-21T15:45:00.000Z') });
+
+		const { rows, total } = await listUnifiedTransactions(db, { from, to });
+
+		expect(total).toBe(2);
+		expect(new Set(rows.map((r) => r.kind))).toEqual(new Set(['maya-payment', 'free-time']));
+	});
+
+	it('AC3 boundary: a session just past Manila midnight (next Manila day) is excluded', async () => {
+		await seedUser('u1', 'Alice');
+		// In-window money row (Manila 07-21 22:00 = 14:00 UTC).
+		await seedMaya({ id: 'pay-in', userId: 'u1', createdAt: new Date('2026-07-21T14:00:00.000Z') });
+		// Session at Manila 07-22 00:30 (= 16:30 UTC 07-21) — same UTC calendar date, NEXT Manila day.
+		await seedFreeTime({ userId: 'u1', startedAt: new Date('2026-07-21T16:30:00.000Z') });
+
+		const { rows, total } = await listUnifiedTransactions(db, { from, to });
+
+		// Only the money row falls inside the Manila-day window; the next-Manila-day session is out.
+		expect(total).toBe(1);
+		expect(rows[0].kind).toBe('maya-payment');
+	});
+});
+
+/**
  * AP name-snapshot freeze: a row's stored ap_name_snapshot is shown VERBATIM and wins over live
  * resolution, so a later AP rename never rewrites history. Rows without a snapshot fall back to
  * today's live resolution (the mocked resolveApCircuitLabel: 'live-1' → 'AP-Pabayo', else raw
@@ -361,7 +411,9 @@ describe('listUnifiedTransactions — AP name-snapshot freeze', () => {
 			apNameSnapshot: 'AP-Pabayo (old name)'
 		});
 		const { rows } = await listUnifiedTransactions(db, {});
-		expect(rows.find((r) => r.kind === 'maya-payment')!.apCircuitLabel).toBe('AP-Pabayo (old name)');
+		expect(rows.find((r) => r.kind === 'maya-payment')!.apCircuitLabel).toBe(
+			'AP-Pabayo (old name)'
+		);
 		expect(rows.find((r) => r.kind === 'free-time')!.apCircuitLabel).toBe('AP-Pabayo (old name)');
 	});
 
