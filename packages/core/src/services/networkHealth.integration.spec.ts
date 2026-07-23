@@ -1,11 +1,18 @@
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { asc, eq, sql } from 'drizzle-orm';
+import { and, asc, eq, sql } from 'drizzle-orm';
 import { PGlite } from '@electric-sql/pglite';
 import { drizzle } from 'drizzle-orm/pglite';
 import { migrate } from 'drizzle-orm/pglite/migrator';
-import { type DB, networkHealth, networkClientAttribution } from '@veent/db';
+import {
+	type DB,
+	networkHealth,
+	networkClientAttribution,
+	customerUser,
+	networkSessions
+} from '@veent/db';
+import { SESSION_STATUS } from '../config';
 import type {
 	NetworkController,
 	NetworkApSample,
@@ -81,7 +88,7 @@ beforeAll(async () => {
 
 beforeEach(async () => {
 	await client.exec(
-		'TRUNCATE "network_health", "network_client_attribution" RESTART IDENTITY CASCADE;'
+		'TRUNCATE "network_health", "network_client_attribution", "customer_user" RESTART IDENTITY CASCADE;'
 	);
 });
 
@@ -415,5 +422,102 @@ describe('AP name-collision once-retry (real Postgres)', () => {
 		// mac IS NULL when the AP scan didn't complete).
 		expect(rows.find((r) => r.mac === NEW_MAC)).toBeUndefined();
 		expect(rows).toHaveLength(3);
+	});
+});
+
+/**
+ * resolveNetworkIdForMac fallback: circuit-id FIRST (ap-session-binding-circuitid-first plan).
+ *
+ * On a shared hotspot bridge that fronts multiple physical APs, the raw interface-name fallback
+ * resolves the shared BRIDGE row (wrong-but-non-null). The fallback now resolves the device's
+ * Option-82 circuit-id first → the physical AP row, only falling through to the raw interface-name
+ * lookup when no circuit-id resolves (pure bridge). Cases (a)-(d) per the plan's Verification
+ * Evidence "Test fixture shapes (E1 / E2)".
+ */
+describe('resolveNetworkIdForMac circuit-id-first fallback (real Postgres)', () => {
+	const TEST_MAC = 'CC:00:00:00:00:01';
+	const BRIDGE_IFACE = 'bridge1_WiFi_Project';
+	const CID = '0/0/1:100.200';
+
+	/** Seed the E1 ambiguous-bridge fixture: a distinct LOWER-id physical AP row carrying the
+	 * circuit-id (name === the resolveApForMac return string so resolveCircuitIdForMac's byName tier
+	 * resolves it), and a HIGHER-id shared-bridge interface row with apCircuitId = NULL. Returns both
+	 * ids. Inserted AP-first so it deterministically wins the ORDER BY id LIMIT 1. */
+	async function seedAmbiguousBridge(apCircuitId: string | null): Promise<{ apId: number; bridgeId: number }> {
+		const [ap] = await db
+			.insert(networkHealth)
+			.values({ name: BRIDGE_IFACE, apCircuitId })
+			.returning({ id: networkHealth.id });
+		const [bridge] = await db
+			.insert(networkHealth)
+			.values({ name: 'shared-bridge-display', interfaceName: BRIDGE_IFACE, apCircuitId: null })
+			.returning({ id: networkHealth.id });
+		return { apId: ap.id, bridgeId: bridge.id };
+	}
+
+	it('(a) cache hit still returns the AP row id after apIdForCircuitId refactor', async () => {
+		const [ap] = await db
+			.insert(networkHealth)
+			.values({ name: 'AP-cached', mac: 'E4:67:1E:00:0A:01', apCircuitId: CID })
+			.returning({ id: networkHealth.id });
+		await db.insert(networkClientAttribution).values({ mac: TEST_MAC, circuitId: CID });
+		// No resolveApForMac → if this hit the fallback it would return null; a real id proves fast path.
+		expect(await resolveNetworkIdForMac(db, fake({}), TEST_MAC)).toBe(ap.id);
+	});
+
+	it('(b) cache miss + circuit-id-resolvable → returns the physical AP row, not the shared bridge', async () => {
+		// Genuine cache MISS: NO network_client_attribution row for TEST_MAC (pre-seeding it would
+		// silently re-test the fast path and make this case vacuous).
+		const { apId, bridgeId } = await seedAmbiguousBridge(CID);
+		// resolveApForMac yields the shared-bridge INTERFACE name — the raw path would resolve the bridge.
+		const net = fake({ resolveApForMac: async () => BRIDGE_IFACE });
+		expect(await resolveNetworkIdForMac(db, net, TEST_MAC)).toBe(apId);
+		expect(await resolveNetworkIdForMac(db, net, TEST_MAC)).not.toBe(bridgeId);
+	});
+
+	it('(b-neg) NEGATIVE CONTROL: same fixture, circuit-id NOT resolvable → returns the BRIDGE id', async () => {
+		// Identical fixture but the physical AP row carries NO circuit-id, so resolveCircuitIdForMac
+		// fails closed → the fallback drops to the raw interface-name lookup → the bridge row. The
+		// id flipping bridge→AP between this run and (b) proves the new circuit-id branch caused it,
+		// not a preseeded cache.
+		const { bridgeId } = await seedAmbiguousBridge(null);
+		const net = fake({ resolveApForMac: async () => BRIDGE_IFACE });
+		expect(await resolveNetworkIdForMac(db, net, TEST_MAC)).toBe(bridgeId);
+	});
+
+	it('(c) cache miss + no resolvable circuit-id (pure bridge) → interface-name fallback preserved', async () => {
+		// A single seeded interface row, apCircuitId NULL (real seeded/interface row: mac NULL).
+		await db.insert(networkHealth).values({ name: 'vlan70 hotspot' });
+		const [iface] = await db
+			.select()
+			.from(networkHealth)
+			.where(eq(networkHealth.name, 'vlan70 hotspot'));
+		const net = fake({ resolveApForMac: async () => 'vlan70 hotspot' });
+		expect(await resolveNetworkIdForMac(db, net, 'FF:FF:FF:00:00:02')).toBe(iface.id);
+	});
+
+	it('(d) session bound via new path keys the outage pause selection on the AP row, not the bridge', async () => {
+		const { apId, bridgeId } = await seedAmbiguousBridge(CID);
+		const net = fake({ resolveApForMac: async () => BRIDGE_IFACE });
+		// Bind: the resolved network_id is the AP row (what sessions.ts:attributeAp stamps).
+		const resolved = await resolveNetworkIdForMac(db, net, TEST_MAC);
+		expect(resolved).toBe(apId);
+		await db.insert(customerUser).values({ id: 'u-d', name: 'u-d', email: 'u-d@t.local' });
+		await db
+			.insert(networkSessions)
+			.values({ userId: 'u-d', macAddress: TEST_MAC, networkId: resolved, status: SESSION_STATUS.active });
+		// Behavioral: replicate outage.ts:113 pause selection `eq(networkSessions.networkId, ap.id)`.
+		const pauseSel = (netId: number) =>
+			db
+				.select({ userId: networkSessions.userId })
+				.from(networkSessions)
+				.where(
+					and(
+						eq(networkSessions.networkId, netId),
+						eq(networkSessions.status, SESSION_STATUS.active)
+					)
+				);
+		expect(await pauseSel(apId)).toHaveLength(1); // pause targets the physical AP
+		expect(await pauseSel(bridgeId)).toHaveLength(0); // NOT the shared bridge
 	});
 });
