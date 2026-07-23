@@ -1,5 +1,20 @@
 # veent-wifiportal - All Context
 
+Last updated: 2026-07-23 (maya-return-url-revert + maya-live-return-url closed and archived to
+`process/general-plans/completed/` — a live Maya (sandbox→live) testing session surfaced two
+UNRELATED root causes behind what first looked like one browser-return bug: (1) MikroTik
+`dst-host` walled-garden rules do NOT match GCash HTTPS traffic (fixed live via a TEMPORARY
+router-side IP allow, NOT productionized — backlog note tracks making this permanent in
+`apps/admin/scripts/setup-router.ts` `PAYMENT_HOSTS`); (2) the post-payment browser return died on
+the ngrok tunnel URL because a same-session code change had pointed `successUrl`/`cancelUrl` at
+`TUNNEL_ORIGIN` — this was a MISDIAGNOSIS (the guest device is still captive at redirect time and
+can only reach walled-garden hosts, so the non-walled-gardened tunnel domain is unreachable) and was
+fully reverted (`maya-return-url-revert_23-07-26`, byte-identical to prior HEAD `cab32e0`). The
+correct fix was operator config, not code: `ORIGIN` for `apps/customer` must be the
+guest-reachable, walled-gardened LAN portal address (never `localhost`/the tunnel) — see
+`docs/deploy/README.md` (already committed, `3f2149a`) and the Maya payments / Gotchas sections
+below. User live-confirmed the full ₱1 GCash loop end-to-end on real hardware after both fixes.)
+
 Last updated: 2026-07-23 (ap-session-binding-circuitid-first closed and archived to
 `process/general-plans/completed/ap-session-binding-circuitid-first_23-07-26/` — fixed, shipped, and
 user-verified LIVE on real 2-SSID hardware: `resolveNetworkIdForMac`'s (`packages/core/src/services/
@@ -404,9 +419,25 @@ easy to find).
 - `packages/core/src/integrations/payments/maya.ts` — hand-rolled HTTP client, no SDK
 - `apps/customer/src/lib/server/payments.ts` + `paymentWebhook.ts`
 - `apps/customer/src/routes/api/webhooks/maya/payment-status`, `api/payments/reconcile`
-- `docs/maya-do-webhook-relay.md`
+- `docs/maya-do-webhook-relay.md`, `docs/deploy/README.md` (live-mode `ORIGIN`/walled-garden note)
 - Dev webhooks: real sandbox webhooks reach local dev through a **registered ngrok tunnel** — do
   not assume localhost is unreachable from Maya's sandbox.
+- **Browser return origin vs webhook origin (live-mode, 23-07-26):** the post-payment BROWSER
+  return (`successUrl`/`cancelUrl` in `apps/customer/src/routes/top-up/+page.server.ts`) must use
+  `event.url.origin` (driven by the `ORIGIN` env), which in production MUST be the guest-reachable,
+  walled-gardened LAN portal address (e.g. `http://10.210.59.11:5173`) — never `localhost` and
+  never the tunnel. The guest device is still captive at Maya-redirect time and can only reach
+  walled-garden hosts; returning to a non-walled-gardened public tunnel domain fails with
+  `ERR_CONNECTION_CLOSED`. `TUNNEL_ORIGIN` (`webhookOrigin`) is for the server→server webhook
+  `originUrl` ONLY — do not reuse it for the browser return URLs. See
+  `process/general-plans/completed/maya-return-url-revert_23-07-26/` for the incident this codifies.
+- **GCash/e-wallet checkout needs IP-based walled-garden allows:** MikroTik `dst-host` (hostname)
+  walled-garden rules do NOT reliably match GCash's HTTPS traffic (`payments.gcash.com` and its
+  Alipay-powered cashier's `*.alipay.com`/`*.alipayobjects.com`/`*.alicdn.com`) — confirmed live via
+  `hits=0` on the hostname rules. Mitigation shipped is a TEMPORARY manual router-side IP allow
+  (`/ip hotspot walled-garden ip add dst-address=<resolved IP>`), NOT productionized. Follow-up:
+  `process/general-plans/backlog/gcash-walled-garden-ip-productionize_NOTE_23-07-26.md` — add
+  IP-based allows for `PAYMENT_HOSTS` in `apps/admin/scripts/setup-router.ts`.
 
 ### Sentry observability
 - `@sentry/sveltekit` in all 3 apps; `@sentry/core` in `packages/core`
@@ -570,6 +601,13 @@ stub-redirects — do not treat them as the source of truth.
   fallback in `resolveNetworkIdForMac` (`packages/core/src/services/networkHealth.ts`) — circuit-id
   must resolve first so a bridged multi-SSID AP binds sessions to the physical AP row, not the
   shared bridge row (fixed 23-07-26, `ap-session-binding-circuitid-first`).
+- **Maya live-mode browser return vs webhook origin:** never point `successUrl`/`cancelUrl`
+  (`apps/customer/src/routes/top-up/+page.server.ts`) at `TUNNEL_ORIGIN`/`webhookOrigin` — the
+  guest device is still captive at redirect time and can only reach walled-garden hosts, so a
+  non-walled-gardened tunnel return fails with `ERR_CONNECTION_CLOSED`. Browser returns always use
+  `event.url.origin` (driven by `ORIGIN`, which must be the walled-gardened LAN portal address in
+  prod); `TUNNEL_ORIGIN` is for the server→server webhook `originUrl` only (see Maya payments
+  section above; incident: `maya-return-url-revert_23-07-26`).
 
 ## Scan Metadata
 
