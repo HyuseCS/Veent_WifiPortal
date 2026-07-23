@@ -220,6 +220,10 @@ Router's DHCP lease table scanned
 - **Customer-app (guest-facing captive portal) changes** beyond whatever the shared
   `resolveNetworkIdForMac` service function requires to keep working as-is. No new customer-facing
   UI or behavior is in scope.
+  - **Superseded note (23-07-26):** `resolveNetworkIdForMac`'s fallback behavior was later revised
+    for the ambiguous-shared-bridge case by
+    `process/general-plans/completed/ap-session-binding-circuitid-first_23-07-26/` — see that plan
+    for detail. Deliberate, diagnosed revision, not a scope violation of this SPEC.
 - **CAPsMAN / SNMP-based AP visibility paths.** Already investigated in RESEARCH and confirmed to
   be dead ends for this topology (APs are not CAPsMAN-managed; SNMP does not provide the needed
   granularity here).

@@ -35,7 +35,9 @@ client counts + byte sums from hotspot-active (lease circuit-id else cache, AC7)
 mac-keyed AP upsert with a deterministic collision-free `resolveApName` pre-check (E3), and a prune
 that restricts to `mac IS NULL` when the AP scan didn't run (R2). `resolveNetworkIdForMac` gains a
 cache fast path (MAC → circuit-id → lowest-id AP row) with the router fallback preserved byte-for-byte
-(Regression #4). New PGlite suite `networkHealth.integration.spec.ts` (13 tests: G1, G1b, G2–G10,
+(Regression #4; **superseded 23-07-26 for the ambiguous-shared-bridge case only** — see
+`process/general-plans/completed/ap-session-binding-circuitid-first_23-07-26/`, a diagnosed and
+intentional revision, not an accidental break). New PGlite suite `networkHealth.integration.spec.ts` (13 tests: G1, G1b, G2–G10,
 G12, G15). G13 added to `outage.integration.spec.ts`.
 
 **Section 3 — MikroTik provider (mikrotik.ts):** `listDhcpLeases` (Option 82 key isolated in one

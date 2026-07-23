@@ -1,5 +1,31 @@
 # veent-wifiportal - All Context
 
+Last updated: 2026-07-23 (ap-session-binding-circuitid-first closed and archived to
+`process/general-plans/completed/ap-session-binding-circuitid-first_23-07-26/` — fixed, shipped, and
+user-verified LIVE on real 2-SSID hardware: `resolveNetworkIdForMac`'s (`packages/core/src/services/
+networkHealth.ts`) router-fallback tier now resolves the device's Option-82 circuit-id FIRST (via
+the existing `resolveCircuitIdForMac`) to the physical AP row, before falling through to the old raw
+interface-name lookup — so a session on a shared hotspot bridge fronting multiple physical APs no
+longer binds to the auto-swept bridge/interface row. This fixed both the admin Active-Session
+Network-column flip-flop AND the outage auto-pause mis-keying (pause/resume selects on
+`network_sessions.network_id`, which now correctly targets the physical AP row). 2 files touched, both
+`packages/core` (the function + its integration spec); no schema change. EVL green (22 integration
+tests incl. a bridge→AP negative control, `packages/core` tsc 0 errors, `bun run check` 0 errors).
+Deliberately, diagnosably revises `per-ap-visibility` Phase A's "byte-for-byte fallback" guarantee for
+the ambiguous-shared-bridge case only — cross-referenced in
+`process/general-plans/completed/per-ap-visibility_16-07-26/` (PLAN, SPEC, REPORT). Known-gap: the
+live 2-SSID-router `resolveApForMac` bridge-name shape (CAPsMAN/wireless/ARP divergence) is not
+reproducible by the test-double controller — the PGlite suite proves the SQL + branch logic, not the
+router's real ambiguity; this was the only piece needing the live hardware confirmation, which the
+user has now provided.)
+
+Last updated: 2026-07-23 (deployment guide consolidated into `docs/deploy/` — a single doc
+(`docs/deploy/README.md`) covering both deploy paths (Docker production / bare-metal host) plus
+shared router/sentry/secrets references; the old `docs/DEPLOYMENT.md` and `docs/runbooks/deploy*.md`
+are now stub-redirects pointing at it; `.gitignore`'s `deploy/` entry is anchored to `/deploy/` (repo
+root only) so it does not shadow `docs/deploy/`. Agents looking for deploy instructions should read
+`docs/deploy/README.md` first.)
+
 Last updated: 2026-07-23 (mac-trust-grant-fix closed and archived to
 `process/general-plans/completed/mac-trust-grant-fix_23-07-26/` — customer captive-portal grant path
 no longer treats a fallback-resolved MAC as a verified binding; `resolveMacForUser` now returns
@@ -498,6 +524,13 @@ Deferred candidates (stay in `process/general-plans/` until they accumulate 5+ a
 `docs/mikrotik/login.html` change), `captive-portal-flow` (customer), `maya-payments` (customer),
 `locator-app`.
 
+## Deployment
+
+`docs/deploy/README.md` — the single deployment guide (consolidated 23-07-26), covering both deploy
+paths (Docker production / bare-metal host) plus shared router/sentry/secrets references. Read this
+first for any deploy-related task. `docs/DEPLOYMENT.md` and `docs/runbooks/deploy*.md` are now
+stub-redirects — do not treat them as the source of truth.
+
 ## Team and Workflow
 
 - Small team: 2+ humans plus AI agents doing substantial implementation.
@@ -533,6 +566,10 @@ Deferred candidates (stay in `process/general-plans/` until they accumulate 5+ a
 - **Auth isolation:** the two `betterAuth()` instances (customer `veent-portal` cookie prefix,
   admin `radius-admin` cookie prefix) must NEVER be cross-wired or unified — each has its own
   `BETTER_AUTH_SECRET` and schema builder output.
+- **`resolveNetworkIdForMac` fallback ordering:** never re-introduce a raw interface-name-first
+  fallback in `resolveNetworkIdForMac` (`packages/core/src/services/networkHealth.ts`) — circuit-id
+  must resolve first so a bridged multi-SSID AP binds sessions to the physical AP row, not the
+  shared bridge row (fixed 23-07-26, `ap-session-binding-circuitid-first`).
 
 ## Scan Metadata
 
