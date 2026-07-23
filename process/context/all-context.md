@@ -1,5 +1,17 @@
 # veent-wifiportal - All Context
 
+Last updated: 2026-07-23 (finance-timestamptz-migration DEV-SIDE COMPLETE, PROD APPLY PENDING —
+migration `0052_pink_maginty.sql` converts 13 finance/session columns (`credit_ledger.created_at`,
+`points_ledger.created_at`, `payment_transactions.created_at`, `payment_checkouts.{created_at,
+settled_at,last_polled_at}`, `network_sessions.{started_at,bound_at,last_seen_at,expires_at}`,
+`customer_profile.{last_free_session_at,access_expires_at,access_paused_at}`) from bare `timestamp`
+to `timestamptz`, with `apps/admin/src/lib/server/period.ts` rewritten to real Manila-day→UTC-instant
+math in the same change-set; migration count is now 53 (`0000`–`0052`), see `database/all-database.md`
+Canonical Notes for the full write-path/root-cause detail. EVL green (391 tests, 0 failures) and user
+browser-confirmed dev display. Plan STAYS in `process/general-plans/active/finance-timestamptz-
+migration_23-07-26/` — NOT archived, NOT VERIFIED — prod TZ preflight, the 6-step prod apply
+sequence, `vc-risk-evidence-pack`, and human prod verification are all still outstanding.)
+
 Last updated: 2026-07-22 (manager-board-lazy-events closed and archived to
 `process/features/incident-management/completed/manager-board-lazy-events_22-07-26/` — admin's
 manager `/issues` board no longer eager-loads every issue's full event history on page load; it
@@ -194,7 +206,7 @@ veent_wifiportal/
 │   └── locator/          -- veent-locator: public hotspot map, no auth (src/, static/, playwright.config.ts)
 ├── packages/
 │   ├── core/              -- @veent/core: business services + integration providers (src/, scripts/)
-│   └── db/                -- @veent/db: sole Drizzle/Postgres schema source (src/, drizzle/ ← 49 migrations)
+│   └── db/                -- @veent/db: sole Drizzle/Postgres schema source (src/, drizzle/ ← 53 migrations)
 ├── docs/                   -- assets/, design/, dev/, mikrotik/, problems/, runbooks/, use-cases/
 ├── scripts/                 -- dev-cron.ts, idempotent-migrations.ts, setup-prod.ts, ...
 ├── process/                 -- this context/plan/development-protocol system
@@ -286,9 +298,11 @@ real provider (mikrotik/maya/resend) plus a `stub.ts` fallback, selected by env.
 into each app's Sentry `beforeSend`.
 
 **Migrations:** `packages/db/drizzle.config.ts` is the single source of truth; schema lives in
-`packages/db/src/schema/index.ts`; 49 `.sql` migrations in `packages/db/drizzle/` (newest:
-`0048_lying_firedrake.sql` 2026-07-20, adds `customer_otp_delivery_log` for OTP delivery
-observability — applied via direct `psql` DDL, not `db:push`, per the push-managed-dev-DB gotcha).
+`packages/db/src/schema/index.ts`; 53 `.sql` migrations in `packages/db/drizzle/` (newest:
+`0052_pink_maginty.sql` 2026-07-23, converts 13 finance/session columns to `timestamptz` — see
+`database/all-database.md` Canonical Notes; prod apply still pending. Prior: `0048_lying_firedrake.sql`
+2026-07-20, adds `customer_otp_delivery_log` for OTP delivery observability — applied via direct
+`psql` DDL, not `db:push`, per the push-managed-dev-DB gotcha).
 Root scripts proxy `db:push/generate/migrate/studio/seed` → `bun run --filter @veent/db`. GOTCHA:
 dev DB is push-managed — see Gotchas below.
 

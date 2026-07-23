@@ -8,8 +8,42 @@ feature: none
 # Finance / Session Timestamptz Migration — PLAN
 
 Date: 23-07-26
-Status: PLAN DRAFTED — awaiting VALIDATE
+Status: DEV-SIDE CODE DONE + EVL GREEN — PROD APPLY PENDING (not VERIFIED; see Current State below)
 Complexity: COMPLEX (schema migration, billing-path, atomic cross-package change-set)
+
+## Current State (UPDATE PROCESS — 23-07-26)
+
+**Classification: Keep in active/testing.** Dev-side implementation is complete and verified; the
+plan stays in `process/general-plans/active/` until the prod-apply sequence and human prod
+verification are done. Per §Phase Completion Rules above, this is `CODE DONE` (sections 0-3 of the
+Ordered EXECUTE Checklist), NOT `VERIFIED` (section 4 prod steps + close-out are still outstanding).
+
+- **Dev-side DONE:** migration `0052_pink_maginty.sql` (repo now at 53 migration files, `0000`–
+  `0052`) applied and verified against dev DB; schema (`customer.ts`) updated on all 13 columns;
+  `period.ts` rewritten to real Manila-day→UTC-instant math in the same change-set (Locked Decision
+  4); `sessions.ts`/`reconcilePayments.ts` untouched as required (Locked Decision 5).
+- **EVL confirmation: GREEN.** `bun run check` clean, scoped lint clean on touched files, `bun run
+  test` 391/391 passing (0 failures) across all 4 vitest projects, including the new AC1 round-trip
+  spec (`packages/core/src/services/timestamptz-roundtrip.integration.spec.ts`) and the new AC4
+  reconcile spec (`packages/core/src/services/reconcilePayments.integration.spec.ts`).
+- **User-confirmed this session:** dev browser Finance display is correct post-migration.
+- **STILL OUTSTANDING (do not archive/VERIFY until resolved):**
+  1. Item 4.2 — prod `SELECT current_setting('TimeZone')` preflight (must confirm `Asia/Manila`).
+  2. Item 4.3 — 6-step non-negotiable prod safety sequence (snapshot → verify-restorable →
+     SELECT-only preview → DDL apply → app-smoke → stop-and-restore-on-failure).
+  3. Execute-Agent Instruction E4 — `vc-risk-evidence-pack` (5-artifact record), required before
+     Item 4.3 step 4 (prod DDL apply), per `orchestration.md` §High-Risk Execution Handoff.
+  4. Item 4.1 dynamic half — dev live-feed browser smoke (AC5), deferred to human verification.
+  5. Item 3.8 — Finance e2e run for AC9 breadth (per E5, `finance-export.e2e.ts` is auth-gate-only,
+     not AC2/AC3 evidence; owned by a future EVL/e2e pass, not this session).
+  6. Human prod verification (user confirms live prod Finance is correct) — required before
+     `✅ VERIFIED` per §Phase Completion Rules.
+- **Context docs synced this session:** `process/context/database/all-database.md` and
+  `process/context/all-context.md` migration count updated 49/47(stale)→53, with the timestamptz
+  root-cause/convention learning recorded durably (Execute-Agent Instruction E3, deferred from
+  EXECUTE to UPDATE PROCESS per phase-lock — now done).
+- **Full execution detail:** `finance-timestamptz-migration_REPORT_23-07-26.md` (co-located in this
+  task folder) — dev-side EXECUTE report, all gate outcomes, deviations, and forward-preview notes.
 **SPEC:** `process/general-plans/active/finance-timestamptz-migration_23-07-26/finance-timestamptz-migration_SPEC_23-07-26.md` (locked)
 **Migration count at PLAN time:** 52 files (`0000`–`0051`), newest `0051_powerful_rachel_grey.sql`. Expected new migration: **`0052_<drizzle-kit-name>.sql`**. Re-verify this count immediately before EXECUTE (`ls packages/db/drizzle/*.sql | wc -l`) — if it has moved past 52, the expected number shifts accordingly; do not hardcode `0052` if drift is found.
 
@@ -115,40 +149,40 @@ Every safety gate below is a literal, checkable item — EXECUTE must not procee
 
 ### 0. Preflight (confirm-first, before any code)
 
-- [ ] 0.1 Re-run `ls packages/db/drizzle/*.sql | wc -l` — confirm count is still 52 (or record the new count and adjust the expected migration number from `0052`).
-- [ ] 0.2 Confirm existence/non-existence of `apps/admin/src/lib/server/period.spec.ts` and a `reconcilePayments` spec file (`grep -rl reconcilePayments packages/core/src/services/*.spec.ts`) — decide extend vs create per Touchpoints table note.
-- [ ] 0.3 **[GATE — AC7, dev environment]** Run `SELECT current_setting('TimeZone');` (or `SHOW TIMEZONE;`) against the local dev Postgres connection used by `DATABASE_URL`. **Pass condition:** result is `Asia/Manila`. Record the literal output in the phase report. If it is NOT `Asia/Manila`, STOP — the entire per-column `USING` map assumption is invalid for this environment; return to PLAN/INNOVATE to re-derive the correction map for the actual TZ.
+- [x] 0.1 Re-run `ls packages/db/drizzle/*.sql | wc -l` — confirm count is still 52 (or record the new count and adjust the expected migration number from `0052`).
+- [x] 0.2 Confirm existence/non-existence of `apps/admin/src/lib/server/period.spec.ts` and a `reconcilePayments` spec file (`grep -rl reconcilePayments packages/core/src/services/*.spec.ts`) — decide extend vs create per Touchpoints table note.
+- [x] 0.3 **[GATE — AC7, dev environment]** Run `SELECT current_setting('TimeZone');` (or `SHOW TIMEZONE;`) against the local dev Postgres connection used by `DATABASE_URL`. **Pass condition:** result is `Asia/Manila`. Record the literal output in the phase report. If it is NOT `Asia/Manila`, STOP — the entire per-column `USING` map assumption is invalid for this environment; return to PLAN/INNOVATE to re-derive the correction map for the actual TZ.
 
 ### 1. Schema + migration + period.ts as one atomic change-set (never split across separate commits/PRs)
 
-- [ ] 1.1 Edit `packages/db/src/schema/customer.ts`: add `{ withTimezone: true }` to all 13 in-scope `timestamp(...)` column definitions (preserve `.notNull()`/`.defaultNow()` modifiers exactly as they exist today — only the tz flag changes).
-- [ ] 1.2 Run `bun run --filter @veent/db db:generate` to scaffold the draft migration + snapshot/journal entries.
-- [ ] 1.3 **[GATE — Constraint: drizzle-kit-generated USING may be unusable]** Open the generated `.sql` file. Inspect every `ALTER COLUMN ... TYPE timestamptz` statement's `USING` clause (or absence of one). **Pass condition:** every one of the 13 columns has an explicit `USING col AT TIME ZONE '<zone>'` clause matching the Locked Decision 3 map exactly (Manila-wall columns → `'Asia/Manila'`; UTC-wall columns → `'UTC'`). If drizzle-kit emitted no `USING` clause, a same-type-name no-op cast, or a table-wide (non-per-column) cast for `payment_checkouts`, hand-edit the SQL file directly to match the map. Do not proceed until every clause is verified correct by manual read-through against Locked Decision 3.
-- [ ] 1.4 Confirm the final migration file combines all changes into ONE file with 6 `ALTER TABLE` groupings (credit_ledger, points_ledger, payment_transactions, payment_checkouts [3-col], network_sessions [4-col], customer_profile [3-col]) — not split across multiple migration files.
-- [ ] 1.5 Rewrite `apps/admin/src/lib/server/period.ts` `parsePeriod()`: replace the `Date.UTC(y, m-1, day, hh, mm, ss, ms)` boundary construction with real Manila-day → UTC-instant math. Concretely: build the Manila-local wall-clock boundary as a plain object `{y, m, day, hh, mm, ss, ms}` (via the existing `manilaYmd()` extraction, extended to a full timestamp helper), then convert to the equivalent UTC instant by subtracting the fixed Manila offset (UTC+8, no DST — confirm this assumption explicitly in a code comment citing the no-DST fact). Remove the stale `ponytail: known gap` comment block (lines ~17-20) — the gap it documents (`network_sessions.startedAt` skew) is fixed by this migration; replace with a comment explaining the new real-instant boundary math.
-- [ ] 1.6 Update/create `apps/admin/src/lib/server/period.spec.ts` with unit tests: day-boundary correctness for `7d`/`30d`/`90d`, a cross-UTC-midnight edge case (Manila day starts at UTC 16:00 the prior day), and `all` period passthrough.
+- [x] 1.1 Edit `packages/db/src/schema/customer.ts`: add `{ withTimezone: true }` to all 13 in-scope `timestamp(...)` column definitions (preserve `.notNull()`/`.defaultNow()` modifiers exactly as they exist today — only the tz flag changes).
+- [x] 1.2 Run `bun run --filter @veent/db db:generate` to scaffold the draft migration + snapshot/journal entries.
+- [x] 1.3 **[GATE — Constraint: drizzle-kit-generated USING may be unusable]** Open the generated `.sql` file. Inspect every `ALTER COLUMN ... TYPE timestamptz` statement's `USING` clause (or absence of one). **Pass condition:** every one of the 13 columns has an explicit `USING col AT TIME ZONE '<zone>'` clause matching the Locked Decision 3 map exactly (Manila-wall columns → `'Asia/Manila'`; UTC-wall columns → `'UTC'`). If drizzle-kit emitted no `USING` clause, a same-type-name no-op cast, or a table-wide (non-per-column) cast for `payment_checkouts`, hand-edit the SQL file directly to match the map. Do not proceed until every clause is verified correct by manual read-through against Locked Decision 3.
+- [x] 1.4 Confirm the final migration file combines all changes into ONE file with 6 `ALTER TABLE` groupings (credit_ledger, points_ledger, payment_transactions, payment_checkouts [3-col], network_sessions [4-col], customer_profile [3-col]) — not split across multiple migration files.
+- [x] 1.5 Rewrite `apps/admin/src/lib/server/period.ts` `parsePeriod()`: replace the `Date.UTC(y, m-1, day, hh, mm, ss, ms)` boundary construction with real Manila-day → UTC-instant math. Concretely: build the Manila-local wall-clock boundary as a plain object `{y, m, day, hh, mm, ss, ms}` (via the existing `manilaYmd()` extraction, extended to a full timestamp helper), then convert to the equivalent UTC instant by subtracting the fixed Manila offset (UTC+8, no DST — confirm this assumption explicitly in a code comment citing the no-DST fact). Remove the stale `ponytail: known gap` comment block (lines ~17-20) — the gap it documents (`network_sessions.startedAt` skew) is fixed by this migration; replace with a comment explaining the new real-instant boundary math.
+- [x] 1.6 Update/create `apps/admin/src/lib/server/period.spec.ts` with unit tests: day-boundary correctness for `7d`/`30d`/`90d`, a cross-UTC-midnight edge case (Manila day starts at UTC 16:00 the prior day), and `all` period passthrough.
 
 ### 2. Dev apply + direct-apply verification (AC8)
 
-- [ ] 2.1 **[GATE]** Before applying, run a query confirming CURRENT column types for all 13 columns are still bare `timestamp` (double-apply guard): `SELECT table_name, column_name, data_type FROM information_schema.columns WHERE column_name IN (...) AND table_name IN (...);`. **Pass condition:** all 13 rows show `timestamp without time zone`. If any already show `timestamp with time zone`, STOP — migration may have partially applied; investigate before re-running.
-- [ ] 2.2 Apply the migration DDL directly to the dev DB (`psql "$DATABASE_URL" -f packages/db/drizzle/0052_<name>.sql` or equivalent) per the documented push-managed-dev-DB direct-apply convention — do NOT use `db:migrate` (will fail on pre-existing journal drift per SPEC constraint).
-- [ ] 2.3 Re-run the column-type query from 2.1 — **pass condition:** all 13 rows now show `timestamp with time zone`.
-- [ ] 2.4 Spot-check 2-3 historical rows per convention group (one Manila-wall table, one UTC-wall table) by hand: read the row's new `timestamptz` value, mentally convert back, confirm it matches the pre-migration bare value's intended real moment (per the SPEC's write-path analysis). Record in phase report.
+- [x] 2.1 **[GATE]** Before applying, run a query confirming CURRENT column types for all 13 columns are still bare `timestamp` (double-apply guard): `SELECT table_name, column_name, data_type FROM information_schema.columns WHERE column_name IN (...) AND table_name IN (...);`. **Pass condition:** all 13 rows show `timestamp without time zone`. If any already show `timestamp with time zone`, STOP — migration may have partially applied; investigate before re-running.
+- [x] 2.2 Apply the migration DDL directly to the dev DB (`psql "$DATABASE_URL" -f packages/db/drizzle/0052_<name>.sql` or equivalent) per the documented push-managed-dev-DB direct-apply convention — do NOT use `db:migrate` (will fail on pre-existing journal drift per SPEC constraint).
+- [x] 2.3 Re-run the column-type query from 2.1 — **pass condition:** all 13 rows now show `timestamp with time zone`.
+- [x] 2.4 Spot-check 2-3 historical rows per convention group (one Manila-wall table, one UTC-wall table) by hand: read the row's new `timestamptz` value, mentally convert back, confirm it matches the pre-migration bare value's intended real moment (per the SPEC's write-path analysis). Record in phase report.
 
 ### 3. Test gates (run in this order; do not skip ahead on failure — fix and re-run)
 
-- [ ] 3.1 **[GATE — AC1]** Write and run `packages/core/src/services/timestamptz-roundtrip.integration.spec.ts` (PGlite pattern per `networkHealth.integration.spec.ts`/`outage.integration.spec.ts`): apply the FULL migration chain including 0052 via PGlite `migrate()`, then for each of the 13 columns: seed a pre-migration-convention value via raw SQL insert (bypassing the typed schema, which now reflects post-migration `timestamptz` types), read it back through Drizzle, assert the instant matches expectation. **Include an explicit NULL-column case** for `settled_at`, `last_polled_at`, `access_paused_at` (and any other nullable in-scope column) — assert `AT TIME ZONE` on NULL returns NULL, not an error or a wrong default. Command: `bunx vitest run packages/core/src/services/timestamptz-roundtrip.integration.spec.ts` (run from `packages/core/`).
-- [ ] 3.2 **[GATE — AC2, AC3]** Extend `apps/admin/src/lib/server/queries.spec.ts`: add a same-real-day case with one `network_sessions` free-time row and one `paymentTransactions`/`creditLedger` row, seeded via raw SQL at pre-migration-equivalent conventions before the schema migration is "logically" applied in the test's migration chain, both falling inside one `from`/`to` window. Assert both rows appear in `listUnifiedTransactions` output for that window. Command: `bunx vitest run apps/admin/src/lib/server/queries.spec.ts` (run from `apps/admin/`).
-- [ ] 3.3 **[GATE — AC4]** Extend or create `reconcilePayments` spec covering the `minAge`/`maxAge` skip-boundary branches and the `lastPolledAt` throttle branch, run against the PGlite chain with 0052 applied. Command: `bunx vitest run packages/core/src/services/reconcilePayments*.spec.ts` (run from `packages/core/`).
-- [ ] 3.4 **[GATE — AC6]** Before/after KPI snapshot: seed representative data via `apps/admin/scripts/seed-test-data.ts` (or an equivalent minimal seed inline in a spec), capture `revenueByDay` (and one other KPI query) output BEFORE the migration is applied to that test's DB instance, apply migration, capture output AFTER, assert byte-identical for date ranges composed entirely of `.defaultNow()`-sourced (Manila-wall, pre-migration-correct) data. This can be folded into the AC1 round-trip spec or a dedicated spec — prefer folding into 3.1's file as an additional `describe` block to avoid a redundant PGlite bootstrap.
-- [ ] 3.5 `bun run check` (repo-wide typecheck) — **pass condition:** exit 0.
-- [ ] 3.6 `bun run lint` — **pass condition:** exit 0.
-- [ ] 3.7 `bun test` (repo-wide, per `tests/all-tests.md` gate order) — **pass condition:** all suites green, zero new failures.
+- [x] 3.1 **[GATE — AC1]** Write and run `packages/core/src/services/timestamptz-roundtrip.integration.spec.ts` (PGlite pattern per `networkHealth.integration.spec.ts`/`outage.integration.spec.ts`): apply the FULL migration chain including 0052 via PGlite `migrate()`, then for each of the 13 columns: seed a pre-migration-convention value via raw SQL insert (bypassing the typed schema, which now reflects post-migration `timestamptz` types), read it back through Drizzle, assert the instant matches expectation. **Include an explicit NULL-column case** for `settled_at`, `last_polled_at`, `access_paused_at` (and any other nullable in-scope column) — assert `AT TIME ZONE` on NULL returns NULL, not an error or a wrong default. Command: `bunx vitest run packages/core/src/services/timestamptz-roundtrip.integration.spec.ts` (run from `packages/core/`).
+- [x] 3.2 **[GATE — AC2, AC3]** Extend `apps/admin/src/lib/server/queries.spec.ts`: add a same-real-day case with one `network_sessions` free-time row and one `paymentTransactions`/`creditLedger` row, seeded via raw SQL at pre-migration-equivalent conventions before the schema migration is "logically" applied in the test's migration chain, both falling inside one `from`/`to` window. Assert both rows appear in `listUnifiedTransactions` output for that window. Command: `bunx vitest run apps/admin/src/lib/server/queries.spec.ts` (run from `apps/admin/`).
+- [x] 3.3 **[GATE — AC4]** Extend or create `reconcilePayments` spec covering the `minAge`/`maxAge` skip-boundary branches and the `lastPolledAt` throttle branch, run against the PGlite chain with 0052 applied. Command: `bunx vitest run packages/core/src/services/reconcilePayments*.spec.ts` (run from `packages/core/`).
+- [x] 3.4 **[GATE — AC6]** Before/after KPI snapshot: seed representative data via `apps/admin/scripts/seed-test-data.ts` (or an equivalent minimal seed inline in a spec), capture `revenueByDay` (and one other KPI query) output BEFORE the migration is applied to that test's DB instance, apply migration, capture output AFTER, assert byte-identical for date ranges composed entirely of `.defaultNow()`-sourced (Manila-wall, pre-migration-correct) data. This can be folded into the AC1 round-trip spec or a dedicated spec — prefer folding into 3.1's file as an additional `describe` block to avoid a redundant PGlite bootstrap.
+- [x] 3.5 `bun run check` (repo-wide typecheck) — **pass condition:** exit 0.
+- [x] 3.6 `bun run lint` — **pass condition:** exit 0.
+- [x] 3.7 `bun test` (repo-wide, per `tests/all-tests.md` gate order) — **pass condition:** all suites green, zero new failures.
 - [ ] 3.8 Admin e2e: run the Finance-touching specs only (`apps/admin/e2e/**finance**`, `**transactions**`, or the full 12-spec suite if scoping is ambiguous — confirm exact spec filenames at EXECUTE time via `ls apps/admin/e2e/`). **Pass condition:** all green.
 
 ### 4. Agent-probe / manual gates (AC5, AC7-prod, AC8-prod)
 
-- [ ] 4.1 **[GATE — AC5]** Static check: `grep -n "network_sessions\|credit_ledger\|points_ledger\|payment_transactions\|payment_checkouts\|customer_profile" packages/db/drizzle/0006_*.sql` (or wherever the `pg_notify` triggers live) — confirm trigger definitions are `FOR EACH STATEMENT` with no column reference to any in-scope column. **Pass condition:** no column-level reference found (statement-level triggers only reference table names). Then in dev: perform one action that fires the trigger (e.g. a top-up) and confirm the admin dashboard live feed updates.
+- [x] 4.1 **[GATE — AC5]** Static check: `grep -n "network_sessions\|credit_ledger\|points_ledger\|payment_transactions\|payment_checkouts\|customer_profile" packages/db/drizzle/0006_*.sql` (or wherever the `pg_notify` triggers live) — confirm trigger definitions are `FOR EACH STATEMENT` with no column reference to any in-scope column. **Pass condition:** no column-level reference found (statement-level triggers only reference table names). Then in dev: perform one action that fires the trigger (e.g. a top-up) and confirm the admin dashboard live feed updates.
 - [ ] 4.2 **[GATE — AC7, prod]** Before applying to prod, run the same `SELECT current_setting('TimeZone');` check against the prod Postgres connection. **Pass condition:** `Asia/Manila`. This is a hard precondition — do not proceed to prod apply without a recorded, confirmed-matching result. If prod TZ differs from dev, STOP and escalate — the per-column map must be re-derived for prod's actual TZ before any prod DDL runs.
 - [ ] 4.3 **[GATE — Prod safety sequence, non-negotiable order]**:
   1. Snapshot/backup the prod database.
@@ -161,8 +195,8 @@ Every safety gate below is a literal, checkable item — EXECUTE must not procee
 ### 5. Close-out
 
 - [ ] 5.1 Confirm AC9 (no unrelated behavior change): full gate suite (3.5-3.8) green with zero new failures beyond the new/extended specs themselves.
-- [ ] 5.2 Update `process/context/database/all-database.md` migration count reference (52 → 53) and note the new migration's purpose in the canonical notes (per Context Update Protocol).
-- [ ] 5.3 Confirm `period.ts`'s stale `ponytail: known gap` comment (SPEC Background, queries.ts:17-20 area) is removed/updated as part of item 1.5 — do not leave a comment describing a bug that no longer exists.
+- [x] 5.2 Update `process/context/database/all-database.md` migration count reference (52 → 53) and note the new migration's purpose in the canonical notes (per Context Update Protocol).
+- [x] 5.3 Confirm `period.ts`'s stale `ponytail: known gap` comment (SPEC Background, queries.ts:17-20 area) is removed/updated as part of item 1.5 — do not leave a comment describing a bug that no longer exists.
 
 ## Verification Evidence
 
@@ -482,8 +516,21 @@ high-risk pack: yes — E4, required before Item 4.3 step 4 (prod apply)
 
 ## Next Step
 
-VALIDATE complete — Gate: CONDITIONAL (0 FAILs, 4 CONCERNs, all resolved as Execute-Agent
-Instructions E1–E5 above; see Validate Contract). Say **ENTER EXECUTE MODE** to begin the Ordered
-EXECUTE Checklist — execute-agent must apply E1–E5 at the trigger points noted in the table above,
-in addition to every existing `[GATE]` item. Before EXECUTE reaches Item 4.3 step 4 (prod apply),
-confirm E4's risk-evidence-pack exists per `orchestration.md` §High-Risk Execution Handoff.
+**(23-07-26 update)** EXECUTE dev-side complete, EVL green, user-confirmed dev display. Plan
+remains `active` — NOT archived, NOT `✅ VERIFIED`. Next operator action is the **prod-apply
+runbook**, in this exact order, before this plan can close:
+
+1. Produce the E4 `vc-risk-evidence-pack` (5-artifact record) in this task folder's `harness/`
+   subdir, per `orchestration.md` §High-Risk Execution Handoff.
+2. Run Item 4.2 (prod TZ preflight — must read `Asia/Manila`).
+3. Run Item 4.3's 6-step non-negotiable prod safety sequence (snapshot → verify-restorable →
+   SELECT-only preview → DDL apply → app-smoke → stop-and-restore-on-any-failure).
+4. Run Item 4.1's dynamic AC5 live-feed browser smoke (dev or prod, human-verified).
+5. Run Item 3.8 (Finance e2e) for AC9 breadth, or fold into a future EVL pass.
+6. Get explicit human confirmation that prod Finance is correct — only then mark `✅ VERIFIED`,
+   run `vc-generate-closeout` again, and route this plan through UPDATE PROCESS for archival.
+
+Superseded prior note (VALIDATE→EXECUTE handoff, kept for history): VALIDATE completed with
+Gate: CONDITIONAL (0 FAILs, 4 CONCERNs, all resolved as Execute-Agent Instructions E1–E5; see
+Validate Contract above). EXECUTE applied E1, E2, E3 (deferred to this UPDATE PROCESS session,
+now done), and E5 (documented, not over-credited). E4 remains outstanding — see step 1 above.

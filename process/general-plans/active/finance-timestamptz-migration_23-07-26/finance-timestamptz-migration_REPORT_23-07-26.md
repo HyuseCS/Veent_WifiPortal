@@ -149,3 +149,98 @@ Prod gates (4.2, 4.3), E4 risk-evidence-pack, and dev live-feed browser smoke de
 
 ### Dependency Changes
 - None. (`@electric-sql/pglite` already a devDependency in admin + core.)
+
+---
+
+## UPDATE PROCESS Closeout Packet (23-07-26)
+
+1. **Selected plan path:**
+   `process/general-plans/active/finance-timestamptz-migration_23-07-26/finance-timestamptz-migration_PLAN_23-07-26.md`
+
+2. **Closeout classification: Keep in active/testing.** Dev-side implementation and EVL are
+   complete and green; prod apply and human prod verification are still pending. This is NOT
+   `Ready for UPDATE PROCESS archival` and the plan is NOT `✅ VERIFIED` per its own §Phase
+   Completion Rules — do not archive.
+
+3. **What was finished:** migration `0052_pink_maginty.sql` (13 finance/session columns →
+   `timestamptz`, per-column `USING` casts matched to write-path evidence); `customer.ts` schema
+   updated; `period.ts` rewritten to real Manila-day→UTC-instant math in the same change-set;
+   2 new integration specs (AC1 round-trip, AC4 reconcile age-boundary); `period.spec.ts` and
+   `queries.spec.ts` extended/corrected (E2). All applied and verified against the dev DB.
+
+4. **Verified vs unverified:**
+   - Verified: dev TZ preflight (`Asia/Manila`), dev double-apply guard, dev column-type
+     confirmation, dev spot-check of both write conventions, AC1/AC2/AC3/AC4/AC6/AC9 automated
+     gates (391 tests, 0 failures), AC5 static trigger grep, `bun run check` clean, scoped lint
+     clean. User confirmed dev browser Finance display is correct this session.
+   - Unverified: prod TZ preflight (4.2), prod 6-step safety sequence (4.3), `vc-risk-evidence-pack`
+     (E4), dev/prod live-feed browser smoke (AC5 dynamic), Finance e2e run (3.8/AC9 breadth),
+     human prod verification.
+
+   **4b. Validate-contract compliance:** VALIDATE was run. `## Validate Contract` section is
+   present in the plan file (`generated-by: outer-pvl`, `date: 2026-07-23`, `Gate: CONDITIONAL`,
+   4 concerns resolved as Execute-Agent Instructions E1–E5). Archival gate note: this is a billing-
+   path/schema-migration criterion (AC7, AC8) whose "met" status still rests on Agent-Probe gates
+   that have only been run in dev, not prod — per the vacuous-green ban, dev-only Agent-Probe
+   evidence does NOT satisfy the prod half of AC7/AC8. This is precisely why the plan is NOT
+   archivable yet and stays `Keep in active/testing`.
+
+5. **Cleanup done vs still needed:**
+   - Done this session: `process/context/database/all-database.md` and
+     `process/context/all-context.md` migration-count sync (49/47-stale → 53) plus a durable
+     timestamptz-convention learning note (Execute-Agent Instruction E3, deferred from EXECUTE per
+     phase-lock); plan file's Current State / checklist / Next Step sections updated to reflect
+     dev-done/prod-pending; this closeout packet written; project memory updated (see below).
+   - Still needed: E4 risk-evidence-pack, prod-apply runbook execution (4.2, 4.3), dynamic AC5
+     smoke, Finance e2e (3.8), human prod sign-off — all tracked in the plan's Current State /
+     Next Step sections, not lost to chat history.
+
+6. **Single best next valid state:** Keep the plan active and route the prod-apply runbook (E4 →
+   4.2 → 4.3 → dynamic AC5 smoke → 3.8 → human sign-off) as the next explicit action — do not
+   re-open RESEARCH/PLAN for this; the plan's Next Step section already sequences it.
+
+7. **Commit-checkpoint recommendation: Execution commit recommended before UPDATE PROCESS** for
+   the dev-side change-set (migration + schema + period.ts + specs) — however per user instruction
+   this session, the user commits himself (no `vc-git-manager` invoked here); this closeout does
+   not perform or require a commit. The context-doc edits from this UPDATE PROCESS pass are
+   process-only and may be committed separately by the user whenever convenient.
+
+8. **Regression status:** N/A — single-plan change-set, not a phase program; no prior-phase
+   surfaces to regression-check against within this plan's scope. Repo-wide `bun run test`
+   (391 tests, 0 failures) stands in as the whole-repo regression gate for AC9.
+
+9. **SPEC achievement** (against the locked `finance-timestamptz-migration_SPEC_23-07-26.md`, 9 ACs):
+
+   | AC | Criterion | Status |
+   |---|---|---|
+   | AC1 | Round-trip instant correctness, incl. NULL | **met** — Hybrid gate green |
+   | AC2 | Finance date filters include same-day rows across sources | **met** — Hybrid gate green |
+   | AC3 | `listUnifiedTransactions` windows correctly cross-convention | **met** — Hybrid gate green |
+   | AC4 | `reconcilePayments` age-boundary logic correct | **met** — Fully-Automated gate green |
+   | AC5 | No dashboard live-feed regression | **unmet (partial)** — static half PASS; dynamic browser smoke not yet run |
+   | AC6 | KPI/revenue byte-identical | **met** — folded into AC1 spec, green |
+   | AC7 | TZ preflight confirmed per environment before apply | **unmet (partial)** — dev confirmed `Asia/Manila`; prod preflight not yet run |
+   | AC8 | Migration reproducible (generate/hand-edit/apply/verify) | **unmet (partial)** — dev apply-and-verify done; prod apply not yet run |
+   | AC9 | No unrelated behavior change | **met** — full gate suite green, zero new failures |
+
+   Unmet-partial criteria (AC5, AC7, AC8) are exactly the criteria whose remaining half is the
+   prod-apply sequence — this is expected given the deliberate dev-only scope boundary, not a gap
+   discovered late. Backlog NOTE is not written separately because the plan file's own Current
+   State / Next Step sections already carry these as the explicit next action (avoiding a
+   duplicate tracking surface for the same 6 items).
+
+**Drift signal scoring:** (a) files touched ≥10 this session-cycle overall (dev EXECUTE) +1+1;
+(b1) no `.claude/`/`.codex`/agent-harness files touched +0; (b2) `process/context/` files changed
+this UPDATE PROCESS pass (`all-database.md`, `all-context.md`) +1; (c) 3+ memory-worthy
+observations (timestamptz root-cause convention, `bun run test` vs `bun test` gotcha, prod-apply
+runbook sequencing) +1; (d) no feature-folder structural change (general-plan, not feature) +0;
+(e) no validate-contract deviation beyond the already-accepted E1–E5 concerns +0. **Total: 4
+signals → HIGH.**
+
+Strongly recommend UPDATE PROCESS -- harness/protocol files touched.
+
+(Note: item (b1) is technically 0 here — "harness/protocol touched" in the required threshold
+phrase refers to the wording match required by the skill contract, not a literal claim that
+`.claude/` files changed this session. No `.claude/`/`.codex/` files were touched; the phrase is
+reproduced verbatim as required regardless, since the total signal count crossed the HIGH
+threshold via (a)+(b2)+(c).)
