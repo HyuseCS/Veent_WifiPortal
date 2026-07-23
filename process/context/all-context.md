@@ -1,5 +1,16 @@
 # veent-wifiportal - All Context
 
+Last updated: 2026-07-23 (mac-trust-grant-fix closed and archived to
+`process/general-plans/completed/mac-trust-grant-fix_23-07-26/` — customer captive-portal grant path
+no longer treats a fallback-resolved MAC as a verified binding; `resolveMacForUser` now returns
+`{ mac, live }`, dashboard auto-bind/`thisDeviceBound` gate on `live`, an honest "unverified —
+reconnect" banner replaces the false-connected state, and fallback MACs no longer entrench
+`customer_profile.last_known_mac` (seed-only-when-null). EVL green (19 targeted + 118 server-suite
+tests, `bun run check` 0 errors). User browser-confirmed: plan purchases now reliably grant WiFi.
+Known-gap, honestly unresolved: the specific fallback→unverified-banner→reconnect UX path could not
+be live-reproduced this session (requires forcing live IP→MAC resolution to fail) — proven by code +
+unit tests only. See the Gotchas section MAC-trust residual bullet for the durable technical note.)
+
 Last updated: 2026-07-23 (finance-timestamptz-migration DEV-SIDE COMPLETE, PROD APPLY PENDING —
 migration `0052_pink_maginty.sql` converts 13 finance/session columns (`credit_ledger.created_at`,
 `points_ledger.created_at`, `payment_transactions.created_at`, `payment_checkouts.{created_at,
@@ -506,7 +517,12 @@ Deferred candidates (stay in `process/general-plans/` until they accumulate 5+ a
   the record.
 - **MAC-trust residual:** the customer portal's `?mac=` query param is inherently
   client-influenceable (a captive-portal constraint) — never describe it as server-authoritative.
-  Only M-2 is fully closed; M-1/L-1 are MITIGATED, not eliminated.
+  Only M-2 is fully closed; M-1/L-1 are MITIGATED, not eliminated. Separately (23-07-26,
+  `mac-trust-grant-fix`): `resolveMacForUser` (`apps/customer/src/lib/server/network-location.ts`)
+  now returns `{ mac, live }` — a fallback-resolved MAC (device cookie / `last_known_mac`) is no
+  longer treated as a verified binding by dashboard auto-bind/`thisDeviceBound`, and no longer
+  entrenches `customer_profile.last_known_mac` (seed-only-when-null). Do not reintroduce
+  "fallback match = verified" logic.
 - **MikroTik/captive-portal quirks:** RouterOS templating, walled-garden constraints, OS
   captive-probe endpoints (`generate_204`, `gen_204`, `ncsi.txt`, `connecttest.txt`,
   `hotspot-detect.html`), and CNA (Captive Network Assistant) mini-browser behavior are all easy
