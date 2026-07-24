@@ -33,6 +33,11 @@ const WALL = '2026-07-21 14:00:00';
 const MANILA_INSTANT = '2026-07-21T06:00:00.000Z'; // 14:00 Manila = 06:00 UTC
 const UTC_INSTANT = '2026-07-21T14:00:00.000Z'; // 14:00 UTC
 
+/** AC6 fixture: a Manila-wall value near Manila midnight (= 2026-07-20 16:30Z), so the day bucket
+ * only comes out right when truncation happens in the Manila session TZ. Isolated by its amount. */
+const BUCKET_WALL = '2026-07-21 00:30:00';
+const BUCKET_AMOUNT = 555;
+
 let client: PGlite;
 
 /** Build a temp migrations dir whose journal stops BEFORE 0052 (so migrate() applies 0000–0051). */
@@ -90,9 +95,16 @@ beforeAll(async () => {
 		`INSERT INTO customer_profile (user_id, last_free_session_at, access_expires_at, access_paused_at) VALUES ('u1', '${WALL}', '${WALL}', NULL);`
 	);
 
+	// AC6 fixture: a Manila-wall value just after Manila midnight. Mid-day values bucket the same
+	// under any session TZ, so they can't tell a correct migration from a broken one — 00:30 Manila
+	// is 16:30Z the PREVIOUS day, so it only lands in the intended day bucket if the instant is
+	// truncated in Manila (which is what prod's session TimeZone supplies).
+	await client.exec(
+		`INSERT INTO credit_ledger (user_id, amount, type, created_at) VALUES ('u1', ${BUCKET_AMOUNT}, 'topup', '${BUCKET_WALL}');`
+	);
 	// AC6 pre-migration revenue-bucket snapshot (Manila-wall column, already correct pre-migration).
 	const bucketPre = await client.query<{ d: string }>(
-		`SELECT to_char(date_trunc('day', created_at), 'YYYY-MM-DD') AS d FROM credit_ledger WHERE user_id='u1'`
+		`SELECT to_char(date_trunc('day', created_at), 'YYYY-MM-DD') AS d FROM credit_ledger WHERE user_id='u1' AND amount=${BUCKET_AMOUNT}`
 	);
 	(globalThis as Record<string, unknown>).__bucketPre = bucketPre.rows[0].d;
 
@@ -142,11 +154,19 @@ describe('timestamptz migration round-trip (AC1)', () => {
 
 describe('KPI/revenue bucket unchanged (AC6)', () => {
 	it('date_trunc(day) of the Manila-wall revenue column is byte-identical across the migration', async () => {
-		const post = await client.query<{ d: string }>(
-			// Post-migration timestamptz truncated in the Manila session TZ → same Manila day bucket.
-			`SELECT to_char(date_trunc('day', created_at AT TIME ZONE 'Asia/Manila'), 'YYYY-MM-DD') AS d FROM credit_ledger WHERE user_id='u1'`
-		);
-		expect(post.rows[0].d).toBe((globalThis as Record<string, unknown>).__bucketPre);
-		expect(post.rows[0].d).toBe('2026-07-21'); // the Manila calendar day the value always meant
+		// Exercise the PRODUCTION expression verbatim: apps/admin/src/lib/server/queries.ts truncates
+		// with a bare `date_trunc('day', created_at)` and relies on the session TimeZone (prod + dev
+		// DBs are both `Asia/Manila`, confirmed by the AC7 preflight). Casting `AT TIME ZONE
+		// 'Asia/Manila'` inside the test would prove a query prod never runs.
+		await client.exec(`SET TIME ZONE 'Asia/Manila';`);
+		try {
+			const post = await client.query<{ d: string }>(
+				`SELECT to_char(date_trunc('day', created_at), 'YYYY-MM-DD') AS d FROM credit_ledger WHERE user_id='u1' AND amount=${BUCKET_AMOUNT}`
+			);
+			expect(post.rows[0].d).toBe((globalThis as Record<string, unknown>).__bucketPre);
+			expect(post.rows[0].d).toBe('2026-07-21'); // the Manila calendar day the value always meant
+		} finally {
+			await client.exec(`SET TIME ZONE 'UTC';`);
+		}
 	});
 });
