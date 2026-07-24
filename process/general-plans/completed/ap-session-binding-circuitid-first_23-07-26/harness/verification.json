@@ -1,0 +1,32 @@
+{
+  "evl_confirmation_run": true,
+  "date": "2026-07-23",
+  "head": "00c095c8c0392731df00995ae455c29783909f6a",
+  "plan": "ap-session-binding-circuitid-first_23-07-26",
+  "verdict": "GREEN",
+  "gates": [
+    {
+      "id": 1,
+      "command": "cd packages/core && bunx vitest run src/services/networkHealth.integration.spec.ts",
+      "result": "PASS",
+      "detail": "22 passed (22), 1 file"
+    },
+    {
+      "id": 2,
+      "command": "cd packages/core && bunx tsc -p tsconfig.json --noEmit",
+      "result": "PASS",
+      "detail": "exit 0, 0 errors"
+    },
+    {
+      "id": 3,
+      "command": "bun run check",
+      "result": "PASS",
+      "detail": "locator/customer/admin all 0 ERRORS 0 WARNINGS"
+    }
+  ],
+  "non_vacuity_checks": {
+    "E1": "HOLD — case (b) seeds NO network_client_attribution row for TEST_MAC (genuine cache miss); negative control (b-neg) nulls the AP row apCircuitId and asserts the BRIDGE id is returned; enabled run returns AP id. bridge->AP flip proven.",
+    "E2": "HOLD — case (d) replicates the real outage pause predicate eq(networkSessions.networkId, netId)+active status; asserts len 1 for apId and len 0 for bridgeId, not a stamped-scalar equality."
+  },
+  "scope_discipline": "CLEAN — git diff --stat shows only packages/core/src/services/networkHealth.ts and networkHealth.integration.spec.ts changed; no sessions.ts/outage.ts/queries.ts/schema edits."
+}

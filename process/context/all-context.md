@@ -1,5 +1,69 @@
 # veent-wifiportal - All Context
 
+Last updated: 2026-07-23 (maya-return-url-revert + maya-live-return-url closed and archived to
+`process/general-plans/completed/` — a live Maya (sandbox→live) testing session surfaced two
+UNRELATED root causes behind what first looked like one browser-return bug: (1) MikroTik
+`dst-host` walled-garden rules do NOT match GCash HTTPS traffic (fixed live via a TEMPORARY
+router-side IP allow, NOT productionized — backlog note tracks making this permanent in
+`apps/admin/scripts/setup-router.ts` `PAYMENT_HOSTS`); (2) the post-payment browser return died on
+the ngrok tunnel URL because a same-session code change had pointed `successUrl`/`cancelUrl` at
+`TUNNEL_ORIGIN` — this was a MISDIAGNOSIS (the guest device is still captive at redirect time and
+can only reach walled-garden hosts, so the non-walled-gardened tunnel domain is unreachable) and was
+fully reverted (`maya-return-url-revert_23-07-26`, byte-identical to prior HEAD `cab32e0`). The
+correct fix was operator config, not code: `ORIGIN` for `apps/customer` must be the
+guest-reachable, walled-gardened LAN portal address (never `localhost`/the tunnel) — see
+`docs/deploy/README.md` (already committed, `3f2149a`) and the Maya payments / Gotchas sections
+below. User live-confirmed the full ₱1 GCash loop end-to-end on real hardware after both fixes.)
+
+Last updated: 2026-07-23 (ap-session-binding-circuitid-first closed and archived to
+`process/general-plans/completed/ap-session-binding-circuitid-first_23-07-26/` — fixed, shipped, and
+user-verified LIVE on real 2-SSID hardware: `resolveNetworkIdForMac`'s (`packages/core/src/services/
+networkHealth.ts`) router-fallback tier now resolves the device's Option-82 circuit-id FIRST (via
+the existing `resolveCircuitIdForMac`) to the physical AP row, before falling through to the old raw
+interface-name lookup — so a session on a shared hotspot bridge fronting multiple physical APs no
+longer binds to the auto-swept bridge/interface row. This fixed both the admin Active-Session
+Network-column flip-flop AND the outage auto-pause mis-keying (pause/resume selects on
+`network_sessions.network_id`, which now correctly targets the physical AP row). 2 files touched, both
+`packages/core` (the function + its integration spec); no schema change. EVL green (22 integration
+tests incl. a bridge→AP negative control, `packages/core` tsc 0 errors, `bun run check` 0 errors).
+Deliberately, diagnosably revises `per-ap-visibility` Phase A's "byte-for-byte fallback" guarantee for
+the ambiguous-shared-bridge case only — cross-referenced in
+`process/general-plans/completed/per-ap-visibility_16-07-26/` (PLAN, SPEC, REPORT). Known-gap: the
+live 2-SSID-router `resolveApForMac` bridge-name shape (CAPsMAN/wireless/ARP divergence) is not
+reproducible by the test-double controller — the PGlite suite proves the SQL + branch logic, not the
+router's real ambiguity; this was the only piece needing the live hardware confirmation, which the
+user has now provided.)
+
+Last updated: 2026-07-23 (deployment guide consolidated into `docs/deploy/` — a single doc
+(`docs/deploy/README.md`) covering both deploy paths (Docker production / bare-metal host) plus
+shared router/sentry/secrets references; the old `docs/DEPLOYMENT.md` and `docs/runbooks/deploy*.md`
+are now stub-redirects pointing at it; `.gitignore`'s `deploy/` entry is anchored to `/deploy/` (repo
+root only) so it does not shadow `docs/deploy/`. Agents looking for deploy instructions should read
+`docs/deploy/README.md` first.)
+
+Last updated: 2026-07-23 (mac-trust-grant-fix closed and archived to
+`process/general-plans/completed/mac-trust-grant-fix_23-07-26/` — customer captive-portal grant path
+no longer treats a fallback-resolved MAC as a verified binding; `resolveMacForUser` now returns
+`{ mac, live }`, dashboard auto-bind/`thisDeviceBound` gate on `live`, an honest "unverified —
+reconnect" banner replaces the false-connected state, and fallback MACs no longer entrench
+`customer_profile.last_known_mac` (seed-only-when-null). EVL green (19 targeted + 118 server-suite
+tests, `bun run check` 0 errors). User browser-confirmed: plan purchases now reliably grant WiFi.
+Known-gap, honestly unresolved: the specific fallback→unverified-banner→reconnect UX path could not
+be live-reproduced this session (requires forcing live IP→MAC resolution to fail) — proven by code +
+unit tests only. See the Gotchas section MAC-trust residual bullet for the durable technical note.)
+
+Last updated: 2026-07-23 (finance-timestamptz-migration DEV-SIDE COMPLETE, PROD APPLY PENDING —
+migration `0052_pink_maginty.sql` converts 13 finance/session columns (`credit_ledger.created_at`,
+`points_ledger.created_at`, `payment_transactions.created_at`, `payment_checkouts.{created_at,
+settled_at,last_polled_at}`, `network_sessions.{started_at,bound_at,last_seen_at,expires_at}`,
+`customer_profile.{last_free_session_at,access_expires_at,access_paused_at}`) from bare `timestamp`
+to `timestamptz`, with `apps/admin/src/lib/server/period.ts` rewritten to real Manila-day→UTC-instant
+math in the same change-set; migration count is now 53 (`0000`–`0052`), see `database/all-database.md`
+Canonical Notes for the full write-path/root-cause detail. EVL green (391 tests, 0 failures) and user
+browser-confirmed dev display. Plan STAYS in `process/general-plans/active/finance-timestamptz-
+migration_23-07-26/` — NOT archived, NOT VERIFIED — prod TZ preflight, the 6-step prod apply
+sequence, `vc-risk-evidence-pack`, and human prod verification are all still outstanding.)
+
 Last updated: 2026-07-22 (manager-board-lazy-events closed and archived to
 `process/features/incident-management/completed/manager-board-lazy-events_22-07-26/` — admin's
 manager `/issues` board no longer eager-loads every issue's full event history on page load; it
@@ -194,7 +258,7 @@ veent_wifiportal/
 │   └── locator/          -- veent-locator: public hotspot map, no auth (src/, static/, playwright.config.ts)
 ├── packages/
 │   ├── core/              -- @veent/core: business services + integration providers (src/, scripts/)
-│   └── db/                -- @veent/db: sole Drizzle/Postgres schema source (src/, drizzle/ ← 49 migrations)
+│   └── db/                -- @veent/db: sole Drizzle/Postgres schema source (src/, drizzle/ ← 53 migrations)
 ├── docs/                   -- assets/, design/, dev/, mikrotik/, problems/, runbooks/, use-cases/
 ├── scripts/                 -- dev-cron.ts, idempotent-migrations.ts, setup-prod.ts, ...
 ├── process/                 -- this context/plan/development-protocol system
@@ -286,9 +350,11 @@ real provider (mikrotik/maya/resend) plus a `stub.ts` fallback, selected by env.
 into each app's Sentry `beforeSend`.
 
 **Migrations:** `packages/db/drizzle.config.ts` is the single source of truth; schema lives in
-`packages/db/src/schema/index.ts`; 49 `.sql` migrations in `packages/db/drizzle/` (newest:
-`0048_lying_firedrake.sql` 2026-07-20, adds `customer_otp_delivery_log` for OTP delivery
-observability — applied via direct `psql` DDL, not `db:push`, per the push-managed-dev-DB gotcha).
+`packages/db/src/schema/index.ts`; 53 `.sql` migrations in `packages/db/drizzle/` (newest:
+`0052_pink_maginty.sql` 2026-07-23, converts 13 finance/session columns to `timestamptz` — see
+`database/all-database.md` Canonical Notes; prod apply still pending. Prior: `0048_lying_firedrake.sql`
+2026-07-20, adds `customer_otp_delivery_log` for OTP delivery observability — applied via direct
+`psql` DDL, not `db:push`, per the push-managed-dev-DB gotcha).
 Root scripts proxy `db:push/generate/migrate/studio/seed` → `bun run --filter @veent/db`. GOTCHA:
 dev DB is push-managed — see Gotchas below.
 
@@ -353,9 +419,25 @@ easy to find).
 - `packages/core/src/integrations/payments/maya.ts` — hand-rolled HTTP client, no SDK
 - `apps/customer/src/lib/server/payments.ts` + `paymentWebhook.ts`
 - `apps/customer/src/routes/api/webhooks/maya/payment-status`, `api/payments/reconcile`
-- `docs/maya-do-webhook-relay.md`
+- `docs/maya-do-webhook-relay.md`, `docs/deploy/README.md` (live-mode `ORIGIN`/walled-garden note)
 - Dev webhooks: real sandbox webhooks reach local dev through a **registered ngrok tunnel** — do
   not assume localhost is unreachable from Maya's sandbox.
+- **Browser return origin vs webhook origin (live-mode, 23-07-26):** the post-payment BROWSER
+  return (`successUrl`/`cancelUrl` in `apps/customer/src/routes/top-up/+page.server.ts`) must use
+  `event.url.origin` (driven by the `ORIGIN` env), which in production MUST be the guest-reachable,
+  walled-gardened LAN portal address (e.g. `http://10.210.59.11:5173`) — never `localhost` and
+  never the tunnel. The guest device is still captive at Maya-redirect time and can only reach
+  walled-garden hosts; returning to a non-walled-gardened public tunnel domain fails with
+  `ERR_CONNECTION_CLOSED`. `TUNNEL_ORIGIN` (`webhookOrigin`) is for the server→server webhook
+  `originUrl` ONLY — do not reuse it for the browser return URLs. See
+  `process/general-plans/completed/maya-return-url-revert_23-07-26/` for the incident this codifies.
+- **GCash/e-wallet checkout needs IP-based walled-garden allows:** MikroTik `dst-host` (hostname)
+  walled-garden rules do NOT reliably match GCash's HTTPS traffic (`payments.gcash.com` and its
+  Alipay-powered cashier's `*.alipay.com`/`*.alipayobjects.com`/`*.alicdn.com`) — confirmed live via
+  `hits=0` on the hostname rules. Mitigation shipped is a TEMPORARY manual router-side IP allow
+  (`/ip hotspot walled-garden ip add dst-address=<resolved IP>`), NOT productionized. Follow-up:
+  `process/general-plans/backlog/gcash-walled-garden-ip-productionize_NOTE_23-07-26.md` — add
+  IP-based allows for `PAYMENT_HOSTS` in `apps/admin/scripts/setup-router.ts`.
 
 ### Sentry observability
 - `@sentry/sveltekit` in all 3 apps; `@sentry/core` in `packages/core`
@@ -473,6 +555,13 @@ Deferred candidates (stay in `process/general-plans/` until they accumulate 5+ a
 `docs/mikrotik/login.html` change), `captive-portal-flow` (customer), `maya-payments` (customer),
 `locator-app`.
 
+## Deployment
+
+`docs/deploy/README.md` — the single deployment guide (consolidated 23-07-26), covering both deploy
+paths (Docker production / bare-metal host) plus shared router/sentry/secrets references. Read this
+first for any deploy-related task. `docs/DEPLOYMENT.md` and `docs/runbooks/deploy*.md` are now
+stub-redirects — do not treat them as the source of truth.
+
 ## Team and Workflow
 
 - Small team: 2+ humans plus AI agents doing substantial implementation.
@@ -492,7 +581,12 @@ Deferred candidates (stay in `process/general-plans/` until they accumulate 5+ a
   the record.
 - **MAC-trust residual:** the customer portal's `?mac=` query param is inherently
   client-influenceable (a captive-portal constraint) — never describe it as server-authoritative.
-  Only M-2 is fully closed; M-1/L-1 are MITIGATED, not eliminated.
+  Only M-2 is fully closed; M-1/L-1 are MITIGATED, not eliminated. Separately (23-07-26,
+  `mac-trust-grant-fix`): `resolveMacForUser` (`apps/customer/src/lib/server/network-location.ts`)
+  now returns `{ mac, live }` — a fallback-resolved MAC (device cookie / `last_known_mac`) is no
+  longer treated as a verified binding by dashboard auto-bind/`thisDeviceBound`, and no longer
+  entrenches `customer_profile.last_known_mac` (seed-only-when-null). Do not reintroduce
+  "fallback match = verified" logic.
 - **MikroTik/captive-portal quirks:** RouterOS templating, walled-garden constraints, OS
   captive-probe endpoints (`generate_204`, `gen_204`, `ncsi.txt`, `connecttest.txt`,
   `hotspot-detect.html`), and CNA (Captive Network Assistant) mini-browser behavior are all easy
@@ -503,6 +597,17 @@ Deferred candidates (stay in `process/general-plans/` until they accumulate 5+ a
 - **Auth isolation:** the two `betterAuth()` instances (customer `veent-portal` cookie prefix,
   admin `radius-admin` cookie prefix) must NEVER be cross-wired or unified — each has its own
   `BETTER_AUTH_SECRET` and schema builder output.
+- **`resolveNetworkIdForMac` fallback ordering:** never re-introduce a raw interface-name-first
+  fallback in `resolveNetworkIdForMac` (`packages/core/src/services/networkHealth.ts`) — circuit-id
+  must resolve first so a bridged multi-SSID AP binds sessions to the physical AP row, not the
+  shared bridge row (fixed 23-07-26, `ap-session-binding-circuitid-first`).
+- **Maya live-mode browser return vs webhook origin:** never point `successUrl`/`cancelUrl`
+  (`apps/customer/src/routes/top-up/+page.server.ts`) at `TUNNEL_ORIGIN`/`webhookOrigin` — the
+  guest device is still captive at redirect time and can only reach walled-garden hosts, so a
+  non-walled-gardened tunnel return fails with `ERR_CONNECTION_CLOSED`. Browser returns always use
+  `event.url.origin` (driven by `ORIGIN`, which must be the walled-gardened LAN portal address in
+  prod); `TUNNEL_ORIGIN` is for the server→server webhook `originUrl` only (see Maya payments
+  section above; incident: `maya-return-url-revert_23-07-26`).
 
 ## Scan Metadata
 
