@@ -13,10 +13,11 @@ Complexity: COMPLEX (schema migration, billing-path, atomic cross-package change
 
 ## Current State (UPDATE PROCESS — 23-07-26)
 
-**Classification: Keep in active/testing.** Dev-side implementation is complete and verified; the
-plan stays in `process/general-plans/active/` until the prod-apply sequence and human prod
-verification are done. Per §Phase Completion Rules above, this is `CODE DONE` (sections 0-3 of the
-Ordered EXECUTE Checklist), NOT `VERIFIED` (section 4 prod steps + close-out are still outstanding).
+**Classification: Keep in active/testing.** Dev-side implementation is complete and verified,
+including Item 3.8 (Finance e2e run 24-07-26 — full 12-spec suite, 23/23 green); the plan stays in
+`process/general-plans/active/` until the prod-apply sequence and human prod verification are done.
+Per §Phase Completion Rules above, this is `CODE DONE` (sections 0-3 of the Ordered EXECUTE
+Checklist), NOT `VERIFIED` (section 4 prod steps + close-out are still outstanding).
 
 - **Dev-side DONE:** migration `0052_pink_maginty.sql` (repo now at 53 migration files, `0000`–
   `0052`) applied and verified against dev DB; schema (`customer.ts`) updated on all 13 columns;
@@ -178,7 +179,7 @@ Every safety gate below is a literal, checkable item — EXECUTE must not procee
 - [x] 3.5 `bun run check` (repo-wide typecheck) — **pass condition:** exit 0.
 - [x] 3.6 `bun run lint` — **pass condition:** exit 0.
 - [x] 3.7 `bun test` (repo-wide, per `tests/all-tests.md` gate order) — **pass condition:** all suites green, zero new failures.
-- [ ] 3.8 Admin e2e: run the Finance-touching specs only (`apps/admin/e2e/**finance**`, `**transactions**`, or the full 12-spec suite if scoping is ambiguous — confirm exact spec filenames at EXECUTE time via `ls apps/admin/e2e/`). **Pass condition:** all green.
+- [x] 3.8 Admin e2e: run the Finance-touching specs only (`apps/admin/e2e/**finance**`, `**transactions**`, or the full 12-spec suite if scoping is ambiguous — confirm exact spec filenames at EXECUTE time via `ls apps/admin/e2e/`). **Pass condition:** all green.
 
 ### 4. Agent-probe / manual gates (AC5, AC7-prod, AC8-prod)
 
@@ -423,7 +424,7 @@ Legacy line form (retained so existing validate-contract consumers still parse):
 **Failing stub (AC4 — the one row with a genuine new-scenario shape; AC9 is a suite-level regression
 gate, not a single new-behavior scenario, so no stub is generated for it):**
 
-```
+```ts
 test("should skip/credit checkouts correctly across minAge/maxAge/lastPolledAt-throttle boundaries against migrated timestamptz payment_checkouts columns", () => {
   throw new Error("NOT IMPLEMENTED — TDD stub: reconcilePayments age-boundary logic against timestamptz-migrated payment_checkouts.created_at/last_polled_at")
 })
@@ -485,7 +486,7 @@ inherited from the plan's own claims.
 
 ## Autonomous Goal Block
 
-```
+```text
 SESSION GOAL: Migrate 13 finance/session timestamp columns (credit_ledger, points_ledger,
 payment_transactions, payment_checkouts, network_sessions, customer_profile) from bare
 timestamp to timestamptz with per-column USING correction, plus the atomic period.ts rewrite,

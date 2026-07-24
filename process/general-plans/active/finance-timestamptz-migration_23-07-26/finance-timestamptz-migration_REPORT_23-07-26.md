@@ -8,9 +8,10 @@ plan: process/general-plans/active/finance-timestamptz-migration_23-07-26/financ
 
 # Finance / Session Timestamptz Migration — EXECUTE Report (DEV-SIDE)
 
-**Scope executed: dev-side only.** All checklist items 0 → 3 complete + AC5 static (Item 4.1) done.
-Prod gates (4.2, 4.3), E4 risk-evidence-pack, and dev live-feed browser smoke deliberately NOT run
-— they await the manual operator handoff / human verification per the hard scope boundary.
+**Scope executed: dev-side only.** All checklist items 0 → 3 complete (Item 3.8 closed out
+24-07-26 — see Addendum) + AC5 static (Item 4.1) done. Prod gates (4.2, 4.3), E4 risk-evidence-pack,
+and dev live-feed browser smoke deliberately NOT run — they await the manual operator handoff /
+human verification per the hard scope boundary.
 
 ## What Was Done
 
@@ -82,9 +83,9 @@ Prod gates (4.2, 4.3), E4 risk-evidence-pack, and dev live-feed browser smoke de
   the manual operator handoff (hard scope boundary).
 - **E4 (vc-risk-evidence-pack):** NOT run — this is the orchestrator/operator step before the manual
   prod apply, not a dev-side execute step.
-- **Item 3.8 (finance e2e):** NOT run as a gate — per E5, `finance-export.e2e.ts` only tests CSV
-  auth-gating (`period=all`), NOT date-windowing, so it is not AC2/AC3 evidence. EVL owns the e2e
-  confirmation run.
+- **Item 3.8 (finance e2e):** deferred at EXECUTE time, **run and green on 24-07-26** (see
+  Addendum). Per E5 its meaning stays narrow: `finance-export.e2e.ts` only tests CSV auth-gating
+  (`period=all`), NOT date-windowing, so it is still NOT AC2/AC3 evidence — it is AC9 breadth only.
 - **Item 4.1 dev live-feed browser smoke (AC5 dynamic half):** deferred to human verification —
   browser-visible, requires a running app + top-up action.
 - **Item 5.2 / E3 (`all-database.md` migration-count re-sync 47→53):** deferred to UPDATE PROCESS —
@@ -102,7 +103,7 @@ Prod gates (4.2, 4.3), E4 risk-evidence-pack, and dev live-feed browser smoke de
 | AC6 KPI bucket byte-identical | PASS |
 | AC7 dev TZ preflight | PASS (Asia/Manila) |
 | AC8 db:generate + hand-edit + dev direct-apply-verify | PASS |
-| AC9 bun run check / lint(scoped) / bun run test | PASS (391 tests, 0 fail) |
+| AC9 bun run check / lint(scoped) / bun run test | PASS (391 tests, 0 fail) + Item 3.8 admin e2e 23/23 green (24-07-26) |
 
 ## Plan Deviations
 
@@ -221,7 +222,7 @@ Prod gates (4.2, 4.3), E4 risk-evidence-pack, and dev live-feed browser smoke de
    | AC6 | KPI/revenue byte-identical | **met** — folded into AC1 spec, green |
    | AC7 | TZ preflight confirmed per environment before apply | **unmet (partial)** — dev confirmed `Asia/Manila`; prod preflight not yet run |
    | AC8 | Migration reproducible (generate/hand-edit/apply/verify) | **unmet (partial)** — dev apply-and-verify done; prod apply not yet run |
-   | AC9 | No unrelated behavior change | **met** — full gate suite green, zero new failures |
+   | AC9 | No unrelated behavior change | **met** — automated gates + admin e2e (23/23) green, zero new failures |
 
    Unmet-partial criteria (AC5, AC7, AC8) are exactly the criteria whose remaining half is the
    prod-apply sequence — this is expected given the deliberate dev-only scope boundary, not a gap
@@ -244,3 +245,33 @@ phrase refers to the wording match required by the skill contract, not a literal
 `.claude/` files changed this session. No `.claude/`/`.codex/` files were touched; the phrase is
 reproduced verbatim as required regardless, since the total signal count crossed the HIGH
 threshold via (a)+(b2)+(c).)
+
+---
+
+## Addendum — Item 3.8 closed out (24-07-26)
+
+The deferred Finance e2e gate was run against the throwaway e2e DB (`radius_admin_test`, seeded by
+`e2e/global-setup.ts`), Playwright + stub router, never the dev DB or a real MikroTik.
+
+- **Scoped run** (`e2e/finance-export.e2e.ts`, the only spec matching Item 3.8's glob — `ls
+  apps/admin/e2e/` shows no `**transactions**` spec): **2/2 green**.
+- **Full suite** (all 12 spec files) run for the AC9 breadth this gate actually exists to prove:
+  **23/23 green, 0 failures.**
+- Meaning is unchanged per **E5**: this is AC9 regression breadth, NOT AC2/AC3 date-window evidence.
+
+**Environment defect found while running it (pre-existing, unrelated to this migration).** The
+admin production build (`vite build`, which the Playwright `webServer` runs) crashes in
+prerender-analyse with `TypeError: z.coerce.boolean(...).meta is not a function`. Cause: the build
+externalises `zod` (`import * as z from "zod"` in the SSR output), but no package in the repo
+declares `zod` as a direct dependency — it is only present transitively under
+`node_modules/.bun/zod@4.4.3/`, with no top-level `node_modules/zod` link. Node therefore resolves
+`zod` by walking ABOVE the repo and finds a stray `/home/seodowa/node_modules/zod` at **v3.25.76**,
+which has no `.meta()` (a zod-v4 API better-auth 1.4.22 relies on).
+
+The gate above was unblocked with a local, gitignored symlink
+(`node_modules/zod -> .bun/zod@4.4.3/node_modules/zod`). **That is a workaround, not a fix** — it is
+wiped by the next `bun install`, and on any machine without a stray `~/node_modules` the same build
+fails with `Cannot find module 'zod'` instead. **Proper fix (not applied — outside this plan's
+scope): declare `zod` (^4.4.3) as a direct dependency of `apps/admin` (check `apps/customer` too,
+same better-auth usage) so the build is hermetic.** Tracked as a follow-up, NOT a blocker for the
+prod-apply sequence (the migration itself is DDL and does not depend on the admin build).
