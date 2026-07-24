@@ -200,11 +200,20 @@ async function rememberAccountMac(userId: string, mac: string): Promise<void> {
  * next LIVE resolution (portal reconnect) via `rememberAccountMac`, not by a fallback.
  */
 async function seedAccountMac(userId: string, mac: string): Promise<void> {
-	// ponytail: read-guard in JS (reuse existing accountMac) rather than a second SQL branch — the
-	// TOCTOU window is harmless (both racers would seed the same fallback MAC) and it keeps the
-	// no-entrench rule unit-testable against the mocked db.
-	if (await accountMac(userId)) return;
-	await rememberAccountMac(userId, mac);
+	// The no-entrench rule lives in the WHERE clause (`last_known_mac IS NULL`), not in a JS
+	// read-guard: a read-then-write would leave a window in which a concurrent LIVE resolution
+	// persists a verified MAC and this fallback then clobbers it (`rememberAccountMac` also matches
+	// rows whose stored MAC merely DIFFERS). One conditional statement makes the guard atomic.
+	try {
+		await db
+			.update(customerProfile)
+			.set({ lastKnownMac: mac })
+			.where(and(eq(customerProfile.userId, userId), isNull(customerProfile.lastKnownMac)));
+	} catch (e) {
+		console.warn('[mac] failed to seed account MAC', { msg: (e as Error).message });
+		// Low-priority: best-effort write, self-heals on the next resolution. Watch the rate, not the event.
+		captureHandled(e, { level: 'warning', tags: { area: 'network', scope: 'mac-persist' } });
+	}
 }
 
 /** One structured success line per resolution, tagged with the branch that won — feeds the

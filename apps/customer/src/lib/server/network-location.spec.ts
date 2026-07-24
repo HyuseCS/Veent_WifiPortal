@@ -12,9 +12,18 @@ vi.mock('$env/dynamic/private', () => ({ env: {} }));
 // stub whose terminal await shifts one result off `selectQueue`, so a test drives each query's
 // result in order regardless of which table/columns it selects.
 const selectQueue: unknown[][] = [];
-// Records every db.update().set(...) call so provenance/no-entrench tests can assert whether a MAC
-// was persisted (live path / empty-seed) or NOT (fallback over a populated last_known_mac — AC5).
-const updateCalls: Array<{ set: unknown }> = [];
+// Records every db.update().set(...).where(...) call so provenance/no-entrench tests can assert both
+// WHAT was persisted and the predicate that guards it — the fallback seed's no-entrench rule (AC5)
+// lives in SQL (`last_known_mac IS NULL`), so it must be asserted on the WHERE, not on call count.
+const updateCalls: Array<{ set: unknown; where: unknown }> = [];
+
+/** Recursively look for a literal SQL fragment (e.g. `is null`) inside a drizzle SQL object. */
+function whereHas(node: unknown, needle: string, seen = new Set<unknown>()): boolean {
+	if (typeof node === 'string') return node.includes(needle);
+	if (node === null || typeof node !== 'object' || seen.has(node)) return false;
+	seen.add(node);
+	return Object.values(node).some((v) => whereHas(v, needle, seen));
+}
 function resetDb() {
 	selectQueue.length = 0;
 	updateCalls.length = 0;
@@ -26,10 +35,11 @@ vi.mock('$lib/server/db', () => {
 	return {
 		db: {
 			update: () => ({
-				set: (v: unknown) => {
-					updateCalls.push({ set: v });
-					return { where: async () => {} };
-				}
+				set: (v: unknown) => ({
+					where: async (w: unknown) => {
+						updateCalls.push({ set: v, where: w });
+					}
+				})
 			}),
 			select: () => chain
 		}
@@ -205,35 +215,28 @@ describe('resolveMacForUser — live/fallback provenance + no-entrench (AC1/AC2/
 	it('13b: all live miss + device cookie ⇒ { mac: <device>, live: false }', async () => {
 		(getPortalContext as ReturnType<typeof vi.fn>).mockReturnValue({}); // no portal mac
 		(getDeviceMac as ReturnType<typeof vi.fn>).mockReturnValue('CC:CC:CC:CC:CC:CC');
-		// seedAccountMac reads accountMac first; empty queue ⇒ null ⇒ seed proceeds.
 		const r = await resolveMacForUser(provEvt, 'u1');
 		expect(r).toEqual({ mac: 'CC:CC:CC:CC:CC:CC', live: false });
 	});
 
-	it('13c: fallback (device cookie) does NOT overwrite a populated last_known_mac (AC5 no-entrench)', async () => {
+	it('13c-seed: the fallback seed is a single write guarded by `last_known_mac IS NULL` (AC5 no-entrench)', async () => {
 		(getPortalContext as ReturnType<typeof vi.fn>).mockReturnValue({}); // no portal mac
 		(getDeviceMac as ReturnType<typeof vi.fn>).mockReturnValue('CC:CC:CC:CC:CC:CC');
-		selectQueue.push([{ mac: 'EE:EE:EE:EE:EE:EE' }]); // accountMac read → already populated
-		const r = await resolveMacForUser(provEvt, 'u1');
-		expect(r).toEqual({ mac: 'CC:CC:CC:CC:CC:CC', live: false });
-		// Negative control: the durable value existed, so NO update must run — a fallback never entrenches.
-		expect(updateCalls.length).toBe(0);
-	});
-
-	it('13c-seed: fallback seeds ONLY when last_known_mac is empty', async () => {
-		(getPortalContext as ReturnType<typeof vi.fn>).mockReturnValue({}); // no portal mac
-		(getDeviceMac as ReturnType<typeof vi.fn>).mockReturnValue('CC:CC:CC:CC:CC:CC');
-		selectQueue.push([]); // accountMac read → null (no durable value yet)
 		await resolveMacForUser(provEvt, 'u1');
-		// Empty durable value → seed proceeds (exactly one persist of the device MAC).
+		// Exactly one statement — the no-entrench rule is the WHERE predicate, not a read-then-write
+		// (a JS read-guard would let a concurrent LIVE persist be clobbered between read and update).
 		expect(updateCalls.length).toBe(1);
 		expect(updateCalls[0].set).toEqual({ lastKnownMac: 'CC:CC:CC:CC:CC:CC' });
+		expect(whereHas(updateCalls[0].where, 'is null')).toBe(true);
+		// ...and ONLY that: no `<>` branch, or a differing verified MAC would still be overwritten.
+		expect(whereHas(updateCalls[0].where, '<>')).toBe(false);
 	});
 
-	it('13d: live hit still persists (rememberAccountMac unchanged on the live branch)', async () => {
+	it('13d: live hit still persists, and its WHERE is NOT null-guarded (a live MAC may replace a stale one)', async () => {
 		(getPortalContext as ReturnType<typeof vi.fn>).mockReturnValue({ mac: SERVER_MAC });
 		await resolveMacForUser(provEvt, 'u1');
 		expect(updateCalls.length).toBe(1);
 		expect(updateCalls[0].set).toEqual({ lastKnownMac: SERVER_MAC });
+		expect(whereHas(updateCalls[0].where, '<>')).toBe(true); // `or(isNull, ne(...))`
 	});
 });
