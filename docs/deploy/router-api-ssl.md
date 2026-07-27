@@ -14,8 +14,17 @@ MIKROTIK_HOST="10.210.0.1"      # the router's LAN IP
 MIKROTIK_USER / MIKROTIK_PASSWORD
 MIKROTIK_PORT="8729"
 MIKROTIK_TLS="true"
-MIKROTIK_TLS_INSECURE="true"    # the router cert is self-signed
+MIKROTIK_TLS_INSECURE="true"    # see the security note below — only acceptable under these conditions
 ```
+
+> **Security note on `MIKROTIK_TLS_INSECURE`:** `true` skips certificate verification, so the API
+> password is encrypted on the wire but the connection is not authenticated against a trusted cert.
+> It is acceptable here **only** because (a) the cert is self-signed and (b) `api-ssl` is IP-restricted
+> to the app server's LAN IP (`address=<APP_SERVER_IP>/32`, below), on a trusted LAN segment — that
+> address restriction is the real mitigation, not TLS verification. Prefer dropping it once the router
+> presents a cert the app host trusts (a CA-signed cert, or the self-signed cert added to the host's
+> trust store). Treat `true` as steady-state only under the two conditions above; otherwise scope it to
+> bootstrap/troubleshooting.
 
 ## Router-side one-time setup
 

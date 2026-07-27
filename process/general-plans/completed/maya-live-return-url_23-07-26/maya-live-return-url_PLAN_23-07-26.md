@@ -19,7 +19,7 @@ feature: general
 
 Type: SIMPLE
 Complexity: SIMPLE
-Status: PLANNED (awaiting EXECUTE approval)
+Status: SUPERSEDED — misdiagnosis, reverted in full (see `maya-return-url-revert_23-07-26/`). Historical record only.
 Date: 23-07-26
 **Risk class:** billing / payments (high-risk) — money path adjacency, though the change itself touches only display redirect URLs.
 
