@@ -30,7 +30,7 @@ vi.mock('$env/dynamic/private', () => ({
 	}
 }));
 
-import { sendOtp } from './otp';
+import { sendOtp, isTestMode, readTestOtp } from './otp';
 import { captureHandled } from '@veent/core';
 
 const PHONE = '+639171234567';
@@ -269,6 +269,32 @@ describe('sendOtp — delivery-log persistence', () => {
 		await flush();
 
 		expect(insertValues).not.toHaveBeenCalled();
+	});
+});
+
+/**
+ * TEST_MODE escape hatch: when the flag is truthy, sendOtp stashes the code in-memory and
+ * NEVER touches a gateway; readTestOtp surfaces it for the verify page. When off, the normal
+ * provider dispatch path is unchanged (proven by every suite above running with TEST_MODE unset).
+ */
+describe('sendOtp — TEST_MODE short-circuit', () => {
+	it('stashes the code, surfaces it via readTestOtp, and calls no gateway', async () => {
+		state.env.TEST_MODE = 'true';
+		state.env.CAST_API_KEY = 'cast_test_key'; // configured — proves the gateway is skipped anyway
+		const fetchFn = mockFetch({ ok: true, ...castOk });
+
+		await expect(sendOtp(PHONE, CODE)).resolves.toBeUndefined();
+
+		expect(fetchFn).not.toHaveBeenCalled();
+		expect(insertValues).not.toHaveBeenCalled();
+		expect(readTestOtp(PHONE)).toBe(CODE);
+	});
+
+	it('isTestMode reflects the truthy set and off otherwise', () => {
+		state.env.TEST_MODE = 'off';
+		expect(isTestMode()).toBe(false);
+		state.env.TEST_MODE = '1';
+		expect(isTestMode()).toBe(true);
 	});
 });
 

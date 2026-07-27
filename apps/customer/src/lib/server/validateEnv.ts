@@ -1,6 +1,7 @@
 import { dev, building } from '$app/environment';
 import { env } from '$env/dynamic/private';
 import { env as pub } from '$env/dynamic/public';
+import { isTestMode } from '$lib/server/otp';
 
 /**
  * Boot-time environment check (called once from hooks.server.ts). Fails fast on a
@@ -22,6 +23,13 @@ const REQUIRED = [
 
 export function validateEnv(): void {
 	if (building) return; // env isn't populated during build/prerender
+
+	if (isTestMode()) {
+		const m = 'TEST_MODE is enabled — dev/test-only behavior is active (first consumer: the login OTP '
+			+ 'is shown in the UI instead of sent via SMS). This MUST NOT run in production.';
+		if (!dev) throw new Error(m);
+		console.warn(`[env] ${m} (allowed in dev only)`);
+	}
 
 	const missing: string[] = REQUIRED.filter((k) => !env[k]);
 	if (env.NETWORK_CONTROLLER === 'mikrotik') {
