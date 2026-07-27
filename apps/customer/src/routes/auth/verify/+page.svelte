@@ -1,12 +1,19 @@
 <script lang="ts">
 	import { enhance } from '$app/forms';
+	import { onMount } from 'svelte';
 	import type { SubmitFunction } from '@sveltejs/kit';
 	import Icon from '$lib/Icon.svelte';
 	import { resolve } from '$app/paths';
+	import { toasts } from '$lib/toasts.svelte';
 	import type { ActionData, PageServerData } from './$types';
 	import logo from '$lib/assets/parafiber-logo.webp';
 
 	let { data, form }: { data: PageServerData; form: ActionData } = $props();
+
+	// Dev/test only: surface the OTP as a long-lived toast instead of an inline banner.
+	onMount(() => {
+		if (data.devCode) toasts.show(`Test mode: your OTP is ${data.devCode}`, 'success', 15000);
+	});
 
 	const LENGTH = 6;
 	let submitting = $state(false);
@@ -52,6 +59,8 @@
 				secondsLeft = 45;
 				resent = true;
 				setTimeout(() => (resent = false), 4000);
+				const dc = (result.data as { devCode?: string } | undefined)?.devCode;
+				if (dc) toasts.show(`Test mode: your OTP is ${dc}`, 'success', 15000);
 			}
 		};
 	};

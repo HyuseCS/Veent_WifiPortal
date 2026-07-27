@@ -21,6 +21,25 @@ import { db } from '$lib/server/db';
 export const PENDING_COOKIE = 'veent-portal-verify';
 export const PENDING_MAX_AGE = 5 * 60; // seconds; matches the OTP expiry
 
+/** General dev/test-mode switch. Truthy = on. NOTE: guarantees "never in prod" (see validateEnv),
+ * not "harmless" — every consumer must be dev-safe on its own. */
+export function isTestMode(): boolean {
+	const v = (env.TEST_MODE ?? '').trim().toLowerCase();
+	return v === '1' || v === 'true' || v === 'yes' || v === 'on';
+}
+
+// ponytail: in-memory, single portal instance only. TEST_MODE targets a single LAN appliance;
+// a multi-instance deploy would not share this Map — acceptable and documented (see validateEnv gate).
+const pendingTestCodes = new Map<string, { code: string; exp: number }>();
+
+/** Read (and consume-check) the stashed test-mode code for a phone; prunes expired entries. */
+export function readTestOtp(phone: string): string | null {
+	const now = Date.now();
+	for (const [k, v] of pendingTestCodes) if (v.exp < now) pendingTestCodes.delete(k);
+	const hit = pendingTestCodes.get(phone);
+	return hit && hit.exp >= now ? hit.code : null;
+}
+
 /**
  * Whether the pending-verification cookie is set `Secure`. Pinned to the ORIGIN protocol
  * (NOT `!dev`/NODE_ENV) to match the better-auth session cookies (`auth.ts` `useSecureCookies`).
@@ -121,6 +140,11 @@ function otpMessage(code: string): string {
  * silently swallowed (that would let anyone "log in" with no code).
  */
 export async function sendOtp(phone: string, code: string): Promise<void> {
+	if (isTestMode()) {
+		pendingTestCodes.set(phone, { code, exp: Date.now() + PENDING_MAX_AGE * 1000 });
+		console.info(`[otp] TEST MODE — code for ${phone}: ${code} (shown on verify page, NOT sent)`);
+		return; // never touches the SMS gateway
+	}
 	const provider = (env.SMS_PROVIDER ?? 'cast').trim().toLowerCase();
 	// Explicit `cast` branch + a throw for anything unrecognized. The previous fall-through
 	// silently routed a typo'd SMS_PROVIDER to Cast, so a misconfigured box looked healthy while

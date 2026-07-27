@@ -85,9 +85,9 @@ here when a `schema-guide.md`, `migration-procedures.md`, or `seeding.md` is spl
 - `packages/db/src/seed.ts` — backs `db:seed`
 - `packages/db/drizzle.config.ts` — single source of truth for `drizzle-kit` (schema path,
   `./drizzle` output dir, `postgresql` dialect, `strict: true`)
-- `packages/db/drizzle/` — committed SQL migrations (47 as of 2026-07-10, `0000`–`0046`;
-  `0046_oval_lorna_dane.sql` relaxes `admin_issue_event_type_ck` for IMS `note_edited`) + `meta/`
-  snapshots + `_journal.json`
+- `packages/db/drizzle/` — committed SQL migrations (53 as of 2026-07-23, `0000`–`0052`; newest
+  `0052_pink_maginty.sql` converts 13 finance/session columns from bare `timestamp` to `timestamptz`
+  — see Canonical Notes) + `meta/` snapshots + `_journal.json`
 - `compose.yaml` (repo root) — local Postgres container definition (`postgres` image, port 5432,
   user `root`, db `local`)
 - `scripts/idempotent-migrations.ts` — one-off that rewrote historical migrations to be idempotent
@@ -151,6 +151,28 @@ Update this group when:
   `apps/customer/src/lib/server/{rateLimit,otpRateLimit}.ts`). `network_health` is read by both the
   admin dashboard and the public locator — `isNetworkHealthStale()` in `network-health.ts` is the
   one shared staleness rule that keeps the two surfaces from disagreeing about whether an AP is live.
-- Migration count is a snapshot (47, `0000`–`0046` as of 2026-07-10, latest
-  `0046_oval_lorna_dane.sql`) — re-check `ls packages/db/drizzle/*.sql | wc -l` if the
+- Migration count is a snapshot (53, `0000`–`0052` as of 2026-07-23, latest
+  `0052_pink_maginty.sql`) — re-check `ls packages/db/drizzle/*.sql | wc -l` if the
   exact count matters for a task.
+- **Timestamp columns must be `timestamptz` from creation — mixed bare-`timestamp` convention was a
+  real bug, now fixed for the finance/session surface.** `0052_pink_maginty.sql` converts 13 columns
+  (`credit_ledger.created_at`, `points_ledger.created_at`, `payment_transactions.created_at`,
+  `payment_checkouts.{created_at,settled_at,last_polled_at}`,
+  `network_sessions.{started_at,bound_at,last_seen_at,expires_at}`,
+  `customer_profile.{last_free_session_at,access_expires_at,access_paused_at}`) from bare
+  `timestamp` to `timestamptz`. Root cause: on this surface some columns were written via
+  `.defaultNow()` (a Postgres-side wall-clock value in the session's `TimeZone` GUC — Manila here)
+  while others were written via an explicit JS `new Date()` (a UTC-wall value once bound through
+  `postgres.js`) — a bare `timestamp` column silently discards the tz origin, so two conventions
+  ended up sharing one ambiguous column type. Each column's `USING` cast direction
+  (`AT TIME ZONE 'Asia/Manila'` vs `AT TIME ZONE 'UTC'`) was derived per-column from its actual
+  write-path evidence, not from schema defaults alone (`network_sessions`'s `.defaultNow()` default
+  never actually fires — the write path always sets it explicitly as UTC-wall; verified by tracing
+  every call site, not by schema inspection). `apps/admin/src/lib/server/period.ts`'s `parsePeriod()`
+  was rewritten in the same change-set to do real Manila-day → UTC-instant math (fixed −8h, no DST)
+  instead of the old wall-clock-spelling `Date.UTC(...)` trick. **Any new timestamp column on this
+  surface (or anywhere finance/session-adjacent) should be declared `timestamp('col', { withTimezone:
+  true })` from the start** — this whole migration exists only because early columns weren't.
+  Full detail: `process/general-plans/active/finance-timestamptz-migration_23-07-26/` (plan/spec/
+  report — PROD APPLY STILL PENDING as of 2026-07-23, plan intentionally kept in `active/`, not yet
+  archived).

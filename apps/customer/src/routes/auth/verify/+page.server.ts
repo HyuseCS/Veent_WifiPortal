@@ -6,8 +6,10 @@ import {
 	PENDING_COOKIE,
 	PENDING_COOKIE_SECURE,
 	PENDING_MAX_AGE,
+	isTestMode,
 	maskPhone,
 	parsePending,
+	readTestOtp,
 	serializePending
 } from '$lib/server/otp';
 import {
@@ -27,7 +29,8 @@ export const load: PageServerLoad = (event) => {
 		// No code in flight (expired or never started) — back to the start.
 		return redirect(303, '/login');
 	}
-	return { maskedPhone: maskPhone(pending.phone) };
+	const devCode = isTestMode() ? (readTestOtp(pending.phone) ?? undefined) : undefined;
+	return { maskedPhone: maskPhone(pending.phone), devCode };
 };
 
 export const actions: Actions = {
@@ -110,6 +113,9 @@ export const actions: Actions = {
 			}
 		);
 
-		return { resent: true };
+		// In TEST_MODE the resend regenerated a fresh code; surface THAT one (the load-time
+		// devCode is now stale). readTestOtp prunes on read, mirroring the load path.
+		const devCode = isTestMode() ? (readTestOtp(pending.phone) ?? undefined) : undefined;
+		return { resent: true, devCode };
 	}
 };

@@ -502,14 +502,42 @@ export async function resolveNetworkIdByApName(db: DB, apName: string): Promise<
 }
 
 /**
+ * The DETERMINISTIC lowest-id `network_health.id` carrying a durable circuit-id string (so a
+ * shared-ONU group resolves stably to one representative AP). Best-effort: returns null when nothing
+ * matches or the lookup fails. Mirrors checkout's `apRowForCircuitId` but returns just the id.
+ */
+async function apIdForCircuitId(db: DB, circuitId: string): Promise<number | null> {
+	try {
+		const [ap] = await db
+			.select({ id: networkHealth.id })
+			.from(networkHealth)
+			.where(eq(networkHealth.apCircuitId, circuitId))
+			.orderBy(networkHealth.id)
+			.limit(1);
+		return ap?.id ?? null;
+	} catch {
+		return null;
+	}
+}
+
+/**
  * Resolve the AP a device MAC is currently on to a `network_health` id. Never throws — returns
  * null when nothing maps.
  *
  * Phase A: a fast path tries the client-attribution cache first — MAC → circuit-id → the AP row(s)
  * carrying that circuit-id, returning the DETERMINISTIC lowest-id member (so a shared-ONU group
- * resolves stably to one representative AP). On a cache miss (or no AP row for the circuit-id), it
- * falls through to today's router lookup (`resolveApForMac` → `resolveNetworkIdByApName`)
- * byte-for-byte — the external contract is unchanged (Regression #4).
+ * resolves stably to one representative AP).
+ *
+ * Fallback (circuit-id FIRST): on a cache miss, resolve the device's Option-82 circuit-id via
+ * `resolveCircuitIdForMac` (fails closed to null on a shared bridge row whose `apCircuitId` is NULL)
+ * and map that to the physical AP row — so a session on a shared hotspot bridge that fronts multiple
+ * physical APs binds to the real AP row, not the auto-swept bridge/interface row. ONLY when no
+ * circuit-id resolves at all (pure-bridge deployment) does it fall through to the terminal raw
+ * interface-name lookup (`resolveApForMac` → `resolveNetworkIdByApName`).
+ *
+ * NOTE: this DELIBERATELY revises the per-ap-visibility Phase A "byte-for-byte fallback" guarantee
+ * (Regression #4) for the AMBIGUOUS-BRIDGE case only — that byte-for-byte fallback was itself the bug
+ * for bridged deployments. Non-bridged / no-circuit-id deployments keep today's exact behavior.
  */
 export async function resolveNetworkIdForMac(
 	db: DB,
@@ -525,18 +553,21 @@ export async function resolveNetworkIdForMac(
 			.where(eq(networkClientAttribution.mac, mac))
 			.limit(1);
 		if (cached) {
-			const [ap] = await db
-				.select({ id: networkHealth.id })
-				.from(networkHealth)
-				.where(eq(networkHealth.apCircuitId, cached.circuitId))
-				.orderBy(networkHealth.id)
-				.limit(1);
-			if (ap) return ap.id;
+			const id = await apIdForCircuitId(db, cached.circuitId);
+			if (id !== null) return id;
 		}
 	} catch {
 		// Cache lookup failed — fall through to the router path (best-effort).
 	}
-	// Fallback: today's router MAC→AP lookup, unchanged.
+	// Fallback tier 1 (circuit-id first): resolve the device's circuit-id string → physical AP row.
+	// `resolveCircuitIdForMac` never throws by contract and fails closed (null) on a bridge row.
+	const circuitId = await resolveCircuitIdForMac(db, network, macAddress);
+	if (circuitId) {
+		const id = await apIdForCircuitId(db, circuitId);
+		if (id !== null) return id;
+	}
+	// Fallback tier 2 (terminal): today's raw router MAC→interface-name lookup, unchanged — the
+	// pure-bridge / no-circuit-id path.
 	if (!network.resolveApForMac) return null;
 	try {
 		const apName = await network.resolveApForMac(macAddress);

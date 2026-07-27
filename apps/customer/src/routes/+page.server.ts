@@ -39,7 +39,7 @@ export const load: PageServerLoad = async (event) => {
 	// Compute the SAME "this device online" state the dashboard shows, so the good-to-go badge
 	// can't claim Online while the dashboard says Offline. Online = the account has live access
 	// AND this device is actually bound on the router (unbound/paused/expired ⇒ Offline).
-	const mac = await resolveMacForUser(event, user.id);
+	const { mac } = await resolveMacForUser(event, user.id);
 	const view = await buildAccountView(db, user.id, mac);
 	const phone = (user as { phoneNumber?: string | null }).phoneNumber ?? null;
 

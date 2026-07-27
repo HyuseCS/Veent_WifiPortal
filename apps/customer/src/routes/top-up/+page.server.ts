@@ -37,7 +37,7 @@ export const load: PageServerLoad = async (event) => {
 	// when the captive/system-browser cookie jar dropped it. resolveMacForUser adds the
 	// last-known-device fallback so this still works behind a NAT'ing hotspot (where IP→MAC
 	// can't see the device) and after the cookie is gone.
-	const mac = await resolveMacForUser(event, user.id);
+	const { mac } = await resolveMacForUser(event, user.id);
 	const portalQuery = mac ? `?mac=${encodeURIComponent(mac)}` : '';
 
 	// Prefill the buyer form (Maya/Kount requires name + email) from the details the buyer chose
@@ -147,7 +147,7 @@ export const actions: Actions = {
 		// whichever browser the buyer lands back in, success or cancel. resolveMacForUser adds
 		// the last-known-device fallback so the round-trip carries a MAC even when the cookie is
 		// already gone and IP→MAC can't help (NAT'ing hotspot).
-		const mac = await resolveMacForUser(event, user.id);
+		const { mac } = await resolveMacForUser(event, user.id);
 		const macQuery = mac ? `&mac=${encodeURIComponent(mac)}` : '';
 		const cancelMacQuery = mac ? `?mac=${encodeURIComponent(mac)}` : '';
 

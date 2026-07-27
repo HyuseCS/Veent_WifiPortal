@@ -22,8 +22,16 @@ export function macTail(mac: string | null): string | null {
 }
 
 /** Shape the account's device registry for the client, flagging the current device. `cap`
- * is the operator-tunable per-account device limit (from getSessionLimits). */
-export function shapeDevices(access: ActiveAccess | null, thisMac: string | null, cap: number) {
+ * is the operator-tunable per-account device limit (from getSessionLimits). `verified` = the
+ * `thisMac` came from a LIVE resolution (not a fallback guess); when false, a MAC-tail match is
+ * NOT treated as proof this device is bound — it's surfaced as `thisDeviceUnverified` so the UI can
+ * prompt a reconnect instead of falsely claiming "connected" (loop-break, AC2/AC3). */
+export function shapeDevices(
+	access: ActiveAccess | null,
+	thisMac: string | null,
+	cap: number,
+	verified = true
+) {
 	const macU = thisMac?.toUpperCase() ?? null;
 	const list = (access?.devices ?? [])
 		.map((d) => ({
@@ -36,13 +44,19 @@ export function shapeDevices(access: ActiveAccess | null, thisMac: string | null
 		// Most-recently-seen first; the current device floats to the top.
 		.sort((a, b) => (a.thisDevice ? -1 : b.thisDevice ? 1 : b.lastSeenAt.localeCompare(a.lastSeenAt)));
 
-	const thisDeviceBound = list.some((d) => d.thisDevice);
+	const matched = list.some((d) => d.thisDevice);
+	// A fallback (unverified) MAC that matches a bound device is NOT proof of connection — the match
+	// may be a stale/wrong MAC. Only a verified match asserts "bound"; an unverified match drives the
+	// "reconnect" recovery UX instead.
+	const thisDeviceBound = matched && verified;
+	const thisDeviceUnverified = matched && !verified;
 	const oldest = [...list].sort((a, b) => a.lastSeenAt.localeCompare(b.lastSeenAt))[0] ?? null;
 
 	return {
 		cap,
 		count: list.length,
 		thisDeviceBound,
+		thisDeviceUnverified,
 		atCap: list.length >= cap && !thisDeviceBound,
 		oldest: oldest ? { id: oldest.id, macTail: oldest.macTail } : null,
 		list
@@ -51,8 +65,15 @@ export function shapeDevices(access: ActiveAccess | null, thisMac: string | null
 
 export type AccountView = Awaited<ReturnType<typeof buildAccountView>>;
 
-/** Read the live account slice for `userId`, shaped for the current device (`thisMac`). */
-export async function buildAccountView(db: DB, userId: string, thisMac: string | null) {
+/** Read the live account slice for `userId`, shaped for the current device (`thisMac`). `verified`
+ * defaults to true so the SSE feed and root `+page` callers (which pass a connect-time MAC) keep
+ * their current behavior; the dashboard load passes the live-provenance flag. */
+export async function buildAccountView(
+	db: DB,
+	userId: string,
+	thisMac: string | null,
+	verified = true
+) {
 	const account = await getAccount(db, userId);
 	const access = await getActiveAccess(db, userId);
 	const limits = await getSessionLimits(db);
@@ -74,6 +95,6 @@ export async function buildAccountView(db: DB, userId: string, thisMac: string |
 			startedAt: access?.startedAt.toISOString() ?? null,
 			expiresAt: access?.expiresAt.toISOString() ?? null
 		},
-		devices: shapeDevices(access, thisMac, limits.maxDevicesPerAccount)
+		devices: shapeDevices(access, thisMac, limits.maxDevicesPerAccount, verified)
 	};
 }

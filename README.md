@@ -80,7 +80,8 @@ bun run dev:cron            # the revoke/reconcile scheduler — REQUIRED for ac
 
 ### Local cron — run `dev:cron` alongside the dev server
 
-In production a scheduler (systemd timer / crontab — `docs/DEPLOYMENT.md` §8) POSTs the
+In production a scheduler (compose `cron` sidecar, or systemd timer / crontab — see
+`docs/deploy/README.md`) POSTs the
 customer cron endpoints every minute. A dev box has no such scheduler, so `dev:cron` stands
 in for it. **Treat it as part of running the dev server**, not an optional extra — without it:
 
@@ -282,10 +283,10 @@ psql "postgres://root:mysecretpassword@localhost:5433/postgres" -c 'DROP DATABAS
 
 ## Deploying to production
 
-See **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)** for the first-run runbook on the
-on-site device — the one-command `bun run setup:prod` (auto-detects the device's LAN IP),
-env, migrations, building with `adapter-node`, running the servers under systemd, the
-router + cron setup, and the pre-production checklist.
+See **[docs/deploy/README.md](docs/deploy/README.md)** for the deployment guide — both the
+**production Docker VM** path (`compose.prod.yaml`) and the **bare-metal host** path
+(`bun run setup:prod` + systemd), plus the shared router/api-ssl, Sentry-alert, and
+secrets-hardening references and the pre-production checklist.
 
 ## Other
 

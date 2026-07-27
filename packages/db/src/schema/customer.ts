@@ -46,12 +46,12 @@ export const customerProfile = pgTable('customer_profile', {
 	// (points_ledger `earn`) and redeemable for the same access tiers instead of credits
 	// (points_ledger `spend`). Whole numbers only — earning floors the percentage. Never expires.
 	pointsBalance: integer('points_balance').notNull().default(0),
-	lastFreeSessionAt: timestamp('last_free_session_at'),
+	lastFreeSessionAt: timestamp('last_free_session_at', { withTimezone: true }),
 	// The ACCOUNT's internet access window — authoritative source of truth for "is this
 	// account online and until when". Buying a tier / claiming free time extends it; the
 	// revoke cron drives off it. Null or in the past = no live access. Devices bind under
 	// this window (network_sessions); they share it rather than each holding their own time.
-	accessExpiresAt: timestamp('access_expires_at'),
+	accessExpiresAt: timestamp('access_expires_at', { withTimezone: true }),
 	// The tier backing the current access window (null = Free Time, or no window). Lives on
 	// the ACCOUNT, not the device row, so every bound device shows the SAME package — a device
 	// that joined during Free Time and one that bought a tier share one account window, so they
@@ -64,7 +64,7 @@ export const customerProfile = pgTable('customer_profile', {
 	// and the revoke cron skips the account so the held time isn't swept away. Resume sets
 	// `access_expires_at = now + held` and clears this. Any window-extending buy/free claim
 	// also clears it (adding time un-pauses). Paid windows only.
-	accessPausedAt: timestamp('access_paused_at'),
+	accessPausedAt: timestamp('access_paused_at', { withTimezone: true }),
 	// Why paused: 'user' (guest tapped Pause) or 'outage' (auto-paused because this account's AP
 	// went down — see the outage sweep). Null when not paused. Lets the outage auto-resume touch
 	// ONLY its own pauses and never un-pause a manual one.
@@ -131,7 +131,7 @@ export const creditLedger = pgTable(
 		// Frozen AP label (display_name ?? name) captured pre-transaction at write time. Finance shows
 		// this as-was name; a later AP rename never rewrites it. Null = unresolvable → live fallback.
 		apNameSnapshot: text('ap_name_snapshot'),
-		createdAt: timestamp('created_at').notNull().defaultNow()
+		createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow()
 	},
 	(t) => [index('credit_ledger_user_id_idx').on(t.userId)]
 );
@@ -164,7 +164,7 @@ export const pointsLedger = pgTable(
 		// Frozen AP label (display_name ?? name) captured pre-transaction — same rationale as
 		// credit_ledger. Null = unresolvable → live fallback.
 		apNameSnapshot: text('ap_name_snapshot'),
-		createdAt: timestamp('created_at').notNull().defaultNow()
+		createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow()
 	},
 	(t) => [index('points_ledger_user_id_idx').on(t.userId)]
 );
@@ -212,7 +212,7 @@ export const paymentTransactions = pgTable(
 		// Frozen AP label (display_name ?? name) copied INSERT-only from the checkout, same as
 		// ap_circuit_id. The as-was name for Finance; immune to later AP renames. Null → live fallback.
 		apNameSnapshot: text('ap_name_snapshot'),
-		createdAt: timestamp('created_at').notNull().defaultNow()
+		createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow()
 	},
 	(t) => [
 		index('payment_transactions_user_id_idx').on(t.userId),
@@ -269,9 +269,9 @@ export const paymentCheckouts = pgTable(
 		// alongside ap_circuit_id. The as-was name for Finance. Null = unresolvable → live fallback.
 		apNameSnapshot: text('ap_name_snapshot'),
 		// Throttle for the on-return poll so a fast-refreshing page can't hammer the gateway.
-		lastPolledAt: timestamp('last_polled_at'),
-		createdAt: timestamp('created_at').notNull().defaultNow(),
-		settledAt: timestamp('settled_at')
+		lastPolledAt: timestamp('last_polled_at', { withTimezone: true }),
+		createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+		settledAt: timestamp('settled_at', { withTimezone: true })
 	},
 	(t) => [
 		index('payment_checkouts_status_idx').on(t.status),
@@ -304,16 +304,16 @@ export const networkSessions = pgTable(
 		// rationale as ap_circuit_id. Null = unresolvable → live fallback.
 		apNameSnapshot: text('ap_name_snapshot'),
 		status: text('status').notNull(),
-		startedAt: timestamp('started_at').notNull().defaultNow(),
+		startedAt: timestamp('started_at', { withTimezone: true }).notNull().defaultNow(),
 		// Device-binding registry: one active row per (user, MAC) = "this device is
 		// currently bypassed for this account". boundAt = first bind under the current
 		// window; lastSeenAt = refreshed on every (re)bind/dashboard land, drives LRU
 		// eviction when the per-account device cap is exceeded. expiresAt mirrors the
 		// account window (customer_profile.access_expires_at) so the cron index + router
 		// sweep keep working — but the profile window is the authoritative gate.
-		boundAt: timestamp('bound_at').notNull().defaultNow(),
-		lastSeenAt: timestamp('last_seen_at').notNull().defaultNow(),
-		expiresAt: timestamp('expires_at')
+		boundAt: timestamp('bound_at', { withTimezone: true }).notNull().defaultNow(),
+		lastSeenAt: timestamp('last_seen_at', { withTimezone: true }).notNull().defaultNow(),
+		expiresAt: timestamp('expires_at', { withTimezone: true })
 	},
 	(t) => [
 		index('network_sessions_user_id_idx').on(t.userId),

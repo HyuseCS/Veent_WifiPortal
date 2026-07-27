@@ -85,6 +85,13 @@ Read-only blast-radius checks (no code change expected): `apps/customer/src/lib/
   - `listHotspotActive?(): Promise<HotspotActiveEntry[]>` — `{ mac: string (uppercased); address: string; bytesIn: number | null; bytesOut: number | null }`. `null` counters = firmware doesn't expose them (AC4 degradation signal).
   - `pingHosts?(addresses: string[], opts?: { timeoutMs?: number }): Promise<Array<{ address: string; aliveMs: number | null }>>` — MUST run pings concurrently; MUST bound each host by `timeoutMs` (default 1500ms); MUST never throw for an unreachable host (`aliveMs: null`).
 - **`resolveNetworkIdForMac(db, network, mac): Promise<number | null>` — signature and external behavior contract STABLE** (cross-app: customer indirectly, core sessions/outage directly). New internal fast path (attribution cache) tried first; the existing router-lookup fallback is preserved byte-for-byte in behavior when the cache has no entry. Never throws. Group ambiguity resolves to the DETERMINISTIC lowest-id AP row sharing the circuit-id.
+  - **Superseded note (23-07-26):** this "byte-for-byte fallback" guarantee was deliberately revised for
+    the ambiguous-shared-bridge case (a MAC whose interface resolves to a shared hotspot bridge row
+    while a distinct circuit-id AP row exists) by
+    `process/general-plans/completed/ap-session-binding-circuitid-first_23-07-26/`. The fallback now
+    resolves the device's Option-82 circuit-id FIRST in that case, returning the physical AP row
+    instead of the bridge row. Non-bridge / no-circuit-id deployments keep byte-for-byte behavior
+    unchanged. This was a diagnosed, intentional revision — not an accidental break.
 - **`network_health` table:** existing columns/semantics unchanged for interface and pinned rows. New nullable columns are additive. `throughputMbps` becomes NULLABLE (null = "traffic unavailable" for AP rows); all existing writers keep writing numbers. Rows with `attributionSource IS NOT NULL` are AP rows; `NULL` = interface/pinned rows (today's semantics).
 - **`network_client_attribution` (new table):** `mac` text PK, `circuit_id` text NOT NULL, `updated_at` timestamptz NOT NULL default now. Internal to `@veent/core` service layer — no app reads it directly.
 - **`refreshNetworkHealth(db, network): Promise<number>`** — signature unchanged; return value remains the interface-sample count (callers: cron route asserts nothing about it beyond JSON echo; `/networks` load ignores it).

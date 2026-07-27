@@ -58,7 +58,7 @@ export const load: PageServerLoad = async (event) => {
 	// After the Maya hop the system browser has no portal cookie, and behind a NAT'ing hotspot
 	// the IP→MAC lookup sees the router's IP, not the device — so without the last-known
 	// fallback this returned '' and "Back to dashboard" landed on "device not detected".
-	const mac = await resolveMacForUser(event, user.id);
+	const { mac } = await resolveMacForUser(event, user.id);
 	const portalQuery = mac ? `?mac=${encodeURIComponent(mac)}` : '';
 
 	// Points earned on this top-up, mirroring the server's earn formula (floor(pesos × rate%)).

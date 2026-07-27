@@ -46,12 +46,18 @@ export const load: PageServerLoad = async (event) => {
 	// help — which it can't behind a hotspot that NATs client traffic to its own IP (we'd see
 	// the router's address, not the device). Without this fallback the dashboard shows the
 	// "device not detected" warning on every return-to-dashboard in those setups.
-	const mac = await resolveMacForUser(event, user.id);
+	// `live` = the MAC came from a live detector (portal cookie / router IP→MAC), not a fallback
+	// guess. A fallback MAC must not drive auto-bind or be reported as a verified "connected" device
+	// (loop-break): otherwise a stale/wrong fallback MAC turns a bad binding into a closed loop a
+	// refresh can't clear.
+	const { mac, live } = await resolveMacForUser(event, user.id);
 
 	// If another account currently holds a LIVE window on this same device (MAC), surface its end
 	// time so a second account on a shared device is warned before double-buying — the device is
 	// already online, and buying stacks a redundant window (never a hard block; see mac-guard).
-	const deviceBusyUntil = mac ? await otherAccountAccessUntilForMac(db, mac, user.id) : null;
+	// Gated on `live`: never derive cross-account occupancy from a fallback (unverified) MAC — a
+	// stale/wrong fallback could match another account's last-known MAC and show a spurious warning.
+	const deviceBusyUntil = mac && live ? await otherAccountAccessUntilForMac(db, mac, user.id) : null;
 
 	const tiers = await db
 		.select()
@@ -67,7 +73,10 @@ export const load: PageServerLoad = async (event) => {
 	// taps. Best-effort — a router hiccup must never break the dashboard render. Skipped while
 	// PAUSED: auto-binding would re-grant internet and defeat the pause (devices stay off until
 	// the user resumes).
-	if (access && !access.paused && mac && !blocked) {
+	// Gated on `live`: never auto-bind a fallback (unverified) MAC — pushing a possibly-wrong MAC to
+	// the router can't self-correct; the user recovers by reconnecting through the portal (fresh
+	// `?mac=` → live hit → correct MAC).
+	if (access && !access.paused && mac && live && !blocked) {
 		const { maxDevicesPerAccount } = await getSessionLimits(db);
 		const macU = mac.toUpperCase();
 		const bound = access.devices.find((d) => d.macAddress?.toUpperCase() === macU);
@@ -88,12 +97,12 @@ export const load: PageServerLoad = async (event) => {
 
 	// The live, per-account slice (balance, free-time, access window, devices) — same shape
 	// the SSE feed pushes (`$lib/server/account-view`), so cross-device updates merge cleanly.
-	const view = await buildAccountView(db, user.id, mac);
+	const view = await buildAccountView(db, user.id, mac, live);
 	// TEMP DIAGNOSTIC: every dashboard load logs the resolved MAC + bound state. After a buy,
 	// `update()` should re-run this load and log a SECOND line with thisBound=true. Remove once
 	// the "needs a refresh to show connected" bug is understood.
 	console.info(
-		`[dash-load] mac=${mac ? maskMac(mac) : 'null'} active=${view.access.active} thisBound=${view.devices.thisDeviceBound} devices=${view.devices.count}`
+		`[dash-load] mac=${mac ? maskMac(mac) : 'null'} live=${live} active=${view.access.active} thisBound=${view.devices.thisDeviceBound} devices=${view.devices.count}`
 	);
 
 	// Issue 2b/B: mint a CNA→browser handoff token for THIS session so the page can offer an
@@ -115,6 +124,7 @@ export const load: PageServerLoad = async (event) => {
 		maskedPhone: phone ? maskPhone(phone) : null,
 		mac,
 		hasMac: !!mac,
+		deviceVerified: live,
 		deviceBusyUntil,
 		tiers,
 		handoffUrl,
@@ -337,7 +347,7 @@ export const actions: Actions = {
 		// refreshes the short-lived portal cookie for the incoming account. Resolve BEFORE signing
 		// out (needs the user id for the per-user fallbacks); cheap and best-effort.
 		const user = event.locals.user;
-		const mac = user ? await resolveMacForUser(event, user.id) : null;
+		const mac = user ? (await resolveMacForUser(event, user.id)).mac : null;
 		await auth.api.signOut({ headers: event.request.headers });
 		return redirect(302, mac ? `/login?mac=${encodeURIComponent(mac)}` : '/login');
 	}

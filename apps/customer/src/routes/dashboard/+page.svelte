@@ -49,10 +49,22 @@
 	// forever and overrides the fresh `load` data — that's the "shows connected only after a manual
 	// refresh" bug. Matching `data.mac` (re-resolved each load) against the list tails fixes it;
 	// falls back to the server flag when we have no MAC at all.
+	// `deviceVerified` = the load resolved THIS device's MAC from a LIVE detector (portal cookie /
+	// router IP→MAC), not a fallback guess. Absent on SSE-only frames → default true (SSE carries a
+	// connect-time MAC, treated as verified — documented known-gap). When false, a MAC-tail match must
+	// NOT assert "bound": the fallback MAC may be stale/wrong, so a match would falsely claim connected
+	// and trap the user in a loop a refresh can't clear (AC2).
+	const deviceVerified = $derived(data.deviceVerified ?? true);
 	const myTail = $derived(macTailOf(mac || null));
-	const thisDeviceBound = $derived(
+	// Does this device's (masked) MAC match a bound device in the list? Recomputed on the CLIENT so a
+	// stale SSE frame (thisDeviceBound fixed at connect) can't override fresh load data.
+	const matchesBound = $derived(
 		myTail ? devices.list.some((d) => d.macTail === myTail) : devices.thisDeviceBound
 	);
+	// Only a VERIFIED match counts as bound. An unverified match is surfaced as "unverified" so the UI
+	// offers a reconnect recovery path instead of claiming the device is online.
+	const thisDeviceBound = $derived(deviceVerified ? matchesBound : false);
+	const thisDeviceUnverified = $derived(!deviceVerified && matchesBound);
 	// Paused: the window is frozen and all devices are unbound. `expiresAt` is the FROZEN end
 	// (may be in the past), so countdown/expiry logic must ignore it and use the held remaining.
 	const paused = $derived(access.paused);
@@ -70,7 +82,9 @@
 	// This device has live account time but isn't bound (auto-bind hit the cap, or a
 	// router hiccup). Surface a connect/replace prompt. Suppressed while paused — the band
 	// offers Resume instead, which reconnects the device.
-	const needsConnect = $derived(access.active && !paused && hasMac && !thisDeviceBound);
+	const needsConnect = $derived(
+		access.active && !paused && hasMac && !thisDeviceBound && !thisDeviceUnverified
+	);
 	// The app-bar dot reflects THIS device — account time alone isn't "online" if this
 	// device isn't actually bound.
 	const thisOnline = $derived(access.active && thisDeviceBound && !isExpired);
@@ -99,6 +113,11 @@
 				<p class="mb-4 rounded-lg bg-amber-50 px-4 py-3 text-sm text-amber-800" role="alert">
 					Device not detected. Reconnect through the WiFi portal (don't open this page directly) so
 					we can get you online.
+				</p>
+			{:else if access.active && thisDeviceUnverified}
+				<p class="mb-4 rounded-lg bg-amber-50 px-4 py-3 text-sm text-amber-800" role="alert">
+					We couldn't verify this device is connected. Reconnect through the WiFi portal to get back
+					online.
 				</p>
 			{/if}
 

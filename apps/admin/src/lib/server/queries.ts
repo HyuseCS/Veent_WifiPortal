@@ -195,7 +195,8 @@ export async function listActiveSessions(db: DB, now: Date = new Date()): Promis
 			macAddress: networkSessions.macAddress,
 			expiresAt: networkSessions.expiresAt,
 			packageName: packages.name,
-			networkName: networkHealth.name
+			networkName: networkHealth.name,
+			networkDisplayName: networkHealth.displayName
 		})
 		.from(networkSessions)
 		.leftJoin(customerProfile, eq(customerProfile.userId, networkSessions.userId))
@@ -219,7 +220,7 @@ export async function listActiveSessions(db: DB, now: Date = new Date()): Promis
 			id: r.id,
 			mac: r.macAddress ?? '—',
 			package: r.packageName ?? 'Free Time',
-			network: r.networkName ?? null,
+			network: r.networkDisplayName ?? r.networkName ?? null,
 			timeLeft: formatTimeLeft(msLeft),
 			tone,
 			status,
