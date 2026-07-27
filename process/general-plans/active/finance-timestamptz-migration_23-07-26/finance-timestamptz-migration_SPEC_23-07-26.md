@@ -71,7 +71,7 @@ migration SQL is written.
 
 **Today (the bug):**
 
-```
+```text
 Write path A (.defaultNow())        Write path B (new Date() in JS)
    e.g. credit_ledger.created_at        e.g. network_sessions.started_at
    stores: DB-session-local wall-clock  stores: UTC wall-clock
@@ -89,7 +89,7 @@ Write path A (.defaultNow())        Write path B (new Date() in JS)
 
 **After migration (the fix):**
 
-```
+```text
 Write path A (.defaultNow())        Write path B (new Date() in JS)
         │                                      │
         ▼                                      ▼
@@ -105,7 +105,7 @@ Write path A (.defaultNow())        Write path B (new Date() in JS)
 
 **Migration state machine (safety path, not an implementation plan):**
 
-```
+```text
 [preflight: confirm session TimeZone per environment]
         │
         ▼

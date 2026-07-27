@@ -77,12 +77,12 @@ negative control the plan mandates, not a scope deviation.)
   non-vacuity negative control (b-neg); pure-bridge fallback preserved (c); outage keying targets the AP
   row behaviorally (d); both typecheck gates.
 - **Still unverified:** live 2-SSID hardware reproduction (accepted Known-Gap, does not block VERIFIED).
-- **Remaining cleanup (UPDATE-PROCESS — E5, checklist item 7):** record the intentional per-ap-visibility
+- **E5 cross-reference (UPDATE-PROCESS, checklist item 7) — DONE:** the intentional per-ap-visibility
   Phase A contract-revision cross-reference (PLAN `:87`, SPEC `:221`, REPORT `:37` in
-  `process/general-plans/completed/per-ap-visibility_16-07-26/`) as a diagnosed, intentional revision of
-  the "byte-for-byte fallback" guarantee for the ambiguous-bridge case — NOT an accidental break. The
-  completed plan stays archived; documentation-only cross-reference. Update `all-context.md` / memory if durable.
-- **Best next state:** `Keep in active/testing` → EVL confirmation run, then UPDATE PROCESS for the E5 cross-reference.
+  `process/general-plans/completed/per-ap-visibility_16-07-26/`) is recorded as a diagnosed, intentional
+  revision of the "byte-for-byte fallback" guarantee for the ambiguous-bridge case — NOT an accidental
+  break — in `process/context/all-context.md` (23-07-26 entry). Documentation-only; completed plan stays archived.
+- **Final state:** archived to `completed/` — EVL confirmation run and UPDATE PROCESS completed.
 
 ## Forward Preview
 

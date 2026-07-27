@@ -59,6 +59,8 @@
 				secondsLeft = 45;
 				resent = true;
 				setTimeout(() => (resent = false), 4000);
+				const dc = (result.data as { devCode?: string } | undefined)?.devCode;
+				if (dc) toasts.show(`Test mode: your OTP is ${dc}`, 'success', 15000);
 			}
 		};
 	};

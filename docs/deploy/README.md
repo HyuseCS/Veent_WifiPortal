@@ -110,8 +110,12 @@ Data lives in the `pgdata` named volume; dumps go to the `pgbackups` volume. Add
   sh -c 'pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB" | gzip > /backups/radius-$(date +\%F).sql.gz'
 ```
 
-Restore: `gunzip -c /backups/radius-YYYY-MM-DD.sql.gz | docker compose -f compose.prod.yaml exec -T db psql -U radius radius`.
-Prune with a `find /backups -mtime +14 -delete` line as needed.
+Restore (runs inside the `db` container — `/backups` is the `pgbackups` volume, not a host path):
+```bash
+docker compose -f compose.prod.yaml exec -T db \
+  sh -c 'gunzip -c /backups/radius-YYYY-MM-DD.sql.gz | psql -U radius radius'
+```
+Prune inside the container too: `docker compose -f compose.prod.yaml exec -T db find /backups -mtime +14 -delete`.
 
 ## 7. Updating (pull new images / rebuild)
 
@@ -257,13 +261,23 @@ at a proxy, set `ADDRESS_HEADER`/`XFF_DEPTH` per **[secrets-hardening.md](secret
 
 ## 7. Cron jobs
 
-Schedule these on the host (systemd timers or crontab), with the `x-cron-secret` header set to each
-app's `CRON_SECRET`:
+Schedule these on the host (systemd timers or crontab). Each request needs the `x-cron-secret` header
+set to **that app's own** `CRON_SECRET` (customer :3001 and admin :3002 may hold different secrets).
+crontab does not expand env vars from your shell profile, so don't rely on a bare `$CRON_SECRET` —
+source each app's env in a small wrapper script (shown) or inject the literal per-app secret:
 
 ```cron
-* * * * * curl -fsS -X POST -H "x-cron-secret: $CRON_SECRET" http://127.0.0.1:3001/api/network/revoke
-* * * * * curl -fsS -X POST -H "x-cron-secret: $CRON_SECRET" http://127.0.0.1:3001/api/payments/reconcile
-* * * * * curl -fsS -X POST -H "x-cron-secret: $CRON_SECRET" http://127.0.0.1:3002/api/network/health/refresh
+# customer cron — wrapper sources apps/customer/.env then runs curl with its CRON_SECRET
+* * * * * /path/to/repo/scripts/cron-customer.sh /api/network/revoke
+* * * * * /path/to/repo/scripts/cron-customer.sh /api/payments/reconcile
+# admin cron — wrapper sources apps/admin/.env (its own CRON_SECRET)
+* * * * * /path/to/repo/scripts/cron-admin.sh /api/network/health/refresh
+```
+
+```sh
+# scripts/cron-customer.sh  (chmod 700; keeps the secret out of crontab)
+set -a; . /path/to/repo/apps/customer/.env; set +a
+curl -fsS -X POST -H "x-cron-secret: $CRON_SECRET" "http://127.0.0.1:3001$1"
 ```
 
 (The Docker path runs these in the `cron` sidecar instead.) `otp/sweep-delivery` runs on a **5-minute**

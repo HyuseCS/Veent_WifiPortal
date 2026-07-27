@@ -55,7 +55,9 @@ export const load: PageServerLoad = async (event) => {
 	// If another account currently holds a LIVE window on this same device (MAC), surface its end
 	// time so a second account on a shared device is warned before double-buying — the device is
 	// already online, and buying stacks a redundant window (never a hard block; see mac-guard).
-	const deviceBusyUntil = mac ? await otherAccountAccessUntilForMac(db, mac, user.id) : null;
+	// Gated on `live`: never derive cross-account occupancy from a fallback (unverified) MAC — a
+	// stale/wrong fallback could match another account's last-known MAC and show a spurious warning.
+	const deviceBusyUntil = mac && live ? await otherAccountAccessUntilForMac(db, mac, user.id) : null;
 
 	const tiers = await db
 		.select()

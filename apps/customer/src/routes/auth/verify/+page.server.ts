@@ -113,6 +113,9 @@ export const actions: Actions = {
 			}
 		);
 
-		return { resent: true };
+		// In TEST_MODE the resend regenerated a fresh code; surface THAT one (the load-time
+		// devCode is now stale). readTestOtp prunes on read, mirroring the load path.
+		const devCode = isTestMode() ? (readTestOtp(pending.phone) ?? undefined) : undefined;
+		return { resent: true, devCode };
 	}
 };
