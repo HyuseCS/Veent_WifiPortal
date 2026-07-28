@@ -1,7 +1,7 @@
 import { dev, building } from '$app/environment';
 import { env } from '$env/dynamic/private';
 import { env as pub } from '$env/dynamic/public';
-import { isTestMode } from '$lib/server/otp';
+import { isTestMode, allowTestModeInProd } from '$lib/server/otp';
 
 /**
  * Boot-time environment check (called once from hooks.server.ts). Fails fast on a
@@ -27,8 +27,18 @@ export function validateEnv(): void {
 	if (isTestMode()) {
 		const m = 'TEST_MODE is enabled — dev/test-only behavior is active (first consumer: the login OTP '
 			+ 'is shown in the UI instead of sent via SMS). This MUST NOT run in production.';
-		if (!dev) throw new Error(m);
-		console.warn(`[env] ${m} (allowed in dev only)`);
+		if (!dev) {
+			if (!allowTestModeInProd()) {
+				throw new Error(m + ' Set ALLOW_TEST_MODE_IN_PROD to deliberately allow it in a prod build (staging only).');
+			}
+			console.warn(
+				`[env] ⚠️  STAGING OPT-IN: ${m} ALLOW_TEST_MODE_IN_PROD is set, so this prod build is booting with ` +
+					'TEST_MODE ON — the login OTP is shown on-device instead of via SMS. This MUST be used on staging only, ' +
+					'NEVER a real production portal.'
+			);
+		} else {
+			console.warn(`[env] ${m} (allowed in dev only)`);
+		}
 	}
 
 	const missing: string[] = REQUIRED.filter((k) => !env[k]);

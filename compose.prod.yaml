@@ -53,6 +53,8 @@ services:
     depends_on:
       migrate:
         condition: service_completed_successfully
+    # Staging opt-in pair TEST_MODE + ALLOW_TEST_MODE_IN_PROD travel via env_file below (no explicit
+    # environment: entry needed) — set both truthy in .env to run on-device OTP on staging only.
     env_file: .env
     environment:
       PORT: 3001
