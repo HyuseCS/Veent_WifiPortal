@@ -59,6 +59,24 @@ Customer and admin use **distinct** `BETTER_AUTH_SECRET` and **distinct** `CRON_
 file maps `CUSTOMER_*` / `ADMIN_*` onto the var name each app reads. `.env` is git-ignored — never
 commit it. Secret rules: **[secrets-hardening.md](secrets-hardening.md)**.
 
+> **Editing `.env` after the stack is up:** a plain `docker compose ... up -d <svc>` does **not**
+> reload `env_file` changes — compose only recreates on a *compose-file* change. Force it:
+> `docker compose -f compose.prod.yaml up -d --force-recreate <svc>` (or rebuild). Confirm with
+> `docker compose -f compose.prod.yaml exec <svc> printenv <VAR>`.
+
+> **Staging vs production env differences** (a staging box that shows the OTP on-device):
+> - **On-device OTP:** set `TEST_MODE=true` **and** `ALLOW_TEST_MODE_IN_PROD=true` (the two-flag
+>   opt-in — the customer prod build refuses to boot with `TEST_MODE` on unless the second flag is
+>   also set). A **real production** portal leaves **both blank** so it fails closed. Boot logs the
+>   `⚠️ STAGING OPT-IN` warning when active.
+> - **Router (api-ssl):** `MIKROTIK_PORT=8729`, `MIKROTIK_TLS=true`, `MIKROTIK_TLS_INSECURE=true`;
+>   `MIKROTIK_USER` = a dedicated api user (e.g. `veent-portal`) whose group has `api,read,write` and
+>   whose source IP (this VM) is in the api-ssl "Available From" list — else router calls fail with
+>   `RosException` (TLS drop) or `Username or password is invalid`. See
+>   **[router-api-ssl.md](router-api-ssl.md)**.
+> - **Instant webhooks:** `TUNNEL_ORIGIN` = the site's public https tunnel (e.g. ngrok) so the DO
+>   relay can forward to it; optional (reconcile credits within ~1min without it).
+
 ## 3. Build + start
 
 ```bash
