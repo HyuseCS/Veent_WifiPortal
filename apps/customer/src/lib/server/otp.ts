@@ -21,11 +21,23 @@ import { db } from '$lib/server/db';
 export const PENDING_COOKIE = 'veent-portal-verify';
 export const PENDING_MAX_AGE = 5 * 60; // seconds; matches the OTP expiry
 
-/** General dev/test-mode switch. Truthy = on. NOTE: guarantees "never in prod" (see validateEnv),
- * not "harmless" — every consumer must be dev-safe on its own. */
-export function isTestMode(): boolean {
-	const v = (env.TEST_MODE ?? '').trim().toLowerCase();
+/** Shared truthy parser for boolean env flags: "1"/"true"/"yes"/"on" (case/space-insensitive). */
+function truthyEnv(name: string): boolean {
+	const v = (env[name] ?? '').trim().toLowerCase();
 	return v === '1' || v === 'true' || v === 'yes' || v === 'on';
+}
+
+/** General dev/test-mode switch. Truthy = on. NOTE: normally blocked in prod by validateEnv, but
+ * ALLOW_TEST_MODE_IN_PROD can deliberately permit it in a non-dev staging build — so this is NOT
+ * "guaranteed never in prod" and NOT "harmless"; every consumer must be dev-safe on its own. */
+export function isTestMode(): boolean {
+	return truthyEnv('TEST_MODE');
+}
+
+/** Deliberate staging opt-in that lets TEST_MODE run in a production build (see validateEnv).
+ * Fail-closed: unset means prod still refuses to boot when TEST_MODE is truthy. */
+export function allowTestModeInProd(): boolean {
+	return truthyEnv('ALLOW_TEST_MODE_IN_PROD');
 }
 
 // ponytail: in-memory, single portal instance only. TEST_MODE targets a single LAN appliance;
