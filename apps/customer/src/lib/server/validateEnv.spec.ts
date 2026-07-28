@@ -64,6 +64,25 @@ describe('validateEnv — TEST_MODE prod gate', () => {
 		expect(() => validateEnv()).toThrow(/TEST_MODE is enabled/);
 	});
 
+	it('still throws in production when TEST_MODE is truthy but ALLOW_TEST_MODE_IN_PROD is unset', () => {
+		configureValidProdEnv();
+		state.env.TEST_MODE = 'true';
+		state.env.ALLOW_TEST_MODE_IN_PROD = '';
+
+		expect(() => validateEnv()).toThrow(/TEST_MODE is enabled/);
+	});
+
+	it('does NOT throw in production when TEST_MODE truthy AND ALLOW_TEST_MODE_IN_PROD is set — loud staging warn', () => {
+		configureValidProdEnv();
+		state.env.TEST_MODE = 'true';
+		state.env.ALLOW_TEST_MODE_IN_PROD = 'true';
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+		expect(() => validateEnv()).not.toThrow();
+		expect(warn).toHaveBeenCalledWith(expect.stringContaining('STAGING OPT-IN'));
+		expect(warn).toHaveBeenCalledWith(expect.stringContaining('ALLOW_TEST_MODE_IN_PROD'));
+	});
+
 	it('does NOT throw in dev (dev=true) when TEST_MODE is truthy — warns only', () => {
 		configureValidProdEnv();
 		state.dev = true;
