@@ -27,8 +27,9 @@ function truthyEnv(name: string): boolean {
 	return v === '1' || v === 'true' || v === 'yes' || v === 'on';
 }
 
-/** General dev/test-mode switch. Truthy = on. NOTE: guarantees "never in prod" (see validateEnv),
- * not "harmless" — every consumer must be dev-safe on its own. */
+/** General dev/test-mode switch. Truthy = on. NOTE: normally blocked in prod by validateEnv, but
+ * ALLOW_TEST_MODE_IN_PROD can deliberately permit it in a non-dev staging build — so this is NOT
+ * "guaranteed never in prod" and NOT "harmless"; every consumer must be dev-safe on its own. */
 export function isTestMode(): boolean {
 	return truthyEnv('TEST_MODE');
 }
