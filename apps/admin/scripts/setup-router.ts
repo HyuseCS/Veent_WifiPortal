@@ -28,6 +28,7 @@
  */
 import { Socket } from 'node:net';
 import { provisionWalledGarden, restrictApiService, type MikrotikConfig } from '@veent/core';
+import { PAYMENT_HOSTS, PROBE_DENIES } from './walled-garden-config';
 
 const argv = new Set(process.argv.slice(2));
 const DRY_RUN = argv.has('--dry-run');
@@ -80,85 +81,8 @@ const splitList = (raw: string | undefined): string[] =>
 
 const isIp = (h: string): boolean => /^[0-9.]+(\/\d{1,2})?$/.test(h) || h.includes(':');
 
-/**
- * Payment-gateway domains that MUST be reachable before a device authenticates
- * (Core Business Rule #2). Without these, the Maya checkout redirect
- * (payments-web*.maya.ph) is blocked by the hotspot and the browser shows a
- * closed connection. Wildcards cover sandbox + prod, checkout page + API host.
- *
- * NOTE: card 3-D Secure step-up redirects to the issuing bank's ACS domain,
- * which can't be predicted here — e-wallet/Maya-wallet checkout is fully covered;
- * card payments may still need the bank's domain added per deployment.
- *
- * The Maya checkout page also renders a Google reCAPTCHA served from google.com/gstatic.com.
- * Those are DELIBERATELY NOT global here anymore. A global `*.google.com` / `*.gstatic.com`
- * allow lets Android's captive-portal probe (`.../generate_204`) return a real 204 pre-auth,
- * so every connecting guest briefly flashes "connected" then reverts to "Sign in to network"
- * (MikroTik can't path-filter HTTPS, so the probe can't be blocked while google.com is open).
- * Instead they're opened PER-DEVICE, scoped to the paying device's IP, at checkout time — see
- * `openCheckoutAccess` (packages/core services/checkoutAccess.ts), swept on a TTL by the
- * customer app's revoke cron. Keep them OUT of this global list.
- *
- * This list mirrors EXACTLY what is live on the router's global walled garden — re-running
- * is a no-op (idempotency matches on `dst-host`, so a mismatched host here would add
- * a redundant entry). These are payment-gateway hosts only; none is a captive-portal probe
- * host, so opening them globally doesn't trigger the flash.
- */
-const PAYMENT_HOSTS = [
-	'maya.ph',
-	'*.maya.ph',
-	'paymaya.com',
-	'*.paymaya.com',
-	// GCash e-wallet checkout — Maya/PayMongo redirect the buyer to GCash to authorize the payment
-	// (payments.gcash.com). Wildcard covers the auth/redirect subdomains.
-	'gcash.com',
-	'*.gcash.com',
-	// Other gateways named in Rule #2; harmless if unused.
-	'*.paymongo.com',
-	'*.xendit.co'
-];
-
-/**
- * OS connectivity-check probe hosts to explicitly DENY pre-auth. The broad reCAPTCHA allows above
- * (`*.google.com` / `*.gstatic.com`) would otherwise let Android's captive probe through to a real
- * HTTP 204, so the phone flashes "Connected" and then reverts to "Sign in to network" while still
- * un-granted (docs/problems/captive-connected-flap-on-free-time.md). These denies sit ABOVE the
- * allows (walled-garden is first-match top-to-bottom) so the probe is intercepted again — while
- * reCAPTCHA, which lives on different hosts/paths (`www.gstatic.com/recaptcha`,
- * `www.google.com/recaptcha`), keeps loading. Each host below is NOT a reCAPTCHA resource:
- *   - connectivitycheck.gstatic.com — Android probe host; reCAPTCHA never uses this subdomain.
- *   - clients1..4.google.com        — Android/Chrome connectivity + client hosts; not reCAPTCHA
- *                                     resources. Matches the set already present on the live router.
- *   - connectivitycheck.android.com — Android's fallback probe (already not in the allowlist; the
- *                                     explicit deny documents intent and covers a manual allow).
- *   - www.google.com PATH /generate_204 — www.google.com IS needed by reCAPTCHA, so deny only the
- *                                     probe PATH (HTTP-only match; reCAPTCHA uses /recaptcha, not this).
- *
- * Apple / Windows / Firefox probe hosts are added below too. Unlike the Google set, these aren't
- * covered by any allow, so they're already intercepted by default — but the explicit deny keeps
- * the OS "Sign in to network" popup firing even if someone later adds a broad allow (e.g.
- * `*.apple.com`), documents intent, and gives every platform the same treatment. None are reCAPTCHA
- * or payment resources, so denying them is pure upside:
- *   - captive.apple.com          — iOS/iPadOS/macOS CNA probe (http://captive.apple.com/hotspot-detect.html).
- *   - www.msftconnecttest.com    — Windows 10/11 NCSI probe (/connecttest.txt).
- *   - www.msftncsi.com           — legacy Windows NCSI probe.
- *   - detectportal.firefox.com   — Firefox's own captive-portal detector.
- */
-const PROBE_DENIES = [
-	// Android / Google
-	{ host: 'connectivitycheck.gstatic.com' },
-	{ host: 'clients1.google.com' },
-	{ host: 'clients2.google.com' },
-	{ host: 'clients3.google.com' },
-	{ host: 'clients4.google.com' },
-	{ host: 'connectivitycheck.android.com' },
-	{ host: 'www.google.com', path: '/generate_204' },
-	// Apple (iOS/macOS), Windows, Firefox
-	{ host: 'captive.apple.com' },
-	{ host: 'www.msftconnecttest.com' },
-	{ host: 'www.msftncsi.com' },
-	{ host: 'detectportal.firefox.com' }
-];
+// PAYMENT_HOSTS + PROBE_DENIES live in ./walled-garden-config (side-effect-free) so the
+// collision-guard spec can import them without running this script's top-level provisioning.
 
 const hosts = new Set([...splitList(ADMIN_WG_HOSTS), ...PAYMENT_HOSTS]);
 const ips = new Set(splitList(ADMIN_WG_IPS));

@@ -69,6 +69,27 @@ reCAPTCHA hosts are deliberately **not** here — see
 /ip hotspot walled-garden add action=allow dst-host=*.paymongo.com comment=veent-admin
 /ip hotspot walled-garden add action=allow dst-host=*.xendit.co    comment=veent-admin
 
+# Alipay/Ant cashier — GCash checkout runs through the Alipay-powered cashier (codified from live
+# hits `*alipay*`=23). Enumerated *.domain forms replace the over-broad `*alipay*` substring.
+/ip hotspot walled-garden add action=allow dst-host=*.alipay.com        comment=veent-admin
+/ip hotspot walled-garden add action=allow dst-host=*.alipayobjects.com comment=veent-admin
+/ip hotspot walled-garden add action=allow dst-host=*.alicdn.com        comment=veent-admin
+/ip hotspot walled-garden add action=allow dst-host=*.antgroup.com      comment=veent-admin
+
+# GCash/Mynt/G-Xchange infra (live hits `*.mynt.xyz`=2). Replaces the over-broad `*g-xchange*`.
+/ip hotspot walled-garden add action=allow dst-host=*.mynt.xyz     comment=veent-admin
+/ip hotspot walled-garden add action=allow dst-host=*.g-xchange.com comment=veent-admin
+
+# Google Pay checkout — specific hosts only (live hits pay.google.com=17, payments.google.com=13).
+# NOT broad *.google.com (that re-opens the captive-probe flap — see the reCAPTCHA note below).
+/ip hotspot walled-garden add action=allow dst-host=pay.google.com      comment=veent-admin
+/ip hotspot walled-garden add action=allow dst-host=payments.google.com comment=veent-admin
+
+# KEEP — proven needed by live traffic (98 hits). Abuse residual: *.googleapis.com is a broad
+# surface; dropping a 98-hit rule risks breaking checkout, so it stays. Tightening to exact subpaths
+# needs a live capture of which paths checkout uses (backlog candidate) — do NOT silently drop.
+/ip hotspot walled-garden add action=allow dst-host=*.googleapis.com    comment=veent-admin
+
 # Our portal / admin origin (derived from ORIGIN). Replace with your LAN hostname,
 # OR add it at the IP layer below if ORIGIN is a bare IP.
 /ip hotspot walled-garden add action=allow dst-host=admin.veent.lan comment=veent-admin
@@ -180,6 +201,31 @@ Symptoms a missing entry causes:
   per-device checkout access didn't open — no `veent-checkout:<ts>` rule for the device IP (check the
   `[topup] openCheckoutAccess failed` log, or that the device's MAC/IP resolved).
 - Card payment dead-ends after entering card details → the bank ACS host is missing (see 3DS above).
+
+## Operator cleanup (manual — `setup:router` will NOT prune)
+
+`setup:router` is additive by design (idempotent print-then-add): it adds the codified `*.domain`
+allows above but will **not** delete the operator's older, over-broad manual `*keyword*` substring
+rules. Those substrings (`*gcash*`, `*g-xchange*`, `*maya.ph*`, `*paymaya*`) match too widely (e.g.
+`gcash.evil.com`) and are superseded by the enumerated `*.domain` forms. **Run the codified script
+first, confirm the new allows are present and matching, then delete the substrings by hand:**
+
+```
+# 1. Confirm the codified replacements exist before removing the originals:
+/ip hotspot walled-garden print
+
+# 2. Remove the over-broad substring wildcards (replaced by enumerated *.domain forms above):
+/ip hotspot walled-garden remove [find where dst-host="*gcash*"]      ;# duplicate rows
+/ip hotspot walled-garden remove [find where dst-host="*g-xchange*"]
+/ip hotspot walled-garden remove [find where dst-host="*maya.ph*"]
+/ip hotspot walled-garden remove [find where dst-host="*paymaya*"]
+# Evaluate (0 hits, likely droppable):
+/ip hotspot walled-garden remove [find where dst-host="*.accounts.google.com"]
+```
+
+The rotating `23.7.208.188` GCash IP allow (`gcash-test` on the `walled-garden ip` layer) is **kept
+for now** — retiring it depends on a live diagnostic capture that is out of scope for this change.
+Leave the disabled `*.gstatic.com` / `*.google.com` / `*.recaptcha.net` rows disabled (the flap fix).
 
 ## Idempotency / cleanup
 
