@@ -1,5 +1,15 @@
 # veent-wifiportal - All Context
 
+Last updated: 2026-07-30 (walled-garden-wipe closed and archived to
+`process/general-plans/completed/` — `setup:router` gains scripted `--wipe [--dry-run]` /
+`--wipe-only [--dry-run]` hard-reset flags, backed by a new `wipeWalledGarden()` in
+`packages/core/src/integrations/network/mikrotik.ts` that clears every static row from both
+walled-garden menus while skipping dynamic auto-shadow rows; replaces the manual Winbox
+`remove [find]` steps in `docs/mikrotik/walled-garden.md`. Add-only — provision/reconcile/scheduler
+untouched. Shipped as commit `53a223b`. EVL green (21/21 unit + admin typecheck 0 errors); the
+staging `--wipe-only --dry-run` real-RouterOS probe remains an outstanding manual-verification
+item, so the plan closed as code-complete rather than fully VERIFIED.)
+
 Last updated: 2026-07-30 (plan-inventory reconciliation — 6 resolved general-plans archived to
 `process/general-plans/completed/`: `finance-timestamptz-migration_23-07-26` (prod apply now DONE,
 user-confirmed 30-07-26 — see the corrected 2026-07-23 entry below), `purchase-ap-attribution_21-07-26`
@@ -481,6 +491,21 @@ easy to find).
   `--reconcile --dry-run` previews without removing. Live-verified 30-07-26:
   `--reconcile --dry-run` → real run removed exactly 3 drifted rows on staging; all safety
   invariants held.
+- **`setup:router --wipe [--dry-run]` / `--wipe-only [--dry-run]` (scripted hard reset, added
+  30-07-26, `walled-garden-wipe`):** `wipeWalledGarden(config, {dryRun})`
+  (`packages/core/src/integrations/network/mikrotik.ts`) clears every STATIC row from BOTH
+  walled-garden menus (`/ip/hotspot/walled-garden` host + `/ip/hotspot/walled-garden/ip`),
+  unconditionally — not tag-scoped like `--reconcile` — while skipping `dynamic==='true'`
+  auto-shadow rows (unremovable) and honoring a real `--dry-run` no-op; returns `{host, ip}`
+  removed counts. `--wipe` wipes then falls through to the normal 3-group provisioning rebuild;
+  `--wipe-only` wipes and exits before provisioning (takes precedence over `--wipe`/`--reconcile`).
+  This REPLACES the manual Winbox/console `remove [find]` hard-reset steps in
+  `docs/mikrotik/walled-garden.md` §Hard reset with a single command. Does NOT touch the
+  `gcash-resolve` scheduler (the scheduler re-adds the `gcash-auto` ip row within 5 min of a wipe).
+  EVL green (21/21 unit incl. dynamic-row negative control + dry-run no-op assertions, admin
+  typecheck 0 errors); the staging `--wipe-only --dry-run` probe against real RouterOS is still an
+  outstanding manual-verification item — see
+  `process/general-plans/completed/walled-garden-wipe_30-07-26/`.
 - **GCash root cause + fix (found + fixed live 29-07-26, codified 30-07-26):** GCash's payment host
   (`payments.gcash.com`) CNAMEs to an Akamai edge — v6 `dst-host` walled-garden matching cannot
   follow a CNAME chain, so hostname rules for the `gcash.com` family always show 0 hits regardless of
