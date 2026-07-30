@@ -23,17 +23,22 @@ plan: process/general-plans/active/walled-garden-wallet-onboarding-prep_30-07-26
   No candidate host added to `PAYMENT_HOSTS`.
 
 ### What Was Skipped/Deferred
-- No candidate wallet/bank was live-verified or whitelisted this session (deliberately out of
-  scope — this is a prep/documentation task only).
-- None of the 9 candidates in the new table have gone through the recon protocol yet — this is
-  future work, tracked only as the table itself (not a backlog NOTE; the doc table IS the tracker).
+- **All NINE candidate domains (GoTyme, SeaBank, GrabPay, ShopeePay, Coins.ph, BDO, BPI, Landbank,
+  Security Bank) remain UNVERIFIED** — none were live-verified against a real wallet/bank flow or
+  driven through the recon protocol on staging this session. This was deliberately out of scope
+  (prep/documentation only). The completed doc + test gates below (collision guard, TS check,
+  set-diff, doc-render) are separate from — and do not imply — any live verification of these
+  candidates; live wallet/bank/staging pass-fail is future work.
+- The 9 unverified candidates are tracked only as the doc table itself (not a backlog NOTE; the
+  `docs/mikrotik/walled-garden.md` candidate table IS the tracker).
 
 ### Test Gate Outcomes
+
 | Gate | Command | Result |
 |---|---|---|
 | Collision guard | `bunx vitest run apps/admin/scripts/setup-router.spec.ts` | PASS (1/1, re-run independently in UPDATE PROCESS) |
 | TS check | `bun run --filter radius-admin check` | PASS (0 errors, 0 warnings, 2316 files) |
-| Deliberate-removal diff | grep for the 6 removed hosts (excluding comments) + googleapis retained | PASS — 0 matches for removed hosts, googleapis present (2 refs: array + comment) |
+| Deliberate-removal diff | Sorted set-diff of `PAYMENT_HOSTS` host strings, post-edit vs HEAD (intended: `diff <(git show HEAD:apps/admin/scripts/walled-garden-config.ts) <edited>` on the extracted+sorted host lines) | PASS — post set = HEAD set MINUS exactly the 6 removed hosts, with NO additions; corroborated by grep (0 matches for the 6 removed hosts, `*.googleapis.com` retained) |
 
 ### Plan Deviations
 None. Diff matches the plan's Execute-agent instructions (E1–E5) exactly.
@@ -52,18 +57,20 @@ the closest analog; all 4 rows are met:
    confirmed by reading `git diff --cached docs/mikrotik/walled-garden.md`).
 
 ### Closeout Packet
-1. Selected plan path: `process/general-plans/active/walled-garden-wallet-onboarding-prep_30-07-26/walled-garden-wallet-onboarding-prep_PLAN_30-07-26.md`
+1. Selected plan path: `process/general-plans/completed/walled-garden-wallet-onboarding-prep_30-07-26/walled-garden-wallet-onboarding-prep_PLAN_30-07-26.md` (archived)
 2. Closeout classification: **Ready for UPDATE PROCESS archival**
 3. What was finished: see "What Was Done" above.
 4. Verified: all 3 gates independently re-run green in this UPDATE PROCESS session (not just
-   trusted from FAST MODE's own report) | Unverified: none — doc section content confirmed by
-   direct diff read (Agent-Probe tier, as declared in the plan).
+   trusted from FAST MODE's own report); doc section content confirmed by direct diff read
+   (Agent-Probe tier, as declared in the plan) | Unverified: the 9 candidate wallet/bank domains
+   in the new doc table — none live-verified against a real wallet/bank flow or staging recon
+   (deferred, out of scope; see "What Was Skipped/Deferred").
 4b. Validate-contract: present, inline in plan, `Gate: PASS`, `generated-by: outer-pvl`, dated
    2026-07-30.
-5. Cleanup done: this report written, plan will be archived, context + memory updates follow in
-   this same UPDATE PROCESS pass | Still needed: none.
-6. Next valid state: archive to `process/general-plans/completed/`, then user makes the SEPARATE
-   code commit (staged files untouched by this agent) followed by the process commit.
+5. Cleanup done: this report written, plan archived to `process/general-plans/completed/`, context
+   + memory updated in this same UPDATE PROCESS pass | Still needed: none.
+6. Next valid state: archived (plan now under `process/general-plans/completed/`); user makes the
+   SEPARATE code commit (staged files untouched by this agent) followed by the process commit.
 7. Commit checkpoint: **Process commit belongs after UPDATE PROCESS** — the 2 staged code files
    are the user's pending commit (per this session's explicit instruction not to commit); this
    agent's own changes (report, archived plan, context/memory docs) form a second, separate

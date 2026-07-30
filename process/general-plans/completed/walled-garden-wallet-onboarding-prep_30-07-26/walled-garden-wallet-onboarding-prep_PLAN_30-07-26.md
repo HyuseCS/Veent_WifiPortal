@@ -23,8 +23,8 @@ any provisioning behavior.
 
 ## Touchpoints
 
-- `apps/admin/scripts/walled-garden-config.ts` — `PAYMENT_HOSTS` (line 41): reorder into 4 blocks +
-  headers; preserve all existing load-bearing per-line comments.
+- `apps/admin/scripts/walled-garden-config.ts` — `PAYMENT_HOSTS` (line 41): reorder into 3 blocks +
+  headers (the Google-Pay block is dropped); preserve all existing load-bearing per-line comments.
 - `docs/mikrotik/walled-garden.md` — add two new sections.
 
 Read-for-context only (NOT edited): `apps/admin/scripts/setup-router.ts`,
@@ -140,11 +140,11 @@ path is broken.
 
 ## Resume and Execution Handoff
 
-1. Selected plan: `process/general-plans/active/walled-garden-wallet-onboarding-prep_30-07-26/walled-garden-wallet-onboarding-prep_PLAN_30-07-26.md`
-2. Last completed step: plan written (VALIDATE next).
-3. Validate-contract status: pending.
+1. Selected plan: `process/general-plans/completed/walled-garden-wallet-onboarding-prep_30-07-26/walled-garden-wallet-onboarding-prep_PLAN_30-07-26.md` (archived).
+2. Last completed step: EXECUTE done, UPDATE PROCESS complete — plan archived.
+3. Validate-contract status: `Gate: PASS`; all 3 test gates re-run green in UPDATE PROCESS (VERIFIED).
 4. Context loaded: `walled-garden-config.ts`, `setup-router.spec.ts`, `walled-garden.md`, research doc, `all-context.md` MikroTik section.
-5. Next step for fresh agent: apply checklist items 1–5, then run verify items 6–8.
+5. Next step for fresh agent: none — session complete. See the colocated `_REPORT_30-07-26.md`.
 
 ## Validate Contract
 
@@ -165,6 +165,7 @@ checkout hits, NOT Google Pay). A later `setup:router --reconcile` prunes those 
 intended cleanup, not a regression.
 
 ### Test gates
+
 | Gate | Command | Expected |
 |---|---|---|
 | Collision guard | `bunx vitest run apps/admin/scripts/setup-router.spec.ts` | 1 passed (baseline green; removals can't create a collision) |

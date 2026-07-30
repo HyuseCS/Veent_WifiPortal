@@ -122,7 +122,7 @@ Therefore, this report recommends a **Hybrid Architecture** that combines the st
 
 > 1. **Phase 1: Pre-Authentication (Walled Garden).** The guest connects to the Wi-Fi. The router intercepts standard DNS and actively blocks DoT/DoH to ensure query visibility. Using RouterOS v7 /ip dns static rules, queries for primary gateway domains (maya.ph, gcash.com, google.com) are dynamically appended to a Payment\_Gateways firewall address list. The user is redirected to the Hotspot login page and chooses to purchase Wi-Fi time.  
 > 2. **Phase 2: Checkout Rendering.** The user selects a plan and clicks "Pay with Maya." The browser is redirected to payments.maya.ph. Because this domain was dynamically mapped to the Payment\_Gateways address list via the intercepted DNS query, the router allows the HTTPS traffic to pass. The Maya checkout renders successfully, presenting GCash, Google Pay, and Credit Card options.  
-> 3. **Phase 3: The Transaction Trigger (Temporary Bypass).** When the user selects a payment method and clicks the final "Confirm/Pay" button, the hotspot backend executes a RouterOS API command (or utilizes a RADIUS Change of Authorization, CoA). This command adds the user's IP or MAC address to a specific Bypass Address List (e.g., Checkout\_In\_Progress) for exactly 15 minutes15.  
+> 3. **Phase 3: The Transaction Trigger (Temporary Bypass).** When the user selects a payment method and clicks the final "Confirm/Pay" button, the hotspot backend executes a RouterOS API command (or utilizes a RADIUS Change of Authorization, CoA). To do this, the backend first resolves the user's MAC address to its current LAN IPv4 address, then adds that scoped IPv4 (not a MAC) to a specific Bypass Address List (e.g., Checkout\_In\_Progress) with a 15-minute timeout, before the HTTPS-only bypass rule is created15.  
 > 4. **Phase 4: Authentication and 3DS Execution.** For the next 15 minutes, the user's device is granted unrestricted access to TCP port 443 (HTTPS)14. If they selected a credit card, the browser's redirect to secure4.arcot.com or their local bank's unique ACS portal proceeds without interference, allowing them to receive and input their OTP.  
 > 5. **Phase 5: Resolution.** The payment succeeds or fails. Maya sends a server-to-server Webhook to the hotspot backend confirming the transaction status33.  
    * If the Webhook indicates success, the backend authenticates the user for their purchased time, removing them from the temporary bypass list and initiating their standard hotspot session.  
@@ -143,13 +143,24 @@ Code snippet
 add chain=dstnat action=redirect to-ports=53 protocol=udp dst-port=53 src-address-list=\!dns-resolvers comment="Force DNS UDP"  
 add chain=dstnat action=redirect to-ports=53 protocol=tcp dst-port=53 src-address-list=\!dns-resolvers comment="Force DNS TCP"
 
+\# The router's own resolver must be allowed to answer the redirected client queries.  
+/ip dns set allow-remote-requests=yes  
+\# Note: allow-remote-requests exposes the resolver network-wide. Restrict it to trusted/hotspot  
+\# interfaces (via existing firewall/hotspot input controls) so untrusted/WAN-side clients cannot  
+\# query the router as an open resolver.
+
 /ip firewall filter  
 \# Drop DoT (DNS over TLS) on port 853 to force Android Private DNS to fall back to port 53\.  
 add chain=forward action=drop protocol=tcp dst-port=853 comment="Block DoT (Android Private DNS Fallback)"
 
-\# Drop known DoH providers to force browsers to fall back to unencrypted DNS.  
+\# Drop known DoH providers so DoH-capable clients MAY fall back to unencrypted DNS.  
 \# (Note: The operator must manually populate the 'Known\_DoH\_IPs' address list with common providers like 8.8.8.8, 1.1.1.1, 9.9.9.9)  
-add chain=forward action=drop protocol=tcp dst-port=443 dst-address-list=Known\_DoH\_IPs comment="Block known DoH Providers"
+\# DoH runs over HTTPS on BOTH TCP/443 and UDP/443 (HTTP/3 / QUIC). A TCP-only drop is INCOMPLETE —  
+\# QUIC-based DoH will still succeed unless UDP/443 is also dropped. Whether a given client actually  
+\# falls back to plaintext DNS (vs. hard-failing) is client-behavior-dependent and MUST be tested  
+\# per platform; do not assume fallback is guaranteed.  
+add chain=forward action=drop protocol=tcp dst-port=443 dst-address-list=Known\_DoH\_IPs comment="Block known DoH Providers (TCP)"  
+add chain=forward action=drop protocol=udp dst-port=443 dst-address-list=Known\_DoH\_IPs comment="Block known DoH Providers (UDP/QUIC)"
 
 ### **Step 2: Configure Dynamic Address List Population via DNS**
 
@@ -171,10 +182,15 @@ add match-subdomain=yes name=alipayobjects.com type=FWD address-list=Payment\_Ga
 add match-subdomain=yes name=alicdn.com type=FWD address-list=Payment\_Gateways  
 add match-subdomain=yes name=antgroup.com type=FWD address-list=Payment\_Gateways
 
-\# Google Pay Domains  
-add match-subdomain=yes name=google.com type=FWD address-list=Payment\_Gateways  
+\# Google Pay Domains — scope to only the hosts the Google Pay flow requires, NOT the broad  
+\# google.com / gstatic.com apex (which would whitelist far more than payments).  
+add name=pay.google.com type=FWD address-list=Payment\_Gateways  
+add name=payments.google.com type=FWD address-list=Payment\_Gateways  
 add match-subdomain=yes name=googleapis.com type=FWD address-list=Payment\_Gateways  
-add match-subdomain=yes name=gstatic.com type=FWD address-list=Payment\_Gateways
+add match-subdomain=yes name=www.gstatic.com type=FWD address-list=Payment\_Gateways  
+\# Research-only (NOT in the active Payment\_Gateways whitelist): the broad apex matches  
+\# google.com and gstatic.com are unconfirmed candidates. Confirm the exact required hosts via  
+\# traffic capture before adding — do not whitelist the apex domains blind.
 
 ### **Step 3: Allow the Dynamic Address List Through the Captive Portal**
 

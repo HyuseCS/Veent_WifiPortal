@@ -15,9 +15,11 @@ Complexity: SIMPLE
 
 Shipped and confirmed. `be527f1 feat(customer): add TEST_MODE to surface OTP on-device instead of
 SMS` implements this plan's deliverable — `sendOtp` short-circuits under `TEST_MODE`, stashes the
-code in-memory, and the verify page surfaces it in a 15s toast instead of sending SMS; `validateEnv`
-hard-fails prod boot if `TEST_MODE` is on. The prod-boot security gate (`ALLOW_TEST_MODE_IN_PROD`
-two-flag opt-in) landed alongside/after via `8531041`/`9dc2ed1`. The "Ready for VALIDATE" status
+code in-memory, and the verify page surfaces it in a 15s toast instead of sending SMS. The prod-boot
+security gate (`ALLOW_TEST_MODE_IN_PROD` two-flag opt-in) landed alongside/after via
+`8531041`/`9dc2ed1`: with that gate in place, `validateEnv` hard-fails prod boot when `TEST_MODE` is
+on **unless** the explicit two-flag staging opt-in (`TEST_MODE` + `ALLOW_TEST_MODE_IN_PROD`) is
+present — it is not an unconditional prod hard-fail on `TEST_MODE`. The "Ready for VALIDATE" status
 line above was stale — archiving as DONE per user confirmation 30-07-26.
 
 ## Overview / Context

@@ -49,7 +49,7 @@ into `setup:router`. Add unit tests + update the hard-reset doc runbook.
 | File | Change |
 |---|---|
 | `packages/core/src/integrations/network/mikrotik.ts` | Add `WipeWalledGardenResult` interface + `wipeWalledGarden()` fn (new export). Mirrors `reconcileWalledGarden`'s `openConn`/print/remove-by-`.id`. |
-| `packages/core/src/index.ts` (or the barrel re-exporting `reconcileWalledGarden`) | Re-export `wipeWalledGarden` if the barrel enumerates exports (verify — `reconcileWalledGarden` is imported from `@veent/core`). |
+| `packages/core/src/integrations/network/index.ts` (the barrel re-exporting `reconcileWalledGarden`) | Re-export `wipeWalledGarden` alongside `reconcileWalledGarden` (this barrel enumerates exports). |
 | `apps/admin/scripts/setup-router.ts` | Parse `--wipe` / `--wipe-only`; import `wipeWalledGarden`; wipe block before provisioning; `--wipe-only` early exit. |
 | `packages/core/src/integrations/network/mikrotik.spec.ts` | New `describe('wipeWalledGarden')` block reusing the in-memory test double. |
 | `docs/mikrotik/walled-garden.md` | Replace manual "remove each row" console steps in §Hard reset with the `--wipe` / `--wipe-only` flags (keep dry-run-first recommendation). |
@@ -63,7 +63,7 @@ into `setup:router`. Add unit tests + update the hard-reset doc runbook.
 
 ## Blast Radius
 
-4 files (1 core fn + 1 barrel re-export if needed, 1 admin script, 1 spec, 1 doc). Risk class:
+5 files (1 core fn, 1 barrel re-export, 1 admin script, 1 spec, 1 doc). Risk class:
 **deploy/runtime (router-mutating, destructive)** — but staging-only, no live guests. Dynamic-row skip +
 dry-run no-op are the safety guards; both mirror existing verified `reconcileWalledGarden` behavior.
 
@@ -108,11 +108,11 @@ dry-run no-op are the safety guards; both mirror existing verified `reconcileWal
 
 ## Resume and Execution Handoff
 
-1. Selected plan: `process/general-plans/active/walled-garden-wipe_30-07-26/walled-garden-wipe_PLAN_30-07-26.md`
-2. Last completed step: PLAN written; VALIDATE next.
-3. Validate-contract status: pending.
+1. Selected plan: `process/general-plans/completed/walled-garden-wipe_30-07-26/walled-garden-wipe_PLAN_30-07-26.md` (archived).
+2. Last completed step: EXECUTE + VERIFY done — shipped (commit `53a223b`), archived; VERIFIED via staging `--wipe-only --dry-run` no-op probe (30-07-26).
+3. Validate-contract status: written — `Gate: CONDITIONAL` (accepted; destructive router op guarded by dry-run no-op + dynamic-row skip).
 4. Context loaded: `mikrotik.ts` (reconcileWalledGarden lines 1169-1265, openConn 966), `setup-router.ts` (full), `mikrotik.spec.ts` (test double 1-130 + reconcile block 232-381), `walled-garden.md` §Hard reset 366-419.
-5. Next step for fresh agent: implement checklist 1→5 in order; run the two test gates.
+5. Next step for fresh agent: none — session complete and VERIFIED.
 
 ## Validate Contract
 
@@ -121,6 +121,7 @@ dry-run no-op are the safety guards; both mirror existing verified `reconcileWal
 - **Gate**: CONDITIONAL (accepted — destructive router op, same risk class as shipped `--reconcile`; guarded by dry-run no-op + dynamic-row skip)
 
 ### Layer 1 dimensions
+
 | Dimension | Status |
 |---|---|
 | Infra fit | PASS |
@@ -129,6 +130,7 @@ dry-run no-op are the safety guards; both mirror existing verified `reconcileWal
 | Security surface | CONCERN (accepted) |
 
 ### Layer 2 sections
+
 | Section | Status |
 |---|---|
 | A — wipeWalledGarden fn | PASS |
@@ -143,6 +145,7 @@ dry-run no-op are the safety guards; both mirror existing verified `reconcileWal
   no-op — assert zero deletion in the spec; (b) skip `dynamic==='true'` rows in BOTH menus.
 
 ### Execute-agent instructions
+
 | # | Instruction | Trigger |
 |---|---|---|
 | E1 | Do NOT modify `reconcileWalledGarden`/`provisionWalledGarden`/`provisionGcashResolveScheduler` bodies or signatures. Add-only. | Section A |

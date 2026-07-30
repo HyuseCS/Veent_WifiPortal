@@ -582,13 +582,17 @@ easy to find).
   `ERR_CONNECTION_CLOSED`. `TUNNEL_ORIGIN` (`webhookOrigin`) is for the server→server webhook
   `originUrl` ONLY — do not reuse it for the browser return URLs. See
   `process/general-plans/completed/maya-return-url-revert_23-07-26/` for the incident this codifies.
-- **GCash/e-wallet checkout needs IP-based walled-garden allows:** MikroTik `dst-host` (hostname)
-  walled-garden rules do NOT reliably match GCash's HTTPS traffic (`payments.gcash.com` and its
-  Alipay-powered cashier's `*.alipay.com`/`*.alipayobjects.com`/`*.alicdn.com`) — confirmed live via
-  `hits=0` on the hostname rules. Mitigation shipped is a TEMPORARY manual router-side IP allow
-  (`/ip hotspot walled-garden ip add dst-address=<resolved IP>`), NOT productionized. Follow-up:
-  `process/general-plans/backlog/gcash-walled-garden-ip-productionize_NOTE_23-07-26.md` — add
-  IP-based allows for `PAYMENT_HOSTS` in `apps/admin/scripts/setup-router.ts`.
+- **GCash/e-wallet checkout is handled by the `gcash-resolve` scheduler (SHIPPED):** MikroTik
+  `dst-host` (hostname) walled-garden rules do NOT match GCash's HTTPS traffic — root cause (found +
+  fixed live 29-07-26, codified 30-07-26) is that `payments.gcash.com` CNAMEs to an Akamai edge and
+  v6 `dst-host` matching cannot follow a CNAME chain (hostname rules always show `hits=0`). The
+  single operational mitigation is `provisionGcashResolveScheduler()`
+  (`packages/core/src/integrations/network/mikrotik.ts`) — an idempotent `/system scheduler` item
+  (`name=gcash-resolve`, 5-min interval) that `:resolve`s the hostname and upserts the `gcash-auto`
+  walled-garden-ip row. This REPLACES the earlier temporary manual router-side IP allow, and the old
+  `gcash-walled-garden-ip-productionize` backlog note is SUPERSEDED. See the MikroTik / RouterOS
+  section above (GCash root cause + fix) and
+  `process/general-plans/completed/payment-walled-garden-v6_29-07-26/` for the full diagnostic trail.
 
 ### Sentry observability
 - `@sentry/sveltekit` in all 3 apps; `@sentry/core` in `packages/core`

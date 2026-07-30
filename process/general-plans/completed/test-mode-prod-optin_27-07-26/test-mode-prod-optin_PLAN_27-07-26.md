@@ -105,7 +105,7 @@ behavior gain.
 
 | Gate / Scenario | Strategy | Proves SPEC criterion |
 |---|---|---|
-| `bunx vitest run apps/customer/src/lib/server/validateEnv.spec.ts` — prod + flag unset throws | Fully-Automated | Fail-safe default preserved: real prod deploy without the flag still crashes |
+| `cd apps/customer && bunx vitest run src/lib/server/validateEnv.spec.ts` — prod + flag unset throws | Fully-Automated | Fail-safe default preserved: real prod deploy without the flag still crashes |
 | Same suite — prod + flag set warns + proceeds | Fully-Automated | Staging opt-in works: TEST_MODE runs in prod build when second flag set |
 | Same suite — dev path + TEST_MODE-off path | Fully-Automated | No regression to existing gate behavior |
 | `bun run check` (customer app typecheck) | Fully-Automated | New import + helper typecheck clean |
@@ -118,7 +118,7 @@ Runner note: use `bunx vitest run`, never `bun test` (bun's native runner no-ops
 
 ## Resume and Execution Handoff
 
-1. Selected plan file: `process/general-plans/active/test-mode-prod-optin_27-07-26/test-mode-prod-optin_PLAN_27-07-26.md`
+1. Selected plan file: `process/general-plans/completed/test-mode-prod-optin_27-07-26/test-mode-prod-optin_PLAN_27-07-26.md`
 2. Last completed step: PLAN written; VALIDATE run inline (see Validate Contract below).
 3. Validate-contract status: written (see below).
 4. Context loaded: `validateEnv.ts`, `validateEnv.spec.ts`, `otp.ts`, `compose.prod.yaml` (customer
@@ -169,7 +169,7 @@ specifies.
 
 ### Test Gates
 
-1. `bunx vitest run apps/customer/src/lib/server/validateEnv.spec.ts` — must exit 0, all cases green.
+1. `cd apps/customer && bunx vitest run src/lib/server/validateEnv.spec.ts` — must exit 0, all cases green.
 2. `bun run check` (customer app) — 0 type errors.
 
 Runner: `bunx vitest run` only (never `bun test` — fake-timer no-op gotcha).

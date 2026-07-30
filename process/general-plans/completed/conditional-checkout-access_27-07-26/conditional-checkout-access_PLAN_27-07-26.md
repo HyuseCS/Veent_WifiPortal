@@ -489,6 +489,12 @@ grant/session/auth decision on it, and do NOT entrench it as a verified identity
 
 ## Next Step
 
+> **⛔ INVALIDATED / NOT-PLANNED (30-07-26) — do NOT follow the EXECUTE instructions below (or in
+> §Resume and Execution Handoff step 5).** The approach was invalidated on live hardware (see the
+> top banner and §Closeout — NOT-PLANNED): a device-wide `0.0.0.0/0` allow and a captive device are
+> mutually exclusive. There is NO valid `ENTER EXECUTE MODE` for this plan; the text below is
+> superseded and kept only as a design record.
+
 Plan validated (CONDITIONAL). Address the supplement items (folded in above), then say
 **ENTER EXECUTE MODE** to implement Phase 1 → 7.
 

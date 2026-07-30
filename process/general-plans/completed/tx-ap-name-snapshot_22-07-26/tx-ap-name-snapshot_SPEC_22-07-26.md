@@ -15,9 +15,11 @@ today silently rewrites what every past transaction says it was — a February p
 through "AP-Pabayo" would start showing "AP-Front-Desk" the moment someone renames that AP
 in March. This feature freezes the AP name at the moment of the transaction, so historical
 records keep the name that was true when the money moved or the grant happened, no matter
-what the AP is called later. This applies to all five kinds of transaction the admin Finance
-page already tracks: Maya payments, credit top-ups, credit spends, points spends, and
-free-time grants.
+what the AP is called later. This EXTENDS the per-record AP attribution that the prior
+`purchase-ap-attribution` feature added (durable circuit-id on each record) to all five kinds
+of transaction the admin Finance page shows — Maya payments, credit top-ups, credit spends,
+points spends, and free-time grants — by additionally freezing each one's AP *name* at write
+time; per-record AP attribution was not already present on all five before that prior feature.
 
 ## User Stories / Jobs To Be Done
 

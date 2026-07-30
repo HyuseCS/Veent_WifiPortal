@@ -286,3 +286,11 @@ failure) has been completed and prod Finance was human-confirmed correct by the 
 (30-07-26). Plan status flipped to `✅ VERIFIED` and archived to `process/general-plans/completed/`
 per `§Phase Completion Rules`. This closes the last outstanding item from the 23-07-26/24-07-26
 dev-side closeout.
+
+**Verification evidence — honest gap.** Each prod step (TZ preflight, snapshot / verify-restorable,
+SELECT-only preview, DDL apply, app smoke, human Finance sign-off) was **operator-confirmed live by
+the user during the 30-07-26 session — no runlogs, command outputs, execution IDs, or a
+`vc-risk-evidence-pack` artifact set were captured to disk for reference here.** The evidence is the
+user's interactive confirmation, not a durable artifact trail; this gap is recorded rather than
+papered over with invented identifiers. Dev-side gate evidence remains reproducible (see the Test
+Gate sections above: `bun run check`, `bun run test` 391/391, the AC1/AC4 integration specs).
