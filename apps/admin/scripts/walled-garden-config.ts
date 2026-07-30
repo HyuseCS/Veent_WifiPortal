@@ -39,43 +39,32 @@
  * additive and will not prune) — see docs/mikrotik/walled-garden.md §Operator cleanup.
  */
 export const PAYMENT_HOSTS = [
+	// Maya / PayMaya — checkout + redirect + API (wildcards cover sandbox + prod).
 	'maya.ph',
 	'*.maya.ph',
 	'paymaya.com',
 	'*.paymaya.com',
-	// GCash e-wallet checkout — Maya/PayMongo redirect the buyer to GCash to authorize the payment
-	// (payments.gcash.com). Wildcard covers the auth/redirect subdomains.
+	// GCash + Alipay cashier + Mynt/G-Xchange infra — Maya's hosted checkout redirects the buyer to
+	// GCash to authorize the payment (payments.gcash.com); GCash checkout runs through the
+	// Alipay-powered cashier (live hits: `*alipay*`=23). Enumerated `*.domain` forms replace the
+	// over-broad `*alipay*` / `*gcash*` / `*g-xchange*` substrings. Bare `alipay.com` is required in
+	// addition to the wildcard: a `*.` wildcard does NOT match its own bare parent host, so
+	// `*.alipay.com` alone leaves `alipay.com` blocked — the retired 41-hit `*alipay*` substring used
+	// to catch it. (AC5.)
 	'gcash.com',
 	'*.gcash.com',
-	// Other gateways named in Rule #2; harmless if unused.
-	'*.paymongo.com',
-	'*.xendit.co',
-	// Alipay/Ant cashier hosts — GCash checkout runs through the Alipay-powered cashier
-	// (live hits: `*alipay*`=23). Enumerated forms replace the over-broad `*alipay*` substring.
-	// Bare `alipay.com` is required in addition to the wildcard: a `*.` wildcard does NOT match its
-	// own bare parent host, so `*.alipay.com` alone leaves `alipay.com` blocked — the retired 41-hit
-	// `*alipay*` substring used to catch it. (AC5.)
 	'alipay.com',
 	'*.alipay.com',
 	'*.alipayobjects.com',
 	'*.alicdn.com',
 	'*.antgroup.com',
-	// GCash/Mynt/G-Xchange infra (live hits: `*.mynt.xyz`=2; research flagged mdap.paas.mynt.xyz).
-	// Replaces the over-broad `*g-xchange*` substring.
 	'*.mynt.xyz',
 	'*.g-xchange.com',
-	// Google Pay checkout hosts (live hits: pay.google.com=17, payments.google.com=13). Distinct,
-	// specific hosts — NOT broad `*.google.com` (that re-opens the captive-probe flap; see note above).
-	'pay.google.com',
-	'payments.google.com',
-	// Google login/SetSID hosts for the Google Pay flow (added from live 29-07-26 findings). The bare
-	// `accounts.google.com` is required because a `*.` wildcard does NOT match its own bare parent host;
-	// `accounts.google.com.ph` is the localized PH ccTLD the SetSID cross-domain-cookie step bounces to.
-	// Both resolve DIRECTLY to Google IPs (no CNAME-to-CDN), so plain host rules suffice — no resolve
-	// script. Distinct literal hosts, NOT broad `*.google.com`. Neither collides with PROBE_DENIES.
-	'accounts.google.com',
-	'accounts.google.com.ph',
-	// KEEP — proven needed by live traffic (98 hits). Abuse residual: `*.googleapis.com` is a broad
+	// Google APIs (reCAPTCHA/assets — NOT Google Pay). Google Pay hosts (pay.google.com,
+	// payments.google.com, accounts.google.com, accounts.google.com.ph) were deliberately dropped —
+	// Google Pay is abandoned: Android WebView blocks it (`OR_BIBED_15`), so it can never work in the
+	// captive CNA regardless of whitelisting.
+	// KEEP `*.googleapis.com` — proven needed by live traffic (98 hits). Abuse residual: it is a broad
 	// surface, but dropping a 98-hit rule risks breaking checkout. Tightening to exact subpaths needs a
 	// live capture of which paths checkout uses (out of scope — backlog candidate). Do NOT silently drop.
 	'*.googleapis.com'

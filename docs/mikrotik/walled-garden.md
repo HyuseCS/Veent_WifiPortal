@@ -256,6 +256,87 @@ re-run `setup:router`):
 
 ---
 
+## How to add a wallet/bank (₱0 recon protocol)
+
+To whitelist a new e-wallet or bank you must discover the EXACT hosts its app/checkout flow hits,
+then classify each one. Do this empirically — never guess from a research doc. The protocol costs
+nothing (no test payment needed; walk up to, but do NOT confirm, the pay screen):
+
+1. **Flush the router DNS cache** so the capture is clean:
+   ```
+   /ip dns cache flush
+   ```
+2. **Drive the flow on the captive device** (a phone still behind the portal, NOT yet granted): open
+   the wallet/bank app, pull-to-refresh the dashboard, and walk the QRPH / pay flow all the way to
+   the confirm screen — **do NOT confirm** (no real payment needed; you only need the app to make its
+   network calls).
+3. **Read what it resolved:**
+   ```
+   /ip dns cache print
+   ```
+   Every host the app touched now appears in the cache. Compare against what's already whitelisted;
+   the new rows are your candidates.
+4. **Classify each new domain:**
+   - **Resolves directly to the provider's own IP** → add a plain `dst-host` entry to `PAYMENT_HOSTS`
+     (`apps/admin/scripts/walled-garden-config.ts`) and re-run `setup:router`.
+   - **CNAMEs to a CDN** (e.g. `…edgekey.net` / `…akamaiedge.net` / any rotating CDN edge) → a
+     `dst-host` rule can NOT match it (RouterOS v6 can't follow a CNAME chain). It needs a `:resolve`
+     scheduler like `gcash-resolve` (see `provisionGcashResolveScheduler` and the `gcash-auto`
+     section above) that re-resolves the host every few minutes and upserts a `walled-garden ip` row.
+5. **Add → re-run `setup:router` → retest** the flow on the captive device. Repeat until the flow
+   completes.
+
+**Two hard rules:**
+
+- **`*.domain` never matches its own bare parent.** If a flow needs both `foo.com` and its
+  subdomains, add BOTH `foo.com` and `*.foo.com` (see the bare `alipay.com` / `gcash.com` entries).
+- **Do NOT add broad CDN allows** — no `*.google.com`, `*.gstatic.com`, `fonts.*`,
+  `googletagmanager`, `cdnjs`, etc. They re-open the captive-probe flap that `PROBE_DENIES` fixes
+  (an un-granted phone gets a real `204` and flashes "Connected" then reverts). If an app seems to
+  need Google/Cloudflare assets, it almost certainly needs a **per-device checkout allow** or a
+  specific host, not a broad wildcard.
+
+**Domain open ≠ app works.** Opening the right hosts is necessary but NOT sufficient — many apps
+cert-pin or actively detect captive networks and refuse to proceed even with every domain reachable
+(Google Pay is the extreme case — see below). Every candidate needs a **live pass/fail** on real
+hardware before you can call it supported.
+
+### Google Pay — KNOWN-DEAD (excluded on purpose)
+
+Google Pay is **not** a candidate and its hosts were removed from `PAYMENT_HOSTS`. Android's WebView
+blocks it (`OR_BIBED_15`), so it can never complete inside the captive CNA regardless of what you
+whitelist. This is a **WebView limitation, not a walled-garden gap** — do not re-add `pay.google.com`
+/ `payments.google.com` / `accounts.google.com*` chasing it.
+
+## Candidate wallets/banks (UNVERIFIED — recon required)
+
+A curated shortlist of likely-useful wallets/banks for this audience. **Every row is UNVERIFIED** —
+the roots below are starting points from research, NOT confirmed working. For each: run the ₱0 recon
+protocol above, classify each host (direct vs CNAME-to-CDN), add, and get a live pass/fail before
+treating it as supported. Do NOT add any of these to `PAYMENT_HOSTS` until live-verified.
+
+| App | Candidate root(s) | Status |
+| --- | --- | --- |
+| GoTyme | `*.gotyme.com.ph` | UNVERIFIED |
+| SeaBank | `*.seabank.ph`, `*.seabank.com.ph` | UNVERIFIED |
+| GrabPay | `*.grab.com` | UNVERIFIED |
+| ShopeePay | `*.shopeepay.ph`, `*.shopee.ph` | UNVERIFIED |
+| Coins.ph | `*.coins.ph` | UNVERIFIED |
+| BDO | `*.bdo.com.ph` | UNVERIFIED |
+| BPI | `*.bpi.com.ph` | UNVERIFIED |
+| Landbank | `*.landbank.com`, `*.landbank.com.ph`, `lbpiaccess.com` | UNVERIFIED |
+| Security Bank | `*.securitybank.com`, `*.securitybank.com.ph` | UNVERIFIED |
+
+**On the 4 bank rows (BDO / BPI / Landbank / Security Bank):** these support QR Ph, but banking apps
+are especially likely to **cert-pin and/or detect captive networks** and refuse even with their
+domains open. Treat a live pass/fail per app as mandatory — a resolving rule is no guarantee.
+
+**Out of scope:** the OTHER traditional banks (Metrobank, RCBC, PNB, China Bank, EastWest, AUB,
+PSBank, etc.) are NOT curated candidates — the "whitelist every QRPH bank" chase was already
+rejected. Only BDO / BPI / Landbank / Security Bank are curated here alongside the 5 wallets.
+
+---
+
 ## `veent-admin:portal` — admin/portal origin
 
 The portal/admin origin the guest must reach pre-auth to see the sign-in page. Derived from `ORIGIN`
