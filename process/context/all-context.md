@@ -1,5 +1,26 @@
 # veent-wifiportal - All Context
 
+Last updated: 2026-07-30 (walled-garden-canonical + the remainder of payment-walled-garden-v6
+closed and archived to `process/general-plans/completed/` — the staging router's walled garden is
+now fully code-owned and hard-reset-rebuilt from scratch. New canonical model: `setup:router`
+provisions 3 sequential tagged groups — `veent-admin:probe` (captive-probe denies), `veent-admin:payment`
+(payment-gateway allow hosts, incl. bare `alipay.com` added this session), `veent-admin:portal`
+(admin/portal origin allows) — plus the untouched `gcash-auto` scheduler-maintained IP row.
+`reconcileWalledGarden()` now matches the whole `veent-admin:` family by prefix (not exact-equality),
+though every real call site still passes its own specific sub-tag so each of the 3 reconcile calls
+stays scoped to its own group in practice. `setup:router --reconcile [--dry-run]` is an opt-in prune
+that removes ONLY code-owned rows (tag-matched AND `action=allow`-scoped — it never touches
+`PROBE_DENIES` deny rows, the `gcash-auto` row, or any un-tagged manual row) absent from the current
+desired set; default (no-flag) `setup:router` stays purely additive. GCash's root cause (found
+29-07-26) was a CNAME-to-Akamai indirection that v6 `dst-host` matching cannot follow — the fix is a
+live `/system scheduler` item (`gcash-resolve`, codified this session as `provisionGcashResolveScheduler()`)
+that `:resolve`s the hostname every 5 minutes and upserts the `gcash-auto` walled-garden-ip row; this
+REPLACED the originally-designed whole-network DoH/DoT block, which was proven unnecessary and never
+shipped. `docs/mikrotik/walled-garden.md` is now the canonical, currently-true reference for the
+whole walled-garden model — read it first for any walled-garden work, including the both-menu
+hard-reset runbook. Live-verified on staging: `--reconcile --dry-run` → real run removed exactly the
+3 drifted rows; scheduler run-count still incrementing; all safety invariants held.)
+
 Last updated: 2026-07-23 (maya-return-url-revert + maya-live-return-url closed and archived to
 `process/general-plans/completed/` — a live Maya (sandbox→live) testing session surfaced two
 UNRELATED root causes behind what first looked like one browser-return bug: (1) MikroTik
@@ -400,6 +421,46 @@ easy to find).
   the router's ICMP to it and the admin dashboard reads a healthy AP as permanently DOWN
   (false-DOWN → risks freezing paid guests via outage auto-pausing). This is currently THE
   primary mitigation for that bug.
+- **`docs/mikrotik/walled-garden.md` is the canonical, currently-true walled-garden reference**
+  (rewritten 30-07-26) — read it FIRST for any walled-garden work. It documents the exact live tag
+  model, the both-menu hard-reset runbook, and the `gcash-resolve` scheduler mechanism.
+- **Walled-garden tag model (canonical, 30-07-26):** `setup:router` (`apps/admin/scripts/setup-router.ts`)
+  provisions the walled garden as 3 sequential tagged groups via `provisionWalledGarden()`
+  (`packages/core/src/integrations/network/mikrotik.ts`) — `veent-admin:probe` (`PROBE_DENIES`, the
+  captive-probe flap-fix deny rows, always provisioned FIRST so denies land above the allows on a
+  fresh/wiped garden), `veent-admin:payment` (`PAYMENT_HOSTS` — payment-gateway allow hosts, incl.
+  bare `alipay.com` added 30-07-26 alongside the existing `*.alipay.com` wildcard, which does not
+  match its own bare parent), `veent-admin:portal` (admin/portal origin allow hosts/IPs, derived
+  from `ADMIN_WG_HOSTS`/`ADMIN_WG_IPS`/`ORIGIN`). The separate `gcash-auto`-tagged walled-garden-ip
+  row (scheduler-maintained, see below) is a DIFFERENT tag family and is never touched by any of the
+  3 provisioning/reconcile calls.
+- **`reconcileWalledGarden()` family-prefix match (30-07-26):** the tag-match check widened from
+  exact-equality to a `veent-admin:` family-prefix match (`commentMatchesTag`-style, reusing the
+  existing `ADMIN_BYPASS_TAG` colon-suffix convention) — a bare `veent-admin`-tag call would manage
+  the whole family, though in practice every real call site (`setup-router.ts`'s 3 reconcile calls)
+  passes its own specific sub-tag, so each stays scoped to its own group. Removal is ALSO
+  action-scoped (`action=allow` rows only, host-layer) — `PROBE_DENIES` deny rows sharing the same
+  tag family are never inspected or removed, preventing a `--reconcile` run from silently re-opening
+  a captive-probe host.
+- **`setup:router --reconcile [--dry-run]` (opt-in prune, added 30-07-26 — revises the prior
+  additive-only D-PRUNE decision):** default (no-flag) `setup:router` stays byte-for-byte additive,
+  unchanged. `--reconcile` removes ONLY rows carrying the code's own tag that are absent from the
+  current run's desired set — hard non-targets, by construction of the tag+action scoping: any
+  un-tagged/manually-added operator row, the `gcash-auto` row, and any `action=deny` row.
+  `--reconcile --dry-run` previews without removing. Live-verified 30-07-26:
+  `--reconcile --dry-run` → real run removed exactly 3 drifted rows on staging; all safety
+  invariants held.
+- **GCash root cause + fix (found + fixed live 29-07-26, codified 30-07-26):** GCash's payment host
+  (`payments.gcash.com`) CNAMEs to an Akamai edge — v6 `dst-host` walled-garden matching cannot
+  follow a CNAME chain, so hostname rules for the `gcash.com` family always show 0 hits regardless of
+  plain vs. encrypted DNS. The fix is `provisionGcashResolveScheduler()` — an idempotent
+  `/system scheduler` item (`name=gcash-resolve`, 5-min interval) that `:resolve`s the hostname and
+  upserts the `gcash-auto` walled-garden-ip row. This REPLACED the originally-designed whole-network
+  DoT/DoH firewall block (`provisionDnsEnforcement()`), which live diagnosis proved unnecessary —
+  it was never built/shipped; see `process/general-plans/completed/payment-walled-garden-v6_29-07-26/`
+  for the full diagnostic trail. Rule of thumb for any future CDN-fronted payment host: a host that
+  CNAMEs to a CDN needs a `:resolve` scheduler; a host that resolves directly to the provider's own
+  IP needs only an ordinary `PAYMENT_HOSTS`/`dst-host` entry.
 - `packages/core` probe/setup scripts
 - `apps/admin/scripts/setup-router.ts`
 - `apps/admin/src/routes/api/network/`
