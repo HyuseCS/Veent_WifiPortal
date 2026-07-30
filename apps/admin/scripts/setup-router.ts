@@ -27,13 +27,20 @@
  * The api-ssl cert + service must already exist on the router (see docs/DEPLOYMENT.md §7a).
  */
 import { Socket } from 'node:net';
-import { provisionWalledGarden, restrictApiService, type MikrotikConfig } from '@veent/core';
+import {
+	provisionWalledGarden,
+	provisionGcashResolveScheduler,
+	reconcileWalledGarden,
+	restrictApiService,
+	type MikrotikConfig
+} from '@veent/core';
 import { PAYMENT_HOSTS, PROBE_DENIES } from './walled-garden-config';
 
 const argv = new Set(process.argv.slice(2));
 const DRY_RUN = argv.has('--dry-run');
 const RESTRICT_API = argv.has('--restrict-api');
 const DISABLE_PLAIN_API = argv.has('--disable-plain-api');
+const RECONCILE = argv.has('--reconcile');
 
 const {
 	NETWORK_CONTROLLER,
@@ -117,10 +124,15 @@ if (ips.size) console.log(`  ips:   ${[...ips].join(', ')}`);
 if (PROBE_DENIES.length)
 	console.log(`  denies: ${PROBE_DENIES.map((d) => d.host + (d.path ?? '')).join(', ')}`);
 
+// The desired host/ip sets — computed ONCE and reused by both the additive provision call and the
+// opt-in --reconcile prune, so reconcile can never drift from what was just provisioned.
+const hostList = [...hosts];
+const ipList = [...ips];
+
 try {
 	const result = await provisionWalledGarden(config, {
-		hosts: [...hosts],
-		ips: [...ips],
+		hosts: hostList,
+		ips: ipList,
 		denies: PROBE_DENIES
 	});
 	for (const d of result.denies)
@@ -131,6 +143,47 @@ try {
 } catch (err) {
 	console.error('\nFailed to provision walled garden:', err instanceof Error ? err.message : err);
 	process.exit(1);
+}
+
+// GCash CNAME resolve-script: `payments.gcash.com` CNAMEs to a rotating Akamai edge IP that v6
+// dst-host rules can't follow, so a `/system scheduler` re-resolves it every 5 min and upserts a
+// walled-garden ip row. Additive + idempotent (matched by name=gcash-resolve), same as above.
+try {
+	const sched = await provisionGcashResolveScheduler(config);
+	console.log(
+		`  scheduler ${sched.scheduler.value}: ${sched.scheduler.created ? 'added' : 'already present'}`
+	);
+} catch (err) {
+	console.error(
+		'\nFailed to provision the gcash-resolve scheduler:',
+		err instanceof Error ? err.message : err
+	);
+	process.exit(1);
+}
+
+// Opt-in prune: --reconcile removes ONLY code-owned (veent-admin-tagged, action=allow) walled-garden
+// rows no longer in the desired set — never un-tagged operator rows, the gcash-auto row, or the
+// PROBE_DENIES deny rows. Default (no flag) run never prunes; --dry-run prints without removing.
+if (RECONCILE) {
+	console.log(
+		`\nReconciling walled garden — removing drifted code-owned rows${DRY_RUN ? ' [dry-run]' : ''}:`
+	);
+	try {
+		const rec = await reconcileWalledGarden(config, {
+			hosts: hostList,
+			ips: ipList,
+			dryRun: DRY_RUN
+		});
+		if (rec.removed.length === 0) {
+			console.log('  nothing to remove — no drifted code-owned rows.');
+		} else {
+			for (const r of rec.removed)
+				console.log(`  ${r.layer} ${r.value}: ${r.dryRun ? 'would remove' : 'removed'}`);
+		}
+	} catch (err) {
+		console.error('\nFailed to reconcile walled garden:', err instanceof Error ? err.message : err);
+		process.exit(1);
+	}
 }
 
 /**

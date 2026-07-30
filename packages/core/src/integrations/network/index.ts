@@ -8,6 +8,8 @@ export { createStubNetworkController } from './stub';
 export {
 	createMikrotikController,
 	provisionWalledGarden,
+	provisionGcashResolveScheduler,
+	reconcileWalledGarden,
 	restrictApiService,
 	formatQueueRate,
 	ipv4NetworkOf,
@@ -24,6 +26,9 @@ export {
 	type WalledGardenInput,
 	type WalledGardenResult,
 	type WalledGardenDeny,
+	type GcashResolveSchedulerResult,
+	type ReconcileWalledGardenInput,
+	type ReconcileWalledGardenResult,
 	type RestrictApiInput,
 	type RestrictApiResult
 } from './mikrotik';

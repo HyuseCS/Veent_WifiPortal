@@ -64,6 +64,13 @@ export const PAYMENT_HOSTS = [
 	// specific hosts — NOT broad `*.google.com` (that re-opens the captive-probe flap; see note above).
 	'pay.google.com',
 	'payments.google.com',
+	// Google login/SetSID hosts for the Google Pay flow (added from live 29-07-26 findings). The bare
+	// `accounts.google.com` is required because a `*.` wildcard does NOT match its own bare parent host;
+	// `accounts.google.com.ph` is the localized PH ccTLD the SetSID cross-domain-cookie step bounces to.
+	// Both resolve DIRECTLY to Google IPs (no CNAME-to-CDN), so plain host rules suffice — no resolve
+	// script. Distinct literal hosts, NOT broad `*.google.com`. Neither collides with PROBE_DENIES.
+	'accounts.google.com',
+	'accounts.google.com.ph',
 	// KEEP — proven needed by live traffic (98 hits). Abuse residual: `*.googleapis.com` is a broad
 	// surface, but dropping a 98-hit rule risks breaking checkout. Tightening to exact subpaths needs a
 	// live capture of which paths checkout uses (out of scope — backlog candidate). Do NOT silently drop.

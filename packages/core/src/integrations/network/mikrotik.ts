@@ -1114,6 +1114,129 @@ export async function provisionWalledGarden(
 	return result;
 }
 
+/**
+ * The `gcash-resolve` scheduler's on-event script body — copied VERBATIM from the 29-07-26 live
+ * diagnostic session (`payment-walled-garden-v6_REPORT_29-07-26.md`, §What Was Done bullet 1), which
+ * proved it working live on the staging router. `payments.gcash.com` CNAMEs to an Akamai edge whose
+ * IP rotates, and RouterOS v6 `dst-host` walled-garden matching cannot follow a CNAME chain — so this
+ * self-healing script `:resolve`s the host every 5 minutes and upserts a single `walled-garden ip`
+ * row (`comment="gcash-auto"`) with the fresh IP.
+ *
+ * SECURITY: this MUST stay a hardcoded, static string. Never templatize it from data structures (e.g.
+ * looping over hosts) without a RouterOS-script-injection review first — no application data may ever
+ * flow into a router-resident scheduled script. (validate-contract item-18 supplement, instruction E3.)
+ */
+const GCASH_RESOLVE_ON_EVENT = `
+  :local ip [:resolve payments.gcash.com];
+  :if ([:len [/ip hotspot walled-garden ip find comment="gcash-auto"]] = 0) do={
+    /ip hotspot walled-garden ip add dst-address=$ip comment="gcash-auto"
+  } else={
+    /ip hotspot walled-garden ip set [find comment="gcash-auto"] dst-address=$ip
+  }
+`;
+
+export interface GcashResolveSchedulerResult {
+	scheduler: { value: string; created: boolean };
+}
+
+/**
+ * Idempotently provisions the `gcash-resolve` `/system scheduler` item (see GCASH_RESOLVE_ON_EVENT).
+ * Matched by `name=gcash-resolve` (the scheduler-item idempotency key) — a re-run is a full no-op.
+ * This is DISTINCT from the on-event body's own inner upsert key (`comment="gcash-auto"` on the
+ * `walled-garden ip` row), which is unchanged from the live-proven script. Additive; does not touch
+ * `provisionWalledGarden`.
+ */
+export async function provisionGcashResolveScheduler(
+	config: MikrotikConfig
+): Promise<GcashResolveSchedulerResult> {
+	const conn = await openConn(config);
+	try {
+		const existing = await conn.write('/system/scheduler/print', ['?name=gcash-resolve']);
+		if (existing.length > 0) {
+			return { scheduler: { value: 'gcash-resolve', created: false } };
+		}
+		await conn.write('/system/scheduler/add', [
+			'=name=gcash-resolve',
+			'=interval=5m',
+			`=on-event=${GCASH_RESOLVE_ON_EVENT}`
+		]);
+		return { scheduler: { value: 'gcash-resolve', created: true } };
+	} finally {
+		conn.close();
+	}
+}
+
+export interface ReconcileWalledGardenInput {
+	/** Desired host-allow set — MUST be the exact `hosts` array passed to `provisionWalledGarden` this
+	 * run (never a recomputed second set). Any code-owned host-allow row NOT in here is removed. */
+	hosts: string[];
+	/** Desired IP set — the exact `ips` array passed to `provisionWalledGarden` this run. */
+	ips: string[];
+	/** Comment tag identifying code-owned rows (exact-equality match). Defaults to `veent-admin`. */
+	tag?: string;
+	/** Log-only: compute the removal set and return it, but delete nothing. */
+	dryRun?: boolean;
+}
+
+export interface ReconcileWalledGardenResult {
+	removed: { layer: 'host' | 'ip'; value: string; dryRun: boolean }[];
+}
+
+/**
+ * Opt-in prune of code-owned walled-garden rows that have drifted out of the desired set. Removes
+ * ONLY rows whose `comment` EXACTLY equals `tag` (default `veent-admin`) and whose host/IP is absent
+ * from the caller's desired set. Additive-safe by construction:
+ *
+ *   - HOST layer: only `action=allow` rows are candidates — NEVER `action=deny` rows. `provisionWalledGarden`
+ *     tags the `PROBE_DENIES` (`action=deny`) rows with the SAME comment on the SAME menu, so an
+ *     action filter is REQUIRED: deleting a deny row would silently re-open a captive-probe host and
+ *     bring back the "Connected" flap (Public Contracts: PROBE_DENIES is Unchanged-hard).
+ *   - Exact-equality tag match (`row.comment === tag`) excludes the differently-tagged `gcash-auto`
+ *     `walled-garden ip` row and every un-tagged operator row by construction.
+ *   - Only ever writes to `/ip/hotspot/walled-garden` and `/ip/hotspot/walled-garden/ip` — NEVER
+ *     `/ip/hotspot/ip-binding`, despite ADMIN_BYPASS_TAG reusing the `veent-admin` string there.
+ *
+ * v6 has no working `find where` filter-remove for this menu, so rows are removed by print-then-`.id`
+ * (mirrors `cutConnectionsForIps`). Does not touch `provisionWalledGarden`.
+ */
+export async function reconcileWalledGarden(
+	config: MikrotikConfig,
+	input: ReconcileWalledGardenInput
+): Promise<ReconcileWalledGardenResult> {
+	const tag = input.tag ?? 'veent-admin';
+	const dryRun = input.dryRun ?? false;
+	const wantHosts = new Set(input.hosts.map((h) => h.toLowerCase()));
+	const wantIps = new Set(input.ips);
+	const removed: ReconcileWalledGardenResult['removed'] = [];
+	const conn = await openConn(config);
+	try {
+		// HOST layer — action=allow, tagged rows only; deny rows are never candidates.
+		const hostRows = await conn.write('/ip/hotspot/walled-garden/print', []);
+		for (const r of hostRows) {
+			const id = r['.id'];
+			if (!id) continue;
+			if (r.comment !== tag) continue; // exact-equality: excludes gcash-auto + un-tagged rows
+			if (r.action !== 'allow') continue; // action-scoping: never touch PROBE_DENIES (action=deny)
+			if (wantHosts.has((r['dst-host'] ?? '').toLowerCase())) continue; // still desired → keep
+			if (!dryRun) await conn.write('/ip/hotspot/walled-garden/remove', [`=.id=${id}`]);
+			removed.push({ layer: 'host', value: r['dst-host'] ?? '', dryRun });
+		}
+		// IP layer — tagged rows only; the gcash-auto row is excluded by the exact-equality tag match.
+		const ipRows = await conn.write('/ip/hotspot/walled-garden/ip/print', []);
+		for (const r of ipRows) {
+			const id = r['.id'];
+			if (!id) continue;
+			if (r.comment !== tag) continue;
+			if (wantIps.has(r['dst-address'] ?? '')) continue;
+			if (!dryRun) await conn.write('/ip/hotspot/walled-garden/ip/remove', [`=.id=${id}`]);
+			removed.push({ layer: 'ip', value: r['dst-address'] ?? '', dryRun });
+		}
+	} finally {
+		conn.close();
+	}
+	return { removed };
+}
+
 export interface RestrictApiInput {
 	/** Source IP (or CIDR) allowed to reach the RouterOS API — the app server's LAN IP. */
 	sourceIp: string;

@@ -85,6 +85,13 @@ reCAPTCHA hosts are deliberately **not** here — see
 /ip hotspot walled-garden add action=allow dst-host=pay.google.com      comment=veent-admin
 /ip hotspot walled-garden add action=allow dst-host=payments.google.com comment=veent-admin
 
+# Google login / SetSID for the Google Pay flow (added from live 29-07-26 findings). Bare
+# accounts.google.com is required — a `*.` wildcard does NOT match its own bare parent host; the
+# .com.ph ccTLD is where SetSID's cross-domain-cookie step bounces. Both resolve DIRECTLY to Google
+# IPs (no CNAME-to-CDN), so plain host rules suffice. Still NOT broad *.google.com.
+/ip hotspot walled-garden add action=allow dst-host=accounts.google.com    comment=veent-admin
+/ip hotspot walled-garden add action=allow dst-host=accounts.google.com.ph comment=veent-admin
+
 # KEEP — proven needed by live traffic (98 hits). Abuse residual: *.googleapis.com is a broad
 # surface; dropping a 98-hit rule risks breaking checkout, so it stays. Tightening to exact subpaths
 # needs a live capture of which paths checkout uses (backlog candidate) — do NOT silently drop.
@@ -115,6 +122,44 @@ device's IP**, tagged `veent-checkout:<epochMs>`, the moment the buyer reaches t
 
 So on the live router you'll see transient `comment=veent-checkout:<ts>` rules appear during a checkout
 and get reaped afterward — that's expected, not drift.
+
+### GCash needs a CNAME resolve-script (not a host rule)
+
+`payments.gcash.com` **CNAMEs to an Akamai edge** (`…edgekey.net` → `…akamaiedge.net`) whose IP
+**rotates**. RouterOS v6 `dst-host` walled-garden matching **cannot follow a CNAME chain** to a
+wildcard like `*.gcash.com`, so a host rule never matches and GCash checkout dead-ends — regardless of
+plain vs. encrypted DNS (this is a CNAME-matching gap, **not** a DoH-hiding problem). The fix is a
+`/system scheduler` item, `gcash-resolve`, that re-resolves the host every 5 minutes and upserts a
+single `walled-garden ip` row (`comment=gcash-auto`) with the fresh IP — self-healing as Akamai's edge
+IP changes, no hardcoded IP:
+
+- Provisioned by `provisionGcashResolveScheduler()` in
+  `packages/core/src/integrations/network/mikrotik.ts`, called from `setup:router` alongside the host
+  provisioning. Idempotent — matched by `name=gcash-resolve`, so a re-run is a no-op.
+- The on-event body is a **hardcoded, static** RouterOS script (never templatized from data — a
+  router-resident-scheduled-code injection guardrail). Verbatim from the 29-07-26 live diagnostic.
+- Distinct match keys: the scheduler **item** is keyed by `name=gcash-resolve`; the on-event body's
+  own **upsert** target on the `walled-garden ip` layer is keyed by `comment="gcash-auto"`.
+
+```
+# What setup:router provisions (equivalent CLI form):
+/system scheduler add name=gcash-resolve interval=5m on-event={
+  :local ip [:resolve payments.gcash.com];
+  :if ([:len [/ip hotspot walled-garden ip find comment="gcash-auto"]] = 0) do={
+    /ip hotspot walled-garden ip add dst-address=$ip comment="gcash-auto"
+  } else={
+    /ip hotspot walled-garden ip set [find comment="gcash-auto"] dst-address=$ip
+  }
+}
+
+# Confirm it's live and self-healing:
+/system scheduler print where name=gcash-resolve
+/ip hotspot walled-garden ip print where comment=gcash-auto
+```
+
+Rule of thumb from the live session: a payment host that CNAMEs to a CDN (GCash → Akamai) needs this
+resolve-script; a host that resolves **directly** to the provider's own IP (all Google hosts above)
+needs only a `dst-host` rule.
 
 ### Deny the OS connectivity-check probes (ordering matters)
 
@@ -226,6 +271,30 @@ first, confirm the new allows are present and matching, then delete the substrin
 The rotating `23.7.208.188` GCash IP allow (`gcash-test` on the `walled-garden ip` layer) is **kept
 for now** — retiring it depends on a live diagnostic capture that is out of scope for this change.
 Leave the disabled `*.gstatic.com` / `*.google.com` / `*.recaptcha.net` rows disabled (the flap fix).
+
+### `--reconcile` (opt-in prune of code-owned rows)
+
+`setup:router --reconcile` automates **only** the code-owned portion of cleanup: it removes
+`/ip hotspot walled-garden` **`action=allow`** rows tagged exactly `comment=veent-admin` whose host is
+no longer in the desired set, plus tagged `walled-garden ip` rows whose IP has dropped out. Preview
+first, always:
+
+```
+bun run --filter radius-admin setup:router --reconcile --dry-run   # prints what it WOULD remove
+bun run --filter radius-admin setup:router --reconcile             # actually removes them
+```
+
+It **never touches**, by construction (exact-tag + action scoping):
+
+- **un-tagged / manually-added operator rows** — including the shadowing `*keyword*` substrings
+  (`*gcash*`, `*g-xchange*`, `*maya.ph*`, `*paymaya*`) from the manual cleanup above. Those still
+  need the by-hand deletion + coverage-regression check — `--reconcile` will not remove them.
+- the **`action=deny` PROBE_DENIES rows** — even though they carry the same `veent-admin` tag on the
+  same menu (removing one would silently re-open a captive-probe host and bring back the flap).
+- the **`gcash-auto`** `walled-garden ip` row (a different tag), and the `/ip hotspot ip-binding`
+  admin-bypass rows (a different menu that reuses the `veent-admin` string).
+
+The default (no-flag) `setup:router` run stays **purely additive** — it never prunes anything.
 
 ## Idempotency / cleanup
 
