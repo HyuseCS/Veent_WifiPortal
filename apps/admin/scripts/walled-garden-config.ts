@@ -102,6 +102,11 @@ export const PAYMENT_HOSTS = [
  * walled garden even when the running box's own ORIGIN/ADMIN_WG_IPS point at a different machine.
  * Both the dev box and the deploy VM are listed so switching the router between them never drops
  * the allow. Edit this list when a box's LAN IP changes.
+ *
+ * These IPs are UNCONDITIONAL: they are always provisioned regardless of env, bypassing the
+ * ORIGIN- and ADMIN_WG_IPS-derived allows entirely. Because they are hardcoded (not env-derived),
+ * they must be audited and retired here when a box's LAN IP changes — a stale entry leaves a
+ * dangling pre-auth allow for an IP no longer under our control.
  */
 export const PORTAL_LAN_IPS = [
 	'10.210.59.11', // dev box

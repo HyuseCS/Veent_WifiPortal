@@ -177,7 +177,11 @@ if (WIPE || WIPE_ONLY) {
 		process.exit(1);
 	}
 	if (WIPE_ONLY) {
-		console.log('\nDone (--wipe-only). Garden is empty — run setup:router to rebuild.');
+		console.log(
+			DRY_RUN
+				? '\nDone (--wipe-only --dry-run). Preview only — nothing changed; re-run without --dry-run to clear the garden.'
+				: '\nDone (--wipe-only). Garden is empty — run setup:router to rebuild.'
+		);
 		process.exit(0);
 	}
 }
