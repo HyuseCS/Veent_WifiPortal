@@ -5,6 +5,8 @@ date: 10-07-26
 feature: incident-management
 ---
 
+**Tracked as GH #99 — https://github.com/HyuseCS/Veent_WifiPortal/issues/99**
+
 # Backlog: Manager-board pagination (L3 Option 1)
 
 **Priority:** Low

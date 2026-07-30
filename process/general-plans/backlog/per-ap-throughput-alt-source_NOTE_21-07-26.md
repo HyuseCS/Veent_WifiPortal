@@ -8,6 +8,8 @@ metadata:
   feature: general-plans
 ---
 
+**Tracked as GH #102 — https://github.com/HyuseCS/Veent_WifiPortal/issues/102**
+
 # Per-AP guest throughput: alternative source (optional, not started)
 
 > **PARKED — not on the actionable list (22-07-26).** Not in our control right now: throughput is

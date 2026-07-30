@@ -5,6 +5,8 @@ date: 10-07-26
 feature: incident-management
 ---
 
+**Tracked as GH #98 — https://github.com/HyuseCS/Veent_WifiPortal/issues/98**
+
 # Backlog: repo-wide `bun run lint` prettier-config path drift
 
 **Status: PARTIALLY CLOSED (20-07-26).** The original root cause (a broken `tailwindStylesheet`

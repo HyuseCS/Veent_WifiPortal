@@ -1,5 +1,17 @@
 # veent-wifiportal - All Context
 
+Last updated: 2026-07-30 (plan-inventory + backlog reconciliation, session 2 — user-confirmed
+30-07-26 on staging: (a) deploy-VM portal reachability fixed, `10.210.54.133` now allowed in the
+`veent-admin:portal` walled-garden tag via `PORTAL_LAN_IPS`; (b) the trimmed `PAYMENT_HOSTS` set
+(Google Pay / PayMongo / Xendit rows pruned) pushed to the router via `setup:router --reconcile`;
+(c) `setup:router --wipe-only --dry-run` verified a true no-op on real RouterOS — closes
+`walled-garden-wipe_30-07-26`'s last residual, flipped PLANNED→VERIFIED. `multi-router-support_
+13-07-26` archived to `completed/` as deferred/revisitable (blocked on Fatap AP-API credentials,
+GH #100) — `process/general-plans/active/` is now empty of plan folders. Project backlog is now
+also tracked as GitHub issues #96-102 (`priority-1/2/3` + `revisitable` labels) on
+`HyuseCS/Veent_WifiPortal`; the `process/**/backlog/*_NOTE_*.md` files remain the detailed source
+of truth, GH is the lightweight tracker/index.)
+
 Last updated: 2026-07-30 (walled-garden-wipe closed and archived to
 `process/general-plans/completed/` — `setup:router` gains scripted `--wipe [--dry-run]` /
 `--wipe-only [--dry-run]` hard-reset flags, backed by a new `wipeWalledGarden()` in
@@ -503,9 +515,17 @@ easy to find).
   `docs/mikrotik/walled-garden.md` §Hard reset with a single command. Does NOT touch the
   `gcash-resolve` scheduler (the scheduler re-adds the `gcash-auto` ip row within 5 min of a wipe).
   EVL green (21/21 unit incl. dynamic-row negative control + dry-run no-op assertions, admin
-  typecheck 0 errors); the staging `--wipe-only --dry-run` probe against real RouterOS is still an
-  outstanding manual-verification item — see
-  `process/general-plans/completed/walled-garden-wipe_30-07-26/`.
+  typecheck 0 errors). The staging `--wipe-only --dry-run` probe against real RouterOS has since
+  been run and confirmed a true no-op (user-confirmed 30-07-26) — plan flipped to VERIFIED, no
+  open residual; see `process/general-plans/completed/walled-garden-wipe_30-07-26/`.
+- **Operational walled-garden closeout (user-confirmed 30-07-26, staging):** (a) deploy-VM portal
+  reachability confirmed working — `10.210.54.133` (staging/deploy VM) is allowed pre-auth via
+  `PORTAL_LAN_IPS` (`apps/admin/scripts/walled-garden-config.ts`), which feeds the
+  `veent-admin:portal` tag group; (b) the trimmed `PAYMENT_HOSTS` set (Google Pay / PayMongo /
+  Xendit rows pruned per `payment-walled-garden-v6`) has been pushed to the router via
+  `setup:router --reconcile`; (c) `--wipe-only --dry-run` verified a true no-op (see bullet above).
+  This closes the last operational follow-ups from the walled-garden-canonical + wipe work — no
+  known-gaps remain on the walled-garden surface as of this date.
 - **GCash root cause + fix (found + fixed live 29-07-26, codified 30-07-26):** GCash's payment host
   (`payments.gcash.com`) CNAMEs to an Akamai edge — v6 `dst-host` walled-garden matching cannot
   follow a CNAME chain, so hostname rules for the `gcash.com` family always show 0 hits regardless of

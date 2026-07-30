@@ -8,7 +8,7 @@ feature: general
 # Walled-Garden Wipe (`--wipe` / `--wipe-only`) — SIMPLE plan
 
 - **Date**: 30-07-26
-- **Status**: PLANNED
+- **Status**: VERIFIED (30-07-26 — staging `--wipe-only --dry-run` probe confirmed a true no-op)
 - **Complexity**: SIMPLE
 
 ## Overview / Context
@@ -23,7 +23,8 @@ walled-garden model, and adds unit + typecheck gates per `process/context/tests/
 
 Single-phase SIMPLE plan. `CODE DONE` when checklist 1-5 applied and both test gates
 (`bunx vitest run .../mikrotik.spec.ts` + `bun run --filter radius-admin check`) are green.
-`VERIFIED` requires the staging `--wipe-only --dry-run` manual probe (deferred, staging-only).
+`VERIFIED` requires the staging `--wipe-only --dry-run` manual probe — **run and confirmed
+30-07-26** (true no-op on real RouterOS).
 
 **TL;DR:** Add `wipeWalledGarden(config, {dryRun})` to `mikrotik.ts` that clears every STATIC row from
 BOTH walled-garden menus (host + ip), skipping dynamic auto-shadow rows, honoring a `--dry-run` no-op,
@@ -99,7 +100,7 @@ dry-run no-op are the safety guards; both mirror existing verified `reconcileWal
 |---|---|---|
 | `bunx vitest run packages/core/src/integrations/network/mikrotik.spec.ts` — wipe tests + existing reconcile tests green | Fully-Automated | AC1–AC4 (both menus, dynamic skip, dry-run no-op, counts) |
 | `bun run --filter radius-admin check` (tsc/svelte-check) | Fully-Automated | AC5–AC7 (flag wiring typechecks, no contract drift) |
-| Manual: `setup:router --wipe-only --dry-run` on staging prints intended removals, changes nothing | Agent-Probe (staging, deferred) | AC3/AC6 against real RouterOS |
+| Manual: `setup:router --wipe-only --dry-run` on staging prints intended removals, changes nothing | Agent-Probe (staging) — **run and confirmed 30-07-26, true no-op** | AC3/AC6 against real RouterOS |
 
 ## Test Infra Improvement Notes
 

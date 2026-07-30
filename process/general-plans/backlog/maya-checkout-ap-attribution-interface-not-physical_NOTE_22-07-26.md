@@ -8,6 +8,8 @@ metadata:
   feature: general-plans
 ---
 
+**Tracked as GH #97 — https://github.com/HyuseCS/Veent_WifiPortal/issues/97**
+
 # Maya checkout attributes to the shared bridge, not the physical AP
 
 > **Status: RESOLVED 22-07-26.** Fixed in `apps/customer/src/lib/server/network-location.ts`:

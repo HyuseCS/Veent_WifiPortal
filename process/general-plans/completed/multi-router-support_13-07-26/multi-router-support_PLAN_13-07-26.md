@@ -8,6 +8,10 @@ phase: "review"
 
 # Multi-Router / Multi-Site Support (Option B) — Implementation Plan
 
+> **Closeout note (30-07-26):** Deferred/revisitable — blocked on Fatap AP-API credentials
+> (external blocker, not abandoned). Tracked as GH #100. Archived to `completed/` without
+> execution; re-open when credentials arrive and Option B is reconfirmed as needed.
+
 > **Status:** REVIEW ARTIFACT — not immediate-execute. Complexity: **COMPLEX** and, for the real build, a **PHASE PROGRAM** (5 dependent phases, each with its own validation gate + high-risk evidence pack). This single document is the detailed umbrella-style plan for the user to read and confirm. Nothing here is implemented.
 >
 > **TL;DR:** Today one app instance talks to exactly one MikroTik router (env `MIKROTIK_*` → one singleton `network` controller). Option B makes one central app instance manage N routers across N sites: a DB-backed **router registry** (encrypted creds) replaces the env singleton, a **`getController(siteId)` factory** resolves the right router per request, every grant/revoke/session gets a **`site_id`** so money and attribution land on the correct router, and the revoke/health crons **fan out over all enabled sites**. The conversion is strictly additive — seeding one "default site" from the existing env means behavior is identical until later phases activate multi-site, so it never breaks mid-migration.

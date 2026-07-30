@@ -1,7 +1,7 @@
 ---
 phase: walled-garden-wipe
 date: 2026-07-30
-status: COMPLETE_WITH_GAPS
+status: COMPLETE
 feature: general
 plan: process/general-plans/completed/walled-garden-wipe_30-07-26/walled-garden-wipe_PLAN_30-07-26.md
 ---
@@ -30,12 +30,9 @@ this session did not touch any of those 5 files).
 
 ### What Was Skipped/Deferred
 
-- **Staging `--wipe-only --dry-run` probe against real RouterOS** — not yet run. This is the one
-  remaining item the plan's own Phase Completion Rules require before the plan can be called
-  `VERIFIED` (as opposed to `CODE DONE`). Deferred, staging-only, no user-facing risk (no live
-  guests on staging). No backlog NOTE filed — this is a routine manual-verification follow-up on a
-  staging-only maintenance script, not a design gap; note it here and pick it up next time
-  `setup:router` is touched on staging.
+None — closed out 30-07-26. The staging `--wipe-only --dry-run` probe against real RouterOS
+(deferred at initial archival) has since been run by the user and confirmed a true no-op. The
+plan's own Phase Completion Rules requirement for `VERIFIED` is now satisfied.
 
 ### Test Gate Outcomes
 
@@ -63,20 +60,19 @@ Criteria section (7 ACs).
 |---|---|---|
 | AC1 | Removes all STATIC rows from both menus | met — Fully-Automated (spec) |
 | AC2 | Dynamic rows never removed (negative control) | met — Fully-Automated (spec) |
-| AC3 | `dryRun:true` real no-op, reports intended counts | met (unit-proven) / staging-probe portion UNPROVEN — Agent-Probe tier deferred |
+| AC3 | `dryRun:true` real no-op, reports intended counts | met — unit-proven + staging-probe confirmed 30-07-26 |
 | AC4 | Returns per-menu removed counts | met — Fully-Automated (spec) |
 | AC5 | `--wipe` wipes-then-rebuilds; `--wipe-only` wipes-then-exits | met — Fully-Automated (typecheck + spec wiring) |
-| AC6 | `--wipe-only` precedence over `--wipe`/`--reconcile` | met (code-level) / staging-probe portion UNPROVEN — Agent-Probe tier deferred |
+| AC6 | `--wipe-only` precedence over `--wipe`/`--reconcile` | met — code-level + staging-probe confirmed 30-07-26 |
 | AC7 | Provision/reconcile/scheduler/tag-model/login.html untouched | met — Fully-Automated (diff review + E1 instruction) |
 
 ### Closeout Packet
 
-See UPDATE PROCESS session chat output (9-item `vc-generate-closeout` packet) — classification
-**DONE (code-complete, EVL green) — not VERIFIED**; user-directed archival despite the one
-outstanding Agent-Probe-tier residual (AC3/AC6 staging dry-run probe against real RouterOS).
-EVL: `gates_green: ["bunx vitest run mikrotik.spec.ts (21/21)", "bun run --filter radius-admin
-check (0 errors)"]`, `known_gaps: ["staging --wipe-only --dry-run probe against real RouterOS not
-yet run (deferred, staging-only)"]`, `closeout_classification: CLEAN`.
+**VERIFIED (30-07-26)** — the staging `--wipe-only --dry-run` probe against real RouterOS has
+been run by the user and confirmed a true no-op (no rows changed, intended removals printed
+correctly). This closes the last outstanding Agent-Probe-tier residual (AC3/AC6). Original EVL:
+`gates_green: ["bunx vitest run mikrotik.spec.ts (21/21)", "bun run --filter radius-admin check
+(0 errors)"]`. No open residual remains.
 
 ### Forward Preview
 

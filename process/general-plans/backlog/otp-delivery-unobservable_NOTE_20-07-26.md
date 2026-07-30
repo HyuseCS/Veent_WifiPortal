@@ -8,6 +8,8 @@ metadata:
   feature: general-plans
 ---
 
+**Tracked as GH #101 — https://github.com/HyuseCS/Veent_WifiPortal/issues/101**
+
 # OTP delivery is unobservable (silent accept-then-drop)
 
 > **PARKED — not on the actionable list (22-07-26).** The root cause (Cast rejecting 100% of sends)
