@@ -96,6 +96,18 @@ export const PAYMENT_HOSTS = [
  *   - www.msftncsi.com           — legacy Windows NCSI probe.
  *   - detectportal.firefox.com   — Firefox's own captive-portal detector.
  */
+/**
+ * Portal origin LAN IPs that must ALWAYS be reachable pre-auth, independent of which box runs
+ * setup:router. The captive guest is redirected to the customer portal, so its IP must sit in the
+ * walled garden even when the running box's own ORIGIN/ADMIN_WG_IPS point at a different machine.
+ * Both the dev box and the deploy VM are listed so switching the router between them never drops
+ * the allow. Edit this list when a box's LAN IP changes.
+ */
+export const PORTAL_LAN_IPS = [
+	'10.210.59.11', // dev box
+	'10.210.54.133' // staging/deploy VM
+];
+
 export const PROBE_DENIES = [
 	// Android / Google
 	{ host: 'connectivitycheck.gstatic.com' },

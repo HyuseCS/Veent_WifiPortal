@@ -34,7 +34,7 @@ import {
 	restrictApiService,
 	type MikrotikConfig
 } from '@veent/core';
-import { PAYMENT_HOSTS, PROBE_DENIES } from './walled-garden-config';
+import { PAYMENT_HOSTS, PORTAL_LAN_IPS, PROBE_DENIES } from './walled-garden-config';
 
 const argv = new Set(process.argv.slice(2));
 const DRY_RUN = argv.has('--dry-run');
@@ -100,6 +100,7 @@ const isIp = (h: string): boolean => /^[0-9.]+(\/\d{1,2})?$/.test(h) || h.includ
 
 const adminHosts = new Set(splitList(ADMIN_WG_HOSTS));
 const adminIps = new Set(splitList(ADMIN_WG_IPS));
+for (const ip of PORTAL_LAN_IPS) adminIps.add(ip);
 
 // Derive the admin host from ORIGIN and slot it into the right portal layer.
 const origin = required('ORIGIN', ORIGIN);
