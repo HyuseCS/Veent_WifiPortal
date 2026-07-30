@@ -4,7 +4,8 @@ import {
 	connectHardened,
 	createMikrotikController,
 	provisionGcashResolveScheduler,
-	reconcileWalledGarden
+	reconcileWalledGarden,
+	wipeWalledGarden
 } from './mikrotik';
 import { RouterUnreachableError } from './types';
 
@@ -378,5 +379,50 @@ describe('reconcileWalledGarden (item 22 — opt-in tagged+action-scoped prune)'
 		// Only the payment group's drifted row is removed; the sibling portal row survives untouched.
 		expect(res.removed).toEqual([{ layer: 'host', value: 'stale.pay.com', dryRun: false }]);
 		expect(routerTable.wg.map((r) => r['dst-host'])).toEqual(['portal.keep.com']);
+	});
+});
+
+describe('wipeWalledGarden (walled-garden-wipe — scripted hard-reset teardown)', () => {
+	// Seeds a live-like mixed table across BOTH menus: static allow + static deny + a disabled static
+	// row + an un-tagged operator row on the host layer; a static ip row on the ip layer; plus ONE
+	// dynamic (`D`) host-menu auto-shadow that must NEVER be removed (regenerated from the ip row).
+	function seedWipeTable() {
+		resetRouterTable();
+		routerTable.wg.push(
+			{ '.id': '*1', action: 'allow', 'dst-host': 'maya.ph', comment: 'veent-admin:payment' },
+			{ '.id': '*2', action: 'deny', 'dst-host': 'connectivitycheck.gstatic.com', comment: 'veent-admin:probe' },
+			{ '.id': '*3', action: 'allow', 'dst-host': '*.recaptcha.net', comment: 'veent-admin', disabled: 'true' },
+			{ '.id': '*4', action: 'allow', 'dst-host': '*gcash*', comment: '' }, // un-tagged operator row
+			// Dynamic auto-shadow: `D`-flagged, regenerated from the ip-layer row → unremovable.
+			{ '.id': '*5', action: 'allow', 'dst-host': '', comment: 'veent-admin:portal', dynamic: 'true' }
+		);
+		routerTable.wgIp.push({ '.id': '*10', 'dst-address': '10.5.50.1', comment: 'veent-admin:portal' });
+	}
+
+	it('removes ALL static rows from BOTH menus (tagged, un-tagged, disabled, allow AND deny) and reports counts', async () => {
+		seedWipeTable();
+		const res = await wipeWalledGarden(mikrotikConfig);
+		// 4 static host rows removed (*1 allow, *2 deny, *3 disabled, *4 un-tagged); the dynamic *5 skipped.
+		expect(res.removed).toEqual({ host: 4, ip: 1 });
+		expect(res.dryRun).toBe(false);
+		// Only the dynamic auto-shadow survives on the host menu; the ip menu is empty.
+		expect(routerTable.wg.map((r) => r['.id'])).toEqual(['*5']);
+		expect(routerTable.wgIp).toHaveLength(0);
+	});
+
+	it('NEGATIVE CONTROL: never removes a dynamic auto-shadow row and never counts it', async () => {
+		seedWipeTable();
+		const res = await wipeWalledGarden(mikrotikConfig);
+		expect(routerTable.wg.find((r) => r['.id'] === '*5')).toBeTruthy(); // dynamic survives
+		expect(res.removed.host).toBe(4); // 5 host rows seeded, 1 dynamic → only 4 counted
+	});
+
+	it('--dry-run removes nothing but still reports the intended counts', async () => {
+		seedWipeTable();
+		const res = await wipeWalledGarden(mikrotikConfig, { dryRun: true });
+		expect(res.removed).toEqual({ host: 4, ip: 1 });
+		expect(res.dryRun).toBe(true);
+		expect(routerTable.wg).toHaveLength(5); // nothing actually deleted on either menu
+		expect(routerTable.wgIp).toHaveLength(1);
 	});
 });

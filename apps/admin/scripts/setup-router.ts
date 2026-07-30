@@ -15,6 +15,15 @@
  * Idempotent: entries we already created (matched by dst-host/dst-address) are
  * left in place, so re-running after an ORIGIN change just adds the new hole.
  *
+ * HARD RESET — scripted teardown of BOTH walled-garden menus (skips unremovable dynamic rows):
+ *
+ *   bun run --filter radius-admin setup:router --wipe            # wipe both menus, THEN rebuild
+ *   bun run --filter radius-admin setup:router --wipe-only       # wipe both menus and STOP
+ *   bun run --filter radius-admin setup:router --wipe --dry-run  # preview the wipe, remove nothing
+ *
+ * Run --wipe-only --dry-run first to preview a destructive wipe. --wipe-only takes precedence over
+ * --wipe/--reconcile. The gcash-resolve scheduler is untouched (it re-adds gcash-auto within ~5 min).
+ *
  * Requires NETWORK_CONTROLLER=mikrotik and reachable RouterOS API credentials.
  *
  * SERVER MIGRATION — lock the router API to THIS server's IP (run once the new server
@@ -31,6 +40,7 @@ import {
 	provisionWalledGarden,
 	provisionGcashResolveScheduler,
 	reconcileWalledGarden,
+	wipeWalledGarden,
 	restrictApiService,
 	type MikrotikConfig
 } from '@veent/core';
@@ -41,6 +51,11 @@ const DRY_RUN = argv.has('--dry-run');
 const RESTRICT_API = argv.has('--restrict-api');
 const DISABLE_PLAIN_API = argv.has('--disable-plain-api');
 const RECONCILE = argv.has('--reconcile');
+// Scripted hard-reset teardown (walled-garden-wipe, 30-07-26). --wipe-only takes precedence over
+// --wipe/--reconcile: it clears both menus and stops. --wipe clears both menus then falls through
+// to the normal 3-group rebuild. Both honor --dry-run (true no-op preview).
+const WIPE = argv.has('--wipe');
+const WIPE_ONLY = argv.has('--wipe-only');
 
 const {
 	NETWORK_CONTROLLER,
@@ -141,6 +156,31 @@ if (portalPaymentOverlap.length)
 		`  WARNING: ADMIN_WG_HOSTS overlaps PAYMENT_HOSTS (${portalPaymentOverlap.join(', ')}) — ` +
 			'the same host will be tagged under both veent-admin:portal and veent-admin:payment.'
 	);
+
+// Opt-in hard-reset teardown: --wipe / --wipe-only clear BOTH walled-garden menus of every static
+// row (dynamic auto-shadow rows are skipped — unremovable), guaranteeing zero drifted/leftover rows.
+// --wipe-only stops here; --wipe falls through to the rebuild below. --dry-run is a true no-op preview.
+if (WIPE || WIPE_ONLY) {
+	console.log(`\nWiping BOTH walled-garden menus on ${config.host}${DRY_RUN ? ' [dry-run]' : ''}:`);
+	try {
+		const wipe = await wipeWalledGarden(config, { dryRun: DRY_RUN });
+		console.log(
+			`  host layer: ${wipe.removed.host} ${DRY_RUN ? 'would be removed' : 'removed'}\n` +
+				`  ip layer:   ${wipe.removed.ip} ${DRY_RUN ? 'would be removed' : 'removed'}`
+		);
+		console.log(
+			'  (dynamic auto-shadow rows skipped; gcash-resolve scheduler untouched — it re-adds\n' +
+				'   the gcash-auto ip row within ~5 min)'
+		);
+	} catch (err) {
+		console.error('\nFailed to wipe walled garden:', err instanceof Error ? err.message : err);
+		process.exit(1);
+	}
+	if (WIPE_ONLY) {
+		console.log('\nDone (--wipe-only). Garden is empty — run setup:router to rebuild.');
+		process.exit(0);
+	}
+}
 
 console.log(`Provisioning walled garden on ${config.host}:${config.port ?? (config.tls ? 8729 : 8728)}`);
 console.log('  3 tagged groups (load-bearing order: probe → payment → portal):');

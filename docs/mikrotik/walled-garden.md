@@ -373,18 +373,27 @@ to guarantee zero un-tagged rows.
 > payment hosts unreachable for the gap between the wipe and the rerun — acceptable on staging (no
 > live guests), never on prod without a maintenance window.
 
-```
-# 1. Wipe BOTH walled-garden menus (host layer AND ip layer) on the router console:
-/ip hotspot walled-garden remove [find]
-/ip hotspot walled-garden ip remove [find]
+The wipe is scripted — no manual `remove [find]` in Winbox/console. Two flags do it:
 
-# 2. Rebuild from code (runs the 3-call split: probe → payment → portal, then the gcash-resolve
-#    scheduler). Idempotent, so safe to re-run.
-bun run --filter radius-admin setup:router
+```
+# Preview FIRST (destructive op — always dry-run before a real wipe):
+bun run --filter radius-admin setup:router --wipe-only --dry-run
+
+# One-shot hard reset: wipe BOTH menus (host layer AND ip layer), THEN rebuild from code
+# (the 3-call split probe → payment → portal, then the gcash-resolve scheduler). Never leaves the
+# garden empty — wipe and rebuild happen in a single run.
+bun run --filter radius-admin setup:router --wipe
+
+# Bare teardown only (wipe both menus and STOP — garden left empty until you re-run setup:router):
+bun run --filter radius-admin setup:router --wipe-only
 ```
 
-Note: wiping `/ip hotspot walled-garden ip` also clears the `gcash-auto` row. The `gcash-resolve`
-scheduler re-creates it on its next ~5-minute tick — no manual action needed.
+`--wipe-only` takes precedence over `--wipe`/`--reconcile`. Both flags SKIP RouterOS' dynamic (`D`)
+auto-shadow rows — they're regenerated from the ip-layer entries and can't be removed directly.
+
+Note: wiping `/ip hotspot walled-garden ip` also clears the `gcash-auto` row. `wipeWalledGarden` does
+NOT touch the `gcash-resolve` scheduler, so it re-creates that row on its next ~5-minute tick — no
+manual action needed.
 
 ### The 3-call split, and why order matters
 
