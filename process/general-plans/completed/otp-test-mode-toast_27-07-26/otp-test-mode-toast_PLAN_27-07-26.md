@@ -8,8 +8,17 @@ feature: general-plans
 # OTP Test-Mode Toast — Implementation Plan (SIMPLE)
 
 Date: 27-07-26
-Status: Ready for VALIDATE
+Status: DONE — shipped `be527f1` (TEST_MODE OTP escape hatch), prod-boot gate in `8531041`/`9dc2ed1`; user-confirmed 30-07-26
 Complexity: SIMPLE
+
+## Closeout — DONE (30-07-26)
+
+Shipped and confirmed. `be527f1 feat(customer): add TEST_MODE to surface OTP on-device instead of
+SMS` implements this plan's deliverable — `sendOtp` short-circuits under `TEST_MODE`, stashes the
+code in-memory, and the verify page surfaces it in a 15s toast instead of sending SMS; `validateEnv`
+hard-fails prod boot if `TEST_MODE` is on. The prod-boot security gate (`ALLOW_TEST_MODE_IN_PROD`
+two-flag opt-in) landed alongside/after via `8531041`/`9dc2ed1`. The "Ready for VALIDATE" status
+line above was stale — archiving as DONE per user confirmation 30-07-26.
 
 ## Overview / Context
 Context loaded: `process/context/all-context.md` (auth + SMS/OTP sections), `process/context/auth/all-auth.md`,

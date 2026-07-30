@@ -1,5 +1,16 @@
 # veent-wifiportal - All Context
 
+Last updated: 2026-07-30 (plan-inventory reconciliation — 6 resolved general-plans archived to
+`process/general-plans/completed/`: `finance-timestamptz-migration_23-07-26` (prod apply now DONE,
+user-confirmed 30-07-26 — see the corrected 2026-07-23 entry below), `purchase-ap-attribution_21-07-26`
+(shipped `0d13023`), `test-mode-prod-optin_27-07-26` (shipped `9dc2ed1`), `tx-ap-name-snapshot_22-07-26`
+(shipped `6a167cf` + migration `0051`), `otp-test-mode-toast_27-07-26` (shipped `be527f1` +
+`8531041`/`9dc2ed1` prod-boot gate — stale "Ready for VALIDATE" status line corrected), and
+`conditional-checkout-access_27-07-26` (closed NOT-PLANNED — invalidated on live hardware, no code
+shipped, see `project_conditional-checkout-access-invalidated` memory). `process/general-plans/active/`
+now holds only `multi-router-support_13-07-26` (Fatap Phase B, creds pending — stalled); the
+`otp-test-mode-toast` plan is done, not active.)
+
 Last updated: 2026-07-30 (walled-garden-wallet-onboarding-prep closed and archived to
 `process/general-plans/completed/` — behavior-neutral prep work on top of the walled-garden-canonical
 rebuild: `PAYMENT_HOSTS` (`apps/admin/scripts/walled-garden-config.ts`) regrouped into 3 labeled
@@ -92,17 +103,18 @@ Known-gap, honestly unresolved: the specific fallback→unverified-banner→reco
 be live-reproduced this session (requires forcing live IP→MAC resolution to fail) — proven by code +
 unit tests only. See the Gotchas section MAC-trust residual bullet for the durable technical note.)
 
-Last updated: 2026-07-23 (finance-timestamptz-migration DEV-SIDE COMPLETE, PROD APPLY PENDING —
-migration `0052_pink_maginty.sql` converts 13 finance/session columns (`credit_ledger.created_at`,
-`points_ledger.created_at`, `payment_transactions.created_at`, `payment_checkouts.{created_at,
-settled_at,last_polled_at}`, `network_sessions.{started_at,bound_at,last_seen_at,expires_at}`,
+Last updated: 2026-07-23, corrected 2026-07-30 (finance-timestamptz-migration — ✅ VERIFIED, PROD
+APPLIED — migration `0052_pink_maginty.sql` converts 13 finance/session columns
+(`credit_ledger.created_at`, `points_ledger.created_at`, `payment_transactions.created_at`,
+`payment_checkouts.{created_at, settled_at,last_polled_at}`,
+`network_sessions.{started_at,bound_at,last_seen_at,expires_at}`,
 `customer_profile.{last_free_session_at,access_expires_at,access_paused_at}`) from bare `timestamp`
 to `timestamptz`, with `apps/admin/src/lib/server/period.ts` rewritten to real Manila-day→UTC-instant
-math in the same change-set; migration count is now 53 (`0000`–`0052`), see `database/all-database.md`
-Canonical Notes for the full write-path/root-cause detail. EVL green (391 tests, 0 failures) and user
-browser-confirmed dev display. Plan STAYS in `process/general-plans/active/finance-timestamptz-
-migration_23-07-26/` — NOT archived, NOT VERIFIED — prod TZ preflight, the 6-step prod apply
-sequence, `vc-risk-evidence-pack`, and human prod verification are all still outstanding.)
+math in the same change-set; migration count is 53 (`0000`–`0052`), see `database/all-database.md`
+Canonical Notes for the full write-path/root-cause detail. EVL green (391 tests, 0 failures) and
+dev-browser-confirmed on 23-07-26; the prod-apply runbook (TZ preflight, 6-step safety sequence,
+human prod verification) is now complete and prod Finance was user-confirmed correct 30-07-26. Plan
+archived to `process/general-plans/completed/finance-timestamptz-migration_23-07-26/`.)
 
 Last updated: 2026-07-22 (manager-board-lazy-events closed and archived to
 `process/features/incident-management/completed/manager-board-lazy-events_22-07-26/` — admin's

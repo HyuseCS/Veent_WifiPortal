@@ -8,16 +8,17 @@ feature: none
 # Finance / Session Timestamptz Migration — PLAN
 
 Date: 23-07-26
-Status: DEV-SIDE CODE DONE + EVL GREEN — PROD APPLY PENDING (not VERIFIED; see Current State below)
+Status: ✅ VERIFIED — PROD APPLIED, user-confirmed 30-07-26 (see Current State below)
 Complexity: COMPLEX (schema migration, billing-path, atomic cross-package change-set)
 
-## Current State (UPDATE PROCESS — 23-07-26)
+## Current State (UPDATE PROCESS — 30-07-26)
 
-**Classification: Keep in active/testing.** Dev-side implementation is complete and verified,
-including Item 3.8 (Finance e2e run 24-07-26 — full 12-spec suite, 23/23 green); the plan stays in
-`process/general-plans/active/` until the prod-apply sequence and human prod verification are done.
-Per §Phase Completion Rules above, this is `CODE DONE` (sections 0-3 of the Ordered EXECUTE
-Checklist), NOT `VERIFIED` (section 4 prod steps + close-out are still outstanding).
+**Classification: ✅ VERIFIED — Ready for UPDATE PROCESS archival.** Dev-side implementation was
+complete and verified as of 23-07-26/24-07-26; the prod-apply runbook (Item 4.2 TZ preflight,
+Item 4.3 6-step safety sequence, human prod verification) has now been completed and the user
+confirmed live prod Finance is correct on 30-07-26. Per §Phase Completion Rules above, this plan
+has satisfied both dev evidence (sections 0-3) and prod apply + human confirmation (section 4) —
+archiving to `process/general-plans/completed/`.
 
 - **Dev-side DONE:** migration `0052_pink_maginty.sql` (repo now at 53 migration files, `0000`–
   `0052`) applied and verified against dev DB; schema (`customer.ts`) updated on all 13 columns;
