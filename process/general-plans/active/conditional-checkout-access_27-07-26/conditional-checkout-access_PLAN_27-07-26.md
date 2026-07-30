@@ -5,6 +5,26 @@ date: 27-07-26
 feature: general-plans
 ---
 
+> **⛔ LIVE FINDING 27-07-26 — APPROACH INVALIDATED. Do not resume this plan as-is.**
+> On real hardware the core primitive breaks checkout: `openFullAccessForDevice` adds an IP-layer
+> `dst-address=0.0.0.0/0 accept` the instant the buyer taps Pay, which lets the OS connectivity
+> probe (`/generate_204`) succeed → Android marks the device "connected" → the captive browser (CNA)
+> where the payment is happening is torn down → **the buyer can no longer complete the top-up.**
+> The host-layer probe-DENY rules (`connectivitycheck.gstatic.com` etc.) do NOT save it: they live
+> in `/ip hotspot walled-garden` (HTTP/SNI layer) while the catch-all lives in
+> `/ip hotspot walled-garden ip` (firewall layer), which bypasses the hotspot before the deny ever
+> applies (confirmed: deny had 3867 hits yet the device still went "connected"). There is no
+> router-config carve-out — `/ip walled-garden ip` only takes `dst-address` (not `dst-host`), and the
+> probe hosts are anycast IPs shared with reCAPTCHA/Google Pay, so they can't be denied without
+> breaking the payment page. **Root truth: a device-wide `0.0.0.0/0` allow and a captive device are
+> mutually exclusive** — any reachable success endpoint satisfies the OS captive detector.
+>
+> The feature commit (`29f70e5`) was reset out of the branch; the code no longer exists. This
+> PLAN + SPEC are kept only as the design record. **Redesign direction for the next RESEARCH cycle:**
+> do the payment OUTSIDE the captive session — hand the buyer to the system browser via the existing
+> CNA→browser handoff (`/auth/handoff`), where the device is a normal client and can reach unbounded
+> 3DS/CDN domains without any captive-portal grant. Do NOT re-attempt a walled-garden catch-all.
+
 # Conditional Full Internet Access During Maya Checkout — PLAN (COMPLEX)
 
 **Date**: 27-07-26

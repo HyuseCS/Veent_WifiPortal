@@ -27,12 +27,20 @@
  * The api-ssl cert + service must already exist on the router (see docs/DEPLOYMENT.md §7a).
  */
 import { Socket } from 'node:net';
-import { provisionWalledGarden, restrictApiService, type MikrotikConfig } from '@veent/core';
+import {
+	provisionWalledGarden,
+	provisionGcashResolveScheduler,
+	reconcileWalledGarden,
+	restrictApiService,
+	type MikrotikConfig
+} from '@veent/core';
+import { PAYMENT_HOSTS, PROBE_DENIES } from './walled-garden-config';
 
 const argv = new Set(process.argv.slice(2));
 const DRY_RUN = argv.has('--dry-run');
 const RESTRICT_API = argv.has('--restrict-api');
 const DISABLE_PLAIN_API = argv.has('--disable-plain-api');
+const RECONCILE = argv.has('--reconcile');
 
 const {
 	NETWORK_CONTROLLER,
@@ -80,90 +88,20 @@ const splitList = (raw: string | undefined): string[] =>
 
 const isIp = (h: string): boolean => /^[0-9.]+(\/\d{1,2})?$/.test(h) || h.includes(':');
 
-/**
- * Payment-gateway domains that MUST be reachable before a device authenticates
- * (Core Business Rule #2). Without these, the Maya checkout redirect
- * (payments-web*.maya.ph) is blocked by the hotspot and the browser shows a
- * closed connection. Wildcards cover sandbox + prod, checkout page + API host.
- *
- * NOTE: card 3-D Secure step-up redirects to the issuing bank's ACS domain,
- * which can't be predicted here — e-wallet/Maya-wallet checkout is fully covered;
- * card payments may still need the bank's domain added per deployment.
- *
- * The Maya checkout page also renders a Google reCAPTCHA served from google.com/gstatic.com.
- * Those are DELIBERATELY NOT global here anymore. A global `*.google.com` / `*.gstatic.com`
- * allow lets Android's captive-portal probe (`.../generate_204`) return a real 204 pre-auth,
- * so every connecting guest briefly flashes "connected" then reverts to "Sign in to network"
- * (MikroTik can't path-filter HTTPS, so the probe can't be blocked while google.com is open).
- * Instead they're opened PER-DEVICE, scoped to the paying device's IP, at checkout time — see
- * `openCheckoutAccess` (packages/core services/checkoutAccess.ts), swept on a TTL by the
- * customer app's revoke cron. Keep them OUT of this global list.
- *
- * This list mirrors EXACTLY what is live on the router's global walled garden — re-running
- * is a no-op (idempotency matches on `dst-host`, so a mismatched host here would add
- * a redundant entry). These are payment-gateway hosts only; none is a captive-portal probe
- * host, so opening them globally doesn't trigger the flash.
- */
-const PAYMENT_HOSTS = [
-	'maya.ph',
-	'*.maya.ph',
-	'paymaya.com',
-	'*.paymaya.com',
-	// GCash e-wallet checkout — Maya/PayMongo redirect the buyer to GCash to authorize the payment
-	// (payments.gcash.com). Wildcard covers the auth/redirect subdomains.
-	'gcash.com',
-	'*.gcash.com',
-	// Other gateways named in Rule #2; harmless if unused.
-	'*.paymongo.com',
-	'*.xendit.co'
-];
+// PAYMENT_HOSTS + PROBE_DENIES live in ./walled-garden-config (side-effect-free) so the
+// collision-guard spec can import them without running this script's top-level provisioning.
+//
+// The walled garden is provisioned as THREE tagged groups (walled-garden-canonical, 30-07-26) so
+// every code-owned row is traceable to its group and --reconcile can manage each independently:
+//   veent-admin:probe    — the OS captive-probe DENY rows (PROBE_DENIES)
+//   veent-admin:payment  — the payment-gateway allow hosts (PAYMENT_HOSTS)
+//   veent-admin:portal   — the admin/portal origin (ORIGIN + ADMIN_WG_HOSTS/ADMIN_WG_IPS)
+// PAYMENT_HOSTS is its OWN group now — it is NOT merged into the portal host set.
 
-/**
- * OS connectivity-check probe hosts to explicitly DENY pre-auth. The broad reCAPTCHA allows above
- * (`*.google.com` / `*.gstatic.com`) would otherwise let Android's captive probe through to a real
- * HTTP 204, so the phone flashes "Connected" and then reverts to "Sign in to network" while still
- * un-granted (docs/problems/captive-connected-flap-on-free-time.md). These denies sit ABOVE the
- * allows (walled-garden is first-match top-to-bottom) so the probe is intercepted again — while
- * reCAPTCHA, which lives on different hosts/paths (`www.gstatic.com/recaptcha`,
- * `www.google.com/recaptcha`), keeps loading. Each host below is NOT a reCAPTCHA resource:
- *   - connectivitycheck.gstatic.com — Android probe host; reCAPTCHA never uses this subdomain.
- *   - clients1..4.google.com        — Android/Chrome connectivity + client hosts; not reCAPTCHA
- *                                     resources. Matches the set already present on the live router.
- *   - connectivitycheck.android.com — Android's fallback probe (already not in the allowlist; the
- *                                     explicit deny documents intent and covers a manual allow).
- *   - www.google.com PATH /generate_204 — www.google.com IS needed by reCAPTCHA, so deny only the
- *                                     probe PATH (HTTP-only match; reCAPTCHA uses /recaptcha, not this).
- *
- * Apple / Windows / Firefox probe hosts are added below too. Unlike the Google set, these aren't
- * covered by any allow, so they're already intercepted by default — but the explicit deny keeps
- * the OS "Sign in to network" popup firing even if someone later adds a broad allow (e.g.
- * `*.apple.com`), documents intent, and gives every platform the same treatment. None are reCAPTCHA
- * or payment resources, so denying them is pure upside:
- *   - captive.apple.com          — iOS/iPadOS/macOS CNA probe (http://captive.apple.com/hotspot-detect.html).
- *   - www.msftconnecttest.com    — Windows 10/11 NCSI probe (/connecttest.txt).
- *   - www.msftncsi.com           — legacy Windows NCSI probe.
- *   - detectportal.firefox.com   — Firefox's own captive-portal detector.
- */
-const PROBE_DENIES = [
-	// Android / Google
-	{ host: 'connectivitycheck.gstatic.com' },
-	{ host: 'clients1.google.com' },
-	{ host: 'clients2.google.com' },
-	{ host: 'clients3.google.com' },
-	{ host: 'clients4.google.com' },
-	{ host: 'connectivitycheck.android.com' },
-	{ host: 'www.google.com', path: '/generate_204' },
-	// Apple (iOS/macOS), Windows, Firefox
-	{ host: 'captive.apple.com' },
-	{ host: 'www.msftconnecttest.com' },
-	{ host: 'www.msftncsi.com' },
-	{ host: 'detectportal.firefox.com' }
-];
+const adminHosts = new Set(splitList(ADMIN_WG_HOSTS));
+const adminIps = new Set(splitList(ADMIN_WG_IPS));
 
-const hosts = new Set([...splitList(ADMIN_WG_HOSTS), ...PAYMENT_HOSTS]);
-const ips = new Set(splitList(ADMIN_WG_IPS));
-
-// Derive the admin host from ORIGIN and slot it into the right layer.
+// Derive the admin host from ORIGIN and slot it into the right portal layer.
 const origin = required('ORIGIN', ORIGIN);
 let originHost: string;
 try {
@@ -180,33 +118,130 @@ if (originHost === 'localhost' || originHost === '127.0.0.1') {
 	);
 	process.exit(1);
 }
-(isIp(originHost) ? ips : hosts).add(originHost);
+(isIp(originHost) ? adminIps : adminHosts).add(originHost);
 
-if (hosts.size === 0 && ips.size === 0) {
+if (adminHosts.size === 0 && adminIps.size === 0) {
 	console.error('Nothing to whitelist — no ORIGIN host, ADMIN_WG_HOSTS, or ADMIN_WG_IPS resolved.');
 	process.exit(1);
 }
 
+// The desired per-group sets — computed ONCE and reused by both the additive provision calls and
+// the opt-in --reconcile prune, so reconcile can never drift from what was just provisioned.
+const paymentHostList = [...PAYMENT_HOSTS];
+const portalHostList = [...adminHosts];
+const portalIpList = [...adminIps];
+
+// E5 guard: an operator-set ADMIN_WG_HOSTS value that duplicates a PAYMENT_HOSTS entry would create
+// the same host under two different tags (functionally harmless — provisioning is idempotent
+// per-tag — but confusing for the doc/AC12 tag audit). Warn rather than silently resolve.
+const portalPaymentOverlap = portalHostList.filter((h) => PAYMENT_HOSTS.includes(h));
+if (portalPaymentOverlap.length)
+	console.warn(
+		`  WARNING: ADMIN_WG_HOSTS overlaps PAYMENT_HOSTS (${portalPaymentOverlap.join(', ')}) — ` +
+			'the same host will be tagged under both veent-admin:portal and veent-admin:payment.'
+	);
+
 console.log(`Provisioning walled garden on ${config.host}:${config.port ?? (config.tls ? 8729 : 8728)}`);
-if (hosts.size) console.log(`  hosts: ${[...hosts].join(', ')}`);
-if (ips.size) console.log(`  ips:   ${[...ips].join(', ')}`);
+console.log('  3 tagged groups (load-bearing order: probe → payment → portal):');
 if (PROBE_DENIES.length)
-	console.log(`  denies: ${PROBE_DENIES.map((d) => d.host + (d.path ?? '')).join(', ')}`);
+	console.log(
+		`  [veent-admin:probe]   denies: ${PROBE_DENIES.map((d) => d.host + (d.path ?? '')).join(', ')}`
+	);
+if (paymentHostList.length) console.log(`  [veent-admin:payment] hosts:  ${paymentHostList.join(', ')}`);
+if (portalHostList.length) console.log(`  [veent-admin:portal]  hosts:  ${portalHostList.join(', ')}`);
+if (portalIpList.length) console.log(`  [veent-admin:portal]  ips:    ${portalIpList.join(', ')}`);
 
 try {
-	const result = await provisionWalledGarden(config, {
-		hosts: [...hosts],
-		ips: [...ips],
-		denies: PROBE_DENIES
+	// Provision the 3 groups sequentially in a LOAD-BEARING order: probe FIRST, then payment, then
+	// portal. On a wiped/fresh garden this guarantees the deny rows land at the very top (ahead of
+	// every allow), matching the doc's stated ordering. provisionWalledGarden re-derives its
+	// deny-placement `beforeId` fresh per call, so the denies would still sit above the allows even
+	// if reordered — but do NOT reorder these calls without re-verifying that beforeId derivation.
+	const probeResult = await provisionWalledGarden(config, {
+		denies: PROBE_DENIES,
+		tag: 'veent-admin:probe'
 	});
-	for (const d of result.denies)
-		console.log(`  deny ${d.value}: ${d.created ? 'added' : 'already present'}`);
-	for (const h of result.hosts) console.log(`  host ${h.value}: ${h.created ? 'added' : 'already present'}`);
-	for (const i of result.ips) console.log(`  ip   ${i.value}: ${i.created ? 'added' : 'already present'}`);
+	const paymentResult = await provisionWalledGarden(config, {
+		hosts: paymentHostList,
+		tag: 'veent-admin:payment'
+	});
+	const portalResult = await provisionWalledGarden(config, {
+		hosts: portalHostList,
+		ips: portalIpList,
+		tag: 'veent-admin:portal'
+	});
+	for (const d of probeResult.denies)
+		console.log(`  [probe]   deny ${d.value}: ${d.created ? 'added' : 'already present'}`);
+	for (const h of paymentResult.hosts)
+		console.log(`  [payment] host ${h.value}: ${h.created ? 'added' : 'already present'}`);
+	for (const h of portalResult.hosts)
+		console.log(`  [portal]  host ${h.value}: ${h.created ? 'added' : 'already present'}`);
+	for (const i of portalResult.ips)
+		console.log(`  [portal]  ip   ${i.value}: ${i.created ? 'added' : 'already present'}`);
 	console.log('\nDone. Guest devices can now reach the admin dashboard before authenticating.');
 } catch (err) {
 	console.error('\nFailed to provision walled garden:', err instanceof Error ? err.message : err);
 	process.exit(1);
+}
+
+// GCash CNAME resolve-script: `payments.gcash.com` CNAMEs to a rotating Akamai edge IP that v6
+// dst-host rules can't follow, so a `/system scheduler` re-resolves it every 5 min and upserts a
+// walled-garden ip row. Additive + idempotent (matched by name=gcash-resolve), same as above.
+try {
+	const sched = await provisionGcashResolveScheduler(config);
+	console.log(
+		`  scheduler ${sched.scheduler.value}: ${sched.scheduler.created ? 'added' : 'already present'}`
+	);
+} catch (err) {
+	console.error(
+		'\nFailed to provision the gcash-resolve scheduler:',
+		err instanceof Error ? err.message : err
+	);
+	process.exit(1);
+}
+
+// Opt-in prune: --reconcile removes ONLY code-owned (veent-admin-tagged, action=allow) walled-garden
+// rows no longer in the desired set — never un-tagged operator rows, the gcash-auto row, or the
+// PROBE_DENIES deny rows. Default (no flag) run never prunes; --dry-run prints without removing.
+if (RECONCILE) {
+	console.log(
+		`\nReconciling walled garden — removing drifted code-owned rows${DRY_RUN ? ' [dry-run]' : ''}:`
+	);
+	try {
+		// One reconcile call per group, each scoped to its OWN sub-tag + desired set — mirroring the 3
+		// provision calls. A sub-tag-scoped call only manages its own group's rows (the family-prefix
+		// match never leaks across siblings, since no row is tagged `veent-admin:payment:<...>`), so
+		// the 3 groups stay isolated. The probe group has only deny rows, which reconcile never
+		// removes, so its desired set is empty.
+		const recProbe = await reconcileWalledGarden(config, {
+			hosts: [],
+			ips: [],
+			tag: 'veent-admin:probe',
+			dryRun: DRY_RUN
+		});
+		const recPayment = await reconcileWalledGarden(config, {
+			hosts: paymentHostList,
+			ips: [],
+			tag: 'veent-admin:payment',
+			dryRun: DRY_RUN
+		});
+		const recPortal = await reconcileWalledGarden(config, {
+			hosts: portalHostList,
+			ips: portalIpList,
+			tag: 'veent-admin:portal',
+			dryRun: DRY_RUN
+		});
+		const removed = [...recProbe.removed, ...recPayment.removed, ...recPortal.removed];
+		if (removed.length === 0) {
+			console.log('  nothing to remove — no drifted code-owned rows.');
+		} else {
+			for (const r of removed)
+				console.log(`  ${r.layer} ${r.value}: ${r.dryRun ? 'would remove' : 'removed'}`);
+		}
+	} catch (err) {
+		console.error('\nFailed to reconcile walled garden:', err instanceof Error ? err.message : err);
+		process.exit(1);
+	}
 }
 
 /**
