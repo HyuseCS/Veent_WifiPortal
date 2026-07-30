@@ -44,7 +44,7 @@
     },
     {
       "step": "AC6 (runtime) — forced resolveCircuitIdForMac rejection STILL commits spend+grant (FREE + PAID), attribution null",
-      "command": "cd packages/core && bunx vitest run src/services/sessions.spec.ts ; cd apps/customer && bunx vitest run src/lib/server/grant-atomic.spec.ts",
+      "command": "(cd packages/core && bunx vitest run src/services/sessions.spec.ts) && (cd apps/customer && bunx vitest run src/lib/server/grant-atomic.spec.ts)",
       "result": "PASS",
       "notes": "NEGATIVE-CONTROL performed: removed the try/catch guard in resolveApCircuitPreTx → both AC6 tests went RED with 'router circuit lookup exploded' propagating out; restored guard → green. grant-atomic 8 tests green (7 prior + 1 new AC6 resolution-unavailable case), no regression."
     },
@@ -63,18 +63,18 @@
     {
       "step": "AC8 (regression) — revenueByAp/apLabel unchanged",
       "command": "source inspection + full suite",
-      "result": "PASS",
-      "notes": "apLabel()/revenueByAp() bytes UNTOUCHED (verified by diff). No pre-existing revenueByAp unit test to re-run; protected structurally + full-suite green."
+      "result": "PASS (source-inspection only — targeted regression pending)",
+      "notes": "apLabel()/revenueByAp() bytes UNTOUCHED (verified by diff) and full suite green. NO targeted regression assertion covering the revenueByAp/apLabel breakdown was added or run — this PASS rests on byte-identical source + full-suite green only, not on a dedicated regression test. A targeted revenueByAp/apLabel regression assertion remains PENDING; the PASS is not backed by direct behavioral coverage of that breakdown."
     },
     {
       "step": "Full regression — typecheck (all apps + core) and full vitest suite",
-      "command": "bun run check ; cd packages/core && bunx tsc --noEmit ; bun run test",
+      "command": "bun run check && (cd packages/core && bunx tsc --noEmit) && bun run test",
       "result": "PASS",
       "notes": "check: 0 errors across 3 apps. core tsc: exit 0. Suite: core 76, locator 6, customer 125, admin 151 — all pass. (Note: bare `bun test` uses bun's native runner and mis-reports; `bun run test` = vitest fan-out is the real gate.)"
     },
     {
       "step": "Lint (scoped per plan step 26 — no NEW errors from this plan's files)",
-      "command": "bunx eslint <touched files> ; bunx prettier --check <touched files>",
+      "command": "bunx eslint <touched files> && bunx prettier --check <touched files>",
       "result": "PASS",
       "notes": "eslint exit 0 on all touched source. Prettier: all EDITED existing files were already drifted at HEAD (pre-existing 297-file repo-wide drift); my 2 new drifted spec files were formatted. No NEW lint failures introduced."
     }

@@ -10,6 +10,7 @@ export {
 	provisionWalledGarden,
 	provisionGcashResolveScheduler,
 	reconcileWalledGarden,
+	wipeWalledGarden,
 	restrictApiService,
 	formatQueueRate,
 	ipv4NetworkOf,
@@ -29,6 +30,7 @@ export {
 	type GcashResolveSchedulerResult,
 	type ReconcileWalledGardenInput,
 	type ReconcileWalledGardenResult,
+	type WipeWalledGardenResult,
 	type RestrictApiInput,
 	type RestrictApiResult
 } from './mikrotik';

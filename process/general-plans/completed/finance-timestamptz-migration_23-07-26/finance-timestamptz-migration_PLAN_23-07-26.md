@@ -8,16 +8,17 @@ feature: none
 # Finance / Session Timestamptz Migration — PLAN
 
 Date: 23-07-26
-Status: DEV-SIDE CODE DONE + EVL GREEN — PROD APPLY PENDING (not VERIFIED; see Current State below)
+Status: ✅ VERIFIED — PROD APPLIED, user-confirmed 30-07-26 (see Current State below)
 Complexity: COMPLEX (schema migration, billing-path, atomic cross-package change-set)
 
-## Current State (UPDATE PROCESS — 23-07-26)
+## Current State (UPDATE PROCESS — 30-07-26)
 
-**Classification: Keep in active/testing.** Dev-side implementation is complete and verified,
-including Item 3.8 (Finance e2e run 24-07-26 — full 12-spec suite, 23/23 green); the plan stays in
-`process/general-plans/active/` until the prod-apply sequence and human prod verification are done.
-Per §Phase Completion Rules above, this is `CODE DONE` (sections 0-3 of the Ordered EXECUTE
-Checklist), NOT `VERIFIED` (section 4 prod steps + close-out are still outstanding).
+**Classification: ✅ VERIFIED — Ready for UPDATE PROCESS archival.** Dev-side implementation was
+complete and verified as of 23-07-26/24-07-26; the prod-apply runbook (Item 4.2 TZ preflight,
+Item 4.3 6-step safety sequence, human prod verification) has now been completed and the user
+confirmed live prod Finance is correct on 30-07-26. Per §Phase Completion Rules above, this plan
+has satisfied both dev evidence (sections 0-3) and prod apply + human confirmation (section 4) —
+archiving to `process/general-plans/completed/`.
 
 - **Dev-side DONE:** migration `0052_pink_maginty.sql` (repo now at 53 migration files, `0000`–
   `0052`) applied and verified against dev DB; schema (`customer.ts`) updated on all 13 columns;
@@ -28,17 +29,19 @@ Checklist), NOT `VERIFIED` (section 4 prod steps + close-out are still outstandi
   spec (`packages/core/src/services/timestamptz-roundtrip.integration.spec.ts`) and the new AC4
   reconcile spec (`packages/core/src/services/reconcilePayments.integration.spec.ts`).
 - **User-confirmed this session:** dev browser Finance display is correct post-migration.
-- **STILL OUTSTANDING (do not archive/VERIFY until resolved):**
-  1. Item 4.2 — prod `SELECT current_setting('TimeZone')` preflight (must confirm `Asia/Manila`).
-  2. Item 4.3 — 6-step non-negotiable prod safety sequence (snapshot → verify-restorable →
-     SELECT-only preview → DDL apply → app-smoke → stop-and-restore-on-failure).
-  3. Execute-Agent Instruction E4 — `vc-risk-evidence-pack` (5-artifact record), required before
-     Item 4.3 step 4 (prod DDL apply), per `orchestration.md` §High-Risk Execution Handoff.
-  4. Item 4.1 dynamic half — dev live-feed browser smoke (AC5), deferred to human verification.
-  5. Item 3.8 — Finance e2e run for AC9 breadth (per E5, `finance-export.e2e.ts` is auth-gate-only,
+- **COMPLETED at prod apply (30-07-26, see co-located REPORT Closeout):** Item 4.2 prod
+  `SELECT current_setting('TimeZone')` preflight (`Asia/Manila` confirmed); Item 4.3 6-step
+  non-negotiable prod safety sequence (snapshot → verify-restorable → SELECT-only preview → DDL
+  apply → app-smoke → stop-and-restore-on-failure); Item 4.1 dynamic half (dev live-feed browser
+  smoke, AC5); and human prod verification (user confirmed live prod Finance is correct) per
+  §Phase Completion Rules — the two evidence tiers (dev sections 0-3, prod section 4) are both
+  satisfied, so this plan is archived.
+- **STILL DEFERRED (not blockers; never captured this program):**
+  1. Execute-Agent Instruction E4 — `vc-risk-evidence-pack` (5-artifact record) is not referenced
+     in the prod-apply closeout; treat as not formally captured (prod DDL was applied under the
+     Item 4.3 safety sequence, but the standalone risk-evidence-pack artifacts were not produced).
+  2. Item 3.8 — Finance e2e run for AC9 breadth (per E5, `finance-export.e2e.ts` is auth-gate-only,
      not AC2/AC3 evidence; owned by a future EVL/e2e pass, not this session).
-  6. Human prod verification (user confirms live prod Finance is correct) — required before
-     `✅ VERIFIED` per §Phase Completion Rules.
 - **Context docs synced this session:** `process/context/database/all-database.md` and
   `process/context/all-context.md` migration count updated 49/47(stale)→53, with the timestamptz
   root-cause/convention learning recorded durably (Execute-Agent Instruction E3, deferred from

@@ -5,6 +5,15 @@ date: 27-07-26
 feature: general-plans
 ---
 
+> **⛔ INVALIDATED / NOT-PLANNED (30-07-26).** This SPEC's approach was invalidated on live
+> hardware — a device-wide `0.0.0.0/0` walled-garden allow and a captive device are mutually
+> exclusive: the OS connectivity probe succeeds the instant the allow lands, tearing down the CNA
+> where the payment is happening, so the checkout can never complete. No code shipped; the feature
+> commit was reset out of branch. Full incident trail: memory
+> `project_conditional-checkout-access-invalidated.md`. **Redesign direction (NOT scoped here):** do
+> the payment OUTSIDE the captive session via the existing CNA→browser handoff (`/auth/handoff`),
+> where the device is a normal client. Kept only as a design record — do not implement as written.
+
 # Conditional Full Internet Access During Maya Checkout — SPEC
 
 ## Summary
@@ -71,7 +80,7 @@ every other unpaid guest.
 
 ## Flow / State Diagram
 
-```
+```text
  Guest device (unpaid, captive)
         │
         │  taps "Pay" on Top-Up page

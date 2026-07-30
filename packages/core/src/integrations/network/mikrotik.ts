@@ -1264,6 +1264,64 @@ export async function reconcileWalledGarden(
 	return { removed };
 }
 
+export interface WipeWalledGardenResult {
+	/** Count of STATIC rows removed from each menu (dynamic auto-shadow rows are never counted). */
+	removed: { host: number; ip: number };
+	dryRun: boolean;
+}
+
+/**
+ * Hard-reset teardown: removes EVERY static row from BOTH walled-garden menus
+ * (`/ip/hotspot/walled-garden` host layer AND `/ip/hotspot/walled-garden/ip` ip layer) so the
+ * garden can be rebuilt from scratch by re-running the 3-group provisioning. Unlike
+ * `reconcileWalledGarden` (tag+action-scoped), this is UNSCOPED — it wipes tagged AND un-tagged,
+ * enabled AND disabled, allow AND deny rows. That is the point: it guarantees zero drifted/leftover
+ * rows, which the tag-scoped prune cannot.
+ *
+ *   - SKIPS `dynamic === 'true'` rows on BOTH menus: RouterOS auto-generates one host-menu mirror per
+ *     `/ip hotspot walled-garden ip` entry; those `D`-flagged rows are regenerated from the ip-layer
+ *     row and are not independently removable — a `remove` by `.id` errors/races. This dynamic skip is
+ *     the sole safety guard (mirrors `reconcileWalledGarden`'s line-1242 skip).
+ *   - Does NOT touch the `/system scheduler` `gcash-resolve` item — that is not a walled-garden row.
+ *     After a wipe the scheduler re-adds the `gcash-auto` ip row within ~5 minutes on its next tick.
+ *   - `dryRun` is a true no-op: it counts what WOULD be removed and deletes nothing.
+ *
+ * v6 has no working `find where` filter-remove for these menus, so rows are removed by
+ * print-then-`.id` (mirrors `reconcileWalledGarden` / `cutConnectionsForIps`). Does not touch
+ * `provisionWalledGarden` or `reconcileWalledGarden`.
+ */
+export async function wipeWalledGarden(
+	config: MikrotikConfig,
+	input: { dryRun?: boolean } = {}
+): Promise<WipeWalledGardenResult> {
+	const dryRun = input.dryRun ?? false;
+	const removed = { host: 0, ip: 0 };
+	const conn = await openConn(config);
+	try {
+		// Snapshot the print result before removing: some RouterOS shapes back the /remove against the
+		// same list we iterate, so a mid-loop delete could skip rows. A copy makes removal order-safe.
+		const hostRows = [...(await conn.write('/ip/hotspot/walled-garden/print', []))];
+		for (const r of hostRows) {
+			const id = r['.id'];
+			if (!id) continue;
+			if (r.dynamic === 'true') continue; // unremovable auto-shadow — never a candidate
+			if (!dryRun) await conn.write('/ip/hotspot/walled-garden/remove', [`=.id=${id}`]);
+			removed.host++;
+		}
+		const ipRows = [...(await conn.write('/ip/hotspot/walled-garden/ip/print', []))];
+		for (const r of ipRows) {
+			const id = r['.id'];
+			if (!id) continue;
+			if (r.dynamic === 'true') continue; // parity with host layer
+			if (!dryRun) await conn.write('/ip/hotspot/walled-garden/ip/remove', [`=.id=${id}`]);
+			removed.ip++;
+		}
+	} finally {
+		conn.close();
+	}
+	return { removed, dryRun };
+}
+
 export interface RestrictApiInput {
 	/** Source IP (or CIDR) allowed to reach the RouterOS API — the app server's LAN IP. */
 	sourceIp: string;

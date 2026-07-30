@@ -489,6 +489,12 @@ grant/session/auth decision on it, and do NOT entrench it as a verified identity
 
 ## Next Step
 
+> **⛔ INVALIDATED / NOT-PLANNED (30-07-26) — do NOT follow the EXECUTE instructions below (or in
+> §Resume and Execution Handoff step 5).** The approach was invalidated on live hardware (see the
+> top banner and §Closeout — NOT-PLANNED): a device-wide `0.0.0.0/0` allow and a captive device are
+> mutually exclusive. There is NO valid `ENTER EXECUTE MODE` for this plan; the text below is
+> superseded and kept only as a design record.
+
 Plan validated (CONDITIONAL). Address the supplement items (folded in above), then say
 **ENTER EXECUTE MODE** to implement Phase 1 → 7.
 
@@ -607,3 +613,14 @@ Next phase: EXECUTE (after PVL supplement cycle or explicit CONDITIONAL acceptan
 Validate contract: inline in plan (## Validate Contract) — Gate: CONDITIONAL.
 Execute start: implement checklist Phase 1→7. Fully-auto gates: `cd packages/core && bunx tsc --noEmit`; `cd packages/core && bunx vitest run src/services/checkoutFullAccess.spec.ts`; `grep -c device_mac packages/db/drizzle/0053_*.sql`; `bun run check`; `bun run lint`; `bun test`. Live probe (MANUAL human gate): AC1-3 payment methods + AC5 revoke network effect on real hardware. High-risk pack: YES (mandatory before VERIFIED).
 ```
+
+---
+
+## Closeout — NOT-PLANNED (30-07-26)
+
+Closed NOT-PLANNED 30-07-26 — invalidated on live hardware (catch-all `0.0.0.0/0` allow + captive
+device are mutually exclusive; the OS connectivity probe succeeds the instant the allow lands,
+tearing down the CNA where the payment is happening, so the checkout can never complete). No code
+was shipped from this plan; it was reset out of branch. See memory
+`project_conditional-checkout-access-invalidated.md` for the full incident trail. The correct
+redesign — pay via CNA→browser handoff — is not scoped here.

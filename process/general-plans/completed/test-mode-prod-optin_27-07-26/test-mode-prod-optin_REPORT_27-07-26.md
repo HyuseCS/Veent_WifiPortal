@@ -3,7 +3,7 @@ phase: test-mode-prod-optin
 date: 2026-07-27
 status: COMPLETE
 feature: general
-plan: process/general-plans/active/test-mode-prod-optin_27-07-26/test-mode-prod-optin_PLAN_27-07-26.md
+plan: process/general-plans/completed/test-mode-prod-optin_27-07-26/test-mode-prod-optin_PLAN_27-07-26.md
 ---
 
 # EXECUTE Report — TEST_MODE prod opt-in (`ALLOW_TEST_MODE_IN_PROD`)
@@ -27,7 +27,9 @@ plan: process/general-plans/active/test-mode-prod-optin_27-07-26/test-mode-prod-
 
 ## What Was Skipped or Deferred
 
-None.
+Real staging deployment / boot verification (prod build boots with both `TEST_MODE` +
+`ALLOW_TEST_MODE_IN_PROD` set) remains pending — not runnable in this environment; proven by unit
+test of the gate logic only (consistent with the Closeout Packet "Unverified" note below).
 
 ## Test Gate Outcomes
 
@@ -50,7 +52,7 @@ None.
 
 ## Closeout Packet
 
-- Selected plan: `process/general-plans/active/test-mode-prod-optin_27-07-26/test-mode-prod-optin_PLAN_27-07-26.md`
+- Selected plan: `process/general-plans/completed/test-mode-prod-optin_27-07-26/test-mode-prod-optin_PLAN_27-07-26.md`
 - Finished: all 7 checklist items.
 - Verified: both automated gates green (vitest 5/5, `bun run check` clean).
 - Unverified: real staging deploy behavior (prod build boots with both flags set) — not runnable in

@@ -1,5 +1,57 @@
 # veent-wifiportal - All Context
 
+Last updated: 2026-07-30 (plan-inventory + backlog reconciliation, session 2 — user-confirmed
+30-07-26 on staging: (a) deploy-VM portal reachability fixed, `10.210.54.133` now allowed in the
+`veent-admin:portal` walled-garden tag via `PORTAL_LAN_IPS`; (b) the trimmed `PAYMENT_HOSTS` set
+(Google Pay / PayMongo / Xendit rows pruned) pushed to the router via `setup:router --reconcile`;
+(c) `setup:router --wipe-only --dry-run` verified a true no-op on real RouterOS — closes
+`walled-garden-wipe_30-07-26`'s last residual, flipped PLANNED→VERIFIED. `multi-router-support_
+13-07-26` archived to `completed/` as deferred/revisitable (blocked on Fatap AP-API credentials,
+GH #100) — `process/general-plans/active/` is now empty of plan folders. Project backlog is now
+also tracked as GitHub issues #96-102 (`priority-1/2/3` + `revisitable` labels) on
+`HyuseCS/Veent_WifiPortal`; the `process/**/backlog/*_NOTE_*.md` files remain the detailed source
+of truth, GH is the lightweight tracker/index.)
+
+Last updated: 2026-07-30 (walled-garden-wipe closed and archived to
+`process/general-plans/completed/` — `setup:router` gains scripted `--wipe [--dry-run]` /
+`--wipe-only [--dry-run]` hard-reset flags, backed by a new `wipeWalledGarden()` in
+`packages/core/src/integrations/network/mikrotik.ts` that clears every static row from both
+walled-garden menus while skipping dynamic auto-shadow rows; replaces the manual Winbox
+`remove [find]` steps in `docs/mikrotik/walled-garden.md`. Add-only — provision/reconcile/scheduler
+untouched. Shipped as commit `53a223b`. EVL green (21/21 unit + admin typecheck 0 errors); the
+staging `--wipe-only --dry-run` real-RouterOS probe remains an outstanding manual-verification
+item, so the plan closed as code-complete rather than fully VERIFIED.)
+
+Last updated: 2026-07-30 (plan-inventory reconciliation — 6 resolved general-plans archived to
+`process/general-plans/completed/`: `finance-timestamptz-migration_23-07-26` (prod apply now DONE,
+user-confirmed 30-07-26 — see the corrected 2026-07-23 entry below), `purchase-ap-attribution_21-07-26`
+(shipped `0d13023`), `test-mode-prod-optin_27-07-26` (shipped `9dc2ed1`), `tx-ap-name-snapshot_22-07-26`
+(shipped `6a167cf` + migration `0051`), `otp-test-mode-toast_27-07-26` (shipped `be527f1` +
+`8531041`/`9dc2ed1` prod-boot gate — stale "Ready for VALIDATE" status line corrected), and
+`conditional-checkout-access_27-07-26` (closed NOT-PLANNED — invalidated on live hardware, no code
+shipped, see `project_conditional-checkout-access-invalidated` memory). `process/general-plans/active/`
+now holds only `multi-router-support_13-07-26` (Fatap Phase B, creds pending — stalled); the
+`otp-test-mode-toast` plan is done, not active.)
+
+Last updated: 2026-07-30 (walled-garden-wallet-onboarding-prep closed and archived to
+`process/general-plans/completed/` — behavior-neutral prep work on top of the walled-garden-canonical
+rebuild: `PAYMENT_HOSTS` (`apps/admin/scripts/walled-garden-config.ts`) regrouped into 3 labeled
+blocks (Maya/PayMaya, GCash+Alipay+Mynt/G-Xchange, Google APIs) AND deliberately trimmed by 6 hosts —
+the 4 Google-Pay-flow hosts (`pay.google.com`, `payments.google.com`, `accounts.google.com`,
+`accounts.google.com.ph` — abandoned, Android WebView `OR_BIBED_15` blocks Google Pay captive
+regardless of whitelisting) plus `*.paymongo.com`/`*.xendit.co` (proven dead — grep-confirmed no
+integration code, only stale config/seed-comment references; live GCash checkout goes through Maya's
+hosted checkout, not PayMongo). `*.googleapis.com` retained (98-hit live checkout dependency, NOT
+Google Pay). Final live payment surface = **GCash + Maya only**. `docs/mikrotik/walled-garden.md`
+gained two new sections: a "How to add a wallet/bank (₱0 recon protocol)" procedure (DNS-cache-flush
+→ drive the flow on a captive device → `dns cache print` → classify direct-resolve vs CNAME-to-CDN →
+add → retest; two hard rules — `*.domain` never matches its bare parent, never add broad CDN
+allowlists) and a curated "Candidate wallets/banks (UNVERIFIED — recon required)" table (GoTyme,
+SeaBank, GrabPay, ShopeePay, Coins.ph + BDO/BPI/Landbank/Security Bank, banks flagged with a
+cert-pin/captive-detection caveat) — NONE of these 9 candidates are whitelisted in code; the table is
+a future-work tracker only. All 3 gates (collision guard, TS check, deliberate-removal diff)
+independently re-run green in UPDATE PROCESS.)
+
 Last updated: 2026-07-30 (walled-garden-canonical + the remainder of payment-walled-garden-v6
 closed and archived to `process/general-plans/completed/` — the staging router's walled garden is
 now fully code-owned and hard-reset-rebuilt from scratch. New canonical model: `setup:router`
@@ -73,17 +125,18 @@ Known-gap, honestly unresolved: the specific fallback→unverified-banner→reco
 be live-reproduced this session (requires forcing live IP→MAC resolution to fail) — proven by code +
 unit tests only. See the Gotchas section MAC-trust residual bullet for the durable technical note.)
 
-Last updated: 2026-07-23 (finance-timestamptz-migration DEV-SIDE COMPLETE, PROD APPLY PENDING —
-migration `0052_pink_maginty.sql` converts 13 finance/session columns (`credit_ledger.created_at`,
-`points_ledger.created_at`, `payment_transactions.created_at`, `payment_checkouts.{created_at,
-settled_at,last_polled_at}`, `network_sessions.{started_at,bound_at,last_seen_at,expires_at}`,
+Last updated: 2026-07-23, corrected 2026-07-30 (finance-timestamptz-migration — ✅ VERIFIED, PROD
+APPLIED — migration `0052_pink_maginty.sql` converts 13 finance/session columns
+(`credit_ledger.created_at`, `points_ledger.created_at`, `payment_transactions.created_at`,
+`payment_checkouts.{created_at, settled_at,last_polled_at}`,
+`network_sessions.{started_at,bound_at,last_seen_at,expires_at}`,
 `customer_profile.{last_free_session_at,access_expires_at,access_paused_at}`) from bare `timestamp`
 to `timestamptz`, with `apps/admin/src/lib/server/period.ts` rewritten to real Manila-day→UTC-instant
-math in the same change-set; migration count is now 53 (`0000`–`0052`), see `database/all-database.md`
-Canonical Notes for the full write-path/root-cause detail. EVL green (391 tests, 0 failures) and user
-browser-confirmed dev display. Plan STAYS in `process/general-plans/active/finance-timestamptz-
-migration_23-07-26/` — NOT archived, NOT VERIFIED — prod TZ preflight, the 6-step prod apply
-sequence, `vc-risk-evidence-pack`, and human prod verification are all still outstanding.)
+math in the same change-set; migration count is 53 (`0000`–`0052`), see `database/all-database.md`
+Canonical Notes for the full write-path/root-cause detail. EVL green (391 tests, 0 failures) and
+dev-browser-confirmed on 23-07-26; the prod-apply runbook (TZ preflight, 6-step safety sequence,
+human prod verification) is now complete and prod Finance was user-confirmed correct 30-07-26. Plan
+archived to `process/general-plans/completed/finance-timestamptz-migration_23-07-26/`.)
 
 Last updated: 2026-07-22 (manager-board-lazy-events closed and archived to
 `process/features/incident-management/completed/manager-board-lazy-events_22-07-26/` — admin's
@@ -450,6 +503,29 @@ easy to find).
   `--reconcile --dry-run` previews without removing. Live-verified 30-07-26:
   `--reconcile --dry-run` → real run removed exactly 3 drifted rows on staging; all safety
   invariants held.
+- **`setup:router --wipe [--dry-run]` / `--wipe-only [--dry-run]` (scripted hard reset, added
+  30-07-26, `walled-garden-wipe`):** `wipeWalledGarden(config, {dryRun})`
+  (`packages/core/src/integrations/network/mikrotik.ts`) clears every STATIC row from BOTH
+  walled-garden menus (`/ip/hotspot/walled-garden` host + `/ip/hotspot/walled-garden/ip`),
+  unconditionally — not tag-scoped like `--reconcile` — while skipping `dynamic==='true'`
+  auto-shadow rows (unremovable) and honoring a real `--dry-run` no-op; returns `{host, ip}`
+  removed counts. `--wipe` wipes then falls through to the normal 3-group provisioning rebuild;
+  `--wipe-only` wipes and exits before provisioning (takes precedence over `--wipe`/`--reconcile`).
+  This REPLACES the manual Winbox/console `remove [find]` hard-reset steps in
+  `docs/mikrotik/walled-garden.md` §Hard reset with a single command. Does NOT touch the
+  `gcash-resolve` scheduler (the scheduler re-adds the `gcash-auto` ip row within 5 min of a wipe).
+  EVL green (21/21 unit incl. dynamic-row negative control + dry-run no-op assertions, admin
+  typecheck 0 errors). The staging `--wipe-only --dry-run` probe against real RouterOS has since
+  been run and confirmed a true no-op (user-confirmed 30-07-26) — plan flipped to VERIFIED, no
+  open residual; see `process/general-plans/completed/walled-garden-wipe_30-07-26/`.
+- **Operational walled-garden closeout (user-confirmed 30-07-26, staging):** (a) deploy-VM portal
+  reachability confirmed working — `10.210.54.133` (staging/deploy VM) is allowed pre-auth via
+  `PORTAL_LAN_IPS` (`apps/admin/scripts/walled-garden-config.ts`), which feeds the
+  `veent-admin:portal` tag group; (b) the trimmed `PAYMENT_HOSTS` set (Google Pay / PayMongo /
+  Xendit rows pruned per `payment-walled-garden-v6`) has been pushed to the router via
+  `setup:router --reconcile`; (c) `--wipe-only --dry-run` verified a true no-op (see bullet above).
+  This closes the last operational follow-ups from the walled-garden-canonical + wipe work — no
+  known-gaps remain on the walled-garden surface as of this date.
 - **GCash root cause + fix (found + fixed live 29-07-26, codified 30-07-26):** GCash's payment host
   (`payments.gcash.com`) CNAMEs to an Akamai edge — v6 `dst-host` walled-garden matching cannot
   follow a CNAME chain, so hostname rules for the `gcash.com` family always show 0 hits regardless of
@@ -461,6 +537,20 @@ easy to find).
   for the full diagnostic trail. Rule of thumb for any future CDN-fronted payment host: a host that
   CNAMEs to a CDN needs a `:resolve` scheduler; a host that resolves directly to the provider's own
   IP needs only an ordinary `PAYMENT_HOSTS`/`dst-host` entry.
+- **`PAYMENT_HOSTS` trimmed to the live payment surface (30-07-26,
+  `walled-garden-wallet-onboarding-prep`):** `apps/admin/scripts/walled-garden-config.ts`'s
+  `PAYMENT_HOSTS` is now grouped into 3 labeled blocks (Maya/PayMaya, GCash+Alipay+Mynt/G-Xchange,
+  Google APIs) and no longer includes Google Pay hosts (`pay.google.com`, `payments.google.com`,
+  `accounts.google.com`, `accounts.google.com.ph` — dropped: Android WebView `OR_BIBED_15` blocks
+  Google Pay captive, unfixable by whitelisting) or `*.paymongo.com`/`*.xendit.co` (dropped: no
+  integration code references them; live GCash checkout is via Maya's hosted checkout).
+  `*.googleapis.com` is kept (98-hit checkout dependency, unrelated to Google Pay). **Final live
+  payment methods = GCash + Maya only.** `docs/mikrotik/walled-garden.md` now also carries a "How
+  to add a wallet/bank (₱0 recon protocol)" section (DNS-cache-flush → drive the flow on a captive
+  device → classify direct-resolve vs CNAME-to-CDN → add → retest) and a curated
+  "Candidate wallets/banks (UNVERIFIED — recon required)" table (GoTyme, SeaBank, GrabPay,
+  ShopeePay, Coins.ph, BDO, BPI, Landbank, Security Bank) — read this before onboarding any new
+  wallet/bank; none of the 9 candidates are whitelisted in code yet.
 - `packages/core` probe/setup scripts
 - `apps/admin/scripts/setup-router.ts`
 - `apps/admin/src/routes/api/network/`
@@ -492,13 +582,17 @@ easy to find).
   `ERR_CONNECTION_CLOSED`. `TUNNEL_ORIGIN` (`webhookOrigin`) is for the server→server webhook
   `originUrl` ONLY — do not reuse it for the browser return URLs. See
   `process/general-plans/completed/maya-return-url-revert_23-07-26/` for the incident this codifies.
-- **GCash/e-wallet checkout needs IP-based walled-garden allows:** MikroTik `dst-host` (hostname)
-  walled-garden rules do NOT reliably match GCash's HTTPS traffic (`payments.gcash.com` and its
-  Alipay-powered cashier's `*.alipay.com`/`*.alipayobjects.com`/`*.alicdn.com`) — confirmed live via
-  `hits=0` on the hostname rules. Mitigation shipped is a TEMPORARY manual router-side IP allow
-  (`/ip hotspot walled-garden ip add dst-address=<resolved IP>`), NOT productionized. Follow-up:
-  `process/general-plans/backlog/gcash-walled-garden-ip-productionize_NOTE_23-07-26.md` — add
-  IP-based allows for `PAYMENT_HOSTS` in `apps/admin/scripts/setup-router.ts`.
+- **GCash/e-wallet checkout is handled by the `gcash-resolve` scheduler (SHIPPED):** MikroTik
+  `dst-host` (hostname) walled-garden rules do NOT match GCash's HTTPS traffic — root cause (found +
+  fixed live 29-07-26, codified 30-07-26) is that `payments.gcash.com` CNAMEs to an Akamai edge and
+  v6 `dst-host` matching cannot follow a CNAME chain (hostname rules always show `hits=0`). The
+  single operational mitigation is `provisionGcashResolveScheduler()`
+  (`packages/core/src/integrations/network/mikrotik.ts`) — an idempotent `/system scheduler` item
+  (`name=gcash-resolve`, 5-min interval) that `:resolve`s the hostname and upserts the `gcash-auto`
+  walled-garden-ip row. This REPLACES the earlier temporary manual router-side IP allow, and the old
+  `gcash-walled-garden-ip-productionize` backlog note is SUPERSEDED. See the MikroTik / RouterOS
+  section above (GCash root cause + fix) and
+  `process/general-plans/completed/payment-walled-garden-v6_29-07-26/` for the full diagnostic trail.
 
 ### Sentry observability
 - `@sentry/sveltekit` in all 3 apps; `@sentry/core` in `packages/core`

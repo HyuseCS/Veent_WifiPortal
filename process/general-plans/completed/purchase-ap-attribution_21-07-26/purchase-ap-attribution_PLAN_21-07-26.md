@@ -8,14 +8,14 @@ feature: general-plans
 # PLAN — Purchase / Grant AP Attribution
 
 Date: 21-07-26
-Status: ⏳ PLANNED
+Status: ✅ SHIPPED — committed `0d13023`; archived to `process/general-plans/completed/`
 Complexity: Complex
 
 **Complexity: COMPLEX** (multi-package, schema migration, billing/credits ledger surface, 4
 touchpoint packages). **Risk class: HIGH_RISK** (billing/credits ledger writes + schema
 migration — see §Risk Notes).
 
-**SPEC:** `process/general-plans/active/purchase-ap-attribution_21-07-26/purchase-ap-attribution_SPEC_21-07-26.md`
+**SPEC:** `process/general-plans/completed/purchase-ap-attribution_21-07-26/purchase-ap-attribution_SPEC_21-07-26.md`
 (locked, AC1–AC8, all read and incorporated below).
 
 **INNOVATE decision (locked, not re-decided here):**
@@ -88,7 +88,7 @@ making attribution security-relevant, Phase B/Fatap AP API).
 | `apps/customer/src/lib/server/paymentWebhook.ts` (line ~95-136, VERIFIED) | select `paymentCheckouts.apCircuitId` alongside `networkId`; pass `apCircuitId: co?.apCircuitId ?? null` into `recordPaymentTransaction` |
 | `packages/core/src/services/credits.ts` | `spendCreditsTx` (line 155-188, VERIFIED) input type gains `apCircuitId?: string \| null`; the `tx.insert(creditLedger).values({...})` call (line ~180) includes `apCircuitId: input.apCircuitId ?? null` |
 | `packages/core/src/services/points.ts` | `spendPointsTx` (line 92-125, VERIFIED) input type gains `apCircuitId?: string \| null`; the `tx.insert(pointsLedger).values({...})` call (line ~117) includes `apCircuitId: input.apCircuitId ?? null` |
-| `packages/core/src/services/sessions.ts` | `bindMacTx` (line 56-182, VERIFIED) gains `apCircuitId?: string \| null` in opts; the update-existing (line ~121-130) and insert-new (line ~154-167) `networkSessions` write paths include `apCircuitId: opts.apCircuitId ?? null`; `startPaidAccessAndBindDevice` (line 329-415, VERIFIED — already resolves `now`/`maxDevicesPerAccount` pre-tx at lines 353-355, confirming the pre-tx pattern is precedented here) resolves `apCircuitId` via `resolveCircuitIdForMac` **wrapped in try/catch** BEFORE `db.transaction(...)` opens (line 357), passes it into both the `spendCreditsTx`/`spendPointsTx` call and the `bindMacTx` call inside the same tx; `startFreeAccessAndBindDevice` (line 685-761, VERIFIED, same pre-tx pattern at line 693) does the same — resolve (try/catch-wrapped) before `db.transaction`, thread into `bindMacTx` — see §Risk Notes for why the try/catch is mandatory, not optional |
+| `packages/core/src/services/sessions.ts` | `bindMacTx` (line 56-182, VERIFIED) gains `apCircuitId?: string \| null` in opts; the two `networkSessions` write paths handle it asymmetrically (VERIFIED against shipped source): the update-existing path only sets `apCircuitId` when `opts.apCircuitId !== undefined` (conditional spread), so an undefined value on an ordinary re-bind PRESERVES any previously-captured attribution rather than erasing it; only the insert-new path coerces a missing value with `apCircuitId: opts.apCircuitId ?? null`; `startPaidAccessAndBindDevice` (line 329-415, VERIFIED — already resolves `now`/`maxDevicesPerAccount` pre-tx at lines 353-355, confirming the pre-tx pattern is precedented here) resolves `apCircuitId` via `resolveCircuitIdForMac` **wrapped in try/catch** BEFORE `db.transaction(...)` opens (line 357), passes it into both the `spendCreditsTx`/`spendPointsTx` call and the `bindMacTx` call inside the same tx; `startFreeAccessAndBindDevice` (line 685-761, VERIFIED, same pre-tx pattern at line 693) does the same — resolve (try/catch-wrapped) before `db.transaction`, thread into `bindMacTx` — see §Risk Notes for why the try/catch is mandatory, not optional |
 | `apps/admin/src/lib/server/queries.ts` | `listTransactions` (line 685-750, VERIFIED) select adds `apCircuitId: paymentTransactions.apCircuitId`; row mapper adds a new field `apCircuitLabel` computed via `resolveApCircuitLabel` (batched — resolve unique circuit-ids once per page, not per row, to avoid N+1 network_health lookups). **VALIDATE finding — see §Risk Notes "Section 5 has no existing surface to extend":** there is currently NO per-user/per-grant detail query or route anywhere in `apps/admin` for credit/points/free-time records (`apps/admin/src/routes/(app)/users/` has only a single list page backed by `listUsers`; `credit_ledger`/`points_ledger` are read nowhere in `apps/admin` except aggregate KPI counts in `dashboardSnapshot`/`revenueByDay`). A new minimal query + display section must be added — see the concrete recommendation in Section 5 of the Implementation Checklist below. `apLabel()`/`revenueByAp()` (line 654-682) are NOT touched (AC8) |
 | `apps/admin/src/routes/(app)/finance/+page.svelte` and/or `apps/admin/src/routes/(app)/finance/transactions/+page.svelte` | render the new `apCircuitLabel` column/badge next to (or in place of) the current `apName` column for Maya transactions; **new** minimal section/table for credit/points/free-time grant AP attribution (see Section 5 recommendation) — likely 1 new small component or an addition to the transactions page, not a wholly new route |
 
@@ -301,11 +301,15 @@ making attribution security-relevant, Phase B/Fatap AP API).
 21. **Test gate (AC6 — Fully-Automated, static tripwire):** new source-text test
     `packages/core/src/services/sessions.transaction-tripwire.spec.ts` — per the Risk Notes design
     (NOT a literal copy of `networkHealth.transaction-tripwire.spec.ts`'s whole-file check): extract
-    the `startPaidAccessAndBindDevice` and `startFreeAccessAndBindDevice` source slices, and for
-    each, assert the line index of `resolveCircuitIdForMac(` is strictly before the line index of
-    that function's own `db.transaction(` call. Positive anchor: each slice must contain both
-    tokens (proves the call sites were actually found, non-vacuous). Command: `cd packages/core &&
-    bunx vitest run src/services/sessions.transaction-tripwire.spec.ts`.
+    the `startPaidAccessAndBindDevice` and `startFreeAccessAndBindDevice` source slices (each from
+    its `export async function <name>(` header to the next `export async function` boundary or EOF —
+    the whole-function slice, which includes the post-transaction body), and for each, assert the
+    line index of `resolveApCircuitPreTx(` (the shipped pre-tx try/catch wrapper that returns the
+    circuit-id STRING — this is the actual token in the code, resolved BEFORE the transaction opens)
+    is strictly before the line index of that function's own `db.transaction(` call. Positive
+    anchor: each slice must contain both tokens (proves the call sites were actually found,
+    non-vacuous). Command: `cd packages/core && bunx vitest run
+    src/services/sessions.transaction-tripwire.spec.ts`.
 
 **Section 5 — Admin display**
 22. Update `apps/admin/src/lib/server/queries.ts` `listTransactions` to select `apCircuitId` and
@@ -448,7 +452,7 @@ Test gates (5-column table):
 | AC4 | Read-time label resolver returns current friendly name after simulated AP rename | Fully-Automated | `cd packages/core && bunx vitest run src/services/networkHealth.spec.ts` | A |
 | AC5 | Read-time label resolver falls back to raw circuit-id string after simulated AP deletion | Fully-Automated | `cd packages/core && bunx vitest run src/services/networkHealth.spec.ts` | A |
 | AC6 | Forced `resolveCircuitIdForMac` failure still commits spend + grant (never blocks) | Fully-Automated | `cd apps/customer && bunx vitest run src/lib/server/grant-atomic.spec.ts` | B |
-| AC6 (defense-in-depth) | Static per-function line-order tripwire: no `resolveCircuitIdForMac(` after that function's `db.transaction(` | Fully-Automated | `cd packages/core && bunx vitest run src/services/sessions.transaction-tripwire.spec.ts` | B |
+| AC6 (defense-in-depth) | Static per-function line-order tripwire: `resolveApCircuitPreTx(` (the shipped pre-tx wrapper) appears BEFORE that function's `db.transaction(`, with positive anchors | Fully-Automated | `cd packages/core && bunx vitest run src/services/sessions.transaction-tripwire.spec.ts` | B |
 | AC7 | AP label (friendly/raw/Unattributed) renders correctly for all 3 grant types (automated leg) | Hybrid | `cd apps/admin && bunx vitest run src/lib/server/queries.spec.ts` | B |
 | AC7 | AP label renders correctly in the live admin UI (agent-probe leg + human handoff) | Hybrid | Agent browser pass on Finance transactions page + new credit/points/free-time section, seeded with all 3 attribution states, THEN human verification handoff | B |
 | AC8 | No regression to existing `revenueByAp`/`apLabel` Maya breakdown | Fully-Automated | existing `apps/admin` test coverage on `revenueByAp`/`apLabel`, re-run unchanged | A |
