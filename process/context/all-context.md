@@ -1,5 +1,24 @@
 # veent-wifiportal - All Context
 
+Last updated: 2026-07-30 (walled-garden-wallet-onboarding-prep closed and archived to
+`process/general-plans/completed/` — behavior-neutral prep work on top of the walled-garden-canonical
+rebuild: `PAYMENT_HOSTS` (`apps/admin/scripts/walled-garden-config.ts`) regrouped into 3 labeled
+blocks (Maya/PayMaya, GCash+Alipay+Mynt/G-Xchange, Google APIs) AND deliberately trimmed by 6 hosts —
+the 4 Google-Pay-flow hosts (`pay.google.com`, `payments.google.com`, `accounts.google.com`,
+`accounts.google.com.ph` — abandoned, Android WebView `OR_BIBED_15` blocks Google Pay captive
+regardless of whitelisting) plus `*.paymongo.com`/`*.xendit.co` (proven dead — grep-confirmed no
+integration code, only stale config/seed-comment references; live GCash checkout goes through Maya's
+hosted checkout, not PayMongo). `*.googleapis.com` retained (98-hit live checkout dependency, NOT
+Google Pay). Final live payment surface = **GCash + Maya only**. `docs/mikrotik/walled-garden.md`
+gained two new sections: a "How to add a wallet/bank (₱0 recon protocol)" procedure (DNS-cache-flush
+→ drive the flow on a captive device → `dns cache print` → classify direct-resolve vs CNAME-to-CDN →
+add → retest; two hard rules — `*.domain` never matches its bare parent, never add broad CDN
+allowlists) and a curated "Candidate wallets/banks (UNVERIFIED — recon required)" table (GoTyme,
+SeaBank, GrabPay, ShopeePay, Coins.ph + BDO/BPI/Landbank/Security Bank, banks flagged with a
+cert-pin/captive-detection caveat) — NONE of these 9 candidates are whitelisted in code; the table is
+a future-work tracker only. All 3 gates (collision guard, TS check, deliberate-removal diff)
+independently re-run green in UPDATE PROCESS.)
+
 Last updated: 2026-07-30 (walled-garden-canonical + the remainder of payment-walled-garden-v6
 closed and archived to `process/general-plans/completed/` — the staging router's walled garden is
 now fully code-owned and hard-reset-rebuilt from scratch. New canonical model: `setup:router`
@@ -461,6 +480,20 @@ easy to find).
   for the full diagnostic trail. Rule of thumb for any future CDN-fronted payment host: a host that
   CNAMEs to a CDN needs a `:resolve` scheduler; a host that resolves directly to the provider's own
   IP needs only an ordinary `PAYMENT_HOSTS`/`dst-host` entry.
+- **`PAYMENT_HOSTS` trimmed to the live payment surface (30-07-26,
+  `walled-garden-wallet-onboarding-prep`):** `apps/admin/scripts/walled-garden-config.ts`'s
+  `PAYMENT_HOSTS` is now grouped into 3 labeled blocks (Maya/PayMaya, GCash+Alipay+Mynt/G-Xchange,
+  Google APIs) and no longer includes Google Pay hosts (`pay.google.com`, `payments.google.com`,
+  `accounts.google.com`, `accounts.google.com.ph` — dropped: Android WebView `OR_BIBED_15` blocks
+  Google Pay captive, unfixable by whitelisting) or `*.paymongo.com`/`*.xendit.co` (dropped: no
+  integration code references them; live GCash checkout is via Maya's hosted checkout).
+  `*.googleapis.com` is kept (98-hit checkout dependency, unrelated to Google Pay). **Final live
+  payment methods = GCash + Maya only.** `docs/mikrotik/walled-garden.md` now also carries a "How
+  to add a wallet/bank (₱0 recon protocol)" section (DNS-cache-flush → drive the flow on a captive
+  device → classify direct-resolve vs CNAME-to-CDN → add → retest) and a curated
+  "Candidate wallets/banks (UNVERIFIED — recon required)" table (GoTyme, SeaBank, GrabPay,
+  ShopeePay, Coins.ph, BDO, BPI, Landbank, Security Bank) — read this before onboarding any new
+  wallet/bank; none of the 9 candidates are whitelisted in code yet.
 - `packages/core` probe/setup scripts
 - `apps/admin/scripts/setup-router.ts`
 - `apps/admin/src/routes/api/network/`
