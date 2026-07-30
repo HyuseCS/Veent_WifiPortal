@@ -1,35 +1,56 @@
-# MikroTik Walled-Garden Runbook
+# MikroTik Walled-Garden Runbook (canonical)
 
 The walled garden lets a guest device reach a small, fixed set of hosts **before it
-authenticates** — the payment gateway and our own portal/admin origin (Core Business Rule #2).
-The reCAPTCHA assets Maya's checkout page loads are **not** in this global list anymore; they're
-opened **per-device, scoped to the paying device's IP, at checkout time** (see [reCAPTCHA is
-per-device](#recaptcha-is-opened-per-device-at-checkout-not-global) below). Everything else stays
-blocked until a grant drops the firewall for that MAC.
+authenticates** — the OS captive-probe denies, the payment gateways, and our own portal/admin
+origin (Core Business Rule #2). Everything else stays blocked until a grant drops the firewall for
+that MAC.
 
-This runbook is the **operator-facing mirror** of what the code provisions automatically. The
-source of truth is still the script — keep this file in sync with it when the host list changes:
+**This doc is the source-of-truth description of the exact live state the code provisions.** The
+walled garden is code-owned: `bun run --filter radius-admin setup:router` rebuilds it from
+`apps/admin/scripts/walled-garden-config.ts`. Every code-owned row carries a `comment` tag in the
+`veent-admin:<group>` family, so no row is ever hand-guessed. Keep this file in sync with the config
+when the host list changes.
 
-- Script: `bun run --filter radius-admin setup:router` →
-  `apps/admin/scripts/setup-router.ts`
-- Core call: `provisionWalledGarden()` in
+- Script: `bun run --filter radius-admin setup:router` → `apps/admin/scripts/setup-router.ts`
+- Host/deny arrays: `apps/admin/scripts/walled-garden-config.ts` (`PAYMENT_HOSTS`, `PROBE_DENIES`)
+- Core call: `provisionWalledGarden()` / `reconcileWalledGarden()` in
   `packages/core/src/integrations/network/mikrotik.ts`
 
-Use the script for normal provisioning (it's idempotent — re-running only adds what's missing).
-Use the manual commands below when you're on the router console, auditing the live config, or
-provisioning a router the app server can't reach over the API.
+Use the script for normal provisioning (it's idempotent — re-running only adds what's missing). Use
+the manual commands below when you're on the router console, auditing the live config, doing a hard
+reset, or provisioning a router the app server can't reach over the API.
+
+---
+
+## The four row families (tags)
+
+Every row on the walled garden is one of these. The first three are code-owned and provisioned by
+`setup:router` in a **load-bearing order — probe → payment → portal** (see [The 3-call split](#the-3-call-split-and-why-order-matters)):
+
+| Tag | Menu | Rows | Provisioned by |
+| --- | --- | --- | --- |
+| `veent-admin:probe`   | `walled-garden` (`action=deny`)  | OS captive-probe hosts (`PROBE_DENIES`) | `setup:router` call 1 |
+| `veent-admin:payment` | `walled-garden` (`action=allow`) | payment-gateway hosts (`PAYMENT_HOSTS`) | `setup:router` call 2 |
+| `veent-admin:portal`  | `walled-garden` + `walled-garden ip` | admin/portal origin (`ORIGIN` + `ADMIN_WG_HOSTS`/`ADMIN_WG_IPS`) | `setup:router` call 3 |
+| `gcash-auto`          | `walled-garden ip`               | one self-healing GCash edge IP | the `gcash-resolve` scheduler (not `provisionWalledGarden`) |
+
+A fifth, **transient** family appears only during a checkout: `veent-checkout:<epochMs>` — per-device
+reCAPTCHA allows scoped to the paying device's IP, opened and swept by the customer app (see
+[reCAPTCHA is per-device](#recaptcha-is-opened-per-device-at-checkout-not-global)).
+
+Anything with **no tag** is an operator-added manual row. `setup:router` never creates untagged
+rows, and `--reconcile` never touches them.
 
 ---
 
 ## ⚠️ The payment webhook needs NO walled-garden rule
 
-A common misconception: the Maya **webhook** (`POST /api/webhooks/payment`) is
-**server-to-server** — Maya's backend calls **our** backend directly. It never traverses the
-guest hotspot, so it is **not** subject to the walled garden and needs **no** rule here.
+A common misconception: the Maya **webhook** (`POST /api/webhooks/payment`) is **server-to-server** —
+Maya's backend calls **our** backend directly. It never traverses the guest hotspot, so it is **not**
+subject to the walled garden and needs **no** rule here.
 
-What the walled garden is for is the **client's** path: the guest's phone reaching Maya's
-checkout/redirect/3DS pages and the reCAPTCHA assets, plus our portal origin. Only those
-client-side hosts go below.
+What the walled garden is for is the **client's** path: the guest's phone reaching the payment
+gateway's checkout/redirect/3DS pages and the reCAPTCHA assets, plus our portal origin.
 
 ---
 
@@ -37,107 +58,163 @@ client-side hosts go below.
 
 | RouterOS path                  | Matches on                                                              | Use for                                                                 |
 | ------------------------------ | ----------------------------------------------------------------------- | ----------------------------------------------------------------------- |
-| `/ip hotspot walled-garden`    | `dst-host` (TLS SNI / HTTP Host — **hostname**, supports `*` wildcards) | HTTP/HTTPS hosts (all the payment + captcha + portal hosts)             |
-| `/ip hotspot walled-garden ip` | `dst-address` (**IP/CIDR**, all protocols)                              | A host that needs non-HTTP/HTTPS, or a portal origin given as a bare IP |
+| `/ip hotspot walled-garden`    | `dst-host` (TLS SNI / HTTP Host — **hostname**, supports `*` wildcards) | HTTP/HTTPS hosts (payment + portal hosts) and the `action=deny` probes  |
+| `/ip hotspot walled-garden ip` | `dst-address` (**IP/CIDR**, all protocols)                              | A host that needs non-HTTP/HTTPS, a portal origin given as a bare IP, or the resolved `gcash-auto` IP |
 
-The host layer can only match the **hostname** (SNI), never the path. That's exactly why reCAPTCHA is
-opened per-device at checkout (scoped to the device IP) rather than globally: a global `*.google.com`
-allow would leak Google to every pre-auth device *and* let Android's captive probe return a real `204`
-(the "connected"-then-reverts flap). See the note in `setup-router.ts`.
+The host layer can only match the **hostname** (SNI), never the path (except an HTTP-only `path=`
+match). That's exactly why reCAPTCHA and GCash's rotating CDN IP are handled specially below.
 
 ---
 
-## Hosts to allow (`/ip hotspot walled-garden`)
+## `veent-admin:probe` — deny the OS connectivity-check probes (ordering matters)
 
-These mirror the `PAYMENT_HOSTS` array in `apps/admin/scripts/setup-router.ts`, which in turn
-mirrors what is **live on the router**. **Pin this list against that array** when either changes. The
-reCAPTCHA hosts are deliberately **not** here — see
-[reCAPTCHA is per-device](#recaptcha-is-opened-per-device-at-checkout-not-global) below.
+`setup:router` provisions an explicit **`action=deny`** set for the OS captive-portal probe hosts,
+tagged `comment=veent-admin:probe`. They guard against the **"Connected"-then-reverts flap** (see
+`docs/problems/captive-connected-flap-on-free-time.md`): whenever a `www.google.com` /
+`www.gstatic.com` allow is in play — the per-device checkout allow, or any broad allow an operator
+adds by hand — an un-granted phone could otherwise get a real `204` and flash **"Connected"** then
+revert to **"Sign in to network."** The denies sit **ABOVE the allows** (walled-garden matching is
+**first-match, top-to-bottom**), so a deny only wins if it sits before the allow. None of these
+hosts/paths is a reCAPTCHA resource, so denying them does not affect payments.
+
+```
+# Provisioned first, with place-before so they land at the TOP, ahead of any allow.
+/ip hotspot walled-garden add action=deny dst-host=connectivitycheck.gstatic.com comment=veent-admin:probe place-before=0
+/ip hotspot walled-garden add action=deny dst-host=clients1.google.com           comment=veent-admin:probe place-before=0
+/ip hotspot walled-garden add action=deny dst-host=clients2.google.com           comment=veent-admin:probe place-before=0
+/ip hotspot walled-garden add action=deny dst-host=clients3.google.com           comment=veent-admin:probe place-before=0
+/ip hotspot walled-garden add action=deny dst-host=clients4.google.com           comment=veent-admin:probe place-before=0
+/ip hotspot walled-garden add action=deny dst-host=connectivitycheck.android.com comment=veent-admin:probe place-before=0
+# www.google.com is needed by reCAPTCHA, so deny ONLY the probe path (HTTP-only match):
+/ip hotspot walled-garden add action=deny dst-host=www.google.com path=/generate_204 comment=veent-admin:probe place-before=0
+# Apple (iOS/macOS), Windows and Firefox probes too, so the OS "Sign in to network" popup fires on
+# every platform. Unlike the Google set these aren't behind any allow (so they're already
+# intercepted by default); the explicit deny makes the popup robust and documents intent.
+/ip hotspot walled-garden add action=deny dst-host=captive.apple.com        comment=veent-admin:probe place-before=0
+/ip hotspot walled-garden add action=deny dst-host=www.msftconnecttest.com  comment=veent-admin:probe place-before=0
+/ip hotspot walled-garden add action=deny dst-host=www.msftncsi.com         comment=veent-admin:probe place-before=0
+/ip hotspot walled-garden add action=deny dst-host=detectportal.firefox.com comment=veent-admin:probe place-before=0
+```
+
+The full deny set lives in `PROBE_DENIES` (`apps/admin/scripts/walled-garden-config.ts`);
+`setup:router` applies it idempotently. **Never remove these** — `--reconcile` is add-only for deny
+rows by construction (it only ever removes `action=allow` rows), precisely so a prune can't re-open
+the flap.
+
+**Verify the fix on an un-granted device:**
+
+```
+# From a phone still behind the portal (NOT yet granted):
+curl -v http://connectivitycheck.gstatic.com/generate_204
+# BEFORE the deny: returns 204 (the leak). AFTER: intercepted/redirected to the portal (fixed).
+
+# Confirm ordering — the deny rows must appear ABOVE the allow rows:
+/ip hotspot walled-garden print
+```
+
+---
+
+## `veent-admin:payment` — payment-gateway allow hosts
+
+These mirror the `PAYMENT_HOSTS` array in `apps/admin/scripts/walled-garden-config.ts`, which in turn
+mirrors what is **live on the router**. Codified from live router hit-data (RouterOS 6.49.18) — the
+over-broad manual `*keyword*` substring wildcards (`*alipay*`, `*gcash*`, `*g-xchange*`) are replaced
+by enumerated `*.domain` forms.
 
 ```
 # Maya / PayMaya checkout + redirect + API (wildcards cover sandbox + prod)
-/ip hotspot walled-garden add action=allow dst-host=maya.ph        comment=veent-admin
-/ip hotspot walled-garden add action=allow dst-host=*.maya.ph      comment=veent-admin
-/ip hotspot walled-garden add action=allow dst-host=paymaya.com    comment=veent-admin
-/ip hotspot walled-garden add action=allow dst-host=*.paymaya.com  comment=veent-admin
+/ip hotspot walled-garden add action=allow dst-host=maya.ph        comment=veent-admin:payment
+/ip hotspot walled-garden add action=allow dst-host=*.maya.ph      comment=veent-admin:payment
+/ip hotspot walled-garden add action=allow dst-host=paymaya.com    comment=veent-admin:payment
+/ip hotspot walled-garden add action=allow dst-host=*.paymaya.com  comment=veent-admin:payment
 
 # GCash e-wallet checkout — Maya/PayMongo redirect the buyer to GCash to authorize payment.
-/ip hotspot walled-garden add action=allow dst-host=gcash.com      comment=veent-admin
-/ip hotspot walled-garden add action=allow dst-host=*.gcash.com    comment=veent-admin
+/ip hotspot walled-garden add action=allow dst-host=gcash.com      comment=veent-admin:payment
+/ip hotspot walled-garden add action=allow dst-host=*.gcash.com    comment=veent-admin:payment
 
 # Other gateways named in Rule #2 — harmless if unused on this deployment.
-/ip hotspot walled-garden add action=allow dst-host=*.paymongo.com comment=veent-admin
-/ip hotspot walled-garden add action=allow dst-host=*.xendit.co    comment=veent-admin
+/ip hotspot walled-garden add action=allow dst-host=*.paymongo.com comment=veent-admin:payment
+/ip hotspot walled-garden add action=allow dst-host=*.xendit.co    comment=veent-admin:payment
 
-# Alipay/Ant cashier — GCash checkout runs through the Alipay-powered cashier (codified from live
-# hits `*alipay*`=23). Enumerated *.domain forms replace the over-broad `*alipay*` substring.
-/ip hotspot walled-garden add action=allow dst-host=*.alipay.com        comment=veent-admin
-/ip hotspot walled-garden add action=allow dst-host=*.alipayobjects.com comment=veent-admin
-/ip hotspot walled-garden add action=allow dst-host=*.alicdn.com        comment=veent-admin
-/ip hotspot walled-garden add action=allow dst-host=*.antgroup.com      comment=veent-admin
+# Alipay/Ant cashier — GCash checkout runs through the Alipay-powered cashier. Enumerated *.domain
+# forms replace the over-broad `*alipay*` substring. BARE alipay.com is required IN ADDITION to the
+# wildcard: a `*.` wildcard does NOT match its own bare parent host, so `*.alipay.com` alone leaves
+# `alipay.com` blocked — the retired `*alipay*` substring used to catch it.
+/ip hotspot walled-garden add action=allow dst-host=alipay.com          comment=veent-admin:payment
+/ip hotspot walled-garden add action=allow dst-host=*.alipay.com        comment=veent-admin:payment
+/ip hotspot walled-garden add action=allow dst-host=*.alipayobjects.com comment=veent-admin:payment
+/ip hotspot walled-garden add action=allow dst-host=*.alicdn.com        comment=veent-admin:payment
+/ip hotspot walled-garden add action=allow dst-host=*.antgroup.com      comment=veent-admin:payment
 
-# GCash/Mynt/G-Xchange infra (live hits `*.mynt.xyz`=2). Replaces the over-broad `*g-xchange*`.
-/ip hotspot walled-garden add action=allow dst-host=*.mynt.xyz     comment=veent-admin
-/ip hotspot walled-garden add action=allow dst-host=*.g-xchange.com comment=veent-admin
+# GCash/Mynt/G-Xchange infra. Replaces the over-broad `*g-xchange*` substring.
+/ip hotspot walled-garden add action=allow dst-host=*.mynt.xyz      comment=veent-admin:payment
+/ip hotspot walled-garden add action=allow dst-host=*.g-xchange.com comment=veent-admin:payment
 
-# Google Pay checkout — specific hosts only (live hits pay.google.com=17, payments.google.com=13).
-# NOT broad *.google.com (that re-opens the captive-probe flap — see the reCAPTCHA note below).
-/ip hotspot walled-garden add action=allow dst-host=pay.google.com      comment=veent-admin
-/ip hotspot walled-garden add action=allow dst-host=payments.google.com comment=veent-admin
+# Google Pay checkout — specific hosts only. NOT broad *.google.com (that re-opens the captive-probe
+# flap — see the reCAPTCHA note below).
+/ip hotspot walled-garden add action=allow dst-host=pay.google.com      comment=veent-admin:payment
+/ip hotspot walled-garden add action=allow dst-host=payments.google.com comment=veent-admin:payment
 
-# Google login / SetSID for the Google Pay flow (added from live 29-07-26 findings). Bare
-# accounts.google.com is required — a `*.` wildcard does NOT match its own bare parent host; the
-# .com.ph ccTLD is where SetSID's cross-domain-cookie step bounces. Both resolve DIRECTLY to Google
-# IPs (no CNAME-to-CDN), so plain host rules suffice. Still NOT broad *.google.com.
-/ip hotspot walled-garden add action=allow dst-host=accounts.google.com    comment=veent-admin
-/ip hotspot walled-garden add action=allow dst-host=accounts.google.com.ph comment=veent-admin
+# Google login / SetSID for the Google Pay flow. Bare accounts.google.com is required — a `*.`
+# wildcard does NOT match its own bare parent host; the .com.ph ccTLD is where SetSID's
+# cross-domain-cookie step bounces. Both resolve DIRECTLY to Google IPs (no CNAME-to-CDN), so plain
+# host rules suffice. Still NOT broad *.google.com.
+/ip hotspot walled-garden add action=allow dst-host=accounts.google.com    comment=veent-admin:payment
+/ip hotspot walled-garden add action=allow dst-host=accounts.google.com.ph comment=veent-admin:payment
 
-# KEEP — proven needed by live traffic (98 hits). Abuse residual: *.googleapis.com is a broad
-# surface; dropping a 98-hit rule risks breaking checkout, so it stays. Tightening to exact subpaths
-# needs a live capture of which paths checkout uses (backlog candidate) — do NOT silently drop.
-/ip hotspot walled-garden add action=allow dst-host=*.googleapis.com    comment=veent-admin
-
-# Our portal / admin origin (derived from ORIGIN). Replace with your LAN hostname,
-# OR add it at the IP layer below if ORIGIN is a bare IP.
-/ip hotspot walled-garden add action=allow dst-host=admin.veent.lan comment=veent-admin
-
-# NOTE: reCAPTCHA hosts (www.google.com, www.gstatic.com, www.recaptcha.net) are NOT global here —
-# openCheckoutAccess opens them per-device at checkout. See the section below.
+# KEEP — proven needed by live traffic (98 hits). *.googleapis.com is a broad surface; dropping a
+# 98-hit rule risks breaking checkout, so it stays. Tightening to exact subpaths needs a live capture
+# of which paths checkout uses (backlog candidate) — do NOT silently drop.
+/ip hotspot walled-garden add action=allow dst-host=*.googleapis.com comment=veent-admin:payment
 ```
+
+### Why `*.google.com` / `*.gstatic.com` / `*.recaptcha.net` are NOT allowed here
+
+**Do not "helpfully" re-add broad Google/gstatic/recaptcha allow rows** — not even disabled ones. The
+hard reset deliberately drops them, and here is why:
+
+- A global `*.google.com` / `*.gstatic.com` allow lets **Android's captive probe**
+  (`.../generate_204`) return a real `204` **pre-auth**, so every connecting guest briefly flashes
+  **"Connected"** then reverts to **"Sign in to network"** while still un-granted. MikroTik can't
+  path-filter HTTPS, so the probe can't be blocked while `google.com` is open at the host level.
+- The reCAPTCHA that Maya's checkout page renders lives on `www.google.com/recaptcha` and
+  `www.gstatic.com/recaptcha` — **paths**, not distinct hosts. The `veent-admin:probe` deny rows
+  above enforce the flap fix; the reCAPTCHA assets are opened **per-device at checkout** instead
+  (next section).
+- A disabled broad-Google row surviving a rebuild for "just in case" reintroduces exactly the
+  "why is this here" guessing problem this canonical setup exists to close. If you think you need
+  Google open globally, you almost certainly need a **per-device checkout allow** or a specific
+  **host** in `PAYMENT_HOSTS`, not a broad wildcard.
 
 ### reCAPTCHA is opened per-device at checkout (not global)
 
-Maya's checkout page renders a Google reCAPTCHA served from `www.google.com` / `www.gstatic.com` /
-`www.recaptcha.net`. These are **deliberately kept out of the global list**: a global `*.google.com`
-allow would expose Google to every pre-auth device and let Android's captive probe return a real `204`
-(the flap above). Instead the customer app opens exactly those three hosts **scoped to the paying
-device's IP**, tagged `veent-checkout:<epochMs>`, the moment the buyer reaches the Maya checkout page:
+The customer app opens `www.google.com`, `www.gstatic.com`, `www.recaptcha.net` **scoped to the
+paying device's IP**, tagged `veent-checkout:<epochMs>`, the moment the buyer reaches the checkout
+page:
 
-- Hosts: `CHECKOUT_ACCESS_HOSTS` in `packages/core/src/services/checkoutAccess.ts`
-  (`www.google.com`, `www.gstatic.com`, `www.recaptcha.net`).
-- Opened by `openCheckoutAccess()` (called from `apps/customer/.../top-up/+page.server.ts`); each rule
-  carries `src-address=<device-ip>`, so it never opens Google for any other device.
-- Swept on a TTL by the customer revoke cron (`sweepHostAccess`, `veent-checkout` tag) — see the B3.6
-  check in [`bench-verify.md`](./bench-verify.md).
+- Hosts: `CHECKOUT_ACCESS_HOSTS` in `packages/core/src/services/checkoutAccess.ts`.
+- Opened by `openCheckoutAccess()` (called from `apps/customer/.../top-up/+page.server.ts`); each
+  rule carries `src-address=<device-ip>`, so it never opens Google for any other device.
+- Swept on a TTL by the customer revoke cron (`sweepHostAccess`, `veent-checkout` tag).
 
-So on the live router you'll see transient `comment=veent-checkout:<ts>` rules appear during a checkout
-and get reaped afterward — that's expected, not drift.
+So on the live router you'll see transient `comment=veent-checkout:<ts>` rules appear during a
+checkout and get reaped afterward — that's expected, not drift.
 
-### GCash needs a CNAME resolve-script (not a host rule)
+### `gcash-auto` — GCash needs a CNAME resolve-script (not a host rule)
 
 `payments.gcash.com` **CNAMEs to an Akamai edge** (`…edgekey.net` → `…akamaiedge.net`) whose IP
 **rotates**. RouterOS v6 `dst-host` walled-garden matching **cannot follow a CNAME chain** to a
-wildcard like `*.gcash.com`, so a host rule never matches and GCash checkout dead-ends — regardless of
-plain vs. encrypted DNS (this is a CNAME-matching gap, **not** a DoH-hiding problem). The fix is a
+wildcard like `*.gcash.com`, so a host rule never matches and GCash checkout dead-ends — regardless
+of plain vs. encrypted DNS (this is a CNAME-matching gap, **not** a DoH-hiding problem). The fix is a
 `/system scheduler` item, `gcash-resolve`, that re-resolves the host every 5 minutes and upserts a
-single `walled-garden ip` row (`comment=gcash-auto`) with the fresh IP — self-healing as Akamai's edge
-IP changes, no hardcoded IP:
+single `walled-garden ip` row (`comment="gcash-auto"`) with the fresh IP — self-healing as Akamai's
+edge IP changes, no hardcoded IP:
 
-- Provisioned by `provisionGcashResolveScheduler()` in
-  `packages/core/src/integrations/network/mikrotik.ts`, called from `setup:router` alongside the host
-  provisioning. Idempotent — matched by `name=gcash-resolve`, so a re-run is a no-op.
+- Provisioned by `provisionGcashResolveScheduler()` in `packages/core/.../mikrotik.ts`, called from
+  `setup:router` alongside the host provisioning. Idempotent — matched by `name=gcash-resolve`, so a
+  re-run is a no-op.
 - The on-event body is a **hardcoded, static** RouterOS script (never templatized from data — a
-  router-resident-scheduled-code injection guardrail). Verbatim from the 29-07-26 live diagnostic.
+  router-resident-scheduled-code injection guardrail).
 - Distinct match keys: the scheduler **item** is keyed by `name=gcash-resolve`; the on-event body's
   own **upsert** target on the `walled-garden ip` layer is keyed by `comment="gcash-auto"`.
 
@@ -157,152 +234,170 @@ IP changes, no hardcoded IP:
 /ip hotspot walled-garden ip print where comment=gcash-auto
 ```
 
-Rule of thumb from the live session: a payment host that CNAMEs to a CDN (GCash → Akamai) needs this
-resolve-script; a host that resolves **directly** to the provider's own IP (all Google hosts above)
-needs only a `dst-host` rule.
+The `gcash-auto` row is **not** managed by `--reconcile` (its tag isn't in the `veent-admin:*`
+family) — leave it to the scheduler to self-heal on its own ~5-minute cadence. Never hand-edit or
+manually recreate it.
 
-### Deny the OS connectivity-check probes (ordering matters)
-
-`setup:router` provisions an explicit **`action=deny`** set for the OS captive-portal probe hosts,
-tagged `comment=veent-admin`. They guard against the **"Connected"-then-reverts flap** (See
-`docs/problems/captive-connected-flap-on-free-time.md`): whenever a `www.google.com` / `www.gstatic.com`
-allow is in play — the **per-device checkout allow** above, or any broad allow an operator adds by hand
-— an un-granted phone could otherwise get a real `204` and flash **"Connected"** then revert to **"Sign
-in to network."** The denies sit **ABOVE the allows** — walled-garden matching is **first-match,
-top-to-bottom**, so a deny only wins if it sits before the allow. None of these hosts/paths is a
-reCAPTCHA resource (reCAPTCHA lives on `www.gstatic.com/recaptcha` and `www.google.com/recaptcha`),
-so denying them does not affect payments.
-
-```
-# Add with place-before so they land at the TOP, ahead of any google/gstatic allow (the per-device
-# checkout allow, or a manual one). (`bun run setup:router` does this automatically and idempotently.)
-/ip hotspot walled-garden add action=deny dst-host=connectivitycheck.gstatic.com comment=veent-admin place-before=0
-/ip hotspot walled-garden add action=deny dst-host=clients3.google.com           comment=veent-admin place-before=0
-/ip hotspot walled-garden add action=deny dst-host=connectivitycheck.android.com comment=veent-admin place-before=0
-# www.google.com is needed by reCAPTCHA, so deny ONLY the probe path (HTTP-only match):
-/ip hotspot walled-garden add action=deny dst-host=www.google.com path=/generate_204 comment=veent-admin place-before=0
-# Apple (iOS/macOS), Windows and Firefox probes too, so the OS "Sign in to network" popup fires on
-# every platform — not just Android. Unlike the Google set these aren't behind any allow (so they're
-# already intercepted by default); the explicit deny makes the popup robust and documents intent.
-/ip hotspot walled-garden add action=deny dst-host=captive.apple.com        comment=veent-admin place-before=0
-/ip hotspot walled-garden add action=deny dst-host=www.msftconnecttest.com  comment=veent-admin place-before=0
-/ip hotspot walled-garden add action=deny dst-host=www.msftncsi.com         comment=veent-admin place-before=0
-/ip hotspot walled-garden add action=deny dst-host=detectportal.firefox.com comment=veent-admin place-before=0
-```
-
-The full deny set lives in `PROBE_DENIES` (`apps/admin/scripts/setup-router.ts`); `bun run setup:router`
-applies it idempotently, so prefer that over adding rows by hand.
-
-**Verify the fix on an un-granted device** (before relying on it):
-
-```
-# From a phone still behind the portal (NOT yet granted):
-curl -v http://connectivitycheck.gstatic.com/generate_204
-# BEFORE the deny: returns 204 (the leak). AFTER: intercepted/redirected to the portal (fixed).
-
-# Confirm ordering on the router — the deny rows must appear ABOVE the *.google.com/*.gstatic.com allows:
-/ip hotspot walled-garden print
-```
+Rule of thumb: a payment host that CNAMEs to a CDN (GCash → Akamai) needs this resolve-script; a host
+that resolves **directly** to the provider's own IP (all the Google hosts above) needs only a
+`dst-host` rule.
 
 ### 3-D Secure / card ACS — per-deployment
 
-Card payments may step up to the **issuing bank's** ACS domain, which can't be predicted in
-advance. E-wallet / Maya-wallet checkout is fully covered by `*.maya.ph` above. If card
-payments dead-end on the 3DS redirect, capture the failing host from the router's DNS cache
-(`/ip dns cache print` while reproducing) and add it:
+Card payments may step up to the **issuing bank's** ACS domain, which can't be predicted in advance.
+E-wallet / Maya-wallet checkout is fully covered by `*.maya.ph` above. If card payments dead-end on
+the 3DS redirect, capture the failing host from the router's DNS cache (`/ip dns cache print` while
+reproducing) and add it as a `veent-admin:payment` row (or, better, add it to `PAYMENT_HOSTS` and
+re-run `setup:router`):
 
 ```
-/ip hotspot walled-garden add action=allow dst-host=<bank-acs-host> comment=veent-admin
-```
-
-## IPs to allow (`/ip hotspot walled-garden ip`)
-
-Only when a host needs **non-HTTP/HTTPS**, or the portal origin is a bare LAN IP rather than a
-hostname (mirrors `ADMIN_WG_IPS` + the IP branch for `ORIGIN`):
-
-```
-# Live deployment: the portal/admin origin is the bare IP 10.210.0.9 (on 10.210.0.0/18).
-/ip hotspot walled-garden ip add action=accept dst-address=10.210.0.9 comment=veent-admin
+/ip hotspot walled-garden add action=allow dst-host=<bank-acs-host> comment=veent-admin:payment
 ```
 
 ---
 
-## Verify
+## `veent-admin:portal` — admin/portal origin
+
+The portal/admin origin the guest must reach pre-auth to see the sign-in page. Derived from `ORIGIN`
+(an IP origin goes to the IP layer, a hostname to the host layer), plus any extra
+`ADMIN_WG_HOSTS`/`ADMIN_WG_IPS`:
 
 ```
-# List what's open pre-auth — confirm every host above is present exactly once.
+ADMIN_WG_HOSTS="admin.veent.lan,portal.veent.lan"   # comma-separated DNS names
+ADMIN_WG_IPS="10.5.50.1,10.5.50.0/24"               # comma-separated IPs/CIDRs
+```
+
+```
+# Hostname origin (host layer):
+/ip hotspot walled-garden add action=allow dst-host=admin.veent.lan comment=veent-admin:portal
+
+# Bare-IP origin (ip layer). Live staging deployment: the portal origin is a bare LAN IP.
+/ip hotspot walled-garden ip add action=accept dst-address=10.210.0.9 comment=veent-admin:portal
+```
+
+`PAYMENT_HOSTS` is its **own** group (`veent-admin:payment`) and is **not** merged into the portal
+set. If an `ADMIN_WG_HOSTS` value happens to duplicate a `PAYMENT_HOSTS` entry, `setup:router` logs a
+warning — the same host would end up tagged under both groups (functionally harmless, since
+provisioning is idempotent per-tag, but it muddies the tag audit).
+
+---
+
+## Hard reset + rebuild (canonical, from-scratch)
+
+When the live garden has drifted (untagged operator rows, stale substrings, duplicates) and you want
+to rebuild it EXACTLY from code, wipe **both** menus and re-run `setup:router`. This is the only way
+to guarantee zero un-tagged rows.
+
+> **Staging-only.** No production walled-garden change is authorized here. Wiping briefly makes
+> payment hosts unreachable for the gap between the wipe and the rerun — acceptable on staging (no
+> live guests), never on prod without a maintenance window.
+
+```
+# 1. Wipe BOTH walled-garden menus (host layer AND ip layer) on the router console:
+/ip hotspot walled-garden remove [find]
+/ip hotspot walled-garden ip remove [find]
+
+# 2. Rebuild from code (runs the 3-call split: probe → payment → portal, then the gcash-resolve
+#    scheduler). Idempotent, so safe to re-run.
+bun run --filter radius-admin setup:router
+```
+
+Note: wiping `/ip hotspot walled-garden ip` also clears the `gcash-auto` row. The `gcash-resolve`
+scheduler re-creates it on its next ~5-minute tick — no manual action needed.
+
+### The 3-call split, and why order matters
+
+`setup:router` calls `provisionWalledGarden` **three times** in this exact order:
+
+```
+call 1: provisionWalledGarden(config, { denies: PROBE_DENIES, tag: 'veent-admin:probe' })
+call 2: provisionWalledGarden(config, { hosts: PAYMENT_HOSTS,  tag: 'veent-admin:payment' })
+call 3: provisionWalledGarden(config, { hosts: portalHosts, ips: portalIps, tag: 'veent-admin:portal' })
+```
+
+**Probe first is load-bearing.** On a wiped/fresh garden, `provisionWalledGarden` derives its
+deny-placement `beforeId` fresh per call — it finds the first enabled, non-dynamic, non-empty-dst-host
+`action=allow` row and `place-before`s the denies ahead of it. Running probe first guarantees the
+deny rows land at the very top of an empty garden, matching this doc's stated order. (Even a reordered
+run would still place denies above the allows via the same mechanism — but do NOT reorder the calls
+without re-verifying that derivation.)
+
+### After a rebuild — verify
+
+```
+# Zero un-tagged rows, zero duplicates, every code-owned row tagged veent-admin:<group>:
 /ip hotspot walled-garden print
 /ip hotspot walled-garden ip print
 
-# Watch DNS the device actually resolves while reproducing a stuck checkout —
-# any host here that ISN'T in the walled garden is a candidate to add.
-/ip dns cache print
+# Clean reconcile (should report nothing to remove for all 3 groups):
+bun run --filter radius-admin setup:router --reconcile --dry-run
+
+# Scheduler present and self-healing:
+/system scheduler print where name=gcash-resolve
+/ip hotspot walled-garden ip print where comment=gcash-auto
 ```
 
 Symptoms a missing entry causes:
 
 - Checkout redirect (`payments-web*.maya.ph`) shows a closed connection → a `*.maya.ph` rule is missing.
 - Checkout page renders but the captcha never appears (works on a fully-online device) → the
-  per-device checkout access didn't open — no `veent-checkout:<ts>` rule for the device IP (check the
-  `[topup] openCheckoutAccess failed` log, or that the device's MAC/IP resolved).
+  per-device checkout access didn't open — no `veent-checkout:<ts>` rule for the device IP.
+- GCash checkout dead-ends → the `gcash-resolve` scheduler isn't running, or `gcash-auto` hasn't
+  resolved yet.
 - Card payment dead-ends after entering card details → the bank ACS host is missing (see 3DS above).
 
-## Operator cleanup (manual — `setup:router` will NOT prune)
+---
 
-`setup:router` is additive by design (idempotent print-then-add): it adds the codified `*.domain`
-allows above but will **not** delete the operator's older, over-broad manual `*keyword*` substring
-rules. Those substrings (`*gcash*`, `*g-xchange*`, `*maya.ph*`, `*paymaya*`) match too widely (e.g.
-`gcash.evil.com`) and are superseded by the enumerated `*.domain` forms. **Run the codified script
-first, confirm the new allows are present and matching, then delete the substrings by hand:**
+## `--reconcile` (opt-in prune of the `veent-admin:*` family)
+
+`setup:router --reconcile` automates the code-owned cleanup: it removes `/ip hotspot walled-garden`
+**`action=allow`** rows (and tagged `walled-garden ip` rows) whose host/IP is no longer in the
+desired set. As of the canonical rebuild it manages the **whole `veent-admin:*` family**, one call
+per group:
 
 ```
-# 1. Confirm the codified replacements exist before removing the originals:
-/ip hotspot walled-garden print
-
-# 2. Remove the over-broad substring wildcards (replaced by enumerated *.domain forms above):
-/ip hotspot walled-garden remove [find where dst-host="*gcash*"]      ;# duplicate rows
-/ip hotspot walled-garden remove [find where dst-host="*g-xchange*"]
-/ip hotspot walled-garden remove [find where dst-host="*maya.ph*"]
-/ip hotspot walled-garden remove [find where dst-host="*paymaya*"]
-# Evaluate (0 hits, likely droppable):
-/ip hotspot walled-garden remove [find where dst-host="*.accounts.google.com"]
+reconcile 1: reconcileWalledGarden(config, { hosts: [], ips: [], tag: 'veent-admin:probe' })
+reconcile 2: reconcileWalledGarden(config, { hosts: PAYMENT_HOSTS, ips: [], tag: 'veent-admin:payment' })
+reconcile 3: reconcileWalledGarden(config, { hosts: portalHosts, ips: portalIps, tag: 'veent-admin:portal' })
 ```
 
-The rotating `23.7.208.188` GCash IP allow (`gcash-test` on the `walled-garden ip` layer) is **kept
-for now** — retiring it depends on a live diagnostic capture that is out of scope for this change.
-Leave the disabled `*.gstatic.com` / `*.google.com` / `*.recaptcha.net` rows disabled (the flap fix).
+The tag match is a **family-prefix** match (`commentMatchesTag`): a call with the bare `veent-admin`
+tag would manage every `veent-admin:*` row, but each of the three real calls passes a **specific
+sub-tag**, so each call only ever manages its own group's rows (no row is tagged
+`veent-admin:payment:<...>`, so the prefix never leaks across siblings). The probe group's desired
+set is empty — harmless, because reconcile never removes `action=deny` rows anyway.
 
-### `--reconcile` (opt-in prune of code-owned rows)
-
-`setup:router --reconcile` automates **only** the code-owned portion of cleanup: it removes
-`/ip hotspot walled-garden` **`action=allow`** rows tagged exactly `comment=veent-admin` whose host is
-no longer in the desired set, plus tagged `walled-garden ip` rows whose IP has dropped out. Preview
-first, always:
+Preview first, always:
 
 ```
 bun run --filter radius-admin setup:router --reconcile --dry-run   # prints what it WOULD remove
 bun run --filter radius-admin setup:router --reconcile             # actually removes them
 ```
 
-It **never touches**, by construction (exact-tag + action scoping):
+It **never touches**, by construction:
 
-- **un-tagged / manually-added operator rows** — including the shadowing `*keyword*` substrings
-  (`*gcash*`, `*g-xchange*`, `*maya.ph*`, `*paymaya*`) from the manual cleanup above. Those still
-  need the by-hand deletion + coverage-regression check — `--reconcile` will not remove them.
-- the **`action=deny` PROBE_DENIES rows** — even though they carry the same `veent-admin` tag on the
-  same menu (removing one would silently re-open a captive-probe host and bring back the flap).
-- the **`gcash-auto`** `walled-garden ip` row (a different tag), and the `/ip hotspot ip-binding`
-  admin-bypass rows (a different menu that reuses the `veent-admin` string).
+- **un-tagged / manually-added operator rows** — no `veent-admin:*` tag, so they're not candidates.
+- the **`action=deny` `veent-admin:probe` rows** — the action filter (`action=allow` only) excludes
+  them, so a prune can't re-open a captive-probe host and bring back the flap.
+- **DISABLED / DYNAMIC / empty-`dst-host`** rows (and disabled/invalid ip-layer rows) — skipped, so
+  RouterOS' auto-generated `dst-address` mirrors and any deliberately-disabled row are never removal
+  candidates.
+- the **`gcash-auto`** `walled-garden ip` row (`gcash-auto` tag, not in the family) and the
+  `/ip hotspot ip-binding` admin-bypass rows (a **different menu** that reuses the `veent-admin`
+  string — `reconcileWalledGarden` only ever writes to `/ip hotspot walled-garden` and its `/ip`
+  sublayer).
 
 The default (no-flag) `setup:router` run stays **purely additive** — it never prunes anything.
 
-## Idempotency / cleanup
+---
 
-The script matches existing entries by `dst-host` / `dst-address` and skips duplicates, and
-tags everything it creates with `comment=veent-admin`. To audit or remove only the entries this
-tooling created:
+## Audit / manual removal
 
 ```
-/ip hotspot walled-garden print where comment=veent-admin
-/ip hotspot walled-garden remove [find comment=veent-admin]
+# List everything this tooling created, by group:
+/ip hotspot walled-garden print where comment~"veent-admin:"
+/ip hotspot walled-garden ip print where comment~"veent-admin:"
+
+# Remove one group by hand (rarely needed — prefer --reconcile):
+/ip hotspot walled-garden remove [find where comment="veent-admin:payment"]
 ```

@@ -90,11 +90,18 @@ const isIp = (h: string): boolean => /^[0-9.]+(\/\d{1,2})?$/.test(h) || h.includ
 
 // PAYMENT_HOSTS + PROBE_DENIES live in ./walled-garden-config (side-effect-free) so the
 // collision-guard spec can import them without running this script's top-level provisioning.
+//
+// The walled garden is provisioned as THREE tagged groups (walled-garden-canonical, 30-07-26) so
+// every code-owned row is traceable to its group and --reconcile can manage each independently:
+//   veent-admin:probe    — the OS captive-probe DENY rows (PROBE_DENIES)
+//   veent-admin:payment  — the payment-gateway allow hosts (PAYMENT_HOSTS)
+//   veent-admin:portal   — the admin/portal origin (ORIGIN + ADMIN_WG_HOSTS/ADMIN_WG_IPS)
+// PAYMENT_HOSTS is its OWN group now — it is NOT merged into the portal host set.
 
-const hosts = new Set([...splitList(ADMIN_WG_HOSTS), ...PAYMENT_HOSTS]);
-const ips = new Set(splitList(ADMIN_WG_IPS));
+const adminHosts = new Set(splitList(ADMIN_WG_HOSTS));
+const adminIps = new Set(splitList(ADMIN_WG_IPS));
 
-// Derive the admin host from ORIGIN and slot it into the right layer.
+// Derive the admin host from ORIGIN and slot it into the right portal layer.
 const origin = required('ORIGIN', ORIGIN);
 let originHost: string;
 try {
@@ -111,34 +118,66 @@ if (originHost === 'localhost' || originHost === '127.0.0.1') {
 	);
 	process.exit(1);
 }
-(isIp(originHost) ? ips : hosts).add(originHost);
+(isIp(originHost) ? adminIps : adminHosts).add(originHost);
 
-if (hosts.size === 0 && ips.size === 0) {
+if (adminHosts.size === 0 && adminIps.size === 0) {
 	console.error('Nothing to whitelist — no ORIGIN host, ADMIN_WG_HOSTS, or ADMIN_WG_IPS resolved.');
 	process.exit(1);
 }
 
-console.log(`Provisioning walled garden on ${config.host}:${config.port ?? (config.tls ? 8729 : 8728)}`);
-if (hosts.size) console.log(`  hosts: ${[...hosts].join(', ')}`);
-if (ips.size) console.log(`  ips:   ${[...ips].join(', ')}`);
-if (PROBE_DENIES.length)
-	console.log(`  denies: ${PROBE_DENIES.map((d) => d.host + (d.path ?? '')).join(', ')}`);
+// The desired per-group sets — computed ONCE and reused by both the additive provision calls and
+// the opt-in --reconcile prune, so reconcile can never drift from what was just provisioned.
+const paymentHostList = [...PAYMENT_HOSTS];
+const portalHostList = [...adminHosts];
+const portalIpList = [...adminIps];
 
-// The desired host/ip sets — computed ONCE and reused by both the additive provision call and the
-// opt-in --reconcile prune, so reconcile can never drift from what was just provisioned.
-const hostList = [...hosts];
-const ipList = [...ips];
+// E5 guard: an operator-set ADMIN_WG_HOSTS value that duplicates a PAYMENT_HOSTS entry would create
+// the same host under two different tags (functionally harmless — provisioning is idempotent
+// per-tag — but confusing for the doc/AC12 tag audit). Warn rather than silently resolve.
+const portalPaymentOverlap = portalHostList.filter((h) => PAYMENT_HOSTS.includes(h));
+if (portalPaymentOverlap.length)
+	console.warn(
+		`  WARNING: ADMIN_WG_HOSTS overlaps PAYMENT_HOSTS (${portalPaymentOverlap.join(', ')}) — ` +
+			'the same host will be tagged under both veent-admin:portal and veent-admin:payment.'
+	);
+
+console.log(`Provisioning walled garden on ${config.host}:${config.port ?? (config.tls ? 8729 : 8728)}`);
+console.log('  3 tagged groups (load-bearing order: probe → payment → portal):');
+if (PROBE_DENIES.length)
+	console.log(
+		`  [veent-admin:probe]   denies: ${PROBE_DENIES.map((d) => d.host + (d.path ?? '')).join(', ')}`
+	);
+if (paymentHostList.length) console.log(`  [veent-admin:payment] hosts:  ${paymentHostList.join(', ')}`);
+if (portalHostList.length) console.log(`  [veent-admin:portal]  hosts:  ${portalHostList.join(', ')}`);
+if (portalIpList.length) console.log(`  [veent-admin:portal]  ips:    ${portalIpList.join(', ')}`);
 
 try {
-	const result = await provisionWalledGarden(config, {
-		hosts: hostList,
-		ips: ipList,
-		denies: PROBE_DENIES
+	// Provision the 3 groups sequentially in a LOAD-BEARING order: probe FIRST, then payment, then
+	// portal. On a wiped/fresh garden this guarantees the deny rows land at the very top (ahead of
+	// every allow), matching the doc's stated ordering. provisionWalledGarden re-derives its
+	// deny-placement `beforeId` fresh per call, so the denies would still sit above the allows even
+	// if reordered — but do NOT reorder these calls without re-verifying that beforeId derivation.
+	const probeResult = await provisionWalledGarden(config, {
+		denies: PROBE_DENIES,
+		tag: 'veent-admin:probe'
 	});
-	for (const d of result.denies)
-		console.log(`  deny ${d.value}: ${d.created ? 'added' : 'already present'}`);
-	for (const h of result.hosts) console.log(`  host ${h.value}: ${h.created ? 'added' : 'already present'}`);
-	for (const i of result.ips) console.log(`  ip   ${i.value}: ${i.created ? 'added' : 'already present'}`);
+	const paymentResult = await provisionWalledGarden(config, {
+		hosts: paymentHostList,
+		tag: 'veent-admin:payment'
+	});
+	const portalResult = await provisionWalledGarden(config, {
+		hosts: portalHostList,
+		ips: portalIpList,
+		tag: 'veent-admin:portal'
+	});
+	for (const d of probeResult.denies)
+		console.log(`  [probe]   deny ${d.value}: ${d.created ? 'added' : 'already present'}`);
+	for (const h of paymentResult.hosts)
+		console.log(`  [payment] host ${h.value}: ${h.created ? 'added' : 'already present'}`);
+	for (const h of portalResult.hosts)
+		console.log(`  [portal]  host ${h.value}: ${h.created ? 'added' : 'already present'}`);
+	for (const i of portalResult.ips)
+		console.log(`  [portal]  ip   ${i.value}: ${i.created ? 'added' : 'already present'}`);
 	console.log('\nDone. Guest devices can now reach the admin dashboard before authenticating.');
 } catch (err) {
 	console.error('\nFailed to provision walled garden:', err instanceof Error ? err.message : err);
@@ -169,15 +208,34 @@ if (RECONCILE) {
 		`\nReconciling walled garden — removing drifted code-owned rows${DRY_RUN ? ' [dry-run]' : ''}:`
 	);
 	try {
-		const rec = await reconcileWalledGarden(config, {
-			hosts: hostList,
-			ips: ipList,
+		// One reconcile call per group, each scoped to its OWN sub-tag + desired set — mirroring the 3
+		// provision calls. A sub-tag-scoped call only manages its own group's rows (the family-prefix
+		// match never leaks across siblings, since no row is tagged `veent-admin:payment:<...>`), so
+		// the 3 groups stay isolated. The probe group has only deny rows, which reconcile never
+		// removes, so its desired set is empty.
+		const recProbe = await reconcileWalledGarden(config, {
+			hosts: [],
+			ips: [],
+			tag: 'veent-admin:probe',
 			dryRun: DRY_RUN
 		});
-		if (rec.removed.length === 0) {
+		const recPayment = await reconcileWalledGarden(config, {
+			hosts: paymentHostList,
+			ips: [],
+			tag: 'veent-admin:payment',
+			dryRun: DRY_RUN
+		});
+		const recPortal = await reconcileWalledGarden(config, {
+			hosts: portalHostList,
+			ips: portalIpList,
+			tag: 'veent-admin:portal',
+			dryRun: DRY_RUN
+		});
+		const removed = [...recProbe.removed, ...recPayment.removed, ...recPortal.removed];
+		if (removed.length === 0) {
 			console.log('  nothing to remove — no drifted code-owned rows.');
 		} else {
-			for (const r of rec.removed)
+			for (const r of removed)
 				console.log(`  ${r.layer} ${r.value}: ${r.dryRun ? 'would remove' : 'removed'}`);
 		}
 	} catch (err) {

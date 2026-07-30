@@ -244,6 +244,24 @@ describe('reconcileWalledGarden (item 22 — opt-in tagged+action-scoped prune)'
 				action: 'deny',
 				'dst-host': 'connectivitycheck.gstatic.com',
 				comment: 'veent-admin'
+			},
+			// A deliberately-disabled reCAPTCHA flap-fix row: veent-admin + allow, host absent from the
+			// desired set, but `disabled=true` (`X`) — reconcile must LEAVE it disabled, not delete it.
+			{
+				'.id': '*5',
+				action: 'allow',
+				'dst-host': '*.recaptcha.net',
+				comment: 'veent-admin',
+				disabled: 'true'
+			},
+			// A RouterOS-auto-generated dst-address mirror: `dynamic=true` (`D`), empty dst-host — it's
+			// regenerated from the walled-garden-ip entry, so reconcile must never treat it as a candidate.
+			{
+				'.id': '*6',
+				action: 'allow',
+				'dst-host': '',
+				comment: 'veent-admin',
+				dynamic: 'true'
 			}
 		);
 		routerTable.wgIp.push({
@@ -257,7 +275,7 @@ describe('reconcileWalledGarden (item 22 — opt-in tagged+action-scoped prune)'
 	it('default run (no --reconcile wiring) removes nothing — reconcile is only invoked opt-in', async () => {
 		// The default setup:router path never calls reconcileWalledGarden; the table is untouched.
 		seedMixedTable();
-		expect(routerTable.wg).toHaveLength(4);
+		expect(routerTable.wg).toHaveLength(6);
 		expect(routerTable.wgIp).toHaveLength(1);
 	});
 
@@ -289,6 +307,76 @@ describe('reconcileWalledGarden (item 22 — opt-in tagged+action-scoped prune)'
 		seedMixedTable();
 		const res = await reconcileWalledGarden(mikrotikConfig, { ...desired, dryRun: true });
 		expect(res.removed).toEqual([{ layer: 'host', value: 'stale.example.com', dryRun: true }]);
-		expect(routerTable.wg).toHaveLength(4); // nothing actually deleted
+		expect(routerTable.wg).toHaveLength(6); // nothing actually deleted
+	});
+
+	it('never removes a DISABLED veent-admin allow row (the deliberately-disabled reCAPTCHA flap-fix row)', async () => {
+		seedMixedTable();
+		const res = await reconcileWalledGarden(mikrotikConfig, desired);
+		// Host absent from the desired set, but disabled → must survive AND not be reported removed.
+		expect(routerTable.wg.find((r) => r['dst-host'] === '*.recaptcha.net')).toBeTruthy();
+		expect(res.removed.some((r) => r.value === '*.recaptcha.net')).toBe(false);
+	});
+
+	it('never removes a DYNAMIC veent-admin allow row with empty dst-host (a dst-address mirror)', async () => {
+		seedMixedTable();
+		const res = await reconcileWalledGarden(mikrotikConfig, desired);
+		expect(routerTable.wg.find((r) => r['.id'] === '*6')).toBeTruthy(); // dynamic mirror survives
+		expect(res.removed.some((r) => r.value === '')).toBe(false); // empty-dst-host never reported
+	});
+
+	it('regression: a STATIC ENABLED veent-admin allow row absent from the desired set IS still removed', async () => {
+		// Proves the disabled/dynamic guard did not disable removal entirely.
+		seedMixedTable();
+		const res = await reconcileWalledGarden(mikrotikConfig, desired);
+		expect(res.removed).toEqual([{ layer: 'host', value: 'stale.example.com', dryRun: false }]);
+		expect(routerTable.wg.map((r) => r['dst-host'])).not.toContain('stale.example.com');
+	});
+
+	// ── Family-prefix tag matching (walled-garden-canonical, 30-07-26) ───────────────────────────
+	// reconcileWalledGarden's tag match is now a family-prefix (`commentMatchesTag`): a bare
+	// `veent-admin` reconcile call manages the whole `veent-admin:*` family, while a specific sub-tag
+	// call manages only its own group. These three cases prove AC12-b/c/d.
+
+	it('AC12-b: a bare veent-admin reconcile call DOES manage a veent-admin:payment-tagged allow row (family-prefix positive)', async () => {
+		resetRouterTable();
+		routerTable.wg.push(
+			{ '.id': '*1', action: 'allow', 'dst-host': 'maya.ph', comment: 'veent-admin:payment' },
+			{ '.id': '*2', action: 'allow', 'dst-host': 'stale.pay.com', comment: 'veent-admin:payment' }
+		);
+		const res = await reconcileWalledGarden(mikrotikConfig, { hosts: ['maya.ph'], ips: [] });
+		expect(res.removed).toEqual([{ layer: 'host', value: 'stale.pay.com', dryRun: false }]);
+		expect(routerTable.wg.map((r) => r['dst-host'])).toContain('maya.ph'); // desired kept
+		expect(routerTable.wg.map((r) => r['dst-host'])).not.toContain('stale.pay.com');
+	});
+
+	it('AC12-c: a bare veent-admin reconcile call does NOT manage a foreign tag or a bare-no-colon lookalike', async () => {
+		resetRouterTable();
+		routerTable.wg.push(
+			{ '.id': '*1', action: 'allow', 'dst-host': 'foreign.com', comment: 'veent-other' },
+			// `veent-admin-x` has NO colon separator, so it is NOT in the veent-admin family.
+			{ '.id': '*2', action: 'allow', 'dst-host': 'lookalike.com', comment: 'veent-admin-x' }
+		);
+		const res = await reconcileWalledGarden(mikrotikConfig, { hosts: [], ips: [] });
+		expect(res.removed).toEqual([]); // neither row matched the veent-admin family
+		expect(routerTable.wg.map((r) => r['dst-host'])).toEqual(['foreign.com', 'lookalike.com']);
+	});
+
+	it('AC12-d: a veent-admin:payment-scoped reconcile call does NOT manage a sibling veent-admin:portal row', async () => {
+		// Proves the 3 real setup-router.ts reconcile call sites (each passing a full sub-tag) stay
+		// isolated to their own group — the family widening never leaks across sibling sub-tags.
+		resetRouterTable();
+		routerTable.wg.push(
+			{ '.id': '*1', action: 'allow', 'dst-host': 'stale.pay.com', comment: 'veent-admin:payment' },
+			{ '.id': '*2', action: 'allow', 'dst-host': 'portal.keep.com', comment: 'veent-admin:portal' }
+		);
+		const res = await reconcileWalledGarden(mikrotikConfig, {
+			hosts: [],
+			ips: [],
+			tag: 'veent-admin:payment'
+		});
+		// Only the payment group's drifted row is removed; the sibling portal row survives untouched.
+		expect(res.removed).toEqual([{ layer: 'host', value: 'stale.pay.com', dryRun: false }]);
+		expect(routerTable.wg.map((r) => r['dst-host'])).toEqual(['portal.keep.com']);
 	});
 });

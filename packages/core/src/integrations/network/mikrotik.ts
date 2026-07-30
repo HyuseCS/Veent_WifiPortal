@@ -1172,7 +1172,10 @@ export interface ReconcileWalledGardenInput {
 	hosts: string[];
 	/** Desired IP set — the exact `ips` array passed to `provisionWalledGarden` this run. */
 	ips: string[];
-	/** Comment tag identifying code-owned rows (exact-equality match). Defaults to `veent-admin`. */
+	/** Comment tag identifying code-owned rows (family-prefix match: exact `tag`, or `tag:<suffix>`).
+	 * Defaults to `veent-admin` — the family root, which matches the whole `veent-admin:*` family
+	 * (`:probe`/`:payment`/`:portal`). A caller passing a specific sub-tag (`veent-admin:payment`)
+	 * only matches its own group's rows, since no row today starts with `veent-admin:payment:`. */
 	tag?: string;
 	/** Log-only: compute the removal set and return it, but delete nothing. */
 	dryRun?: boolean;
@@ -1184,17 +1187,26 @@ export interface ReconcileWalledGardenResult {
 
 /**
  * Opt-in prune of code-owned walled-garden rows that have drifted out of the desired set. Removes
- * ONLY rows whose `comment` EXACTLY equals `tag` (default `veent-admin`) and whose host/IP is absent
- * from the caller's desired set. Additive-safe by construction:
+ * ONLY rows whose `comment` belongs to `tag`'s FAMILY (exact `tag`, or `tag:<suffix>` — the same
+ * `commentMatchesTag` rule the ip-binding bypass logic uses) and whose host/IP is absent from the
+ * caller's desired set. With the default `tag='veent-admin'` this manages the whole
+ * `veent-admin:*` family (`:probe`/`:payment`/`:portal`) uniformly; a caller passing a specific
+ * sub-tag (`veent-admin:payment`) manages ONLY that group, because no row today is tagged
+ * `veent-admin:payment:<...>` — so `setup-router.ts`'s three per-group reconcile calls stay
+ * isolated to their own group. Additive-safe by construction:
  *
  *   - HOST layer: only `action=allow` rows are candidates — NEVER `action=deny` rows. `provisionWalledGarden`
  *     tags the `PROBE_DENIES` (`action=deny`) rows with the SAME comment on the SAME menu, so an
  *     action filter is REQUIRED: deleting a deny row would silently re-open a captive-probe host and
  *     bring back the "Connected" flap (Public Contracts: PROBE_DENIES is Unchanged-hard).
- *   - Exact-equality tag match (`row.comment === tag`) excludes the differently-tagged `gcash-auto`
- *     `walled-garden ip` row and every un-tagged operator row by construction.
+ *   - Family-prefix tag match (`commentMatchesTag(row.comment, tag)`) excludes the differently-tagged
+ *     `gcash-auto` `walled-garden ip` row and every un-tagged operator row by construction (neither
+ *     equals `veent-admin` nor starts with `veent-admin:`).
  *   - Only ever writes to `/ip/hotspot/walled-garden` and `/ip/hotspot/walled-garden/ip` — NEVER
  *     `/ip/hotspot/ip-binding`, despite ADMIN_BYPASS_TAG reusing the `veent-admin` string there.
+ *   - DISABLED / DYNAMIC / empty-`dst-host` host rows are skipped (and disabled/invalid ip rows) —
+ *     the deliberately-disabled reCAPTCHA flap-fix rows and RouterOS' auto-generated dst-address
+ *     mirrors are never removal candidates (live-observed 30-07-26).
  *
  * v6 has no working `find where` filter-remove for this menu, so rows are removed by print-then-`.id`
  * (mirrors `cutConnectionsForIps`). Does not touch `provisionWalledGarden`.
@@ -1215,8 +1227,20 @@ export async function reconcileWalledGarden(
 		for (const r of hostRows) {
 			const id = r['.id'];
 			if (!id) continue;
-			if (r.comment !== tag) continue; // exact-equality: excludes gcash-auto + un-tagged rows
+			if (!commentMatchesTag(r.comment ?? '', tag)) continue; // family-prefix: excludes gcash-auto + un-tagged rows
 			if (r.action !== 'allow') continue; // action-scoping: never touch PROBE_DENIES (action=deny)
+			// Safety skips (live-observed 30-07-26 on the real router) — a row here is NEVER a removal
+			// candidate when it is:
+			//   (a) DISABLED (`X` flag): the deliberately-disabled reCAPTCHA flap-fix rows
+			//       (`*.gstatic.com`/`*.google.com`/`*.recaptcha.net`) are tagged veent-admin+allow but
+			//       must STAY disabled, not be deleted;
+			//   (b) DYNAMIC (`D` flag): RouterOS auto-generates one host-menu mirror per
+			//       `/ip hotspot walled-garden ip` entry — regenerated from the ip-layer row, so not
+			//       independently removable; deleting it is a no-op-that-races at best;
+			//   (c) missing dst-host: a dst-address mirror carries no dst-host, so it isn't a host allow.
+			if (r.disabled === 'true') continue;
+			if (r.dynamic === 'true') continue;
+			if ((r['dst-host'] ?? '') === '') continue;
 			if (wantHosts.has((r['dst-host'] ?? '').toLowerCase())) continue; // still desired → keep
 			if (!dryRun) await conn.write('/ip/hotspot/walled-garden/remove', [`=.id=${id}`]);
 			removed.push({ layer: 'host', value: r['dst-host'] ?? '', dryRun });
@@ -1226,7 +1250,10 @@ export async function reconcileWalledGarden(
 		for (const r of ipRows) {
 			const id = r['.id'];
 			if (!id) continue;
-			if (r.comment !== tag) continue;
+			if (!commentMatchesTag(r.comment ?? '', tag)) continue; // family-prefix (see host layer)
+			// Defensive parity with the host layer: skip disabled (`X`) / invalid (`I`) ip-menu rows —
+			// never a removal candidate.
+			if (r.disabled === 'true' || r.invalid === 'true') continue;
 			if (wantIps.has(r['dst-address'] ?? '')) continue;
 			if (!dryRun) await conn.write('/ip/hotspot/walled-garden/ip/remove', [`=.id=${id}`]);
 			removed.push({ layer: 'ip', value: r['dst-address'] ?? '', dryRun });

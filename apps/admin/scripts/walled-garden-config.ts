@@ -52,6 +52,10 @@ export const PAYMENT_HOSTS = [
 	'*.xendit.co',
 	// Alipay/Ant cashier hosts — GCash checkout runs through the Alipay-powered cashier
 	// (live hits: `*alipay*`=23). Enumerated forms replace the over-broad `*alipay*` substring.
+	// Bare `alipay.com` is required in addition to the wildcard: a `*.` wildcard does NOT match its
+	// own bare parent host, so `*.alipay.com` alone leaves `alipay.com` blocked — the retired 41-hit
+	// `*alipay*` substring used to catch it. (AC5.)
+	'alipay.com',
 	'*.alipay.com',
 	'*.alipayobjects.com',
 	'*.alicdn.com',
