@@ -1,0 +1,403 @@
+<meta charset="utf-8">
+<title>Veent WiFi Portal Atlas</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;1,400&display=swap">
+<style>
+:root{
+  --paper:#E6DFBE; --paper-2:#DCD4AF; --ink:#17170F; --ink-2:#6E6B54; --rule:#B9B293; --ghost:#8E8A70;
+  --hi-bg:#17170F; --hi-fg:#E6DFBE; --face:#EFE9CC; --grid:#CFC8A3;
+  --mono:'IBM Plex Mono',ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --paper:#1E1D15; --paper-2:#26251B; --ink:#E6DFBE; --ink-2:#A8A388; --rule:#4A4838; --ghost:#6E6B54;
+    --hi-bg:#E6DFBE; --hi-fg:#1E1D15; --face:#2A2920; --grid:#33321F;
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#1E1D15; --paper-2:#26251B; --ink:#E6DFBE; --ink-2:#A8A388; --rule:#4A4838; --ghost:#6E6B54;
+  --hi-bg:#E6DFBE; --hi-fg:#1E1D15; --face:#2A2920; --grid:#33321F;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--paper);color:var(--ink);font-family:var(--mono);font-size:13px;line-height:1.55;overflow:hidden}
+#app{display:grid;grid-template-rows:52px 1fr 30px;height:100vh;min-height:600px}
+#top{display:flex;align-items:stretch;border-bottom:1.5px solid var(--ink);overflow:hidden}
+.stat{padding:6px 14px 4px;border-right:1.5px solid var(--ink);min-width:0;white-space:nowrap}
+.stat .k{font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-2)}
+.stat .v{font-size:15px;font-variant-numeric:tabular-nums}
+.stat.grow{flex:1;border-right:none;overflow:hidden}
+#controls{display:flex;gap:8px;align-items:center;padding:0 14px;border-left:1.5px solid var(--ink)}
+button.ctl{font:inherit;font-size:11px;letter-spacing:.06em;text-transform:uppercase;background:var(--paper);color:var(--ink);border:1.5px solid var(--ink);padding:5px 10px;cursor:pointer;box-shadow:2px 2px 0 var(--ink);white-space:nowrap}
+button.ctl:hover{background:var(--face)}
+button.ctl:active{transform:translate(1px,1px);box-shadow:1px 1px 0 var(--ink)}
+button.ctl:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+button.ctl.primary{background:var(--hi-bg);color:var(--hi-fg)}
+button.ctl.primary:hover{background:var(--hi-bg);opacity:.9}
+button.ctl:disabled{opacity:.4;cursor:default;box-shadow:none}
+#main{display:grid;grid-template-columns:232px 1fr 440px;min-height:0}
+#index{border-right:1.5px solid var(--ink);overflow-y:auto;padding:10px 8px 20px}
+#index h4{font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-2);margin:12px 4px 6px;font-weight:500}
+#index h4:first-child{margin-top:2px}
+.ix{display:flex;align-items:flex-start;gap:8px;width:100%;text-align:left;font:inherit;font-size:11.5px;line-height:1.3;background:var(--paper);color:var(--ink);border:1.5px solid var(--ink);padding:7px 8px;margin:0 0 6px;cursor:pointer;box-shadow:2px 2px 0 var(--ink);text-transform:uppercase;letter-spacing:.02em}
+.ix .code{color:var(--ink-2);min-width:16px;font-size:10px;padding-top:1px}
+.ix .nm{flex:1}
+.ix .n{color:var(--ink-2);font-size:10.5px;font-variant-numeric:tabular-nums}
+.ix.ghost{border-style:dashed;box-shadow:none;color:var(--ink-2)}
+.ix.later{border-color:var(--rule);box-shadow:none;color:var(--ink-2);opacity:.75}
+.ix.later .n{font-size:9px;letter-spacing:.06em}
+.ix.new{outline:1.5px dashed var(--ink);outline-offset:2px}
+.ix.on{background:var(--hi-bg);color:var(--hi-fg)}
+.ix.on .code,.ix.on .n{color:var(--hi-fg);opacity:.75}
+.ix:hover:not(.on){background:var(--face)}
+.ix:focus-visible{outline:2px solid var(--ink);outline-offset:1px}
+#canvasWrap{position:relative;min-width:0;background:var(--paper)}
+#svg{width:100%;height:100%;display:block;cursor:grab;touch-action:none}
+#svg.dragging{cursor:grabbing}
+#zoom{position:absolute;right:12px;top:12px;display:flex;flex-direction:column;gap:6px}
+#zoom button{width:30px;height:26px;font:inherit;font-size:14px;background:var(--paper);border:1.5px solid var(--ink);color:var(--ink);cursor:pointer;box-shadow:2px 2px 0 var(--ink)}
+#rail{position:absolute;left:12px;top:12px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;max-width:calc(100% - 70px)}
+#rail .ch{width:22px;height:22px;font:inherit;font-size:10px;background:var(--paper);border:1.5px solid var(--ink);color:var(--ink);cursor:pointer;padding:0;line-height:1}
+#rail .ch.done{background:var(--face)}
+#rail .ch.on{background:var(--hi-bg);color:var(--hi-fg)}
+#rail .ch.locked{border-style:dashed;color:var(--ink-2)}
+#rail .ch:focus-visible{outline:2px solid var(--ink);outline-offset:1px}
+#rail .title{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-2);margin-left:6px}
+#rail .title b{color:var(--ink);font-weight:500}
+#flowSel{position:absolute;left:12px;bottom:12px;display:none;gap:6px}
+#flowSel button{font:inherit;font-size:10px;letter-spacing:.08em;text-transform:uppercase;background:var(--paper);border:1.5px solid var(--ink);color:var(--ink);padding:3px 8px;cursor:pointer}
+#flowSel button.on{background:var(--hi-bg);color:var(--hi-fg)}
+#tip{position:absolute;pointer-events:none;background:var(--hi-bg);color:var(--hi-fg);font-size:11px;padding:4px 8px;max-width:280px;line-height:1.35;display:none;z-index:5}
+#panel{border-left:1.5px solid var(--ink);display:flex;flex-direction:column;min-height:0}
+#tabs{display:flex;border-bottom:1.5px solid var(--ink)}
+#tabs button{flex:1;font:inherit;font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;padding:9px 6px;background:var(--paper);color:var(--ink);border:none;border-right:1.5px solid var(--ink);cursor:pointer}
+#tabs button:last-child{border-right:none}
+#tabs button.on{background:var(--hi-bg);color:var(--hi-fg)}
+#tabs button:focus-visible{outline:2px solid var(--ink);outline-offset:-3px}
+#body{overflow-y:auto;padding:14px 18px 40px;flex:1}
+.eyebrow{font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-2)}
+h1.t{font-size:22px;font-weight:500;line-height:1.2;margin:2px 0 4px;text-wrap:balance}
+.lede{font-size:14.5px;line-height:1.5;margin:0 0 14px;max-width:56ch}
+.sub{color:var(--ink-2);font-size:11px;margin-bottom:14px}
+h3.sec{font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-2);font-weight:500;margin:20px 0 6px;padding-bottom:4px;border-bottom:1.5px solid var(--ink)}
+#body p{margin:0 0 12px;max-width:62ch}
+#body ul{margin:0 0 12px;padding-left:18px;max-width:62ch}
+#body li{margin-bottom:6px}
+mark{background:var(--hi-bg);color:var(--hi-fg);padding:0 3px}
+.chip{display:inline-block;border:1.5px solid var(--ink);padding:1px 6px;font-size:10px;letter-spacing:.06em;text-transform:uppercase;margin:0 6px 6px 0;background:var(--paper);color:var(--ink);font-family:inherit;cursor:pointer}
+.chip.ghost{border-style:dashed;color:var(--ink-2)}
+.chip.static{cursor:default}
+pre{background:var(--face);border:1.5px solid var(--rule);padding:10px 12px;font-size:11px;line-height:1.45;overflow-x:auto;margin:0 0 12px;white-space:pre}
+.step{display:grid;grid-template-columns:24px 1fr;gap:8px;margin:0 0 8px;font-size:12px}
+.step .no{color:var(--ink-2);font-variant-numeric:tabular-nums}
+.step.cur .no{color:var(--ink);font-weight:600}
+.step.cur .tx{background:var(--face);outline:1.5px solid var(--ink);padding:2px 6px}
+.actions{display:flex;gap:8px;margin:14px 0 0;flex-wrap:wrap}
+.pk{border:1.5px solid var(--ink);padding:10px 12px;margin:0 0 12px}
+.pk .lbl{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-2)}
+.pk .route{font-size:12px;margin:2px 0 8px}
+details{border-top:1.5px solid var(--rule);margin:8px 0 0;padding:6px 0 0}
+details summary{cursor:pointer;font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-2);list-style:none;display:flex;gap:8px;align-items:center}
+details summary::before{content:'+';display:inline-block;width:12px;color:var(--ink)}
+details[open] summary::before{content:'−'}
+details summary::-webkit-details-marker{display:none}
+details > *:not(summary){margin-top:8px}
+#hint{border-top:1.5px solid var(--ink);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-2);display:flex;align-items:center;padding:0 14px;gap:14px;overflow:hidden;white-space:nowrap}
+.q{padding-left:0;list-style:none}
+.q li{position:relative;padding-left:18px}
+.q li::before{content:'?';position:absolute;left:0;top:0;color:var(--ink-2)}
+.q li.res::before{content:'✓'}
+.q li.to::before{content:'→'}
+.q li.res>span,.q li.to>span{color:var(--ink-2);text-decoration:line-through;text-decoration-color:var(--rule)}
+.q li.to>span{text-decoration:none}
+.q .ans{margin-top:2px;padding-left:10px;border-left:1.5px solid var(--ink)}
+@keyframes halo{0%{opacity:.9}50%{opacity:.25}100%{opacity:.9}}
+.halo{animation:halo 1.6s ease-in-out infinite}
+@media (prefers-reduced-motion: reduce){.halo{animation:none}}
+@media (max-width:1100px){#main{grid-template-columns:200px 1fr 360px}}
+</style>
+
+<div id="app">
+  <div id="top">
+    <div id="stats" style="display:flex;min-width:0;flex:1"></div>
+    <div id="controls">
+      <button class="ctl" id="btnBack">◂ Back</button>
+      <button class="ctl primary" id="btnNext">Next ▸</button>
+      <button class="ctl" id="btnFlow">‖ Pause</button>
+      <button class="ctl" id="btnStep">Trace one step</button>
+      <button class="ctl" id="btnReset">Refit</button>
+    </div>
+  </div>
+  <div id="main">
+    <nav id="index" aria-label="Structures"></nav>
+    <div id="canvasWrap">
+      <svg id="svg" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <pattern id="hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="6" stroke="currentColor" stroke-width="1.1"/></pattern>
+          <pattern id="hatchLight" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(-45)"><line x1="0" y1="0" x2="0" y2="7" stroke="currentColor" stroke-width=".8" opacity=".55"/></pattern>
+        </defs>
+        <g id="world"></g>
+      </svg>
+      <div id="rail"></div>
+      <div id="flowSel"></div>
+      <div id="zoom"><button id="zin" aria-label="Zoom in">+</button><button id="zout" aria-label="Zoom out">−</button></div>
+      <div id="tip"></div>
+    </div>
+    <aside id="panel">
+      <div id="tabs">
+        <button data-tab="what" class="on">What it does</button>
+        <button data-tab="how">How it's built</button>
+        <button data-tab="cond">Open questions</button>
+      </div>
+      <div id="body"></div>
+    </aside>
+  </div>
+  <div id="hint">
+    <span>enter / ] next chapter</span><span>[ back</span><span>hover to read</span><span>click to pin</span><span>→ go inside</span><span>← come out</span><span>click a dot to inspect its packet</span>
+  </div>
+</div>
+
+<script>
+const GROUPS = [{"id":"edge","title":"The network edge"},{"id":"portal","title":"The guest portal"},{"id":"money","title":"Money and grants"},{"id":"shared","title":"Shared foundations"},{"id":"staff","title":"Staff operations"},{"id":"off","title":"Not yet switched on"}];
+const NODES = [{"id":"G","code":"G","name":"Guest device","short":"GUEST","group":"edge","gx":0,"gy":0,"w":2,"d":2,"h":40,"kind":"screen","one":"A phone or laptop that just joined the WiFi and cannot reach the internet yet.","what":"The customer. It associates with the hotspot, gets an address, and is held captive until someone grants it time. Its operating system quietly checks a few known URLs to decide whether to pop up the sign-in window.","how":"Identified by MAC address. The MAC arrives as a <code>?mac=</code> query param, which is client-influenceable and is <mark>never treated as server-authoritative</mark>. Captive probes hit <code>generate_204</code>, <code>gen_204</code>, <code>ncsi.txt</code>, <code>connecttest.txt</code>, <code>hotspot-detect.html</code> in <code>apps/customer/src/routes/</code>.","steps":[["Associate","Joins the SSID, gets a DHCP lease."],["Probe","The OS hits a known URL to test for a captive portal."],["Redirect","Gets bounced to the portal and the sign-in window opens."],["Granted","After a grant, the same MAC passes through freely."]],"cond":[{"q":"Can the fallback MAC path (unverified banner, reconnect prompt) be reproduced live?","r":"Not reproduced — it needs live IP→MAC resolution to fail on purpose. Proven by code and unit tests only (2026-07-23)."}]},{"id":"MT","code":"MT","name":"MikroTik router","short":"MIKROTIK","group":"edge","gx":4,"gy":0,"w":3,"d":3,"h":56,"kind":"slab","one":"The RouterOS box that owns the hotspot and decides who gets through.","what":"Runs the hotspot, hands out addresses, holds unpaid guests behind the walled garden, and lets granted devices past. It is also the source of truth for which access point a device is actually on.","how":"Reached over the RouterOS API with <code>node-routeros</code> from <code>packages/core/src/integrations/network/mikrotik.ts</code>. Grants are <code>/ip/hotspot/ip-binding</code> rows with <mark>type=bypassed</mark> — which skips byte accounting, so per-guest throughput is not measurable. Every physical AP MAC must also be bypassed or the router rejects its own ICMP and the dashboard reads a healthy AP as permanently DOWN.","steps":[["Hotspot","Holds the guest at the login page."],["Walled garden","Allows only the whitelisted hosts."],["Bind","Adds an ip-binding row for a granted MAC."],["Report","Answers health probes and reports Option-82 circuit-ids."]],"cond":[{"q":"Should the false-DOWN AP case have a code-level guard, not just a runbook?","r":"Impossible as designed — online_since/offline_since are current-state stamps, not history. Deferred; the ip-binding runbook is the shipped mitigation (2026-07-21)."}]},{"id":"WG","code":"WG","name":"Walled garden","short":"WALLED GDN","group":"edge","gx":4,"gy":4,"w":2.5,"d":2.5,"h":30,"kind":"gate","one":"The short list of hosts an unpaid guest is allowed to reach.","what":"Everything a guest needs before paying: the portal itself, the payment gateway, and a few deliberate denies that stop the sign-in window from flapping. Nothing else. It is rebuilt from code, not edited by hand.","how":"Provisioned as three sequential tag groups by <code>provisionWalledGarden()</code>: <code>veent-admin:probe</code> (the captive-probe denies, first so they sit above the allows), <code>veent-admin:payment</code> (from <code>PAYMENT_HOSTS</code>), <code>veent-admin:portal</code> (from <code>ADMIN_WG_HOSTS</code>/<code>ADMIN_WG_IPS</code>/<code>PORTAL_LAN_IPS</code>). A separate <code>gcash-auto</code> IP row is scheduler-owned and never touched here. Canonical reference: <code>docs/mikrotik/walled-garden.md</code>.","steps":[["Probe denies","Deny rows first so they win on a fresh garden."],["Payment allows","Maya, GCash/Alipay/Mynt, googleapis."],["Portal allows","Admin and portal origins plus the LAN portal IP."],["Reconcile","Optional prune of drifted code-owned allow rows."]],"cond":[{"q":"Which extra wallets and banks should be onboarded?","r":"Nine candidates listed UNVERIFIED in docs/mikrotik/walled-garden.md (GoTyme, SeaBank, GrabPay, ShopeePay, Coins.ph, BDO, BPI, Landbank, Security Bank). None whitelisted — each needs the ₱0 recon protocol first (2026-07-30)."}]},{"id":"GS","code":"GS","name":"gcash-resolve scheduler","short":"GCASH SCHED","group":"edge","gx":1,"gy":5,"w":2,"d":2,"h":34,"kind":"job","one":"A five-minute job on the router that keeps GCash reachable by IP.","what":"GCash hides behind a CDN, and the router can only match plain hostnames. So instead of naming the host, the router looks up its current address every few minutes and allows that address directly.","how":"An idempotent <code>/system scheduler</code> item named <code>gcash-resolve</code>, created by <code>provisionGcashResolveScheduler()</code>. It <code>:resolve</code>s the hostname and upserts the <code>gcash-auto</code> walled-garden-ip row. Root cause: <code>payments.gcash.com</code> CNAMEs to an Akamai edge and <mark>v6 dst-host matching cannot follow a CNAME chain</mark> — hostname rules always showed zero hits. The originally designed DoH/DoT firewall block was proven unnecessary and never built.","steps":[["Tick","Fires every 5 minutes."],["Resolve","Looks up the current edge address."],["Upsert","Writes the gcash-auto IP row."],["Survive wipe","Re-adds the row within 5 min of a hard reset."]],"cond":["Rule of thumb to keep applying: a host that CNAMEs to a CDN needs a resolve scheduler; a host that resolves to the provider’s own IP needs only a PAYMENT_HOSTS entry."]},{"id":"CU","code":"CU","name":"Customer portal","short":"PORTAL","group":"portal","gx":8.5,"gy":0,"w":3,"d":3,"h":50,"kind":"screen","one":"The page the guest lands on — sign in, see your time, buy more.","what":"Phone login, a dashboard showing remaining time, and a top-up flow. It is the only app a guest ever sees, and it must be reachable from behind the walled garden, which is why its address is a LAN address and not a public one.","how":"<code>apps/customer</code>, SvelteKit with <code>adapter-node</code>. Its own <code>betterAuth()</code> instance, cookie prefix <mark>veent-portal</mark>, separate secret from admin. <code>ORIGIN</code> must be the guest-reachable walled-gardened LAN portal address — never <code>localhost</code> and never the tunnel.","steps":[["Land","Captive redirect arrives with the MAC."],["Login","Phone number, then a one-time code."],["Dashboard","Shows time left and whether this device is bound."],["Top up","Starts a Maya checkout."]],"cond":[]},{"id":"OT","code":"OT","name":"OTP and SMS","short":"OTP / SMS","group":"portal","gx":4,"gy":-4.5,"w":2.5,"d":2.5,"h":38,"kind":"box","one":"Sends the one-time code and watches whether it actually arrived.","what":"The guest types a phone number, a code goes out over SMS, and every send attempt is logged. Only one of the SMS providers can tell us whether the message was really delivered.","how":"<code>apps/customer/src/lib/server/otp.ts</code> writes an append-only row to <code>customer_otp_delivery_log</code> per attempt — the insert is <mark>awaited inside its own try/catch</mark>, because an un-awaited rejection escapes onto the guest login path. Only <b>Cast</b> has real delivery receipts; itexmo, unisms and smsgate rows are written but never swept. <code>api/otp/sweep-delivery</code> alerts on rejected sends inside a 30-minute window and prunes rows after 48h.","steps":[["Send","Gateway call, then log the attempt."],["Verify","Guest types the code back."],["Sweep","Cron checks Cast delivery receipts."],["Prune","Rows older than 48h are dropped."]],"cond":[{"q":"Is the Cast delivery-receipt response shape stable beyond the one observed REJECTD case?","to":"Blocked on Cast activating a real sender ID for live traffic"}]},{"id":"MY","code":"MY","name":"Maya payments","short":"MAYA","group":"money","gx":8.5,"gy":-4.5,"w":2.5,"d":2.5,"h":38,"kind":"box","one":"The hosted checkout where the guest actually pays.","what":"The guest is sent to Maya, pays with GCash or a Maya wallet, and comes back. Maya also calls us server-side to confirm, and a reconciler catches anything the callback missed.","how":"Hand-rolled HTTP in <code>packages/core/src/integrations/payments/maya.ts</code> — no SDK. Webhooks reach dev through a registered ngrok tunnel. <mark>The browser return and the webhook use different origins</mark>: the return uses <code>event.url.origin</code>, the webhook uses <code>TUNNEL_ORIGIN</code>. Crossing them fails with <code>ERR_CONNECTION_CLOSED</code> because the guest is still captive at redirect time.","steps":[["Checkout","Portal creates the checkout and redirects."],["Pay","Guest pays on Maya’s page."],["Webhook","Maya calls the portal server-side."],["Reconcile","Cron sweeps anything the webhook missed."]],"cond":[]},{"id":"LD","code":"LD","name":"Ledgers","short":"LEDGERS","group":"money","gx":18,"gy":0,"w":2.5,"d":2.5,"h":26,"kind":"store","one":"Append-only records of money in and time out.","what":"Credits bought, points earned, transactions recorded. Nothing is ever edited in place, so the finance page can always be rebuilt from the trail.","how":"<code>credit_ledger</code>, <code>points_ledger</code>, <code>payment_transactions</code>, <code>payment_checkouts</code> — all <code>timestamptz</code> since migration <code>0052</code>. Duplicate crediting is caught by walking the drizzle error cause-chain for SQLSTATE <mark>23505</mark>, checking both <code>constraint_name</code> and <code>constraint</code> because drivers differ.","steps":[["Credit","A settled payment writes a credit row."],["Spend","A grant draws it down."],["Report","Finance reads a merged, deduped activity list."]],"cond":[]},{"id":"SS","code":"SS","name":"Sessions and grants","short":"SESSIONS","group":"money","gx":13,"gy":0,"w":3,"d":2.5,"h":46,"kind":"box","one":"Decides how much time a device gets and when to take it back.","what":"Free time for new guests, paid time for those who bought it, and an expiry sweep that revokes access when the clock runs out. It also pauses everyone’s clock when their access point goes down.","how":"<code>packages/core/src/services/</code> — <code>sessions.ts</code>, <code>credits.ts</code>, <code>points.ts</code>, <code>freeTime.ts</code>, <code>outage.ts</code>. Pause and resume select on <code>network_sessions.network_id</code>, which is why the circuit-id-first binding matters. Revocation runs from a cron endpoint, wrapped in <code>Sentry.withMonitor</code>.","steps":[["Resolve device","Circuit-id first, then interface name."],["Grant","Write the session row, call the router."],["Pause","Freeze the clock during an AP outage."],["Revoke","Expire the session and unbind the MAC."]],"cond":[]},{"id":"NC","code":"NC","name":"NetworkController","short":"ROUTER SEAM","group":"shared","gx":13,"gy":4.5,"w":2.5,"d":2.5,"h":42,"kind":"cards","one":"The one interface everything uses to talk to the router.","what":"A single narrow door between the business logic and the network hardware. Swap the real router for a fake one and every test still runs, which is the only reason this codebase can be tested without hardware.","how":"<code>packages/core/src/integrations/network/</code> — <code>types.ts</code> defines the interface, <code>mikrotik.ts</code> is the real provider, <code>stub.ts</code> is the fallback, and <code>index.ts</code> picks one from <code>NETWORK_CONTROLLER</code>. <code>traceMethods()</code> wraps every method in a Sentry span at the factory seam. Timeouts throw <code>RouterUnreachableError</code>, which is <mark>downgraded to warning level</mark> because the cron monitor already alerts.","steps":[["Choose","Env picks mikrotik or stub."],["Trace","Each method is wrapped in a span."],["Call","Grant, revoke, probe, provision, wipe."],["Degrade","Timeout becomes a typed, warning-level error."]],"cond":[]},{"id":"DB","code":"DB","name":"Postgres","short":"DATABASE","group":"shared","gx":18,"gy":4,"w":3,"d":3,"h":30,"kind":"store","one":"One database, one schema package, shared by all three apps.","what":"Everything durable lives here — guests, staff, sessions, ledgers, incidents, rate limits, AP health. The apps never share code with each other; they share this.","how":"<code>@veent/db</code> is the sole schema and migration authority: <code>packages/db/src/schema/index.ts</code> plus <mark>53 migrations</mark>. The dev DB is push-managed, so <code>db:migrate</code> fails on journal drift — apply new DDL directly to verify locally, but still generate the migration file for the record.","steps":[["Define","Schema files under src/schema/."],["Generate","drizzle-kit writes the migration."],["Apply","Direct DDL in dev; the runbook in prod."],["Share","All three apps read the same tables."]],"cond":[]},{"id":"LO","code":"LO","name":"Locator map","short":"LOCATOR","group":"shared","gx":8.5,"gy":12.5,"w":2,"d":2,"h":36,"kind":"screen","one":"A public map of where the hotspots are. No login.","what":"The smallest app in the repo. It reads hotspot locations and draws them on a map for anyone who visits.","how":"<code>apps/locator</code>, Leaflet, two env vars (<code>DATABASE_URL</code>, <code>ORIGIN</code>), no auth surface at all. Reads the shared database directly.","steps":[["Read","Query hotspot locations."],["Draw","Render Leaflet markers."]],"cond":[]},{"id":"AD","code":"AD","name":"Admin dashboard","short":"ADMIN","group":"staff","gx":8.5,"gy":8,"w":3,"d":3,"h":54,"kind":"screen","one":"Where staff run the shop — networks, finance, incidents, staff accounts.","what":"Access points and their health, the finance activity list and CSV export, the incident board, staff accounts with two-factor, and the router setup scripts. It is deliberately separate from the guest portal.","how":"<code>apps/admin</code>. Authed routes sit in the <code>(app)</code> route group; login, 2FA and password reset sit outside it. Its own <code>betterAuth()</code> instance, cookie prefix <mark>radius-admin</mark>, secret at least 32 characters. Every issue mutation runs in a transaction that appends an <code>admin_issue_event</code> row in the same transaction — never a fire-and-forget log write.","steps":[["Sign in","Password, then TOTP."],["Operate","Networks, finance, issues, staff, map."],["Provision","Run setup:router against the live box."],["Audit","Every mutation writes its own event row."]],"cond":[{"q":"Does the manager issue board need row pagination?","to":"Backlog — lazy event loading shipped; row pagination still open (GH backlog)"}]},{"id":"HL","code":"HL","name":"AP health and outage","short":"AP HEALTH","group":"staff","gx":13,"gy":8.5,"w":2.5,"d":2.5,"h":40,"kind":"job","one":"Watches the access points and freezes guest clocks when one dies.","what":"Probes each access point, records whether it is up, and if it goes down, pauses the paid time of everyone connected to it so nobody loses minutes to an outage.","how":"<code>packages/core/src/services/networkHealth.ts</code> plus <code>outage.ts</code>, writing <code>network_health</code>. AP name collisions are retried by walking the drizzle cause-chain for a unique violation — which only works while the call sites stay <b>outside</b> a transaction. A static tripwire spec fails the build if either admin call site is ever wrapped in <code>db.transaction(</code>.","steps":[["Probe","Ask the router about each AP."],["Record","Upsert the health row, retry on name collision."],["Pause","Freeze sessions bound to a down AP."],["Resume","Unfreeze when it comes back."]],"cond":[{"q":"Has the live down-AP case been observed end to end in production?","to":"Accepted known-gap — tracked in the general-plans backlog"}]},{"id":"CR","code":"CR","name":"Scheduled jobs","short":"CRON","group":"shared","gx":13,"gy":12.5,"w":2,"d":2,"h":34,"kind":"job","one":"There is no cron app — just guarded HTTP endpoints someone else calls.","what":"Four jobs: revoke expired sessions, reconcile payments, sweep OTP delivery, refresh AP health. In production an external scheduler calls them; in development a script polls them.","how":"Endpoints guarded by an <code>x-cron-secret</code> header. <code>scripts/dev-cron.ts</code> polls on a single one-minute interval — but <mark>the OTP sweep is designed for a five-minute prod cadence</mark>, so that schedule must be set on the real scheduler, not inferred from dev. The sweep’s alert path has no atomic claim, so genuinely overlapping runs could double-alert.","steps":[["Revoke","Expire finished sessions."],["Reconcile","Catch payments the webhook missed."],["Sweep","Check OTP delivery receipts."],["Refresh","Re-probe AP health."]],"cond":["The five-minute OTP sweep cadence has to be configured on the external prod scheduler — nothing in the repo enforces it."]},{"id":"SN","code":"SN","name":"Sentry and incidents","short":"SENTRY","group":"staff","gx":18,"gy":8.5,"w":2.5,"d":2.5,"h":38,"kind":"box","one":"Errors come in, staff turn them into tracked incidents.","what":"All three apps report errors. Staff can pull a Sentry issue onto the incident board, assign it, and work it. Personal data is stripped before anything leaves the building.","how":"<code>@sentry/sveltekit</code> in all three apps, <code>@sentry/core</code> in <code>packages/core</code>. A shared <code>scrubEvent</code> redactor is wired into every <code>beforeSend</code>: it drops secrets and masks emails, MACs and phone numbers. Tracking a Sentry issue <mark>round-trips the Sentry API before persisting</mark> and fails closed if the lookup fails. Permalink hosts are pinned to sentry.io.","steps":[["Capture","Error is caught and scrubbed."],["Classify","Router timeouts drop to warning level."],["Track","Staff pull it onto the incident board."],["Resolve","Assignment and events are audit-logged."]],"cond":[]},{"id":"MR","code":"MR","name":"Multi-router support","short":"MULTI-ROUTER","group":"off","ghost":true,"gx":0,"gy":9,"w":2.5,"d":2.5,"h":40,"one":"Later: more than one router, and third-party APs that speak their own API.","what":"Today the system assumes one MikroTik. The plan is to support several sites, and access points from a vendor whose API we do not have credentials for yet.","how":"Plan archived to <code>process/general-plans/completed/multi-router-support_13-07-26/</code> as deferred but revisitable. Phase B is blocked on Fatap AP-API credentials, tracked as GH #100.","steps":[["Credentials","Get Fatap AP-API access."],["Generalise","Make NetworkController multi-instance."],["Route","Bind each session to its own router."]],"cond":[{"q":"When do we get Fatap AP-API credentials?","to":"GH #100 — plan archived as deferred/revisitable (2026-07-30)"}]}];
+const FLOWS = [{"id":"free","name":"A guest gets online free","hops":[["G","MT","associate",{"mac":"AA:BB:CC:11:22:33","ssid":"Veent"},"xy"],["MT","CU","captive redirect",{"mac":"AA:BB:CC:11:22:33","to":"/login"},"yx"],["CU","OT","send code",{"phone":"+639••••••123","provider":"cast"},"xy"],["OT","CU","verified",{"ok":true},"yx"],["CU","SS","grant free time",{"minutes":30,"reason":"free_session"},"xy"],["SS","NC","allow mac",{"mac":"AA:BB:CC:11:22:33"},"yx"],["NC","MT","ip-binding",{"type":"bypassed"},"xy"],["MT","G","internet",{"state":"granted"},"yx"]]},{"id":"paid","name":"A guest pays","hops":[["CU","MY","create checkout",{"amount":20,"currency":"PHP"},"yx"],["MY","CU","webhook: paid",{"status":"PAYMENT_SUCCESS"},"xy"],["CU","LD","credit",{"credits":20,"ref":"chk_…"},"yx"],["LD","SS","spend",{"minutes":120},"xy"],["SS","NC","allow mac",{"mac":"AA:BB:CC:11:22:33"},"yx"],["NC","MT","ip-binding",{"type":"bypassed"},"xy"]]},{"id":"garden","name":"Staff rebuild the walled garden","hops":[["AD","NC","setup:router --wipe",{"dryRun":false},"xy"],["NC","WG","provision 3 groups",{"tags":["probe","payment","portal"]},"yx"],["WG","MT","write rows",{"host":14,"ip":2},"xy"],["GS","WG","gcash-auto ip",{"every":"5m"},"yx"]]},{"id":"health","name":"An access point goes down","hops":[["CR","HL","refresh health",{"secret":"x-cron-secret"},"xy"],["HL","NC","probe aps",{"count":6},"yx"],["NC","MT","ping",{},"xy"],["MT","NC","no reply",{"rtt":null},"yx"],["HL","DB","mark down",{"networkId":"ap-3"},"xy"],["HL","SS","pause clocks",{"sessions":4},"yx"]]},{"id":"incident","name":"An error becomes an incident","hops":[["CU","SN","scrubbed error",{"level":"error","pii":"masked"},"xy"],["SN","AD","track issue",{"verified":true},"yx"],["AD","DB","issue + event",{"tx":true},"xy"]]}];
+const CH = [{"id":"guest","title":"A guest and the router","reveal":["G","MT"],"lede":"Strip everything away and this is the shop: a phone joins the WiFi, and a router decides whether it gets anywhere.","story":"<p>The guest is identified by one thing — its MAC address. The router holds it, hands it an address, and refuses to pass its traffic. <mark>Nothing else in the system matters until this device is let through.</mark></p>","flow":[["G","MT","associate",{"mac":"AA:BB:CC:11:22:33"}],["MT","G","held captive",{"state":"unauthorised"}]]},{"id":"garden","title":"The short list of allowed hosts","reveal":["WG","CU"],"lede":"Before paying, a guest can reach exactly two kinds of place: our portal, and the payment gateway.","story":"<p>The walled garden is the router's allow-list, and it is <mark>owned by code, not by hand-edits in Winbox</mark>. Three tagged groups are written in order — the captive-probe denies first, then payment hosts, then the portal's own addresses. The portal has to be on that list or the guest can never reach the page that sells them time.</p>","flow":[["G","MT","probe",{"url":"/generate_204"}],["MT","WG","check allow-list",{"host":"portal"}],["MT","CU","captive redirect",{"to":"/login"}],["CU","G","sign-in page",{"status":200}]]},{"id":"who","title":"Proving who you are","reveal":["OT"],"lede":"A phone number and a six-digit code — no passwords, no accounts to remember.","story":"<p>The code goes out over SMS and <mark>every attempt is logged before we know whether it landed</mark>. Only one of the four SMS providers reports real delivery receipts, so for the others we know we sent, not that it arrived. That is a deliberate limit, not a bug.</p>","flow":[["CU","OT","send code",{"phone":"+639••••••123"}],["OT","CU","verified",{"ok":true}]]},{"id":"grant","title":"Giving out time","reveal":["SS","NC"],"lede":"Now the interesting part: the portal has to reach through and change the router.","story":"<p>Sessions decides how many minutes a device gets. But it never speaks RouterOS itself — it goes through <mark>one narrow seam, NetworkController</mark>. That seam is why the whole codebase can be tested without a router in the room: swap the real provider for a stub and nothing above notices.</p>","flow":[["CU","SS","grant free time",{"minutes":30}],["SS","NC","allow mac",{"mac":"AA:BB:CC:11:22:33"}],["NC","MT","ip-binding",{"type":"bypassed"}],["MT","G","internet",{"state":"granted"}]]},{"id":"pay","title":"Paying for more","reveal":["MY","LD"],"lede":"Free time runs out. Buying more means leaving the portal and coming back — while still captive.","story":"<p>The guest is sent to Maya's hosted checkout, pays with GCash or a Maya wallet, and returns. The trap here bit us once already: <mark>the page they return to must be a walled-gardened address</mark>, because the device is still behind the router at that moment. Payments are written to append-only ledgers, and a duplicate credit is caught by a unique violation, not by a lock.</p>","flow":[["CU","MY","create checkout",{"amount":20}],["MY","CU","webhook: paid",{"status":"PAYMENT_SUCCESS"}],["CU","LD","credit",{"credits":20}],["LD","SS","spend",{"minutes":120}]]},{"id":"store","title":"Where everything is written","reveal":["DB","LO"],"lede":"Three apps, no shared code between them — one database instead.","story":"<p>The apps never import each other. What they share is <code>@veent/db</code>, the single schema and migration authority, and <code>@veent/core</code>'s services. <mark>The dev database is push-managed, so the migration chain drifts</mark> — apply new DDL directly to verify, then still generate the migration file for the record. The public locator map is the smallest reader: two env vars and no auth at all.</p>","flow":[["SS","DB","write session",{"table":"network_sessions"}],["LD","DB","write ledger",{"table":"credit_ledger"}],["LO","DB","read hotspots",{"auth":null}]]},{"id":"staff","title":"Staff run the shop","reveal":["AD"],"lede":"A completely separate dashboard, with its own login, its own cookie, its own secret.","story":"<p>Admin and the guest portal share a database but nothing else — <mark>two auth instances that must never be cross-wired</mark>. Staff manage access points, finance and incidents here, and they run the router setup scripts from here too. Every incident mutation writes its own audit event inside the same transaction.</p>","flow":[["AD","NC","setup:router --reconcile",{"dryRun":true}],["NC","WG","prune drifted rows",{"removed":3}],["AD","DB","read finance",{"scope":"unified"}]]},{"id":"watch","title":"Watching the access points","reveal":["CR","HL"],"lede":"If an access point dies, nobody should lose the minutes they paid for.","story":"<p>A scheduled job probes each AP. When one goes down, every session bound to it is paused, and resumed when it returns. This only works if a session is bound to the <mark>physical access point, not the shared bridge in front of it</mark> — which is why the device lookup resolves the DHCP circuit-id first and only then falls back to the interface name.</p>","flow":[["CR","HL","refresh health",{}],["HL","NC","probe aps",{"count":6}],["NC","MT","ping",{}],["MT","NC","no reply",{"rtt":null}],["HL","SS","pause clocks",{"sessions":4}]]},{"id":"break","title":"When things break","reveal":["SN"],"lede":"Errors are scrubbed before they leave, then staff turn the real ones into tracked work.","story":"<p>All three apps report to Sentry through one shared redactor that drops secrets and masks emails, MACs and phone numbers. Router timeouts are deliberately downgraded to warnings — the cron monitor already alerts on those, so raising them twice is noise. Pulling a Sentry issue onto the board <mark>round-trips the Sentry API first and fails closed</mark> if the lookup does not confirm it.</p>","flow":[["CU","SN","scrubbed error",{"pii":"masked"}],["SN","AD","track issue",{"verified":true}],["AD","DB","issue + event",{"tx":true}]]},{"id":"later","title":"The odd corners and what is next","reveal":["GS","MR"],"lede":"One live workaround that had to become code, and one thing not built yet.","story":"<p>GCash hides behind a CDN and the router cannot follow the redirection, so a five-minute job on the router looks up the address and allows it directly. That started as a manual fix on live hardware and is now provisioned from code. <mark>Multi-router support is designed but switched off</mark> — it is waiting on credentials we do not have.</p>","flow":[["GS","WG","gcash-auto ip",{"every":"5m"}],["WG","MT","write ip row",{"tag":"gcash-auto"}]]},{"id":"all","title":"The whole system","reveal":[],"lede":"Everything at once, with five flows to choose from.","story":"<p>Pick a flow bottom-left. Hover anything to read it, click to pin, <b>→</b> goes inside a structure to see its steps. The <mark>Open questions</mark> tab lists every question by ID, with the ones already answered struck through.</p>","flow":null}];
+const HOW_HTML = "<div class=\"eyebrow\">veent_wifiportal · staging</div><h1 class=\"t\">How it's built</h1><div class=\"sub\">a bun monorepo: three SvelteKit apps, two shared packages, one database</div>\n<h3 class=\"sec\">Shape</h3><pre>apps/\n  admin/     staff dashboard (networks, finance, issues, staff, map)\n  customer/  captive portal (login, dashboard, top-up, probes)\n  locator/   public hotspot map, no auth\npackages/\n  core/      services + integrations (network, payments, email)\n  db/        sole schema + 53 migrations</pre>\n<h3 class=\"sec\">Stack</h3><p>SvelteKit 2 on Svelte 5 (runes forced project-wide, no <code>svelte.config.js</code> — config lives inline in each <code>vite.config.ts</code>), Tailwind 4, Drizzle + postgres.js, better-auth, Sentry, <code>node-routeros</code>. Package manager and runtime: bun. All three apps use <code>adapter-node</code>.</p>\n<h3 class=\"sec\">Seams that matter</h3><p>Everything that touches the router goes through <code>NetworkController</code>. Everything durable goes through <code>@veent/db</code>. The two auth instances never meet. Integration providers all follow the same factory + stub pattern, wrapped in Sentry spans at the seam.</p>\n<h3 class=\"sec\">Gates</h3><p>There is <b>no CI</b>. Quality gates are run by hand: <code>check</code> → <code>lint</code> → <code>test</code> → admin e2e. Feature branches merge into <code>staging</code>, which is the current frontier; there is no production deploy process yet. Agents never commit — they stage changes and suggest a message.</p>";
+const DECISIONS_HTML = "<li><b>Router seam.</b> Every router call goes through the <code>NetworkController</code> interface. Real provider is <code>mikrotik.ts</code>, tests use <code>stub.ts</code>. Nothing outside <code>packages/core/src/integrations/network/</code> speaks RouterOS.</li><li><b>Walled garden ownership.</b> The garden is code-owned. <code>setup:router</code> provisions three tagged groups — <code>veent-admin:probe</code>, <code>:payment</code>, <code>:portal</code> — in that order so denies land above allows.</li><li><b>Provisioning safety.</b> Default <code>setup:router</code> is purely additive. <code>--reconcile</code> is an opt-in prune that removes only rows carrying the code tag AND <code>action=allow</code>. <code>--wipe</code> clears both menus for a hard rebuild.</li><li><b>GCash reachability.</b> A <code>/system scheduler</code> item (<code>gcash-resolve</code>, 5 min) resolves the host and upserts an IP row. Hostname rules cannot follow the CNAME to Akamai. The originally designed DoH/DoT block was proven unnecessary and never shipped.</li><li><b>Payment surface.</b> GCash and Maya only. Google Pay is blocked by Android WebView in captive mode; PayMongo and Xendit had no integration code and were pruned.</li><li><b>Browser return URL.</b> <code>successUrl</code>/<code>cancelUrl</code> use <code>event.url.origin</code> (the walled-gardened LAN portal address). <code>TUNNEL_ORIGIN</code> is for the server-to-server webhook only — the guest is still captive at redirect time.</li><li><b>Access grant.</b> Paid guests are granted with <code>ip-binding type=bypassed</code>, which skips hotspot byte accounting. Per-AP guest throughput is therefore not measurable, by design.</li><li><b>Session→AP binding.</b> <code>resolveNetworkIdForMac</code> resolves the Option-82 circuit-id first, then falls back to interface name. A shared bridge fronting several APs must not capture the session.</li><li><b>MAC trust.</b> A fallback-resolved MAC (device cookie, <code>last_known_mac</code>) is never treated as a verified binding, and never entrenches <code>last_known_mac</code>. The <code>?mac=</code> param is client-influenceable by nature.</li><li><b>Auth isolation.</b> Two separate <code>betterAuth()</code> instances with separate secrets and cookie prefixes — <code>veent-portal</code> and <code>radius-admin</code>. Never cross-wired.</li><li><b>Schema authority.</b> <code>@veent/db</code> is the sole schema and migration source for all three apps. The dev DB is push-managed, so <code>db:migrate</code> drifts — apply DDL directly and still generate the migration file.</li><li><b>Time storage.</b> Finance and session columns are <code>timestamptz</code> (migration <code>0052</code>), with real Manila-day→UTC-instant maths in <code>period.ts</code>.</li><li><b>Scheduled work.</b> No cron app. Prod hits guarded HTTP endpoints from an external scheduler with an <code>x-cron-secret</code> header; <code>scripts/dev-cron.ts</code> polls them in dev.</li>";
+const STATS = [{"k":"Repo","v":"veent_wifiportal · staging"},{"k":"Apps","v":"3 + 2 packages"},{"k":"Migrations","v":"53"}];
+const TITLE = "Veent WiFi Portal";
+
+/* ---------------- CHAPTERS (progressive disclosure) ---------------- */
+/* ---------------- ISO ---------------- */
+const TW=72, TH=36;
+function P(gx,gy,z=0){ return [(gx-gy)*TW/2, (gx+gy)*TH/2 - z]; }
+function pts(a){ return a.map(p=>p.join(',')).join(' '); }
+const byId = Object.fromEntries(NODES.map(n=>[n.id,n]));
+const center = n => [n.gx+n.w/2, n.gy+n.d/2];
+const NS='http://www.w3.org/2000/svg';
+const el=(t,a={},...kids)=>{const e=document.createElementNS(NS,t);for(const k in a)e.setAttribute(k,a[k]);kids.forEach(k=>e.appendChild(k));return e;};
+const qOpen=n=>(n.cond||[]).filter(c=>!c.r&&!c.to).length; const qHtml=list=>`<ul class="q">${list.map(c=>c.r?`<li class="res"><span>${c.q}</span><div class="ans">✓ ${c.r}</div></li>`:c.to?`<li class="to"><span>${c.q}</span><div class="ans">→ ${c.to}</div></li>`:`<li>${c.q}</li>`).join('')}</ul>`;
+const esc=s=>String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+
+/* ---------------- STATE ---------------- */
+const S = { ch:0, view:'world', inside:null, selected:null, hover:null, tab:'what', playing:true, tx:0, ty:0, k:1, packets:[], selPacket:null, hoverPacket:null, flowSel:(typeof FLOWS!=='undefined'&&FLOWS[0]?FLOWS[0].id:'turn'), maxCh:0 };
+const svg=document.getElementById('svg'), world=document.getElementById('world'), tip=document.getElementById('tip'), body=document.getElementById('body');
+let sceneNodes=[], sceneHops=[];
+const revealedIds=()=>{ if(S.ch>=CH.length-1) return NODES.map(n=>n.id); const s=new Set(); for(let i=0;i<=S.ch;i++) CH[i].reveal.forEach(id=>s.add(id)); return [...s]; };
+const isNew=id=>S.ch<CH.length-1 && CH[S.ch].reveal.includes(id);
+const revealChapterOf=id=>{ for(let i=0;i<CH.length-1;i++) if(CH[i].reveal.includes(id)) return i; return CH.length-1; };
+
+/* ---------------- SCENES ---------------- */
+function buildWorldScene(){
+  const ids=new Set(revealedIds()); sceneNodes=NODES.filter(n=>ids.has(n.id)); sceneHops=[];
+  const c=CH[S.ch];
+  if(c.flow){ c.flow.forEach((h,i)=>{ let bend=bendFor(h[0],h[1]); const rev=c.flow.findIndex(x=>x[0]===h[1]&&x[1]===h[0]); if(rev>-1&&rev<i) bend=bend==='xy'?'yx':'xy'; sceneHops.push({flow:'ch',idx:i,from:h[0],to:h[1],label:h[2],payload:h[3],bend}); }); }
+  else { FLOWS.forEach(f=>{ if(S.flowSel!=='both'&&f.id!==S.flowSel)return; f.hops.forEach((h,i)=>sceneHops.push({flow:f.id,idx:i,from:h[0],to:h[1],label:h[2],payload:h[3],bend:h[4]||'xy'})); }); }
+}
+function bendFor(a,b){ const t=FLOWS[0].hops.find(h=>h[0]===a&&h[1]===b)||FLOWS[1].hops.find(h=>h[0]===a&&h[1]===b); return t?(t[4]||'xy'):'yx'; }
+function buildInsideScene(n){
+  const steps=n.steps||[]; sceneNodes=steps.map((s,i)=>({id:'s'+i,code:String(i+1),name:s[0],short:s[0],desc:s[1],gx:2+i*3.4,gy:2+i*0.6,w:2,d:2,h:34,inside:true}));
+  sceneHops=[]; for(let i=0;i<steps.length-1;i++) sceneHops.push({flow:'inside',idx:i,from:'s'+i,to:'s'+(i+1),label:steps[i][0]+' → '+steps[i+1][0],payload:{step:i+1,handsOff:steps[i+1][0]},bend:'xy'});
+}
+function hopPath(h){
+  const A=sceneNodes.find(n=>n.id===h.from), B=sceneNodes.find(n=>n.id===h.to); if(!A||!B) return null;
+  const [ax,ay]=center(A), [bx,by]=center(B); const mid = h.bend==='xy' ? [bx,ay] : [ax,by];
+  const g=[[ax,ay],mid,[bx,by]].filter((p,i,arr)=>i===0||p[0]!==arr[i-1][0]||p[1]!==arr[i-1][1]);
+  const scr=g.map(p=>P(p[0],p[1],0)); let len=0; const seg=[]; for(let i=1;i<scr.length;i++){const l=Math.hypot(scr[i][0]-scr[i-1][0],scr[i][1]-scr[i-1][1]);seg.push(l);len+=l;}
+  return {grid:g,scr,seg,len};
+}
+function pointAt(path,t){ let d=t*path.len; for(let i=0;i<path.seg.length;i++){ if(d<=path.seg[i]||i===path.seg.length-1){const u=path.seg[i]?Math.min(1,d/path.seg[i]):1;const a=path.scr[i],b=path.scr[i+1];return [a[0]+(b[0]-a[0])*u,a[1]+(b[1]-a[1])*u];} d-=path.seg[i]; } return path.scr[0]; }
+
+/* ---------------- RENDER ---------------- */
+function render(){
+  world.innerHTML='';
+  const gg=el('g',{opacity:.55}); const R=[-4,26];
+  for(let i=R[0];i<=R[1];i+=2){ const a=P(i,R[0]),b=P(i,R[1]);gg.appendChild(el('line',{x1:a[0],y1:a[1],x2:b[0],y2:b[1],stroke:'var(--grid)','stroke-width':.6})); const c=P(R[0],i),d=P(R[1],i);gg.appendChild(el('line',{x1:c[0],y1:c[1],x2:d[0],y2:d[1],stroke:'var(--grid)','stroke-width':.6})); }
+  world.appendChild(gg);
+  if(S.view==='world'&&S.ch>=CH.length-1){
+    const plate=(x0,y0,x1,y1,dash)=>{const p=el('polygon',{points:pts([P(x0,y0),P(x1,y0),P(x1,y1),P(x0,y1)]),fill:'none',stroke:'var(--ink)','stroke-width':.9,opacity:.5});if(dash)p.setAttribute('stroke-dasharray','5 4');return p;};
+    world.appendChild(plate(0.5,1.5,17,10.5,false)); world.appendChild(plate(2,9,17.5,16.5,false)); world.appendChild(plate(-2,-2,24,17.5,true));
+  }
+  const hg=el('g'); world.appendChild(hg);
+  sceneHops.forEach(h=>{ h.path=hopPath(h); if(!h.path)return; const ghost=byId[h.from]?.ghost||byId[h.to]?.ghost;
+    const pl=el('polyline',{points:pts(h.path.scr),fill:'none',stroke:'var(--ink)','stroke-width':h.flow!=='turn'&&h.flow!=='ch'&&h.flow!=='inside'?1:1.4,opacity:(h.flow!=='turn'&&h.flow!=='ch'&&h.flow!=='inside')||ghost?.7:1});
+    if((h.flow!=='turn'&&h.flow!=='ch'&&h.flow!=='inside')||ghost)pl.setAttribute('stroke-dasharray','3 3'); hg.appendChild(pl);
+    h.path.scr.slice(1,-1).forEach(p=>hg.appendChild(el('polygon',{points:pts([[p[0],p[1]-3.5],[p[0]+3.5,p[1]],[p[0],p[1]+3.5],[p[0]-3.5,p[1]]]),fill:'var(--ink)'})));
+  });
+  const ng=el('g'); world.appendChild(ng);
+  [...sceneNodes].sort((a,b)=>(a.gx+a.gy+a.w+a.d)-(b.gx+b.gy+b.w+b.d)).forEach(n=>ng.appendChild(drawNode(n)));
+  const lg=el('g'); world.appendChild(lg); sceneNodes.forEach(n=>lg.appendChild(drawLabel(n)));
+  world.appendChild(el('g',{id:'pkts'})); drawPackets(); renderRail();
+}
+function drawLabel(n){
+  const g=el('g',{style:'pointer-events:none'});
+  const b=P(n.gx+n.w, n.gy+n.d, 0); const txt=(n.short||n.name).toUpperCase(); const w=txt.length*6.6+10; const y=b[1]+9;
+  const dim=n.ghost&&!n.inside;
+  g.appendChild(el('rect',{x:b[0]-w/2,y:y,width:w,height:14,fill:S.selected===n.id?'var(--hi-bg)':'var(--paper)',stroke:dim?'var(--ghost)':'var(--ink)','stroke-width':.9,'stroke-dasharray':dim?'3 2':'none'}));
+  const t=el('text',{x:b[0],y:y+10.5,'text-anchor':'middle','font-size':'9','font-family':'var(--mono)','letter-spacing':'.06em',fill:S.selected===n.id?'var(--hi-fg)':(dim?'var(--ink-2)':'var(--ink)'),'font-weight':'500'}); t.textContent=txt; g.appendChild(t);
+  return g;
+}
+function drawNode(n){
+  const g=el('g',{class:'node',style:'cursor:pointer','data-id':n.id});
+  const {gx,gy,w,d,h}=n; const sel=S.selected===n.id, hov=S.hover===n.id, fresh=!n.inside&&isNew(n.id);
+  const sw=sel?2:1.2, dash=n.ghost?'4 3':null, face=n.ghost?'none':'var(--face)';
+  const face3=(p,fill,hatch,extra={})=>{const poly=el('polygon',{points:pts(p),fill:fill,stroke:'var(--ink)','stroke-width':sw,'stroke-linejoin':'round',...extra});if(dash)poly.setAttribute('stroke-dasharray',dash);g.appendChild(poly);if(hatch&&!n.ghost){g.appendChild(el('polygon',{points:pts(p),fill:'url(#'+hatch+')',style:'color:var(--ink)',stroke:'none'}));}};
+  const box=(z0,z1,hatchTop)=>{ face3([P(gx,gy+d,z0),P(gx+w,gy+d,z0),P(gx+w,gy+d,z1),P(gx,gy+d,z1)],face,'hatch'); face3([P(gx+w,gy,z0),P(gx+w,gy+d,z0),P(gx+w,gy+d,z1),P(gx+w,gy,z1)],face,'hatch'); face3([P(gx,gy,z1),P(gx+w,gy,z1),P(gx+w,gy+d,z1),P(gx,gy+d,z1)],face,hatchTop||null); };
+  const kind=n.kind||'box';
+  if(kind==='store'){ const L=3, gap=3, lh=(h-gap*(L-1))/L; for(let i=0;i<L;i++){ const z0=i*(lh+gap); box(z0,z0+lh,null);} }
+  else if(kind==='cards'){ const L=5, lh=h/L; for(let i=0;i<L;i++) box(i*lh,(i+1)*lh,null); }
+  else if(kind==='slab'){ box(0,h,'hatchLight'); }
+  else if(kind==='screen'){ box(0,h,null); const inset=.3; if(!n.ghost){ const scr=[P(gx+inset,gy+inset,h),P(gx+w-inset,gy+inset,h),P(gx+w-inset,gy+d-inset,h),P(gx+inset,gy+d-inset,h)]; g.appendChild(el('polygon',{points:pts(scr),fill:'var(--paper)',stroke:'var(--ink)','stroke-width':.9})); for(let i=1;i<=3;i++){const a=P(gx+inset+.2,gy+inset+i*.4,h),b=P(gx+w-inset-.4-(i===3?.5:0),gy+inset+i*.4,h);g.appendChild(el('line',{x1:a[0],y1:a[1],x2:b[0],y2:b[1],stroke:'var(--ink)','stroke-width':.8,opacity:.7}));} } }
+  else if(kind==='gate'){ box(0,h,null); if(!n.ghost){ const z0=h*.55,z1=h*.75; const band=[[P(gx,gy+d,z0),P(gx+w,gy+d,z0),P(gx+w,gy+d,z1),P(gx,gy+d,z1)],[P(gx+w,gy,z0),P(gx+w,gy+d,z0),P(gx+w,gy+d,z1),P(gx+w,gy,z1)]]; band.forEach(p=>g.appendChild(el('polygon',{points:pts(p),fill:'var(--ink)',opacity:.85,stroke:'none'}))); } }
+  else if(kind==='tall'){ box(0,h,null); if(!n.ghost){ // roof ridge line on top to read as "the brain"
+      const c=P(gx+w/2,gy+d/2,h); const a=P(gx,gy+d,h),b=P(gx+w,gy,h); g.appendChild(el('line',{x1:a[0],y1:a[1],x2:b[0],y2:b[1],stroke:'var(--ink)','stroke-width':.8,opacity:.5})); } }
+  else if(kind==='job'){ box(0,h,'hatchLight'); }
+  else { box(0,h,null); }
+  const top=[P(gx,gy,h),P(gx+w,gy,h),P(gx+w,gy+d,h),P(gx,gy+d,h)];
+  if(sel||hov){ g.appendChild(el('polygon',{points:pts(top),fill:sel?'var(--ink)':'none',opacity:sel?.12:1,stroke:'var(--ink)','stroke-width':sel?2.5:1.8})); }
+  if(fresh&&!sel){ g.appendChild(el('polygon',{class:'halo',points:pts([P(gx-.35,gy-.35,0),P(gx+w+.35,gy-.35,0),P(gx+w+.35,gy+d+.35,0),P(gx-.35,gy+d+.35,0)]),fill:'none',stroke:'var(--ink)','stroke-width':1.4,'stroke-dasharray':'4 3'})); }
+  const c=P(gx+w/2,gy+d/2,h); const chipW=16;
+  g.appendChild(el('rect',{x:c[0]-chipW/2,y:c[1]-8,width:chipW,height:14,fill:sel?'var(--hi-bg)':'var(--paper)',stroke:'var(--ink)','stroke-width':1}));
+  const t=el('text',{x:c[0],y:c[1]+3,'text-anchor':'middle','font-size':'9','font-family':'var(--mono)',fill:sel?'var(--hi-fg)':'var(--ink)','font-weight':'600'}); t.textContent=n.code; g.appendChild(t);
+  g.addEventListener('mouseenter',e=>{S.hover=n.id;showTip(e,n);renderPanel();render();});
+  g.addEventListener('mousemove',e=>moveTip(e));
+  g.addEventListener('mouseleave',()=>{S.hover=null;hideTip();renderPanel();render();});
+  g.addEventListener('click',e=>{e.stopPropagation();select(n.id);});
+  g.addEventListener('dblclick',e=>{e.stopPropagation();if(!n.inside)goInside(n.id);});
+  return g;
+}
+
+/* ---------------- PACKETS ---------------- */
+function initPackets(){ S.packets=[]; const flows=[...new Set(sceneHops.map(h=>h.flow))]; flows.forEach(f=>S.packets.push({flow:f,hop:0,t:0,speed:.5,pause:0})); S.selPacket=null; }
+function hopsOf(flow){ return sceneHops.filter(h=>h.flow===flow); }
+function drawPackets(){
+  const pg=world.querySelector('#pkts'); if(!pg)return; pg.innerHTML='';
+  S.packets.forEach((p,i)=>{ const hs=hopsOf(p.flow); const h=hs[p.hop]; if(!h||!h.path)return; const [x,y]=pointAt(h.path,p.t);
+    const isSel=S.selPacket===i; const g=el('g',{class:'pkt',style:'cursor:pointer'});
+    if(isSel) g.appendChild(el('circle',{cx:x,cy:y,r:11,fill:'none',stroke:'var(--ink)','stroke-width':1.2,'stroke-dasharray':'2 2'}));
+    g.appendChild(el('circle',{cx:x,cy:y,r:5.5,fill:'var(--ink)',stroke:'var(--paper)','stroke-width':1.6}));
+    if(isSel||S.hoverPacket===i||S.ch<CH.length-1){ const lbl=el('text',{x:x+10,y:y-8,'font-size':'10','font-family':'var(--mono)',fill:'var(--ink)','font-weight':'500'}); lbl.textContent=h.label; g.appendChild(el('rect',{x:x+7,y:y-19,width:h.label.length*6.4+6,height:14,fill:'var(--paper)',stroke:'var(--ink)','stroke-width':.8})); g.appendChild(lbl); }
+    g.addEventListener('click',e=>{e.stopPropagation();S.selPacket=i;S.playing=false;syncFlowBtn();renderPanel();drawPackets();});
+    g.addEventListener('mouseenter',()=>{S.hoverPacket=i;drawPackets();});
+    g.addEventListener('mouseleave',()=>{S.hoverPacket=null;drawPackets();});
+    pg.appendChild(g);
+  });
+}
+let last=0;
+function tick(ts){ const dt=Math.min(.05,(ts-last)/1000||0); last=ts; tweenTick(); if(S.playing){ S.packets.forEach(p=>advance(p,dt)); drawPackets(); if(S.selPacket!=null) renderPanel(); } requestAnimationFrame(tick); }
+function advance(p,dt){ const hs=hopsOf(p.flow); if(!hs.length)return; if(p.pause>0){p.pause-=dt;return;} const h=hs[p.hop]; if(!h||!h.path){p.hop=(p.hop+1)%hs.length;return;} p.t+=dt*p.speed*(320/Math.max(120,h.path.len)); if(p.t>=1){p.t=0;p.hop=(p.hop+1)%hs.length;p.pause=(p.hop===0?1.2:.35);} }
+function stepOnce(){ S.playing=false; syncFlowBtn(); let i=S.selPacket??0; const p=S.packets[i]; if(!p)return; const hs=hopsOf(p.flow); p.hop=(p.hop+1)%hs.length; p.t=.5; p.pause=0; S.selPacket=i; drawPackets(); renderPanel(); }
+function syncFlowBtn(){ document.getElementById('btnFlow').textContent = S.playing?'‖ Pause':'▸ Play'; }
+requestAnimationFrame(tick);
+
+/* ---------------- PANEL ---------------- */
+function nodeChip(id){ const n=byId[id]; return `<button class="chip${n.ghost?' ghost':''}" onclick="select('${id}')">${esc(n.code)} · ${esc(n.name)}</button>`; }
+function renderPanel(){
+  document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.tab===S.tab));
+  if(S.selPacket!=null && S.packets[S.selPacket]){ const p=S.packets[S.selPacket]; const hs=hopsOf(p.flow); const h=hs[p.hop];
+    const A=sceneNodes.find(n=>n.id===h.from), B=sceneNodes.find(n=>n.id===h.to); const flowName=p.flow==='ch'?CH[S.ch].title:p.flow==='inside'?'inside '+byId[S.inside].name:(FLOWS.find(f=>f.id===p.flow)||{}).name;
+    body.innerHTML=`<div class="eyebrow">Data packet · ${esc(flowName)} · hop ${p.hop+1} of ${hs.length}</div><h1 class="t">${esc(h.label)}</h1>
+    <div class="pk"><div class="lbl">Route</div><div class="route">${esc(A.code)} ${esc(A.name)} &nbsp;→&nbsp; ${esc(B.code)} ${esc(B.name)}</div><div class="lbl">Payload (representative)</div><pre>${esc(JSON.stringify(h.payload,null,2))}</pre></div>
+    <p>Payload shapes are what the design implies, not measured traffic.</p>
+    <div class="actions"><button class="ctl" onclick="stepOnce()">Trace one step</button><button class="ctl" onclick="S.selPacket=null;S.playing=true;syncFlowBtn();renderPanel();drawPackets()">Release & play</button><button class="ctl" onclick="select('${esc(B.id)}')">Open ${esc(B.code)}</button></div>`; return; }
+  const id=S.selected??S.hover; const n=id?sceneNodes.find(x=>x.id===id):null;
+  if(!n){ renderChapterPanel(); return; }
+  if(n.inside){ const parent=byId[S.inside]; const i=+n.id.slice(1);
+    body.innerHTML=`<div class="eyebrow">Inside ${esc(parent.code)} · ${esc(parent.name)} · step ${i+1} of ${parent.steps.length}</div><h1 class="t">${esc(n.name)}</h1><p class="lede">${esc(n.desc)}</p>
+    <h3 class="sec">All steps</h3>${parent.steps.map((s,j)=>`<div class="step ${j===i?'cur':''}"><div class="no">${j+1}</div><div class="tx"><b>${esc(s[0])}</b> — ${esc(s[1])}</div></div>`).join('')}
+    <div class="actions"><button class="ctl" onclick="comeOut()">← Come back out</button></div>`; return; }
+  const status = n.ghost?'<span class="chip ghost static">Not switched on</span>':`<span class="chip static">${n.group==='loop'?'turn loop':n.group==='mem'?'memory':'supporting'}</span>`;
+  const pinned=S.selected===n.id;
+  let content='';
+  if(S.tab==='what') content=`<p class="lede">${n.one}</p><details${pinned?' open':''}><summary>Read more</summary><p>${n.what}</p></details>${n.steps?`<details><summary>Steps in execution</summary>${n.steps.map((s,j)=>`<div class="step"><div class="no">${j+1}</div><div class="tx"><b>${esc(s[0])}</b> — ${esc(s[1])}</div></div>`).join('')}</details>`:''}`;
+  else if(S.tab==='how') content=`<p class="lede">${n.one}</p><p>${n.how}</p>`;
+  else content=`<p class="lede">${n.one}</p>`+(n.cond&&n.cond.length?qHtml(n.cond):`<p>Nothing open here right now.</p>`);
+  body.innerHTML=`<div class="eyebrow">${esc(n.code)} · ${pinned?'pinned':'hovering'}${isNew(n.id)?' · new in this chapter':''}</div><h1 class="t">${esc(n.name)}</h1><div class="sub">${status}</div>${content}
+  ${pinned?`<div class="actions">${n.steps?`<button class="ctl" onclick="goInside('${n.id}')">→ Go inside</button>`:''}<button class="ctl" onclick="select(null)">Back to chapter</button></div>`:''}`;
+}
+function renderChapterPanel(){
+  const c=CH[S.ch]; const last=S.ch===CH.length-1;
+  if(S.tab==='how'){ body.innerHTML=HOW_HTML; return; }
+  if(S.tab==='cond'){ body.innerHTML=`<div class="eyebrow">${esc(TITLE)}</div><h1 class="t">Open questions</h1><div class="sub">${last?'everything unresolved, by structure':'for the structures revealed so far'}</div>`+NODES.filter(n=>revealedIds().includes(n.id)&&n.cond&&n.cond.length).map(n=>`<h3 class="sec">${n.code} · ${esc(n.name)}${n.ghost?' <span class="chip ghost static">later</span>':''}</h3>${qHtml(n.cond)}`).join(''); return; }
+  const chips = last ? '' : `<h3 class="sec">New in this chapter</h3><div>${c.reveal.map(nodeChip).join('')}</div>`;
+  const nav=`<div class="actions"><button class="ctl" onclick="prevCh()" ${S.ch===0?'disabled':''}>◂ Back</button><button class="ctl primary" onclick="nextCh()" ${last?'disabled':''}>${S.ch===CH.length-2?'Show the whole system ▸':'Next ▸'}</button></div>`;
+  body.innerHTML=`<div class="eyebrow">Chapter ${S.ch+1} of ${CH.length}</div><h1 class="t">${esc(c.title)}</h1><p class="lede">${c.lede}</p>${c.story}${chips}${nav}
+  ${last?`<h3 class="sec">Decisions locked</h3><ul>${DECISIONS_HTML}</ul>`:''}`;
+}
+document.querySelectorAll('#tabs button').forEach(b=>b.addEventListener('click',()=>{S.tab=b.dataset.tab;S.selPacket=null;renderPanel();drawPackets();}));
+
+/* ---------------- STATS ---------------- */
+function renderStats(){ const el=document.getElementById('stats'); const open=NODES.reduce((a,n)=>a+qOpen(n),0), routed=NODES.reduce((a,n)=>a+(n.cond||[]).filter(c=>c.to).length,0), res=NODES.reduce((a,n)=>a+(n.cond||[]).filter(c=>c.r).length,0);
+  const dyn={chapter:`${S.ch+1} / ${CH.length}`, shown:`${revealedIds().length} / ${NODES.length}`, questions:`${open} open · ${routed} routed · ${res} resolved`};
+  const all=[...(STATS||[]), {k:'Chapter',v:dyn.chapter},{k:'Structures shown',v:dyn.shown},{k:'Open questions',v:dyn.questions,grow:true}];
+  el.innerHTML=all.map(s=>`<div class="stat${s.grow?' grow':''}"><div class="k">${s.k}</div><div class="v">${s.v}</div></div>`).join(''); }
+
+/* ---------------- INDEX + RAIL ---------------- */
+function renderIndex(){
+  const ix=document.getElementById('index'); ix.innerHTML=''; const rev=new Set(revealedIds());
+  GROUPS.forEach(g=>{ const h=document.createElement('h4'); h.textContent=g.title; ix.appendChild(h);
+    NODES.filter(n=>n.group===g.id).forEach(n=>{ const b=document.createElement('button'); const shown=rev.has(n.id);
+      b.className='ix'+(n.ghost&&shown?' ghost':'')+(!shown?' later':'')+(S.selected===n.id?' on':'')+(isNew(n.id)?' new':''); b.dataset.id=n.id;
+      b.innerHTML=`<span class="code">${n.code}</span><span class="nm">${esc(n.name)}</span><span class="n" title="${shown?'open questions':'revealed in chapter'}">${shown?qOpen(n):'ch '+(revealChapterOf(n.id)+1)}</span>`;
+      b.addEventListener('click',()=>{ if(!shown){ gotoCh(revealChapterOf(n.id)); select(n.id); return; } if(S.view!=='world')comeOut(); select(n.id); focusNode(n); });
+      b.addEventListener('mouseenter',()=>{ if(S.view==='world'&&shown){S.hover=n.id;renderPanel();render();} });
+      b.addEventListener('mouseleave',()=>{ if(S.view==='world'){S.hover=null;renderPanel();render();} });
+      ix.appendChild(b); }); });
+  renderStats();
+}
+function renderRail(){ const r=document.getElementById('rail'); if(S.view!=='world'){ r.innerHTML=`<span class="title">THE SYSTEM &nbsp;›&nbsp; <b>${esc(byId[S.inside].code)} ${esc(byId[S.inside].name)}</b> &nbsp;·&nbsp; steps in execution</span>`; document.getElementById('flowSel').style.display='none'; return; }
+  r.innerHTML=CH.map((c,i)=>`<button class="ch ${i===S.ch?'on':i<S.ch?'done':''} ${i>S.maxCh+1?'locked':''}" title="${esc(c.title)}" onclick="gotoCh(${i})">${i+1}</button>`).join('')+`<span class="title">chapter ${S.ch+1} · <b>${esc(CH[S.ch].title)}</b></span>`;
+  const fs=document.getElementById('flowSel'); fs.style.display = S.ch===CH.length-1?'flex':'none';
+  if(!fs.dataset.built){ fs.innerHTML=[...FLOWS.map(f=>`<button data-f="${f.id}">${f.name}</button>`),'<button data-f="both">All flows</button>'].join(''); fs.dataset.built='1'; fs.querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>{S.flowSel=b.dataset.f;buildWorldScene();initPackets();render();})); }
+  fs.querySelectorAll('button').forEach(b=>b.classList.toggle('on',b.dataset.f===S.flowSel));
+  document.getElementById('btnBack').disabled=S.ch===0; document.getElementById('btnNext').disabled=S.ch===CH.length-1;
+}
+
+/* ---------------- NAV ---------------- */
+function select(id){ S.selected=id; S.selPacket=null; renderIndex(); renderPanel(); render(); }
+function gotoCh(i){ i=Math.max(0,Math.min(CH.length-1,i)); if(S.view!=='world'){S.view='world';S.inside=null;} S.ch=i; S.maxCh=Math.max(S.maxCh,i); S.selected=null; S.hover=null; S.tab='what'; buildWorldScene(); initPackets(); S.playing=true; syncFlowBtn(); renderIndex(); render(); renderPanel(); fitView(true); }
+function nextCh(){ gotoCh(S.ch+1); } function prevCh(){ gotoCh(S.ch-1); }
+function goInside(id){ const n=byId[id]; if(!n||!n.steps)return; S.view='inside'; S.inside=id; S.selected='s0'; buildInsideScene(n); initPackets(); fitView(true); renderIndex(); render(); renderPanel(); }
+function comeOut(){ const was=S.inside; S.view='world'; S.inside=null; buildWorldScene(); initPackets(); S.selected=was; fitView(true); renderIndex(); render(); renderPanel(); }
+function orderList(){ return S.view==='world'?sceneNodes.map(n=>n.id):sceneNodes.map(n=>n.id); }
+document.addEventListener('keydown',e=>{ if(e.target.tagName==='INPUT')return; const L=orderList(); let i=L.indexOf(S.selected);
+  if(e.key==='ArrowDown'){e.preventDefault();select(L[Math.min(L.length-1,i+1)]);}
+  else if(e.key==='ArrowUp'){e.preventDefault();select(L[Math.max(0,i-1)]);}
+  else if(e.key==='ArrowRight'){e.preventDefault(); if(S.view==='world'&&S.selected)goInside(S.selected);}
+  else if(e.key==='ArrowLeft'){e.preventDefault(); if(S.view==='inside')comeOut(); else select(null);}
+  else if(e.key==='Enter'||e.key===']'){e.preventDefault(); if(S.view==='world')nextCh();}
+  else if(e.key==='['){e.preventDefault(); if(S.view==='world')prevCh();}
+  else if(e.key===' '){e.preventDefault();toggleFlow();}
+  else if(e.key==='Escape'){select(null);} });
+
+/* ---------------- VIEW / PAN / ZOOM ---------------- */
+let tween=null;
+function applyView(){ world.setAttribute('transform',`translate(${S.tx},${S.ty}) scale(${S.k})`); }
+function tweenTick(){ if(!tween)return; const now=performance.now(); let u=Math.min(1,(now-tween.t0)/tween.dur); u=1-Math.pow(1-u,3); S.tx=tween.a.tx+(tween.b.tx-tween.a.tx)*u; S.ty=tween.a.ty+(tween.b.ty-tween.a.ty)*u; S.k=tween.a.k+(tween.b.k-tween.a.k)*u; applyView(); if(u>=1)tween=null; }
+function setView(tx,ty,k,anim){ tween=null; if(anim&&!matchMedia('(prefers-reduced-motion: reduce)').matches){ tween={a:{tx:S.tx,ty:S.ty,k:S.k},b:{tx,ty,k},t0:performance.now(),dur:520}; } else { S.tx=tx;S.ty=ty;S.k=k;applyView(); } }
+function bbox(){ let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9; sceneNodes.forEach(n=>{[P(n.gx,n.gy,n.h),P(n.gx+n.w,n.gy,n.h),P(n.gx+n.w,n.gy+n.d,-24),P(n.gx,n.gy+n.d,0),P(n.gx,n.gy,0)].forEach(p=>{x0=Math.min(x0,p[0]);y0=Math.min(y0,p[1]);x1=Math.max(x1,p[0]);y1=Math.max(y1,p[1]);});}); return {x0,y0,x1,y1}; }
+function fitView(anim){ const r=svg.getBoundingClientRect(); if(!sceneNodes.length)return; const b=bbox(); const pad=40; const k=Math.min((r.width-pad*2)/Math.max(1,b.x1-b.x0),(r.height-pad*2)/Math.max(1,b.y1-b.y0)); if(r.width<80||r.height<80||!isFinite(k)||k<=0)return; const kk=Math.max(.2,Math.min(k,1.5)); setView(r.width/2-((b.x0+b.x1)/2)*kk, r.height/2-((b.y0+b.y1)/2)*kk+8, kk, anim); }
+function focusNode(n){ const r=svg.getBoundingClientRect(); const c=P(n.gx+n.w/2,n.gy+n.d/2,n.h/2); setView(r.width/2-c[0]*S.k, r.height/2-c[1]*S.k, S.k, true); }
+function zoomAt(f,cx,cy){ tween=null; const nk=Math.max(.35,Math.min(3,S.k*f)); S.tx=cx-(cx-S.tx)*(nk/S.k); S.ty=cy-(cy-S.ty)*(nk/S.k); S.k=nk; applyView(); }
+svg.addEventListener('wheel',e=>{e.preventDefault(); const r=svg.getBoundingClientRect(); zoomAt(e.deltaY<0?1.1:0.9,e.clientX-r.left,e.clientY-r.top);},{passive:false});
+let drag=null; svg.addEventListener('pointerdown',e=>{ if(e.button!==0)return; tween=null; drag={x:e.clientX,y:e.clientY,tx:S.tx,ty:S.ty,moved:false}; svg.setPointerCapture(e.pointerId); });
+svg.addEventListener('pointermove',e=>{ if(!drag)return; const dx=e.clientX-drag.x,dy=e.clientY-drag.y; if(Math.hypot(dx,dy)>3){drag.moved=true;svg.classList.add('dragging');} S.tx=drag.tx+dx; S.ty=drag.ty+dy; applyView(); });
+svg.addEventListener('pointerup',e=>{ if(drag&&!drag.moved){ select(null); } drag=null; svg.classList.remove('dragging'); });
+document.getElementById('zin').onclick=()=>{const r=svg.getBoundingClientRect();zoomAt(1.2,r.width/2,r.height/2);};
+document.getElementById('zout').onclick=()=>{const r=svg.getBoundingClientRect();zoomAt(1/1.2,r.width/2,r.height/2);};
+window.addEventListener('resize',()=>fitView(false));
+
+/* ---------------- TIP ---------------- */
+function showTip(e,n){ tip.style.display='block'; tip.textContent=n.inside?n.desc:(n.ghost?'Later · ':'')+n.name+' — '+(n.one||'').replace(/<[^>]+>/g,''); moveTip(e); }
+function moveTip(e){ const r=svg.getBoundingClientRect(); let x=e.clientX-r.left+14,y=e.clientY-r.top+14; if(x+290>r.width)x-=300; if(y+60>r.height)y-=70; tip.style.left=x+'px'; tip.style.top=y+'px'; }
+function hideTip(){ tip.style.display='none'; }
+
+/* ---------------- CONTROLS ---------------- */
+function toggleFlow(){ S.playing=!S.playing; if(S.playing)S.selPacket=null; syncFlowBtn(); renderPanel(); drawPackets(); }
+document.getElementById('btnFlow').onclick=toggleFlow;
+document.getElementById('btnStep').onclick=stepOnce;
+document.getElementById('btnReset').onclick=()=>{ select(null); fitView(true); };
+document.getElementById('btnNext').onclick=nextCh; document.getElementById('btnBack').onclick=prevCh;
+
+/* ---------------- BOOT ---------------- */
+gotoCh(0);
+</script>
