@@ -1,0 +1,43 @@
+%%{init: {'theme':'base','themeVariables':{'primaryColor':'#FFFFFF','primaryTextColor':'#17202B','primaryBorderColor':'#8C97A3','lineColor':'#6E7883','clusterBkg':'#F3F1EC','clusterBorder':'#C0BCB4','fontFamily':'ui-monospace, monospace'}}}%%
+graph TB
+    G["Guest device<br/>(captive)"]
+
+    subgraph EDGE["Network edge"]
+        MT["MikroTik RouterOS<br/>hotspot · walled garden"]
+    end
+
+    subgraph APPS["SvelteKit apps"]
+        CUST["apps/customer<br/>portal · OTP · top-up"]
+        ADM["apps/admin<br/>dashboard · incidents · finance"]
+        LOC["apps/locator<br/>public map"]
+    end
+
+    subgraph CORE["@veent/core"]
+        NC{{"NetworkController<br/>33 edges"}}
+        SVC["services<br/>sessions · credits · points<br/>networkHealth · outage"]
+    end
+
+    DBP[("@veent/db<br/>Postgres · 53 migrations")]
+
+    subgraph OUT["Providers"]
+        MAYA["Maya"]
+        SMS["SMS gateways"]
+        SEN["Sentry"]
+    end
+
+    G -->|captive redirect| MT
+    MT --> CUST
+    CUST --> SVC
+    ADM --> SVC
+    ADM -->|setup-router| NC
+    SVC --> NC
+    NC -->|grant / revoke| MT
+
+    CUST --> MAYA
+    MAYA -->|webhook| CUST
+    CUST --> SMS
+    ADM --> SEN
+
+    SVC --> DBP
+    ADM --> DBP
+    LOC --> DBP
