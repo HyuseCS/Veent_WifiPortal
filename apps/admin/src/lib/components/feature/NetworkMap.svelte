@@ -122,9 +122,7 @@
 			.filter((c) => c.members.length > 0)
 	);
 	// Placed APs not in any cluster, matching the filter — the flat rows.
-	const singletons = $derived(
-		placed.filter((ap) => !clusteredIds.has(ap.id) && matchesQuery(ap))
-	);
+	const singletons = $derived(placed.filter((ap) => !clusteredIds.has(ap.id) && matchesQuery(ap)));
 
 	// Collapsed-by-key (default expanded) + which cluster's name is being edited.
 	let collapsed = $state<Record<string, boolean>>({});
@@ -145,7 +143,14 @@
 		void focusedApId;
 		void coverageVisible;
 		void clusteredIds;
-		if (mapReady) mapCtl.renderDomes(placed, { coverageVisible, editingApId, focusedApId, clusteredIds, models });
+		if (mapReady)
+			mapCtl.renderDomes(placed, {
+				coverageVisible,
+				editingApId,
+				focusedApId,
+				clusteredIds,
+				models
+			});
 	});
 
 	// Scale the focused pin up (.sel) and restore all others — no marker re-creation.
@@ -355,7 +360,8 @@
 	// Mirrors the server's clusterReachable check.
 	function isNameReachable(pin: Pin, name: string): boolean {
 		const others = placed.filter(
-			(m) => m.clusterName === name && m.id !== pin.apId && m.latitude != null && m.longitude != null
+			(m) =>
+				m.clusterName === name && m.id !== pin.apId && m.latitude != null && m.longitude != null
 		);
 		if (others.length === 0) return true;
 		return others.some(
@@ -485,7 +491,11 @@
 	// Open the delete-confirmation modal for a saved AP (edit pin). New pins never reach here.
 	function requestDelete(pin: Pin) {
 		if (!pin.apId) return;
-		confirmDelete = { localId: pin.localId, apId: pin.apId, name: pin.name.trim() || 'this access point' };
+		confirmDelete = {
+			localId: pin.localId,
+			apId: pin.apId,
+			name: pin.name.trim() || 'this access point'
+		};
 	}
 
 	// Confirmed deletion: posts ?/deletePlace, then drops the edit pin and reloads.
@@ -590,7 +600,18 @@
 					class="flex h-8 w-8 items-center justify-center rounded text-muted hover:bg-surface"
 					aria-label="Hide list"
 				>
-					<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+					<svg
+						xmlns="http://www.w3.org/2000/svg"
+						width="16"
+						height="16"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg
+					>
 				</button>
 			</header>
 
@@ -724,7 +745,11 @@
 									use:enhance={nameClusterEnhance()}
 									class="flex items-center gap-1.5 px-2 py-1.5"
 								>
-									<input type="hidden" name="ids" value={cluster.members.map((m) => m.id).join(',')} />
+									<input
+										type="hidden"
+										name="ids"
+										value={cluster.members.map((m) => m.id).join(',')}
+									/>
 									<input
 										name="name"
 										value={cluster.named ? cluster.name : ''}
@@ -755,7 +780,9 @@
 										aria-expanded={!collapsed[cluster.key]}
 									>
 										<ChevronDown
-											class="h-4 w-4 transition-transform {collapsed[cluster.key] ? '-rotate-90' : ''}"
+											class="h-4 w-4 transition-transform {collapsed[cluster.key]
+												? '-rotate-90'
+												: ''}"
 											aria-hidden="true"
 										/>
 									</button>
@@ -788,7 +815,9 @@
 										<li>
 											{@render apRow(ap)}
 											{#if editPin}
-												<div class="border-t border-border bg-bg p-2">{@render pinPanel(editPin)}</div>
+												<div class="border-t border-border bg-bg p-2">
+													{@render pinPanel(editPin)}
+												</div>
 											{/if}
 										</li>
 									{/each}
@@ -815,9 +844,15 @@
 
 			<footer class="space-y-2 border-t border-border px-3 py-2">
 				<div class="flex items-center gap-3 px-1 text-xs text-muted">
-					<span class="flex items-center gap-1.5"><span class="h-2 w-2 shrink-0 rounded-full bg-online"></span>Online</span>
-					<span class="flex items-center gap-1.5"><span class="h-2 w-2 shrink-0 rounded-full bg-warning"></span>Degraded</span>
-					<span class="flex items-center gap-1.5"><span class="h-2 w-2 shrink-0 rounded-full bg-blocked"></span>Offline</span>
+					<span class="flex items-center gap-1.5"
+						><span class="h-2 w-2 shrink-0 rounded-full bg-online"></span>Online</span
+					>
+					<span class="flex items-center gap-1.5"
+						><span class="h-2 w-2 shrink-0 rounded-full bg-warning"></span>Degraded</span
+					>
+					<span class="flex items-center gap-1.5"
+						><span class="h-2 w-2 shrink-0 rounded-full bg-blocked"></span>Offline</span
+					>
 				</div>
 				<button
 					onclick={() => {
@@ -856,7 +891,23 @@
 			class="absolute top-3 left-3 z-[1000] flex h-9 items-center gap-2 rounded border border-border bg-bg px-3 text-sm font-medium text-ink shadow-sm hover:bg-surface"
 			aria-label="Show access point list"
 		>
-			<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+			<svg
+				xmlns="http://www.w3.org/2000/svg"
+				width="14"
+				height="14"
+				viewBox="0 0 24 24"
+				fill="none"
+				stroke="currentColor"
+				stroke-width="2"
+				stroke-linecap="round"
+				stroke-linejoin="round"
+				><line x1="3" y1="12" x2="21" y2="12" /><line x1="3" y1="6" x2="21" y2="6" /><line
+					x1="3"
+					y1="18"
+					x2="21"
+					y2="18"
+				/></svg
+			>
 			APs
 		</button>
 	{/if}
@@ -879,8 +930,8 @@
 	>
 		<h2 class="text-base font-semibold text-ink">Remove access point?</h2>
 		<p class="mt-1 text-sm text-muted">
-			<span class="font-medium text-ink">{confirmDelete?.name ?? ''}</span> will be permanently
-			deleted from the network. This cannot be undone.
+			<span class="font-medium text-ink">{confirmDelete?.name ?? ''}</span> will be permanently deleted
+			from the network. This cannot be undone.
 		</p>
 		<form
 			method="post"

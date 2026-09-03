@@ -27,12 +27,12 @@ reset, or provisioning a router the app server can't reach over the API.
 Every row on the walled garden is one of these. The first three are code-owned and provisioned by
 `setup:router` in a **load-bearing order — probe → payment → portal** (see [The 3-call split](#the-3-call-split-and-why-order-matters)):
 
-| Tag | Menu | Rows | Provisioned by |
-| --- | --- | --- | --- |
-| `veent-admin:probe`   | `walled-garden` (`action=deny`)  | OS captive-probe hosts (`PROBE_DENIES`) | `setup:router` call 1 |
-| `veent-admin:payment` | `walled-garden` (`action=allow`) | payment-gateway hosts (`PAYMENT_HOSTS`) | `setup:router` call 2 |
-| `veent-admin:portal`  | `walled-garden` + `walled-garden ip` | admin/portal origin (`ORIGIN` + `ADMIN_WG_HOSTS`/`ADMIN_WG_IPS`) | `setup:router` call 3 |
-| `gcash-auto`          | `walled-garden ip`               | one self-healing GCash edge IP | the `gcash-resolve` scheduler (not `provisionWalledGarden`) |
+| Tag                   | Menu                                 | Rows                                                             | Provisioned by                                              |
+| --------------------- | ------------------------------------ | ---------------------------------------------------------------- | ----------------------------------------------------------- |
+| `veent-admin:probe`   | `walled-garden` (`action=deny`)      | OS captive-probe hosts (`PROBE_DENIES`)                          | `setup:router` call 1                                       |
+| `veent-admin:payment` | `walled-garden` (`action=allow`)     | payment-gateway hosts (`PAYMENT_HOSTS`)                          | `setup:router` call 2                                       |
+| `veent-admin:portal`  | `walled-garden` + `walled-garden ip` | admin/portal origin (`ORIGIN` + `ADMIN_WG_HOSTS`/`ADMIN_WG_IPS`) | `setup:router` call 3                                       |
+| `gcash-auto`          | `walled-garden ip`                   | one self-healing GCash edge IP                                   | the `gcash-resolve` scheduler (not `provisionWalledGarden`) |
 
 A fifth, **transient** family appears only during a checkout: `veent-checkout:<epochMs>` — per-device
 reCAPTCHA allows scoped to the paying device's IP, opened and swept by the customer app (see
@@ -56,9 +56,9 @@ gateway's checkout/redirect/3DS pages and the reCAPTCHA assets, plus our portal 
 
 ## Two layers
 
-| RouterOS path                  | Matches on                                                              | Use for                                                                 |
-| ------------------------------ | ----------------------------------------------------------------------- | ----------------------------------------------------------------------- |
-| `/ip hotspot walled-garden`    | `dst-host` (TLS SNI / HTTP Host — **hostname**, supports `*` wildcards) | HTTP/HTTPS hosts (payment + portal hosts) and the `action=deny` probes  |
+| RouterOS path                  | Matches on                                                              | Use for                                                                                               |
+| ------------------------------ | ----------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `/ip hotspot walled-garden`    | `dst-host` (TLS SNI / HTTP Host — **hostname**, supports `*` wildcards) | HTTP/HTTPS hosts (payment + portal hosts) and the `action=deny` probes                                |
 | `/ip hotspot walled-garden ip` | `dst-address` (**IP/CIDR**, all protocols)                              | A host that needs non-HTTP/HTTPS, a portal origin given as a bare IP, or the resolved `gcash-auto` IP |
 
 The host layer can only match the **hostname** (SNI), never the path (except an HTTP-only `path=`
@@ -315,17 +315,17 @@ the roots below are starting points from research, NOT confirmed working. For ea
 protocol above, classify each host (direct vs CNAME-to-CDN), add, and get a live pass/fail before
 treating it as supported. Do NOT add any of these to `PAYMENT_HOSTS` until live-verified.
 
-| App | Candidate root(s) | Status |
-| --- | --- | --- |
-| GoTyme | `*.gotyme.com.ph` | UNVERIFIED |
-| SeaBank | `*.seabank.ph`, `*.seabank.com.ph` | UNVERIFIED |
-| GrabPay | `*.grab.com` | UNVERIFIED |
-| ShopeePay | `*.shopeepay.ph`, `*.shopee.ph` | UNVERIFIED |
-| Coins.ph | `*.coins.ph` | UNVERIFIED |
-| BDO | `*.bdo.com.ph` | UNVERIFIED |
-| BPI | `*.bpi.com.ph` | UNVERIFIED |
-| Landbank | `*.landbank.com`, `*.landbank.com.ph`, `lbpiaccess.com` | UNVERIFIED |
-| Security Bank | `*.securitybank.com`, `*.securitybank.com.ph` | UNVERIFIED |
+| App           | Candidate root(s)                                       | Status     |
+| ------------- | ------------------------------------------------------- | ---------- |
+| GoTyme        | `*.gotyme.com.ph`                                       | UNVERIFIED |
+| SeaBank       | `*.seabank.ph`, `*.seabank.com.ph`                      | UNVERIFIED |
+| GrabPay       | `*.grab.com`                                            | UNVERIFIED |
+| ShopeePay     | `*.shopeepay.ph`, `*.shopee.ph`                         | UNVERIFIED |
+| Coins.ph      | `*.coins.ph`                                            | UNVERIFIED |
+| BDO           | `*.bdo.com.ph`                                          | UNVERIFIED |
+| BPI           | `*.bpi.com.ph`                                          | UNVERIFIED |
+| Landbank      | `*.landbank.com`, `*.landbank.com.ph`, `lbpiaccess.com` | UNVERIFIED |
+| Security Bank | `*.securitybank.com`, `*.securitybank.com.ph`           | UNVERIFIED |
 
 **On the 4 bank rows (BDO / BPI / Landbank / Security Bank):** these support QR Ph, but banking apps
 are especially likely to **cert-pin and/or detect captive networks** and refuse even with their

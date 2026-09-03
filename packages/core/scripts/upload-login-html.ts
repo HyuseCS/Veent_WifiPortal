@@ -8,7 +8,8 @@
  */
 import { readFileSync } from 'node:fs';
 
-const { MIKROTIK_HOST, MIKROTIK_USER, MIKROTIK_PASSWORD, MIKROTIK_PORT, MIKROTIK_TLS } = process.env;
+const { MIKROTIK_HOST, MIKROTIK_USER, MIKROTIK_PASSWORD, MIKROTIK_PORT, MIKROTIK_TLS } =
+	process.env;
 const host = process.argv[2] || MIKROTIK_HOST;
 const routerFile = process.argv[3] || 'hotspot/login.html';
 const localFile = 'docs/mikrotik/login.html';

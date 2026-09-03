@@ -53,7 +53,7 @@
 		status >= 500
 			? {
 					title: 'Something went wrong',
-					body: "An error on our end stopped this section from loading. Try again.",
+					body: 'An error on our end stopped this section from loading. Try again.',
 					icon: ServerCrash
 				}
 			: {
@@ -79,7 +79,9 @@
 
 <div class="grid h-full min-h-[60vh] place-items-center">
 	<div class="w-full max-w-md rounded-2xl border border-border bg-bg p-8 text-center shadow-sm">
-		<div class="mx-auto flex h-14 w-14 items-center justify-center rounded-xl bg-brand/10 text-brand">
+		<div
+			class="mx-auto flex h-14 w-14 items-center justify-center rounded-xl bg-brand/10 text-brand"
+		>
 			<Icon class="h-7 w-7" aria-hidden="true" />
 		</div>
 		<p class="mt-5 font-mono text-xs font-semibold tracking-[0.2em] text-muted">ERROR {status}</p>

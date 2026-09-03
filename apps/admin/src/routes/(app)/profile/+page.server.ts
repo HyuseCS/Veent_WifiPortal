@@ -139,12 +139,23 @@ export const actions: Actions = {
 		const code = String(form.get('code') ?? '').trim();
 
 		if (!EMAIL_RE.test(newEmail))
-			return fail(400, { action: 'email', error: 'Enter a valid email address.', values: { email: newEmail } });
+			return fail(400, {
+				action: 'email',
+				error: 'Enter a valid email address.',
+				values: { email: newEmail }
+			});
 		if (newEmail === user.email.toLowerCase())
-			return fail(400, { action: 'email', error: 'That is already your email.', values: { email: newEmail } });
+			return fail(400, {
+				action: 'email',
+				error: 'That is already your email.',
+				values: { email: newEmail }
+			});
 
 		// High-stakes: re-prompt for the authenticator code (same pattern as content saves).
-		const stepUp = await verifyStepUp(event, code, { scope: 'admin_profile_email', action: 'email' });
+		const stepUp = await verifyStepUp(event, code, {
+			scope: 'admin_profile_email',
+			action: 'email'
+		});
 		if (stepUp) return stepUp;
 
 		// Email is the unique login identity — reject a collision with a friendly message rather
@@ -155,7 +166,11 @@ export const actions: Actions = {
 			.where(eq(adminUser.email, newEmail))
 			.limit(1);
 		if (existing && existing.id !== user.id)
-			return fail(409, { action: 'email', error: 'That email is already in use.', values: { email: newEmail } });
+			return fail(409, {
+				action: 'email',
+				error: 'That email is already in use.',
+				values: { email: newEmail }
+			});
 
 		// The new address hasn't been verified; admin login is password + TOTP (not email-link),
 		// so this doesn't lock anyone out — it just keeps emailVerified honest.
@@ -179,13 +194,19 @@ export const actions: Actions = {
 		const code = String(form.get('code') ?? '').trim();
 
 		if (newPassword.length < 8)
-			return fail(400, { action: 'password', error: 'New password must be at least 8 characters.' });
+			return fail(400, {
+				action: 'password',
+				error: 'New password must be at least 8 characters.'
+			});
 		if (newPassword !== confirm)
 			return fail(400, { action: 'password', error: 'New passwords do not match.' });
 
 		// High-stakes: re-prompt for the authenticator code (checked before the password change so a
 		// leaked/shoulder-surfed password alone can't rotate credentials).
-		const stepUp = await verifyStepUp(event, code, { scope: 'admin_profile_password', action: 'password' });
+		const stepUp = await verifyStepUp(event, code, {
+			scope: 'admin_profile_password',
+			action: 'password'
+		});
 		if (stepUp) return stepUp;
 
 		try {
@@ -218,7 +239,10 @@ export const actions: Actions = {
 			// confirm step verifies a code from the new device (verifyTOTP), which activates it.
 			// (We deliberately DON'T disableTwoFactor first — that rotates the session and leaves the
 			// follow-up call unauthorized, and would also drop the mandatory-2FA guarantee mid-flow.)
-			const res = await auth.api.enableTwoFactor({ body: { password }, headers: event.request.headers });
+			const res = await auth.api.enableTwoFactor({
+				body: { password },
+				headers: event.request.headers
+			});
 			return {
 				action: 'twofa',
 				step: 'confirm' as const,
@@ -229,7 +253,8 @@ export const actions: Actions = {
 		} catch (e) {
 			// The only expected APIError here is a bad password (we don't disable first, so no
 			// session-rotation UNAUTHORIZED). Anything else is unexpected — log it.
-			if (e instanceof APIError) return fail(400, { action: 'twofa', error: 'Incorrect password.' });
+			if (e instanceof APIError)
+				return fail(400, { action: 'twofa', error: 'Incorrect password.' });
 			log.error('2FA re-enroll start unexpected error:', e);
 			return fail(500, { action: 'twofa', error: 'Unexpected error.' });
 		}
@@ -259,7 +284,8 @@ export const actions: Actions = {
 		try {
 			await auth.api.verifyTOTP({ body: { code }, headers: event.request.headers });
 		} catch (e) {
-			if (e instanceof APIError) return fail(400, { ...echo, error: 'Invalid code. Please try again.' });
+			if (e instanceof APIError)
+				return fail(400, { ...echo, error: 'Invalid code. Please try again.' });
 			log.error('2FA re-enroll confirm unexpected error:', e);
 			return fail(500, { ...echo, error: 'Unexpected error.' });
 		}
@@ -282,7 +308,8 @@ export const actions: Actions = {
 			});
 			return { action: 'backup', ok: true, backupCodes: res.backupCodes };
 		} catch (e) {
-			if (e instanceof APIError) return fail(400, { action: 'backup', error: 'Incorrect password.' });
+			if (e instanceof APIError)
+				return fail(400, { action: 'backup', error: 'Incorrect password.' });
 			log.error('regenerate backup codes unexpected error:', e);
 			return fail(500, { action: 'backup', error: 'Unexpected error.' });
 		}

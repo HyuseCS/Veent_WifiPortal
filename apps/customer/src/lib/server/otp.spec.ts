@@ -184,7 +184,11 @@ describe('sendOtp (Cast — default provider)', () => {
 		state.env.CAST_API_KEY = 'cast_test_key';
 		mockFetch({
 			ok: true,
-			json: async () => ({ success: false, error_code: 'INSUFFICIENT_CREDITS', error: 'no credits' })
+			json: async () => ({
+				success: false,
+				error_code: 'INSUFFICIENT_CREDITS',
+				error: 'no credits'
+			})
 		});
 
 		await expect(sendOtp(PHONE, CODE)).rejects.toThrow(/INSUFFICIENT_CREDITS/);

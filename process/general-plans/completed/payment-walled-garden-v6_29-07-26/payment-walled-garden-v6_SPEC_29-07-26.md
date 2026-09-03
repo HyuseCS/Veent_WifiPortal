@@ -18,9 +18,9 @@ captive):
    walled-garden mechanism can't follow a CNAME to a wildcard rule, regardless of plain vs.
    encrypted DNS. The DoT/DoH-block mechanism this SPEC's Flow/State Diagram and AC1 describe is
    **not built** — GCash is fixed instead via a `:resolve`-scheduler pattern that resolves the
-   CNAME target directly and upserts an IP-layer allow. The *behavioral outcome* AC1/AC2 describe
+   CNAME target directly and upserts an IP-layer allow. The _behavioral outcome_ AC1/AC2 describe
    (GCash checkout completes while captive) is still the goal and is confirmed live-working; the
-   *mechanism* is different from what this SPEC's Flow diagram depicts.
+   _mechanism_ is different from what this SPEC's Flow diagram depicts.
 2. **AC3 (Google Pay checkout completes while captive) is downgraded to a known-limitation, not an
    achievable acceptance criterion.** Reachability was fixed live (missing `accounts.google.com` +
    `accounts.google.com.ph` host rules), but Google Pay itself refuses to run inside the captive
@@ -29,7 +29,7 @@ captive):
    is explicitly already listed below in **Out Of Scope** ("The decoupled-payment path... a later,
    separate phase"). AC3 is therefore reclassified from a shippable criterion to a documented
    known-limitation of the captive-portal payment surface, consistent with this SPEC's own
-   Out-of-Scope boundary — not a scope change, a scope *clarification* forced by live evidence.
+   Out-of-Scope boundary — not a scope change, a scope _clarification_ forced by live evidence.
 
 This SPEC is otherwise still locked and still governs the plan. See the plan's own
 §Re-Scoped Acceptance Criteria (added 29-07-26) for the corresponding plan-side detail.

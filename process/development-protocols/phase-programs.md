@@ -1,13 +1,13 @@
 ---
 name: protocol:phase-programs
-description: "How to run large multi-phase programs: umbrella plan, per-phase split, 10-step loop, blocker handling, and foundation-vs-expansion boundaries."
+description: 'How to run large multi-phase programs: umbrella plan, per-phase split, 10-step loop, blocker handling, and foundation-vs-expansion boundaries.'
 date: 09-06-26
 metadata:
   node_type: memory
   type: protocol
   read_order: 5
   required: false
-  read_when: "planning or executing a multi-phase program (3+ dependent phases)"
+  read_when: 'planning or executing a multi-phase program (3+ dependent phases)'
 ---
 
 # Phase Programs

@@ -662,7 +662,8 @@ export function createMikrotikController(config: MikrotikConfig): NetworkControl
 					// never cut an admin who just refreshed.
 					const fresh = await conn.write('/ip/hotspot/ip-binding/print', [`?mac-address=${mac}`]);
 					const current = fresh.find((f) => f['.id'] === id);
-					if (!current || !adminBypassExpired(current.comment ?? '', Date.now(), maxAgeMs)) continue;
+					if (!current || !adminBypassExpired(current.comment ?? '', Date.now(), maxAgeMs))
+						continue;
 					try {
 						await conn.write('/ip/hotspot/ip-binding/remove', [`=.id=${id}`]);
 						reaped.push(mac);
@@ -781,9 +782,7 @@ export function createMikrotikController(config: MikrotikConfig): NetworkControl
 						PING_TIMEOUT_MS,
 						'ping'
 					);
-					const times = pings
-						.map((p) => rttToMs(p.time))
-						.filter((n): n is number => n != null);
+					const times = pings.map((p) => rttToMs(p.time)).filter((n): n is number => n != null);
 					if (times.length) {
 						latencyMs = Math.round(times.reduce((a, b) => a + b, 0) / times.length);
 					}
@@ -881,7 +880,9 @@ export function createMikrotikController(config: MikrotikConfig): NetworkControl
 			if (addresses.length === 0) return [];
 			const timeoutMs = opts?.timeoutMs ?? AP_PING_TIMEOUT_MS;
 			return withConn(async (conn) => {
-				const pingOne = async (address: string): Promise<{ address: string; aliveMs: number | null }> => {
+				const pingOne = async (
+					address: string
+				): Promise<{ address: string; aliveMs: number | null }> => {
 					try {
 						// `=count=2`: two echoes so a single dropped packet doesn't read as down. Bounded by
 						// withTimeout so a host that never replies can't stall the batch; a reject/timeout →
@@ -891,9 +892,7 @@ export function createMikrotikController(config: MikrotikConfig): NetworkControl
 							timeoutMs,
 							`ping ${address}`
 						);
-						const times = pings
-							.map((p) => rttToMs(p.time))
-							.filter((n): n is number => n != null);
+						const times = pings.map((p) => rttToMs(p.time)).filter((n): n is number => n != null);
 						const aliveMs = times.length
 							? Math.round(times.reduce((a, b) => a + b, 0) / times.length)
 							: null;

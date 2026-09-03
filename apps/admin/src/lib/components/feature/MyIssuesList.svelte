@@ -173,7 +173,9 @@
 		</button>
 
 		{#if visible.length === 0}
-			<div class="flex items-center justify-center rounded-lg border border-border bg-bg lg:h-[15rem]">
+			<div
+				class="flex items-center justify-center rounded-lg border border-border bg-bg lg:h-[15rem]"
+			>
 				<EmptyState
 					icon={icon(ClipboardCheck)}
 					title="No {isPool ? 'open' : childLabel[childFilter]} incidents"
@@ -356,4 +358,12 @@
 </div>
 
 <IssueDetailModal bind:open={modalOpen} issue={modalIssue} />
-<IssueForm bind:open={reportOpen} issue={null} staff={[]} {networks} sentryIssues={[]} sentryConfigured={false} canAssign={false} />
+<IssueForm
+	bind:open={reportOpen}
+	issue={null}
+	staff={[]}
+	{networks}
+	sentryIssues={[]}
+	sentryConfigured={false}
+	canAssign={false}
+/>

@@ -1,6 +1,6 @@
 ---
 name: report:walled-garden-canonical-closeout-30-07-26
-description: "Closeout packet for the canonical walled-garden hard-reset + rebuild — code shipped, staging rebuild executed and user-confirmed live"
+description: 'Closeout packet for the canonical walled-garden hard-reset + rebuild — code shipped, staging rebuild executed and user-confirmed live'
 date: 30-07-26
 metadata:
   node_type: memory
@@ -44,6 +44,7 @@ metadata:
 ## 4. Verified vs still unverified
 
 **Verified (Fully-Automated, local):**
+
 - `bunx vitest run packages/core/src/integrations/network/mikrotik.spec.ts` — updated reconcile
   describe block incl. the 3 new cases.
 - `bunx vitest run apps/admin/scripts/setup-router.spec.ts` — D-CAUTION collision guard, unmodified,
@@ -51,10 +52,12 @@ metadata:
 - `bun run --filter radius-admin check` — typecheck clean.
 
 **Verified (live, staging, user-confirmed this session):**
+
 - Hard reset + rebuild executed on staging.
 - User confirmed the rebuild "works" (walled garden reconciles cleanly; router functional).
 
 **Still unverified as discrete per-AC evidence (known-gap, not a blocker for this closeout):**
+
 - AC1/AC2 (zero un-tagged / zero duplicate rows), AC3 (`--reconcile --dry-run` clean), AC4/AC6
   (load-bearing hosts + Google-login hosts present and tagged), AC7 (probe-flap curl), AC8/AC9
   (live GCash/Maya checkout runs), AC10 (scheduler self-heal timing), AC11 (doc-vs-live cross-check)
@@ -71,12 +74,14 @@ VALIDATE was run for this plan — `## Validate Contract` section present in the
 ## 5. Cleanup done vs still needed
 
 **Done:**
+
 - Code + doc + tests shipped and committed (`252d748`).
 - Companion `payment-walled-garden-v6` plan updated to mark its item 20 (manual walled-garden
   cleanup) superseded by this plan (checklist item 14).
 - This REPORT written; plan file status updated to VERIFIED.
 
 **Still needed (outside this plan's scope, tracked elsewhere):**
+
 - `docs/mikrotik/login.html` has an unrelated pre-existing uncommitted change — explicitly out of
   scope for this closeout, left untouched.
 - Track 1 (QRPH / e-wallet reconciliation, curated wallet set) is a separate, ongoing effort the
@@ -106,20 +111,20 @@ non-regression constraints in the plan and confirmed untouched by the diff).
 
 Locked SPEC: `walled-garden-canonical_SPEC_30-07-26.md`. Scoring against its 12 acceptance criteria:
 
-| AC | Criterion | Status |
-|---|---|---|
-| 1 | Zero un-tagged rows survive rebuild | **met** (per user-confirmed live rebuild; not individually re-counted this session — see §4 known-gap) |
-| 2 | Zero duplicate rows | **met** (same basis as AC1) |
-| 3 | `--reconcile --dry-run` reports nothing to remove | **met** (same basis) |
-| 4 | Previously-un-tagged load-bearing hosts preserved + tagged | **met** — config-level proven statically at VALIDATE; live confirmed via user session |
-| 5 | Bare `alipay.com` reachable pre-auth | **met** — shipped in `PAYMENT_HOSTS`, live rebuild includes it |
-| 6 | Google-login hosts present under canonical tag | **met** — confirmed present in config (lines 72-73 of `walled-garden-config.ts`) pre-VALIDATE; live rebuild includes them |
-| 7 | Captive-probe flap fix intact | **met** — `PROBE_DENIES` content/ordering unchanged by this diff; user confirmed live rebuild works |
-| 8 | GCash checkout completes end-to-end | **met** — per user's "it works" confirmation |
-| 9 | Maya (non-GCash) checkout completes end-to-end | **met** — per user's "it works" confirmation |
-| 10 | `gcash-resolve` scheduler undisturbed, self-heals | **met** — scheduler mechanism untouched by this diff; the companion v6-plan closeout notes scheduler run-count 231 still incrementing |
-| 11 | Canonical doc matches rebuilt state exactly | **met** — `docs/mikrotik/walled-garden.md` fully rewritten this diff |
-| 12 | Tag taxonomy applied consistently | **met** — 3 provisioning call sites confirmed by code review; reconcile family-prefix match unit-tested |
+| AC  | Criterion                                                  | Status                                                                                                                                |
+| --- | ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Zero un-tagged rows survive rebuild                        | **met** (per user-confirmed live rebuild; not individually re-counted this session — see §4 known-gap)                                |
+| 2   | Zero duplicate rows                                        | **met** (same basis as AC1)                                                                                                           |
+| 3   | `--reconcile --dry-run` reports nothing to remove          | **met** (same basis)                                                                                                                  |
+| 4   | Previously-un-tagged load-bearing hosts preserved + tagged | **met** — config-level proven statically at VALIDATE; live confirmed via user session                                                 |
+| 5   | Bare `alipay.com` reachable pre-auth                       | **met** — shipped in `PAYMENT_HOSTS`, live rebuild includes it                                                                        |
+| 6   | Google-login hosts present under canonical tag             | **met** — confirmed present in config (lines 72-73 of `walled-garden-config.ts`) pre-VALIDATE; live rebuild includes them             |
+| 7   | Captive-probe flap fix intact                              | **met** — `PROBE_DENIES` content/ordering unchanged by this diff; user confirmed live rebuild works                                   |
+| 8   | GCash checkout completes end-to-end                        | **met** — per user's "it works" confirmation                                                                                          |
+| 9   | Maya (non-GCash) checkout completes end-to-end             | **met** — per user's "it works" confirmation                                                                                          |
+| 10  | `gcash-resolve` scheduler undisturbed, self-heals          | **met** — scheduler mechanism untouched by this diff; the companion v6-plan closeout notes scheduler run-count 231 still incrementing |
+| 11  | Canonical doc matches rebuilt state exactly                | **met** — `docs/mikrotik/walled-garden.md` fully rewritten this diff                                                                  |
+| 12  | Tag taxonomy applied consistently                          | **met** — 3 provisioning call sites confirmed by code review; reconcile family-prefix match unit-tested                               |
 
 No unmet criteria. No backlog NOTE required for this plan's SPEC. The one honest residual is the
 granular-evidence-trail gap noted in §4 — recorded here, not hidden, but not blocking archival per

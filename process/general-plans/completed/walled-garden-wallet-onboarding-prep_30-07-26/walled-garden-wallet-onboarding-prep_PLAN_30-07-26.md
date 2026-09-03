@@ -1,6 +1,6 @@
 ---
 name: plan:walled-garden-wallet-onboarding-prep
-description: "Behavior-neutral PAYMENT_HOSTS regroup + two new walled-garden.md doc sections (recon procedure + curated UNVERIFIED candidate table). No new domains whitelisted."
+description: 'Behavior-neutral PAYMENT_HOSTS regroup + two new walled-garden.md doc sections (recon procedure + curated UNVERIFIED candidate table). No new domains whitelisted.'
 date: 30-07-26
 ---
 
@@ -49,8 +49,9 @@ not a regression.
 plus a deliberate removal of 6 allow hosts (4 abandoned Google Pay + 2 unused PayMongo/Xendit);
 additive prose in docs. No schema/auth/API/billing/migration surface. Google Pay is proven
 non-functional captive (WebView `OR_BIBED_15`); PayMongo/Xendit have no integration code (only config
-+ one `seed.ts` comment) and the live GCash redirect goes via Maya's hosted checkout — so no working
-path is broken.
+
+- one `seed.ts` comment) and the live GCash redirect goes via Maya's hosted checkout — so no working
+  path is broken.
 
 ## Implementation Checklist
 
@@ -92,19 +93,19 @@ path is broken.
      needs a live pass/fail, not just a resolving rule.
 5. Add section **"Candidate wallets/banks (UNVERIFIED — recon required)"** after section 4. A curated
    table (NOT all 24) sourced from `docs/external_research/Top 20+ Philippine Banking App API
-   Domains.md`:
+Domains.md`:
 
-   | App | Candidate root(s) | Status |
-   | --- | --- | --- |
-   | GoTyme | `*.gotyme.com.ph` | UNVERIFIED |
-   | SeaBank | `*.seabank.ph`, `*.seabank.com.ph` | UNVERIFIED |
-   | GrabPay | `*.grab.com` | UNVERIFIED |
-   | ShopeePay | `*.shopeepay.ph`, `*.shopee.ph` | UNVERIFIED |
-   | Coins.ph | `*.coins.ph` | UNVERIFIED |
-   | BDO | `*.bdo.com.ph` | UNVERIFIED |
-   | BPI | `*.bpi.com.ph` | UNVERIFIED |
-   | Landbank | `*.landbank.com`, `*.landbank.com.ph`, `lbpiaccess.com` | UNVERIFIED |
-   | Security Bank | `*.securitybank.com`, `*.securitybank.com.ph` | UNVERIFIED |
+   | App           | Candidate root(s)                                       | Status     |
+   | ------------- | ------------------------------------------------------- | ---------- |
+   | GoTyme        | `*.gotyme.com.ph`                                       | UNVERIFIED |
+   | SeaBank       | `*.seabank.ph`, `*.seabank.com.ph`                      | UNVERIFIED |
+   | GrabPay       | `*.grab.com`                                            | UNVERIFIED |
+   | ShopeePay     | `*.shopeepay.ph`, `*.shopee.ph`                         | UNVERIFIED |
+   | Coins.ph      | `*.coins.ph`                                            | UNVERIFIED |
+   | BDO           | `*.bdo.com.ph`                                          | UNVERIFIED |
+   | BPI           | `*.bpi.com.ph`                                          | UNVERIFIED |
+   | Landbank      | `*.landbank.com`, `*.landbank.com.ph`, `lbpiaccess.com` | UNVERIFIED |
+   | Security Bank | `*.securitybank.com`, `*.securitybank.com.ph`           | UNVERIFIED |
 
    Each row note: "candidate root — run the recon protocol above; classify direct vs CNAME-to-CDN
    before adding." Add a note on the 4 bank rows: banks support QR Ph but are especially likely to
@@ -112,6 +113,7 @@ path is broken.
    app. Updated out-of-scope note: only the OTHER traditional banks (Metrobank, RCBC, PNB, China
    Bank, EastWest, AUB, PSBank, etc.) remain out of scope; BDO/BPI/Landbank/Security Bank are now
    curated candidates.
+
 6. Add a **Google Pay = KNOWN-DEAD** note (in the recon section or near the candidate table): Google
    Pay is excluded on purpose — Android WebView blocks it (`OR_BIBED_15`), so it can never work in
    the captive CNA regardless of whitelisting. This is a WebView limitation, NOT a walled-garden gap.
@@ -127,12 +129,12 @@ path is broken.
 
 ## Verification Evidence
 
-| Gate / Scenario | Strategy | Proves SPEC criterion |
-|---|---|---|
-| `bunx vitest run apps/admin/scripts/setup-router.spec.ts` exits 0 | Fully-Automated | Collision guard preserved (`PAYMENT_HOSTS ∩ PROBE_DENIES = ∅`); removal can't create a collision |
-| Sorted host set post = HEAD set MINUS the 6 hosts, nothing else | Fully-Automated (grep/sort) | Regroup neutral + only the intended 6 removed |
-| `bun run --filter radius-admin check` clean on touched file | Fully-Automated | No TS regression from the edit |
-| Doc sections render with recon steps + candidate table + out-of-scope note | Agent-Probe (read) | Deliverable 2 completeness |
+| Gate / Scenario                                                            | Strategy                    | Proves SPEC criterion                                                                            |
+| -------------------------------------------------------------------------- | --------------------------- | ------------------------------------------------------------------------------------------------ |
+| `bunx vitest run apps/admin/scripts/setup-router.spec.ts` exits 0          | Fully-Automated             | Collision guard preserved (`PAYMENT_HOSTS ∩ PROBE_DENIES = ∅`); removal can't create a collision |
+| Sorted host set post = HEAD set MINUS the 6 hosts, nothing else            | Fully-Automated (grep/sort) | Regroup neutral + only the intended 6 removed                                                    |
+| `bun run --filter radius-admin check` clean on touched file                | Fully-Automated             | No TS regression from the edit                                                                   |
+| Doc sections render with recon steps + candidate table + out-of-scope note | Agent-Probe (read)          | Deliverable 2 completeness                                                                       |
 
 ## Test Infra Improvement Notes
 
@@ -153,6 +155,7 @@ date: 2026-07-30
 Gate: PASS
 
 ### Change framing (deliberate removal, not pure neutrality)
+
 The regroup of RETAINED hosts is behavior-neutral: `PAYMENT_HOSTS` are all `action=allow`,
 provisioned as one tagged group (`veent-admin:payment`, call 2); first-match ordering only decides
 allow-vs-deny for the same host, so reordering distinct allow hosts is neutral. SEPARATELY, **6 hosts
@@ -166,13 +169,14 @@ intended cleanup, not a regression.
 
 ### Test gates
 
-| Gate | Command | Expected |
-|---|---|---|
-| Collision guard | `bunx vitest run apps/admin/scripts/setup-router.spec.ts` | 1 passed (baseline green; removals can't create a collision) |
-| TS check | `bun run --filter radius-admin check` | no NEW errors from touched file |
-| Deliberate-removal diff | Compare sorted host set of `PAYMENT_HOSTS` pre/post | post = HEAD MINUS exactly the 6 hosts, nothing else |
+| Gate                    | Command                                                   | Expected                                                     |
+| ----------------------- | --------------------------------------------------------- | ------------------------------------------------------------ |
+| Collision guard         | `bunx vitest run apps/admin/scripts/setup-router.spec.ts` | 1 passed (baseline green; removals can't create a collision) |
+| TS check                | `bun run --filter radius-admin check`                     | no NEW errors from touched file                              |
+| Deliberate-removal diff | Compare sorted host set of `PAYMENT_HOSTS` pre/post       | post = HEAD MINUS exactly the 6 hosts, nothing else          |
 
 ### Execute-agent instructions
+
 - E1: Remove EXACTLY these 6 hosts + their orphaned comments: `pay.google.com`,
   `payments.google.com`, `accounts.google.com`, `accounts.google.com.ph`, `*.paymongo.com`,
   `*.xendit.co`. Remove the now-empty "Generic gateways" block. Every OTHER host string stays
@@ -190,4 +194,5 @@ intended cleanup, not a regression.
   Candidates go ONLY into the doc table, never into `PAYMENT_HOSTS`.
 
 ### Known gaps
+
 None.

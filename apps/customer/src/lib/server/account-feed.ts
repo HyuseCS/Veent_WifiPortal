@@ -29,7 +29,10 @@ function fire(userId: string) {
 function onNotify(userId: string) {
 	if (!userId) return;
 	if (timers.has(userId)) return; // a fire is already scheduled for this account's burst
-	timers.set(userId, setTimeout(() => fire(userId), DEBOUNCE_MS));
+	timers.set(
+		userId,
+		setTimeout(() => fire(userId), DEBOUNCE_MS)
+	);
 }
 
 function ensureListening() {

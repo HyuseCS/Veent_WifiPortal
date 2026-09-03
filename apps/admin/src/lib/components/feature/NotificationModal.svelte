@@ -147,7 +147,9 @@
 					<p class="mt-1 text-xs text-muted">{fmtDateTime(notification.createdAt)}</p>
 				</div>
 			{:else if failed}
-				<div class="flex items-center gap-2 rounded-lg border border-border bg-surface p-3 text-sm text-muted">
+				<div
+					class="flex items-center gap-2 rounded-lg border border-border bg-surface p-3 text-sm text-muted"
+				>
 					<TriangleAlert class="h-4 w-4 shrink-0" aria-hidden="true" />
 					Couldn't load this incident. Please try again.
 				</div>

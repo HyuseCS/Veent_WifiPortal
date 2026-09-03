@@ -10,32 +10,33 @@ Veent WiFi Portal sells WiFi time in a captive-portal shop. A guest joins the ho
 
 ## Decisions locked
 
-| Axis | Decision | ADR |
-|---|---|---|
-| Router seam | Every router call goes through the `NetworkController` interface. Real provider is `mikrotik.ts`, tests use `stub.ts`. Nothing outside `packages/core/src/integrations/network/` speaks RouterOS. | — |
-| Walled garden ownership | The garden is code-owned. `setup:router` provisions three tagged groups — `veent-admin:probe`, `:payment`, `:portal` — in that order so denies land above allows. | — |
-| Provisioning safety | Default `setup:router` is purely additive. `--reconcile` is an opt-in prune that removes only rows carrying the code tag AND `action=allow`. `--wipe` clears both menus for a hard rebuild. | — |
-| GCash reachability | A `/system scheduler` item (`gcash-resolve`, 5 min) resolves the host and upserts an IP row. Hostname rules cannot follow the CNAME to Akamai. The originally designed DoH/DoT block was proven unnecessary and never shipped. | — |
-| Payment surface | GCash and Maya only. Google Pay is blocked by Android WebView in captive mode; PayMongo and Xendit had no integration code and were pruned. | — |
-| Browser return URL | `successUrl`/`cancelUrl` use `event.url.origin` (the walled-gardened LAN portal address). `TUNNEL_ORIGIN` is for the server-to-server webhook only — the guest is still captive at redirect time. | — |
-| Access grant | Paid guests are granted with `ip-binding type=bypassed`, which skips hotspot byte accounting. Per-AP guest throughput is therefore not measurable, by design. | — |
-| Session→AP binding | `resolveNetworkIdForMac` resolves the Option-82 circuit-id first, then falls back to interface name. A shared bridge fronting several APs must not capture the session. | — |
-| MAC trust | A fallback-resolved MAC (device cookie, `last_known_mac`) is never treated as a verified binding, and never entrenches `last_known_mac`. The `?mac=` param is client-influenceable by nature. | — |
-| Auth isolation | Two separate `betterAuth()` instances with separate secrets and cookie prefixes — `veent-portal` and `radius-admin`. Never cross-wired. | — |
-| Schema authority | `@veent/db` is the sole schema and migration source for all three apps. The dev DB is push-managed, so `db:migrate` drifts — apply DDL directly and still generate the migration file. | — |
-| Time storage | Finance and session columns are `timestamptz` (migration `0052`), with real Manila-day→UTC-instant maths in `period.ts`. | — |
-| Scheduled work | No cron app. Prod hits guarded HTTP endpoints from an external scheduler with an `x-cron-secret` header; `scripts/dev-cron.ts` polls them in dev. | — |
+| Axis                    | Decision                                                                                                                                                                                                                       | ADR |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --- |
+| Router seam             | Every router call goes through the `NetworkController` interface. Real provider is `mikrotik.ts`, tests use `stub.ts`. Nothing outside `packages/core/src/integrations/network/` speaks RouterOS.                              | —   |
+| Walled garden ownership | The garden is code-owned. `setup:router` provisions three tagged groups — `veent-admin:probe`, `:payment`, `:portal` — in that order so denies land above allows.                                                              | —   |
+| Provisioning safety     | Default `setup:router` is purely additive. `--reconcile` is an opt-in prune that removes only rows carrying the code tag AND `action=allow`. `--wipe` clears both menus for a hard rebuild.                                    | —   |
+| GCash reachability      | A `/system scheduler` item (`gcash-resolve`, 5 min) resolves the host and upserts an IP row. Hostname rules cannot follow the CNAME to Akamai. The originally designed DoH/DoT block was proven unnecessary and never shipped. | —   |
+| Payment surface         | GCash and Maya only. Google Pay is blocked by Android WebView in captive mode; PayMongo and Xendit had no integration code and were pruned.                                                                                    | —   |
+| Browser return URL      | `successUrl`/`cancelUrl` use `event.url.origin` (the walled-gardened LAN portal address). `TUNNEL_ORIGIN` is for the server-to-server webhook only — the guest is still captive at redirect time.                              | —   |
+| Access grant            | Paid guests are granted with `ip-binding type=bypassed`, which skips hotspot byte accounting. Per-AP guest throughput is therefore not measurable, by design.                                                                  | —   |
+| Session→AP binding      | `resolveNetworkIdForMac` resolves the Option-82 circuit-id first, then falls back to interface name. A shared bridge fronting several APs must not capture the session.                                                        | —   |
+| MAC trust               | A fallback-resolved MAC (device cookie, `last_known_mac`) is never treated as a verified binding, and never entrenches `last_known_mac`. The `?mac=` param is client-influenceable by nature.                                  | —   |
+| Auth isolation          | Two separate `betterAuth()` instances with separate secrets and cookie prefixes — `veent-portal` and `radius-admin`. Never cross-wired.                                                                                        | —   |
+| Schema authority        | `@veent/db` is the sole schema and migration source for all three apps. The dev DB is push-managed, so `db:migrate` drifts — apply DDL directly and still generate the migration file.                                         | —   |
+| Time storage            | Finance and session columns are `timestamptz` (migration `0052`), with real Manila-day→UTC-instant maths in `period.ts`.                                                                                                       | —   |
+| Scheduled work          | No cron app. Prod hits guarded HTTP endpoints from an external scheduler with an `x-cron-secret` header; `scripts/dev-cron.ts` polls them in dev.                                                                              | —   |
 
 ## Cost model
 
 No cloud cost model. The costs that matter here are operational, not per-token:
 
-| Cost | Where it lands | Note |
-|---|---|---|
+| Cost         | Where it lands                       | Note                                                                                                             |
+| ------------ | ------------------------------------ | ---------------------------------------------------------------------------------------------------------------- |
 | Router calls | Every grant, revoke and health probe | `node-routeros` over the API port; timeouts become `RouterUnreachableError` (warning-level in Sentry, not error) |
-| SMS sends | Every OTP | Only the Cast provider reports delivery status; itexmo/unisms/smsgate are write-only logs |
-| Maya fees | Every paid top-up | GCash and Maya wallet only — every other gateway was pruned from the walled garden |
-| Manual gates | Every merge | No CI: `check` → `lint` → `test` → admin e2e are run by hand |
+| SMS sends    | Every OTP                            | Only the Cast provider reports delivery status; itexmo/unisms/smsgate are write-only logs                        |
+| Maya fees    | Every paid top-up                    | GCash and Maya wallet only — every other gateway was pruned from the walled garden                               |
+| Manual gates | Every merge                          | No CI: `check` → `lint` → `test` → admin e2e are run by hand                                                     |
+
 ## Reading order (the atlas chapters)
 
 1. **A guest and the router** — Strip everything away and this is the shop: a phone joins the WiFi, and a router decides whether it gets anywhere. _(adds G, MT)_
@@ -357,55 +358,55 @@ Payload shapes are what the design implies, not measured traffic.
 
 ### A guest gets online free
 
-| # | From → To | Packet | Representative payload |
-|---|---|---|---|
-| 1 | G → MT | associate | `{"mac":"AA:BB:CC:11:22:33","ssid":"Veent"}` |
-| 2 | MT → CU | captive redirect | `{"mac":"AA:BB:CC:11:22:33","to":"/login"}` |
-| 3 | CU → OT | send code | `{"phone":"+639••••••123","provider":"cast"}` |
-| 4 | OT → CU | verified | `{"ok":true}` |
-| 5 | CU → SS | grant free time | `{"minutes":30,"reason":"free_session"}` |
-| 6 | SS → NC | allow mac | `{"mac":"AA:BB:CC:11:22:33"}` |
-| 7 | NC → MT | ip-binding | `{"type":"bypassed"}` |
-| 8 | MT → G | internet | `{"state":"granted"}` |
+| #   | From → To | Packet           | Representative payload                        |
+| --- | --------- | ---------------- | --------------------------------------------- |
+| 1   | G → MT    | associate        | `{"mac":"AA:BB:CC:11:22:33","ssid":"Veent"}`  |
+| 2   | MT → CU   | captive redirect | `{"mac":"AA:BB:CC:11:22:33","to":"/login"}`   |
+| 3   | CU → OT   | send code        | `{"phone":"+639••••••123","provider":"cast"}` |
+| 4   | OT → CU   | verified         | `{"ok":true}`                                 |
+| 5   | CU → SS   | grant free time  | `{"minutes":30,"reason":"free_session"}`      |
+| 6   | SS → NC   | allow mac        | `{"mac":"AA:BB:CC:11:22:33"}`                 |
+| 7   | NC → MT   | ip-binding       | `{"type":"bypassed"}`                         |
+| 8   | MT → G    | internet         | `{"state":"granted"}`                         |
 
 ### A guest pays
 
-| # | From → To | Packet | Representative payload |
-|---|---|---|---|
-| 1 | CU → MY | create checkout | `{"amount":20,"currency":"PHP"}` |
-| 2 | MY → CU | webhook: paid | `{"status":"PAYMENT_SUCCESS"}` |
-| 3 | CU → LD | credit | `{"credits":20,"ref":"chk_…"}` |
-| 4 | LD → SS | spend | `{"minutes":120}` |
-| 5 | SS → NC | allow mac | `{"mac":"AA:BB:CC:11:22:33"}` |
-| 6 | NC → MT | ip-binding | `{"type":"bypassed"}` |
+| #   | From → To | Packet          | Representative payload           |
+| --- | --------- | --------------- | -------------------------------- |
+| 1   | CU → MY   | create checkout | `{"amount":20,"currency":"PHP"}` |
+| 2   | MY → CU   | webhook: paid   | `{"status":"PAYMENT_SUCCESS"}`   |
+| 3   | CU → LD   | credit          | `{"credits":20,"ref":"chk_…"}`   |
+| 4   | LD → SS   | spend           | `{"minutes":120}`                |
+| 5   | SS → NC   | allow mac       | `{"mac":"AA:BB:CC:11:22:33"}`    |
+| 6   | NC → MT   | ip-binding      | `{"type":"bypassed"}`            |
 
 ### Staff rebuild the walled garden
 
-| # | From → To | Packet | Representative payload |
-|---|---|---|---|
-| 1 | AD → NC | setup:router --wipe | `{"dryRun":false}` |
-| 2 | NC → WG | provision 3 groups | `{"tags":["probe","payment","portal"]}` |
-| 3 | WG → MT | write rows | `{"host":14,"ip":2}` |
-| 4 | GS → WG | gcash-auto ip | `{"every":"5m"}` |
+| #   | From → To | Packet              | Representative payload                  |
+| --- | --------- | ------------------- | --------------------------------------- |
+| 1   | AD → NC   | setup:router --wipe | `{"dryRun":false}`                      |
+| 2   | NC → WG   | provision 3 groups  | `{"tags":["probe","payment","portal"]}` |
+| 3   | WG → MT   | write rows          | `{"host":14,"ip":2}`                    |
+| 4   | GS → WG   | gcash-auto ip       | `{"every":"5m"}`                        |
 
 ### An access point goes down
 
-| # | From → To | Packet | Representative payload |
-|---|---|---|---|
-| 1 | CR → HL | refresh health | `{"secret":"x-cron-secret"}` |
-| 2 | HL → NC | probe aps | `{"count":6}` |
-| 3 | NC → MT | ping | `{}` |
-| 4 | MT → NC | no reply | `{"rtt":null}` |
-| 5 | HL → DB | mark down | `{"networkId":"ap-3"}` |
-| 6 | HL → SS | pause clocks | `{"sessions":4}` |
+| #   | From → To | Packet         | Representative payload       |
+| --- | --------- | -------------- | ---------------------------- |
+| 1   | CR → HL   | refresh health | `{"secret":"x-cron-secret"}` |
+| 2   | HL → NC   | probe aps      | `{"count":6}`                |
+| 3   | NC → MT   | ping           | `{}`                         |
+| 4   | MT → NC   | no reply       | `{"rtt":null}`               |
+| 5   | HL → DB   | mark down      | `{"networkId":"ap-3"}`       |
+| 6   | HL → SS   | pause clocks   | `{"sessions":4}`             |
 
 ### An error becomes an incident
 
-| # | From → To | Packet | Representative payload |
-|---|---|---|---|
-| 1 | CU → SN | scrubbed error | `{"level":"error","pii":"masked"}` |
-| 2 | SN → AD | track issue | `{"verified":true}` |
-| 3 | AD → DB | issue + event | `{"tx":true}` |
+| #   | From → To | Packet         | Representative payload             |
+| --- | --------- | -------------- | ---------------------------------- |
+| 1   | CU → SN   | scrubbed error | `{"level":"error","pii":"masked"}` |
+| 2   | SN → AD   | track issue    | `{"verified":true}`                |
+| 3   | AD → DB   | issue + event  | `{"tx":true}`                      |
 
 ## Questions — index
 

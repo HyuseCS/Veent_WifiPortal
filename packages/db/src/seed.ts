@@ -41,9 +41,30 @@ const seedPackages: SeedPackage[] = [
 
 	// Tiers: spend credits OR loyalty points for access time. pointsCost is set a little above
 	// creditCost so points (earned, not bought) feel like a reward rather than free credits.
-	{ name: '5 Minutes', type: 'tier', creditCost: 1, pointsCost: 2, durationMinutes: 5, isActive: true },
-	{ name: '30 Minutes', type: 'tier', creditCost: 5, pointsCost: 8, durationMinutes: 30, isActive: true },
-	{ name: '1 Hour', type: 'tier', creditCost: 10, pointsCost: 15, durationMinutes: 60, isActive: true }
+	{
+		name: '5 Minutes',
+		type: 'tier',
+		creditCost: 1,
+		pointsCost: 2,
+		durationMinutes: 5,
+		isActive: true
+	},
+	{
+		name: '30 Minutes',
+		type: 'tier',
+		creditCost: 5,
+		pointsCost: 8,
+		durationMinutes: 30,
+		isActive: true
+	},
+	{
+		name: '1 Hour',
+		type: 'tier',
+		creditCost: 10,
+		pointsCost: 15,
+		durationMinutes: 60,
+		isActive: true
+	}
 ];
 
 // SAMPLE per-AP health for the Networks page. Synthetic until a real router /
@@ -51,10 +72,38 @@ const seedPackages: SeedPackage[] = [
 // No coordinates: the locator map starts empty; an operator sets each AP's
 // location from the admin Networks page.
 const seedNetworkHealth: SeedAp[] = [
-	{ name: 'AP — Ground Floor', online: true, uptimePct: '99.80', latencyMs: 12, users: 38, throughputMbps: 84 },
-	{ name: 'AP — Floor 2', online: true, uptimePct: '99.50', latencyMs: 15, users: 27, throughputMbps: 61 },
-	{ name: 'AP — Cafe Patio', online: true, uptimePct: '97.10', latencyMs: 48, users: 12, throughputMbps: 22 },
-	{ name: 'AP — Parking Lobby', online: false, uptimePct: '0.00', latencyMs: null, users: 0, throughputMbps: 0 }
+	{
+		name: 'AP — Ground Floor',
+		online: true,
+		uptimePct: '99.80',
+		latencyMs: 12,
+		users: 38,
+		throughputMbps: 84
+	},
+	{
+		name: 'AP — Floor 2',
+		online: true,
+		uptimePct: '99.50',
+		latencyMs: 15,
+		users: 27,
+		throughputMbps: 61
+	},
+	{
+		name: 'AP — Cafe Patio',
+		online: true,
+		uptimePct: '97.10',
+		latencyMs: 48,
+		users: 12,
+		throughputMbps: 22
+	},
+	{
+		name: 'AP — Parking Lobby',
+		online: false,
+		uptimePct: '0.00',
+		latencyMs: null,
+		users: 0,
+		throughputMbps: 0
+	}
 ];
 
 async function seed() {

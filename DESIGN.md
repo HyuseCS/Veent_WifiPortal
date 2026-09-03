@@ -18,20 +18,20 @@ with a sparing **gold highlight**. One accent only — `cta` is an alias of `bra
 Danger is a distinct **oxblood red** (`blocked`), the only red, so it never reads as the
 accent. Neutrals are tinted toward the blue hue (264), never pure `#000`/`#fff`.
 
-| Role | Light | Dark |
-|---|---|---|
-| `brand` / `cta` (accent) | `oklch(0.54 0.22 262)` | `oklch(0.64 0.2 262)` |
-| `highlight` (gold, sparing) | `oklch(0.86 0.18 98)` | `oklch(0.87 0.18 98)` |
-| `bg` (raised card) | `oklch(1 0 0)` | `oklch(0.18 0.055 264)` |
-| `canvas` (recessed page bg) | `oklch(0.972 0.007 264)` | `oklch(0.14 0.05 264)` |
-| `surface` (in-card tint) | `oklch(0.975 0.006 264)` | `oklch(0.23 0.055 264)` |
-| `border` | `oklch(0.91 0.006 264)` | `oklch(0.33 0.045 264)` |
-| `ink` (text) | `oklch(0.16 0.01 264)` | `oklch(0.95 0.005 264)` |
-| `muted` (text) | `oklch(0.5 0.01 264)` | `oklch(0.68 0.01 264)` |
-| `online` | `oklch(0.52 0.15 150)` | `oklch(0.68 0.15 150)` |
-| `warning` | `oklch(0.62 0.15 75)` | `oklch(0.74 0.14 75)` |
-| `blocked` (oxblood) | `oklch(0.42 0.15 18)` | `oklch(0.6 0.16 18)` |
-| `sidebar` (navy) | `oklch(0.24 0.11 266)` | `oklch(0.23 0.11 266)` |
+| Role                        | Light                    | Dark                    |
+| --------------------------- | ------------------------ | ----------------------- |
+| `brand` / `cta` (accent)    | `oklch(0.54 0.22 262)`   | `oklch(0.64 0.2 262)`   |
+| `highlight` (gold, sparing) | `oklch(0.86 0.18 98)`    | `oklch(0.87 0.18 98)`   |
+| `bg` (raised card)          | `oklch(1 0 0)`           | `oklch(0.18 0.055 264)` |
+| `canvas` (recessed page bg) | `oklch(0.972 0.007 264)` | `oklch(0.14 0.05 264)`  |
+| `surface` (in-card tint)    | `oklch(0.975 0.006 264)` | `oklch(0.23 0.055 264)` |
+| `border`                    | `oklch(0.91 0.006 264)`  | `oklch(0.33 0.045 264)` |
+| `ink` (text)                | `oklch(0.16 0.01 264)`   | `oklch(0.95 0.005 264)` |
+| `muted` (text)              | `oklch(0.5 0.01 264)`    | `oklch(0.68 0.01 264)`  |
+| `online`                    | `oklch(0.52 0.15 150)`   | `oklch(0.68 0.15 150)`  |
+| `warning`                   | `oklch(0.62 0.15 75)`    | `oklch(0.74 0.14 75)`   |
+| `blocked` (oxblood)         | `oklch(0.42 0.15 18)`    | `oklch(0.6 0.16 18)`    |
+| `sidebar` (navy)            | `oklch(0.24 0.11 266)`   | `oklch(0.23 0.11 266)`  |
 
 Text on `brand`/`cta` is always `white`. The `canvas` ↔ `bg` relationship (recessed
 gutter behind raised cards) holds in both modes — that's why white cards lift off it.

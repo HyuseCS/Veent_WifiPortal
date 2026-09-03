@@ -1,9 +1,9 @@
 ---
 name: plan:multi-router-support
-description: "Convert Veent WiFi Portal from single-router to central multi-router/multi-site (Option B) — controller registry, DB-backed encrypted router registry, per-site session tagging, multi-controller cron. COMPLEX review artifact."
+description: 'Convert Veent WiFi Portal from single-router to central multi-router/multi-site (Option B) — controller registry, DB-backed encrypted router registry, per-site session tagging, multi-controller cron. COMPLEX review artifact.'
 date: 13-07-26
 feature: network-infrastructure-ops
-phase: "review"
+phase: 'review'
 ---
 
 # Multi-Router / Multi-Site Support (Option B) — Implementation Plan
@@ -35,24 +35,24 @@ This plan is a detailed **review artifact** for converting Veent WiFi Portal fro
 
 A **central captive portal** manages many hotspot sites at once instead of one. Concretely, one deployed `apps/customer` + `apps/admin` instance can:
 
-1. **Know which site a guest is on** at request time (a guest at Site A behind Router A must be granted access *on Router A*, not Router B).
-2. **Grant / revoke / report per-site** — buying WiFi time pushes an `ip-binding` to the *correct* router; the revoke cron expires each site's sessions against *that site's* router; the admin dashboard shows which site each session and each AP belongs to.
+1. **Know which site a guest is on** at request time (a guest at Site A behind Router A must be granted access _on Router A_, not Router B).
+2. **Grant / revoke / report per-site** — buying WiFi time pushes an `ip-binding` to the _correct_ router; the revoke cron expires each site's sessions against _that site's_ router; the admin dashboard shows which site each session and each AP belongs to.
 3. **Manage routers as data, not env** — operators add/edit/disable routers from an admin CRUD screen; router API credentials live (encrypted) in the database rather than in a single app's `.env`.
 
-This is the doc's **Option B** (`docs/mikrotik/adding-a-remote-router.md` §"What centralized multi-site (Option B) would require"). Option A (one app instance per site + shared DB) works *today* with zero code; Option B is only justified when a single central "single pane of glass" deploy is a real business requirement (see DECISION C).
+This is the doc's **Option B** (`docs/mikrotik/adding-a-remote-router.md` §"What centralized multi-site (Option B) would require"). Option A (one app instance per site + shared DB) works _today_ with zero code; Option B is only justified when a single central "single pane of glass" deploy is a real business requirement (see DECISION C).
 
 ### 1.2 Current vs Target
 
-| Dimension | Current (single-router) | Target (Option B multi-router) |
-|---|---|---|
-| Controller | One `network` singleton per app, built from `env.MIKROTIK_*` (`apps/{admin,customer}/src/lib/server/network.ts`) | `getController(siteId)` registry factory; N stateless controllers, one per enabled site |
-| Router config source | Env vars (`MIKROTIK_HOST/USER/PASSWORD/…`) | `sites` DB table (host/user/pw/tls/hotspot creds/exclude-interfaces/WG/origin/enabled) with **encrypted** secrets; env seeds ONE default site |
-| Which router for a grant/revoke | Implicit — there is only one | `resolveSiteId(event, userId)` at request time → controller for that site |
-| Session attribution | `network_sessions.networkId` → a `network_health` row (per-interface, no site dimension) | `network_sessions.site_id` (+ `network_health.site_id`); `network_health` unique key becomes composite `(site_id, name)` |
-| Health table key | `network_health_name_key` UNIQUE on `name` (`admin.ts:158`) — two sites' `vlan70 hotspot` collide | composite UNIQUE `(site_id, name)` — same interface name allowed per site |
-| Revoke / health cron | Acts on the single `network` singleton | Iterates all enabled sites; each sweep scoped to its own router + its own sessions |
-| Admin UI | Global networks/health list; map pins global | Per-site grouped/filtered networks + map; NEW Sites/Routers CRUD screen |
-| Credential exposure | Router API password in env only (process memory) | Secrets-at-rest in Postgres → **requires encryption** (new risk, see §Risk) |
+| Dimension                       | Current (single-router)                                                                                          | Target (Option B multi-router)                                                                                                                |
+| ------------------------------- | ---------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| Controller                      | One `network` singleton per app, built from `env.MIKROTIK_*` (`apps/{admin,customer}/src/lib/server/network.ts`) | `getController(siteId)` registry factory; N stateless controllers, one per enabled site                                                       |
+| Router config source            | Env vars (`MIKROTIK_HOST/USER/PASSWORD/…`)                                                                       | `sites` DB table (host/user/pw/tls/hotspot creds/exclude-interfaces/WG/origin/enabled) with **encrypted** secrets; env seeds ONE default site |
+| Which router for a grant/revoke | Implicit — there is only one                                                                                     | `resolveSiteId(event, userId)` at request time → controller for that site                                                                     |
+| Session attribution             | `network_sessions.networkId` → a `network_health` row (per-interface, no site dimension)                         | `network_sessions.site_id` (+ `network_health.site_id`); `network_health` unique key becomes composite `(site_id, name)`                      |
+| Health table key                | `network_health_name_key` UNIQUE on `name` (`admin.ts:158`) — two sites' `vlan70 hotspot` collide                | composite UNIQUE `(site_id, name)` — same interface name allowed per site                                                                     |
+| Revoke / health cron            | Acts on the single `network` singleton                                                                           | Iterates all enabled sites; each sweep scoped to its own router + its own sessions                                                            |
+| Admin UI                        | Global networks/health list; map pins global                                                                     | Per-site grouped/filtered networks + map; NEW Sites/Routers CRUD screen                                                                       |
+| Credential exposure             | Router API password in env only (process memory)                                                                 | Secrets-at-rest in Postgres → **requires encryption** (new risk, see §Risk)                                                                   |
 
 ### 1.3 How the architecture shifts (the load-bearing insight)
 
@@ -61,7 +61,7 @@ This is the doc's **Option B** (`docs/mikrotik/adding-a-remote-router.md` §"Wha
 - `apps/admin/src/lib/server/network.ts:32` → `export const network = createNetworkController(buildConfig())`
 - `apps/customer/src/lib/server/network.ts:26` → same shape
 
-So the conversion is **narrow**: replace those two module singletons with a registry factory, and change every call site that today reads the module `network` to first *resolve* the site then *pass* the resolved controller into the same unchanged core service. Core does not change its signatures. MikroTik connects **per-call / stateless** (`mikrotik.ts` opens a connection per operation), so having N controllers looped over is cheap — no connection-pool redesign, no long-lived sockets.
+So the conversion is **narrow**: replace those two module singletons with a registry factory, and change every call site that today reads the module `network` to first _resolve_ the site then _pass_ the resolved controller into the same unchanged core service. Core does not change its signatures. MikroTik connects **per-call / stateless** (`mikrotik.ts` opens a connection per operation), so having N controllers looped over is cheap — no connection-pool redesign, no long-lived sockets.
 
 Four moving parts change, in dependency order:
 
@@ -80,7 +80,7 @@ Three open decisions. Each has a RECOMMENDED answer + rationale + rejected alter
 
 **Recommended: parse the MikroTik `link-login-only` host as the primary site key**, with a layered fallback chain mirroring `resolveCheckoutNetworkId`.
 
-- **Why:** `link-login-only` (captured today at `portal.ts:34-42,48` into `PortalContext.callbackUrl`) is the router's *own* hotspot login URL, containing the router's LAN IP/host. It is **server-derivable at request time** and requires **no per-site router template change** — every MikroTik hotspot already sends it. It is the strongest signal that does not require touching `login.html` at every site.
+- **Why:** `link-login-only` (captured today at `portal.ts:34-42,48` into `PortalContext.callbackUrl`) is the router's _own_ hotspot login URL, containing the router's LAN IP/host. It is **server-derivable at request time** and requires **no per-site router template change** — every MikroTik hotspot already sends it. It is the strongest signal that does not require touching `login.html` at every site.
 - **Fallback chain (in order):** (1) `link-login-only` host → site; (2) per-site portal ORIGIN / subdomain (host-based, cookie-independent — good hybrid secondary, needs per-site DNS/vhost); (3) `?ap=/?ssid=` (needs a `login.html` template change per site — weaker); (4) persisted `network_sessions`/`customer_profile.lastSiteId` fallback (already the last-resort pattern in `resolveCheckoutNetworkId:246-253`).
 - **Rejected — source-IP→subnet map:** fragile; the hotspot NATs guests to the router IP, so the observed source IP is the router's, and cross-site VPN routing muddies it further.
 - **Rejected — `?ap=` as primary:** MikroTik does not send `ap` by default; it is zone-level not site-level and needs a template edit at every site (the exact per-site friction we want to avoid).
@@ -89,16 +89,16 @@ Three open decisions. Each has a RECOMMENDED answer + rationale + rejected alter
 
 **Recommended: app-level envelope encryption of router secrets in the `sites` table, with a legacy-env fallback.**
 
-- **Why:** moving router API passwords from env-only into the DB is a **secrets-at-rest** change — plaintext columns would be an auth/trust-boundary *regression* versus today. Envelope encryption (a master key from env/secret store encrypts each row's `password`/`hotspotLoginPassword`; only ciphertext is stored) keeps the master secret out of the DB while letting the registry hold N routers. Legacy-env fallback (if a site row has no encrypted creds, fall back to the `MIKROTIK_*` env trio) preserves Phase-0 behavior and a break-glass path.
-- **Alternatives considered:** (1) **pgcrypto** (DB-side encryption) — viable but puts the key nearer the data and couples secret handling to Postgres; app-level envelope keeps the trust boundary in the app. (2) **External secret store** (Vault / cloud secrets manager) — strongest, but heavyweight for current team scale; recommend as a *future* upgrade, not a Phase-1 blocker. (3) **Plaintext columns — REJECTED** — a clear regression; explicitly out of scope.
-- **Note:** this decision gates Phase 1 (encryption lands *with* the registry, before any real secret moves to the DB).
+- **Why:** moving router API passwords from env-only into the DB is a **secrets-at-rest** change — plaintext columns would be an auth/trust-boundary _regression_ versus today. Envelope encryption (a master key from env/secret store encrypts each row's `password`/`hotspotLoginPassword`; only ciphertext is stored) keeps the master secret out of the DB while letting the registry hold N routers. Legacy-env fallback (if a site row has no encrypted creds, fall back to the `MIKROTIK_*` env trio) preserves Phase-0 behavior and a break-glass path.
+- **Alternatives considered:** (1) **pgcrypto** (DB-side encryption) — viable but puts the key nearer the data and couples secret handling to Postgres; app-level envelope keeps the trust boundary in the app. (2) **External secret store** (Vault / cloud secrets manager) — strongest, but heavyweight for current team scale; recommend as a _future_ upgrade, not a Phase-1 blocker. (3) **Plaintext columns — REJECTED** — a clear regression; explicitly out of scope.
+- **Note:** this decision gates Phase 1 (encryption lands _with_ the registry, before any real secret moves to the DB).
 
 ### DECISION C — Option B vs Option A (build-or-not) · CONFIRM ON REVIEW
 
 **Recommended: confirm the business need before building Phase 1+.** The canonical doc (`adding-a-remote-router.md:37`) currently recommends **Option A** (one app instance per site + one shared Postgres over Tailscale/VPN) because it works **today with zero code** and unifies reporting via a shared DB + a `site_id` label. Option B (this plan) is only justified if a **single central deploy managing all routers from one instance** is a real, stated business driver (e.g. one operator, many sites, wants one grant/revoke control plane and cannot run a box per site).
 
-- **If the driver is only unified *reporting*:** Option A + shared DB + a `site_id` column already delivers it — build Phase 0 (the `sites` table + `site_id` tagging) and STOP; do not build Phases 1–4.
-- **If the driver is central *management* (grant/revoke remote routers from the center):** proceed to Phases 1–4, and note the network prerequisite — the central server needs a VPN path to each router's API (WireGuard/IPsec or a Tailscale subnet-router per site; `adding-a-remote-router.md:176-181`). No amount of app code substitutes for that path.
+- **If the driver is only unified _reporting_:** Option A + shared DB + a `site_id` column already delivers it — build Phase 0 (the `sites` table + `site_id` tagging) and STOP; do not build Phases 1–4.
+- **If the driver is central _management_ (grant/revoke remote routers from the center):** proceed to Phases 1–4, and note the network prerequisite — the central server needs a VPN path to each router's API (WireGuard/IPsec or a Tailscale subnet-router per site; `adding-a-remote-router.md:176-181`). No amount of app code substitutes for that path.
 
 ---
 
@@ -125,6 +125,7 @@ Legend for verification tier: **FA** = Fully-Automated · **HY** = Hybrid (needs
 **Goal:** Introduce the router registry table and backfill one "default site" from existing env. Behavior identical; nothing reads `site_id` for control yet.
 
 **Touchpoints:**
+
 - NEW `packages/db/src/schema/sites.ts` — `sites` table; export from `packages/db/src/schema/index.ts` barrel.
 - `packages/db/src/schema/admin.ts:106-163` — `network_health`: add nullable `site_id` FK column (do NOT change the unique key yet — that's Phase 2, to keep Phase 0 behavior identical).
 - `packages/db/src/schema/customer.ts` — `network_sessions` (:251, `networkId`:265): add nullable `site_id`; `customer_profile` (:30, `lastNetworkId`:81, `accessPausedNetworkId`:74): add nullable `lastSiteId` (or derive via join — see blast radius).
@@ -132,6 +133,7 @@ Legend for verification tier: **FA** = Fully-Automated · **HY** = Hybrid (needs
 - NEW seed logic (in `packages/db/src/seed.ts` or a one-off script): insert one `sites` row from `MIKROTIK_*` env; backfill existing `network_health`/`network_sessions` rows to that default `site_id`.
 
 **Schema DDL sketch (`sites`):**
+
 ```
 sites(
   id            serial primary key,
@@ -158,7 +160,8 @@ sites(
 ```
 
 **Blast radius:** `packages/db` only (schema + migration + seed). No app or core logic reads `site_id` yet. Risk class: **schema/migration** (high-risk — additive nullable columns are the safest form; the one live-DB concern is the push-managed drift, handled by direct-DDL-apply).
-- *Derive-vs-store note:* `lastSiteId` can be derived by joining `customer_profile.lastNetworkId → network_health.site_id`. Recommend **storing** `last_site_id` explicitly to avoid a join on the hot resolution path and to survive a `network_health` row deletion. CONFIRM.
+
+- _Derive-vs-store note:_ `lastSiteId` can be derived by joining `customer_profile.lastNetworkId → network_health.site_id`. Recommend **storing** `last_site_id` explicitly to avoid a join on the hot resolution path and to survive a `network_health` row deletion. CONFIRM.
 
 **Backward-compat guarantee:** All new columns nullable; a single default site seeded and backfilled. With exactly one site, every downstream resolution (added later) returns the default — identical to today.
 
@@ -176,6 +179,7 @@ sites(
 **Goal:** Replace the two `network.ts` singletons with a `getController(siteId)` factory backed by the `sites` table; add credential encryption (secrets move to DB here). Default site preserves current behavior.
 
 **Touchpoints:**
+
 - NEW `packages/core/src/integrations/network/registry.ts` (or app-side `$lib/server/networkRegistry.ts`) — `getController(db, siteId): Promise<NetworkController>`; reads the `sites` row, decrypts creds, builds `MikrotikConfig` (mirrors `buildConfig()` at `admin/network.ts:6-30` and the identical customer body), calls `createNetworkController`. Caches by `siteId` (controllers are stateless config holders — safe to memoize).
 - NEW `packages/core/src/services/crypto.ts` (or similar) — envelope encrypt/decrypt for `api_password` + `hotspot_login_password`, master key from env (`SITES_ENCRYPTION_KEY`).
 - `apps/admin/src/lib/server/network.ts:32` and `apps/customer/src/lib/server/network.ts:26` — replace the `export const network = …` singleton with a thin `getController(siteId)` re-export + a legacy-env fallback (if no sites in DB, synthesize default from env — preserves Phase 0/Option-A behavior).
@@ -202,12 +206,14 @@ sites(
 **Goal:** Resolve which site a request belongs to and stamp `site_id` on every session at bind time. Flip `network_health` unique key to composite `(site_id, name)`.
 
 **Touchpoints:**
+
 - NEW `apps/customer/src/lib/server/network-location.ts` (extend) — `resolveSiteId(event, userId): Promise<number>` mirroring `resolveCheckoutNetworkId:205-273` layered pattern: (1) `link-login-only` host → site; (2) ORIGIN/subdomain; (3) `?ap/?ssid`; (4) active session `site_id`; (5) `customer_profile.lastSiteId`; (6) single-site short-circuit (if only one enabled site, return it — the Option-A/default path).
 - `packages/core/src/services/sessions.ts` — `bindDevice` (:273-281 `resolveNetworkIdForMac`): also resolve+stamp `site_id` onto `network_sessions.site_id` and `customer_profile.lastSiteId`, in the SAME transaction as the existing `networkId` stamp (audit-trail/atomicity pattern). Grant/revoke entry points (`startPaidAccessAndBindDevice`/`startFreeAccessAndBindDevice` :244,385,742) receive the resolved controller from `resolveSiteId`→`getController`.
 - Customer call sites that pass the singleton `network` → resolve-then-pass: `routes/api/network/grant/+server.ts:62,78`; `routes/dashboard/+page.server.ts:78,155,200,243,262,277,293`; `routes/top-up/+page.server.ts:162`; `network-location.ts:41,225`.
 - `packages/db/src/schema/admin.ts:158` — change `uniqueIndex('network_health_name_key').on(t.name)` → composite `(t.siteId, t.name)`; make `site_id` NOT NULL now (backfilled in P0). Migration for the record + direct DDL apply.
 
 **Schema DDL sketch:**
+
 ```
 DROP INDEX network_health_name_key;
 ALTER TABLE network_health ALTER COLUMN site_id SET NOT NULL;
@@ -235,6 +241,7 @@ CREATE UNIQUE INDEX network_health_site_name_key ON network_health(site_id, name
 **Goal:** Revoke and health-refresh crons iterate all enabled sites; each sweep scoped to its own router + its own sessions. Reconcile stays strictly per-router.
 
 **Touchpoints:**
+
 - `apps/customer/src/routes/api/network/revoke/+server.ts:35-47` — wrap `sweepOutagePauses`, `expireDueAccounts`, `reconcileGuestBindings`, `sweepCheckoutAccess`, `sweepAdminAccess` in a loop over enabled sites; pass each site's `getController(siteId)` + scope each sweep's session query to that `site_id`.
 - `apps/admin/src/routes/api/network/health/refresh/+server.ts:29` — loop enabled sites; `refreshNetworkHealth` upserts on composite `(site_id, name)`.
 - `packages/core/src/services/sessions.ts:960` — `reconcileGuestBindings` MUST run per-router (scoped to one site's sessions + that site's router bindings) or it drops orphans wrongly (a Site-A session looks "orphaned" against Site-B's router).
@@ -261,6 +268,7 @@ CREATE UNIQUE INDEX network_health_site_name_key ON network_health(site_id, name
 **Goal:** Operators manage routers from the admin UI; networks/health list + map gain a site dimension.
 
 **Touchpoints:**
+
 - NEW `apps/admin/src/routes/(app)/sites/` (or `routers/`) — Sites/Routers CRUD: add/edit/disable + a "test connectivity" action. Owner-gated, mirroring the wipe/owner gates at `routes/(app)/networks/+page.server.ts:24-29`.
 - `apps/admin/src/routes/(app)/networks/+page.server.ts:54,119,121` + `listNetworkHealth` (queries.ts:345) — group/filter health by site.
 - `apps/admin/src/routes/(app)/map` — pins gain a site dimension; locator reads the same `network_health` table (`packages/db/network-health.ts`) → must NOT merge two sites' identically-named APs (composite key from Phase 2 already prevents the row-merge; the map read must group by site).
@@ -328,19 +336,19 @@ Four HIGH-risk classes. The real build must run the **high-risk manual-first evi
 
 Consolidated test plan. All FA gates are automatable with a **pglite 2-site + 2-stub-controller fixture** (pattern: `@electric-sql/pglite` per-core-tests + the `stub.ts` network provider). Real multi-router connectivity = **Known-Gap**, blocked on hardware (memory `ap-detection-issue`). Use `bunx vitest run <file>` (never `bun test` — memory `unit-test-runner-gotcha`).
 
-| Gate / Scenario | Strategy | Proves SPEC criterion |
-|---|---|---|
-| `resolveSiteId` returns correct site per signal in priority order | Fully-Automated | Central portal knows which site a guest is on (Phase 2 goal) |
-| Registry `getController(siteId)` == env `buildConfig()` for default site; legacy-env fallback | Fully-Automated | Singleton→registry swap is behavior-preserving (Phase 1 goal) |
-| Grant/revoke land on the CORRECT router across 2 sites (2-stub fixture) | Fully-Automated | Per-site grant/revoke correctness; money lands on right router (Phase 2/3 goal) |
-| Cron fan-out: each site's sweep hits only its own router/sessions; disabled site skipped | Fully-Automated | Multi-controller cron scoping (Phase 3 goal) |
-| `network_health` composite-unique: same name per site OK, dup within site rejected | Fully-Automated | Two sites' identical AP names no longer collide (Phase 2 goal) |
-| Credential encryption round-trip; no plaintext at rest; no secret in logs | Fully-Automated + Agent-Probe | Secrets-at-rest is not a regression (DECISION B / Phase 1) |
-| `reconcileGuestBindings` per-router does not drop cross-site orphans | Fully-Automated | Reconcile safety under multi-router (Phase 3 goal) |
-| Owner-gate on Sites CRUD; secrets never rendered | Fully-Automated + Agent-Probe | Router-registry writes are owner-only (Phase 4 goal) |
-| Direct DDL applies on drifted dev DB; migration diff additive-only | Hybrid | Migration safety (Phase 0/2) |
-| "Test connectivity" per site | Hybrid | Operator can validate a router before enabling (Phase 4) |
-| Live 2-router grant/revoke/cron on real hardware | Known-Gap | End-to-end multi-site on real routers — blocked on hardware |
+| Gate / Scenario                                                                               | Strategy                      | Proves SPEC criterion                                                           |
+| --------------------------------------------------------------------------------------------- | ----------------------------- | ------------------------------------------------------------------------------- |
+| `resolveSiteId` returns correct site per signal in priority order                             | Fully-Automated               | Central portal knows which site a guest is on (Phase 2 goal)                    |
+| Registry `getController(siteId)` == env `buildConfig()` for default site; legacy-env fallback | Fully-Automated               | Singleton→registry swap is behavior-preserving (Phase 1 goal)                   |
+| Grant/revoke land on the CORRECT router across 2 sites (2-stub fixture)                       | Fully-Automated               | Per-site grant/revoke correctness; money lands on right router (Phase 2/3 goal) |
+| Cron fan-out: each site's sweep hits only its own router/sessions; disabled site skipped      | Fully-Automated               | Multi-controller cron scoping (Phase 3 goal)                                    |
+| `network_health` composite-unique: same name per site OK, dup within site rejected            | Fully-Automated               | Two sites' identical AP names no longer collide (Phase 2 goal)                  |
+| Credential encryption round-trip; no plaintext at rest; no secret in logs                     | Fully-Automated + Agent-Probe | Secrets-at-rest is not a regression (DECISION B / Phase 1)                      |
+| `reconcileGuestBindings` per-router does not drop cross-site orphans                          | Fully-Automated               | Reconcile safety under multi-router (Phase 3 goal)                              |
+| Owner-gate on Sites CRUD; secrets never rendered                                              | Fully-Automated + Agent-Probe | Router-registry writes are owner-only (Phase 4 goal)                            |
+| Direct DDL applies on drifted dev DB; migration diff additive-only                            | Hybrid                        | Migration safety (Phase 0/2)                                                    |
+| "Test connectivity" per site                                                                  | Hybrid                        | Operator can validate a router before enabling (Phase 4)                        |
+| Live 2-router grant/revoke/cron on real hardware                                              | Known-Gap                     | End-to-end multi-site on real routers — blocked on hardware                     |
 
 ## Test Infra Improvement Notes
 

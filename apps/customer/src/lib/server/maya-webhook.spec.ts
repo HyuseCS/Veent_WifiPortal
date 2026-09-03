@@ -61,23 +61,50 @@ describe('maya verifyWebhook', () => {
 	});
 
 	it('treats isPaid=true as paid regardless of status string', async () => {
-		mockFetchOnce({ id: 'p', isPaid: true, amount: 10, currency: 'PHP', requestReferenceNumber: 'r' });
+		mockFetchOnce({
+			id: 'p',
+			isPaid: true,
+			amount: 10,
+			currency: 'PHP',
+			requestReferenceNumber: 'r'
+		});
 		const evt = await provider.verifyWebhook(JSON.stringify({ id: 'p' }), headers);
 		expect(evt.status).toBe('paid');
 		expect(evt.amountMinor).toBe(1000);
 	});
 
 	it('maps failed, cancelled and expired statuses distinctly', async () => {
-		mockFetchOnce({ id: 'p', paymentStatus: 'PAYMENT_FAILED', amount: 5, requestReferenceNumber: 'r' });
-		expect((await provider.verifyWebhook(JSON.stringify({ id: 'p' }), headers)).status).toBe('failed');
+		mockFetchOnce({
+			id: 'p',
+			paymentStatus: 'PAYMENT_FAILED',
+			amount: 5,
+			requestReferenceNumber: 'r'
+		});
+		expect((await provider.verifyWebhook(JSON.stringify({ id: 'p' }), headers)).status).toBe(
+			'failed'
+		);
 
 		// PAYMENT_CANCELLED is its own status (not folded into failed) so Finance can separate
 		// user-cancelled from gateway-failed attempts.
-		mockFetchOnce({ id: 'p', paymentStatus: 'PAYMENT_CANCELLED', amount: 5, requestReferenceNumber: 'r' });
-		expect((await provider.verifyWebhook(JSON.stringify({ id: 'p' }), headers)).status).toBe('cancelled');
+		mockFetchOnce({
+			id: 'p',
+			paymentStatus: 'PAYMENT_CANCELLED',
+			amount: 5,
+			requestReferenceNumber: 'r'
+		});
+		expect((await provider.verifyWebhook(JSON.stringify({ id: 'p' }), headers)).status).toBe(
+			'cancelled'
+		);
 
-		mockFetchOnce({ id: 'p', paymentStatus: 'PAYMENT_EXPIRED', amount: 5, requestReferenceNumber: 'r' });
-		expect((await provider.verifyWebhook(JSON.stringify({ id: 'p' }), headers)).status).toBe('expired');
+		mockFetchOnce({
+			id: 'p',
+			paymentStatus: 'PAYMENT_EXPIRED',
+			amount: 5,
+			requestReferenceNumber: 'r'
+		});
+		expect((await provider.verifyWebhook(JSON.stringify({ id: 'p' }), headers)).status).toBe(
+			'expired'
+		);
 	});
 
 	it('extracts Finance detail (fund source, receipt, buyer, error) from the re-fetched payment', async () => {
@@ -160,7 +187,10 @@ describe('maya verifyWebhook re-fetch resilience', () => {
 	});
 
 	it('retries a network error, then succeeds on a later attempt', async () => {
-		const fetchMock = vi.fn().mockRejectedValueOnce(new TypeError('fetch failed')).mockResolvedValueOnce(paidOk);
+		const fetchMock = vi
+			.fn()
+			.mockRejectedValueOnce(new TypeError('fetch failed'))
+			.mockResolvedValueOnce(paidOk);
 		vi.stubGlobal('fetch', fetchMock);
 		const evt = await provider.verifyWebhook(JSON.stringify({ id: 'p' }), headers);
 		expect(fetchMock).toHaveBeenCalledTimes(2);
@@ -171,7 +201,9 @@ describe('maya verifyWebhook re-fetch resilience', () => {
 		const abort = Object.assign(new Error('aborted'), { name: 'AbortError' });
 		const fetchMock = vi.fn().mockRejectedValue(abort);
 		vi.stubGlobal('fetch', fetchMock);
-		await expect(provider.verifyWebhook(JSON.stringify({ id: 'p' }), headers)).rejects.toThrow(/timed out/);
+		await expect(provider.verifyWebhook(JSON.stringify({ id: 'p' }), headers)).rejects.toThrow(
+			/timed out/
+		);
 		// 1 initial attempt + 2 bounded retries.
 		expect(fetchMock).toHaveBeenCalledTimes(3);
 	});

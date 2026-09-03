@@ -90,7 +90,13 @@ describe('assembleOpenRequests', () => {
 	});
 
 	it('flags expiry against now, with no approvals as an empty list', () => {
-		const out = assembleOpenRequests([row({ expiresAt: 500 })], ['a', 'b'], nameById, new Map(), 1_000);
+		const out = assembleOpenRequests(
+			[row({ expiresAt: 500 })],
+			['a', 'b'],
+			nameById,
+			new Map(),
+			1_000
+		);
 		expect(out[0].expired).toBe(true);
 		expect(out[0].approvedOwnerIds).toEqual([]);
 		expect(out[0].initiatedByName).toBe('Olivia');

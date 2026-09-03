@@ -9,7 +9,13 @@ import {
 	SENTRY_CREDENTIAL_KEYS
 } from './client';
 import { deriveKpis, mapEventDetail, mapIssue, mapTrend } from './map';
-import type { IssueFilter, IssueStatus, SentryDashboard, SentryEventDetail, SentryIssue } from './types';
+import type {
+	IssueFilter,
+	IssueStatus,
+	SentryDashboard,
+	SentryEventDetail,
+	SentryIssue
+} from './types';
 
 /**
  * Facade over the Sentry transport + mappers — the ONLY Sentry module the route imports. It
@@ -25,7 +31,10 @@ const log = logger('sentry');
 
 /** Assemble the whole dashboard. Unresolved drives the KPIs; ignored fills the second tab. */
 export async function getDashboard(): Promise<SentryDashboard> {
-	const [unresolved, ignored] = await Promise.all([loadIssues('unresolved'), loadIssues('ignored')]);
+	const [unresolved, ignored] = await Promise.all([
+		loadIssues('unresolved'),
+		loadIssues('ignored')
+	]);
 	return {
 		configured: true,
 		kpis: deriveKpis(unresolved.data),
@@ -43,7 +52,10 @@ export async function getIssues(): Promise<{
 	ignoredIssues: SentryIssue[];
 	degraded: { issues: boolean; ignored: boolean };
 }> {
-	const [unresolved, ignored] = await Promise.all([loadIssues('unresolved'), loadIssues('ignored')]);
+	const [unresolved, ignored] = await Promise.all([
+		loadIssues('unresolved'),
+		loadIssues('ignored')
+	]);
 	return {
 		configured: true,
 		issues: unresolved.data,
@@ -58,7 +70,9 @@ export async function getIssues(): Promise<{
  * harvested only for its per-issue sparkline and merged in by id (issues absent from the 24h
  * top-list keep an empty — correctly flat — 24h trend), so a 24h failure never blanks the table.
  */
-async function loadIssues(status: IssueFilter): Promise<{ data: SentryIssue[]; degraded: boolean }> {
+async function loadIssues(
+	status: IssueFilter
+): Promise<{ data: SentryIssue[]; degraded: boolean }> {
 	const [primary, hourly] = await Promise.allSettled([
 		fetchIssuesRaw(status, '14d'),
 		fetchIssuesRaw(status, '24h')

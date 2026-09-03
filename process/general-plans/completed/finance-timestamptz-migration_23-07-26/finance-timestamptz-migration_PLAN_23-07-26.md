@@ -1,6 +1,6 @@
 ---
 name: plan:finance-timestamptz-migration
-description: "Migrate 13 finance/session timestamp columns from bare wall-clock to timestamptz with per-column correction; period.ts rewrite ships atomically with the migration"
+description: 'Migrate 13 finance/session timestamp columns from bare wall-clock to timestamptz with per-column correction; period.ts rewrite ships atomically with the migration'
 date: 23-07-26
 feature: none
 ---
@@ -25,7 +25,7 @@ archiving to `process/general-plans/completed/`.
   `period.ts` rewritten to real Manila-day→UTC-instant math in the same change-set (Locked Decision
   4); `sessions.ts`/`reconcilePayments.ts` untouched as required (Locked Decision 5).
 - **EVL confirmation: GREEN.** `bun run check` clean, scoped lint clean on touched files, `bun run
-  test` 391/391 passing (0 failures) across all 4 vitest projects, including the new AC1 round-trip
+test` 391/391 passing (0 failures) across all 4 vitest projects, including the new AC1 round-trip
   spec (`packages/core/src/services/timestamptz-roundtrip.integration.spec.ts`) and the new AC4
   reconcile spec (`packages/core/src/services/reconcilePayments.integration.spec.ts`).
 - **User-confirmed this session:** dev browser Finance display is correct post-migration.
@@ -48,8 +48,8 @@ archiving to `process/general-plans/completed/`.
   EXECUTE to UPDATE PROCESS per phase-lock — now done).
 - **Full execution detail:** `finance-timestamptz-migration_REPORT_23-07-26.md` (co-located in this
   task folder) — dev-side EXECUTE report, all gate outcomes, deviations, and forward-preview notes.
-**SPEC:** `process/general-plans/active/finance-timestamptz-migration_23-07-26/finance-timestamptz-migration_SPEC_23-07-26.md` (locked)
-**Migration count at PLAN time:** 52 files (`0000`–`0051`), newest `0051_powerful_rachel_grey.sql`. Expected new migration: **`0052_<drizzle-kit-name>.sql`**. Re-verify this count immediately before EXECUTE (`ls packages/db/drizzle/*.sql | wc -l`) — if it has moved past 52, the expected number shifts accordingly; do not hardcode `0052` if drift is found.
+  **SPEC:** `process/general-plans/active/finance-timestamptz-migration_23-07-26/finance-timestamptz-migration_SPEC_23-07-26.md` (locked)
+  **Migration count at PLAN time:** 52 files (`0000`–`0051`), newest `0051_powerful_rachel_grey.sql`. Expected new migration: **`0052_<drizzle-kit-name>.sql`**. Re-verify this count immediately before EXECUTE (`ls packages/db/drizzle/*.sql | wc -l`) — if it has moved past 52, the expected number shifts accordingly; do not hardcode `0052` if drift is found.
 
 ## Overview
 
@@ -115,23 +115,23 @@ working correctly in the target environment (user says so, or user-confirmed bro
 
 ## Touchpoints
 
-| File | Change | Why |
-|---|---|---|
-| `packages/db/src/schema/customer.ts` | 13 columns: add `{ withTimezone: true }` to `timestamp(...)` calls | Drizzle schema must match the post-migration DB type so future `db:generate` diffs stay clean (SPEC constraint) |
-| `packages/db/drizzle/0052_<name>.sql` (new) | New migration file, one `BEGIN`/implicit-transaction DDL block with 3 `ALTER TABLE ... ALTER COLUMN ... TYPE timestamptz USING ...` statements (one per table: `credit_ledger`+`points_ledger`+`payment_transactions` are single-column each; `payment_checkouts` is 3-column in one `ALTER TABLE`; `network_sessions` is 4-column in one `ALTER TABLE`; `customer_profile` is 3-column in one `ALTER TABLE`) | The actual schema change (AC8) |
-| `packages/db/drizzle/meta/0052_snapshot.json` + `meta/_journal.json` | drizzle-kit-generated snapshot + journal entry | Required for `db:generate` reproducibility record (AC8); dev DB itself is applied via direct DDL per the push-managed-dev-DB convention, but the committed migration+snapshot pair must still exist |
-| `apps/admin/src/lib/server/period.ts` | Rewrite `parsePeriod()` boundary construction: replace the `Date.UTC(y, m-1, day, ...)` wall-clock-spelling trick with real Manila-day → UTC-instant math (fixed −8h offset, no DST) | Ships atomically with the migration per Locked Decision 4; the old spelling trick becomes wrong (and unnecessary) once columns are real instants |
-| `apps/admin/src/lib/server/period.spec.ts` (new, if none exists — confirm first) | Unit tests for the rewritten boundary math: day-boundary correctness, cross-midnight-UTC edge cases | Fully-Automated regression coverage for the rewritten function (not explicitly an AC row, but required by AC9 "no unrelated behavior change" — this function's behavior changes, so it needs direct coverage) |
-| `packages/core/src/services/timestamptz-roundtrip.integration.spec.ts` (new) | AC1: pre/post-migration instant round-trip test for all 13 columns, including NULL-column cases | Proves AC1 |
-| `apps/admin/src/lib/server/queries.spec.ts` (extend, not new file) | AC2/AC3: add a same-day cross-write-convention case (free-time/session row + Maya payment row, same real day, opposite pre-migration conventions) to the existing `listUnifiedTransactions` describe blocks | Proves AC2, AC3 |
-| `packages/core/src/services/reconcilePayments.spec.ts` (extend if exists, else create `reconcilePayments.integration.spec.ts`) | AC4: age-boundary branch coverage run against the migrated (timestamptz) column type | Proves AC4 |
-| `apps/admin/scripts/seed-test-data.ts` (read-only reference, not modified unless snapshot test needs a seed helper) | AC6 baseline data source | Supports the before/after KPI snapshot comparison |
+| File                                                                                                                           | Change                                                                                                                                                                                                                                                                                                                                                                                                        | Why                                                                                                                                                                                                           |
+| ------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `packages/db/src/schema/customer.ts`                                                                                           | 13 columns: add `{ withTimezone: true }` to `timestamp(...)` calls                                                                                                                                                                                                                                                                                                                                            | Drizzle schema must match the post-migration DB type so future `db:generate` diffs stay clean (SPEC constraint)                                                                                               |
+| `packages/db/drizzle/0052_<name>.sql` (new)                                                                                    | New migration file, one `BEGIN`/implicit-transaction DDL block with 3 `ALTER TABLE ... ALTER COLUMN ... TYPE timestamptz USING ...` statements (one per table: `credit_ledger`+`points_ledger`+`payment_transactions` are single-column each; `payment_checkouts` is 3-column in one `ALTER TABLE`; `network_sessions` is 4-column in one `ALTER TABLE`; `customer_profile` is 3-column in one `ALTER TABLE`) | The actual schema change (AC8)                                                                                                                                                                                |
+| `packages/db/drizzle/meta/0052_snapshot.json` + `meta/_journal.json`                                                           | drizzle-kit-generated snapshot + journal entry                                                                                                                                                                                                                                                                                                                                                                | Required for `db:generate` reproducibility record (AC8); dev DB itself is applied via direct DDL per the push-managed-dev-DB convention, but the committed migration+snapshot pair must still exist           |
+| `apps/admin/src/lib/server/period.ts`                                                                                          | Rewrite `parsePeriod()` boundary construction: replace the `Date.UTC(y, m-1, day, ...)` wall-clock-spelling trick with real Manila-day → UTC-instant math (fixed −8h offset, no DST)                                                                                                                                                                                                                          | Ships atomically with the migration per Locked Decision 4; the old spelling trick becomes wrong (and unnecessary) once columns are real instants                                                              |
+| `apps/admin/src/lib/server/period.spec.ts` (new, if none exists — confirm first)                                               | Unit tests for the rewritten boundary math: day-boundary correctness, cross-midnight-UTC edge cases                                                                                                                                                                                                                                                                                                           | Fully-Automated regression coverage for the rewritten function (not explicitly an AC row, but required by AC9 "no unrelated behavior change" — this function's behavior changes, so it needs direct coverage) |
+| `packages/core/src/services/timestamptz-roundtrip.integration.spec.ts` (new)                                                   | AC1: pre/post-migration instant round-trip test for all 13 columns, including NULL-column cases                                                                                                                                                                                                                                                                                                               | Proves AC1                                                                                                                                                                                                    |
+| `apps/admin/src/lib/server/queries.spec.ts` (extend, not new file)                                                             | AC2/AC3: add a same-day cross-write-convention case (free-time/session row + Maya payment row, same real day, opposite pre-migration conventions) to the existing `listUnifiedTransactions` describe blocks                                                                                                                                                                                                   | Proves AC2, AC3                                                                                                                                                                                               |
+| `packages/core/src/services/reconcilePayments.spec.ts` (extend if exists, else create `reconcilePayments.integration.spec.ts`) | AC4: age-boundary branch coverage run against the migrated (timestamptz) column type                                                                                                                                                                                                                                                                                                                          | Proves AC4                                                                                                                                                                                                    |
+| `apps/admin/scripts/seed-test-data.ts` (read-only reference, not modified unless snapshot test needs a seed helper)            | AC6 baseline data source                                                                                                                                                                                                                                                                                                                                                                                      | Supports the before/after KPI snapshot comparison                                                                                                                                                             |
 
 **Confirm-first note:** `period.spec.ts` and a dedicated `reconcilePayments` spec file existence must be confirmed by RESEARCH-equivalent grep at EXECUTE start (see Execute Checklist item 0). If either already exists, extend it; do not create a duplicate.
 
 ## Public Contracts
 
-- **Column types** (public within the monorepo — read by `packages/core` and `apps/admin`): 13 columns change from `timestamp` to `timestamptz`. Any other reader of these columns outside the touched files (none found in SPEC research — confirmed no view/materialized-view dependency) is unaffected at the SQL level since `timestamptz` round-trips through `postgres.js`/Drizzle exactly like `timestamp` does for JS `Date` values — only the *stored representation and comparison semantics* change (instant vs ambiguous wall-clock).
+- **Column types** (public within the monorepo — read by `packages/core` and `apps/admin`): 13 columns change from `timestamp` to `timestamptz`. Any other reader of these columns outside the touched files (none found in SPEC research — confirmed no view/materialized-view dependency) is unaffected at the SQL level since `timestamptz` round-trips through `postgres.js`/Drizzle exactly like `timestamp` does for JS `Date` values — only the _stored representation and comparison semantics_ change (instant vs ambiguous wall-clock).
 - **`period.ts` exports** (`parsePeriod`, `granularityFor`, `Period` type): signature unchanged; only internal boundary-construction logic changes. Callers (`apps/admin/src/routes/(app)/finance/**`) are unaffected by this contract change — same input/output shape, corrected values.
 - **No new public API, no new schema fields, no new package.**
 
@@ -204,16 +204,16 @@ Every safety gate below is a literal, checkable item — EXECUTE must not procee
 
 ## Verification Evidence
 
-| Gate / Scenario | Strategy | Proves SPEC criterion |
-|---|---|---|
-| PGlite round-trip test, all 13 columns + NULL cases — `timestamptz-roundtrip.integration.spec.ts` | Hybrid | AC1 |
-| `queries.spec.ts` same-day cross-convention extension | Hybrid | AC2, AC3 |
-| `reconcilePayments` age-boundary spec against migrated column type | Fully-Automated | AC4 |
-| Static trigger-definition grep + dev live-feed smoke check | Agent-Probe | AC5 |
-| Before/after KPI/`revenueByDay` byte-identical snapshot (folded into round-trip spec) | Hybrid | AC6 |
-| `SELECT current_setting('TimeZone')` recorded per environment (dev item 0.3, prod item 4.2) before apply | Agent-Probe | AC7 |
-| `db:generate` scaffold + hand-edit verification + direct-apply-and-verify against dev DB | Agent-Probe | AC8 |
-| Full gate suite (`bun run check` → `bun run lint` → `bun test` → admin finance e2e) green, zero new failures | Fully-Automated | AC9 |
+| Gate / Scenario                                                                                              | Strategy        | Proves SPEC criterion |
+| ------------------------------------------------------------------------------------------------------------ | --------------- | --------------------- |
+| PGlite round-trip test, all 13 columns + NULL cases — `timestamptz-roundtrip.integration.spec.ts`            | Hybrid          | AC1                   |
+| `queries.spec.ts` same-day cross-convention extension                                                        | Hybrid          | AC2, AC3              |
+| `reconcilePayments` age-boundary spec against migrated column type                                           | Fully-Automated | AC4                   |
+| Static trigger-definition grep + dev live-feed smoke check                                                   | Agent-Probe     | AC5                   |
+| Before/after KPI/`revenueByDay` byte-identical snapshot (folded into round-trip spec)                        | Hybrid          | AC6                   |
+| `SELECT current_setting('TimeZone')` recorded per environment (dev item 0.3, prod item 4.2) before apply     | Agent-Probe     | AC7                   |
+| `db:generate` scaffold + hand-edit verification + direct-apply-and-verify against dev DB                     | Agent-Probe     | AC8                   |
+| Full gate suite (`bun run check` → `bun run lint` → `bun test` → admin finance e2e) green, zero new failures | Fully-Automated | AC9                   |
 
 ## Test Infra Improvement Notes
 
@@ -249,17 +249,17 @@ Per the task brief's Layer 2 guidance, the two genuinely untested-at-plan-time m
 were resolved empirically now rather than deferred or guessed:
 
 1. **Single-column per-column `USING` cast** (`credit_ledger.created_at` pattern): `ALTER TABLE t
-   ALTER COLUMN created_at TYPE timestamptz USING created_at AT TIME ZONE 'Asia/Manila'` against a
+ALTER COLUMN created_at TYPE timestamptz USING created_at AT TIME ZONE 'Asia/Manila'` against a
    bare `timestamp` value `2026-07-23 14:00:00` in a real PGlite instance → produced
    `2026-07-23T06:00:00.000Z`. This is the mathematically correct instant (14:00 Manila = 06:00 UTC,
    UTC+8) — confirms the Locked Decision 3 Manila-wall cast direction and PGlite's ability to run it.
 2. **NULL propagation through `AT TIME ZONE`**: a `NULL` bare-timestamp column cast via `... USING
-   nullable_at AT TIME ZONE 'UTC'` remained `NULL` after the `ALTER` — confirms AC1's required NULL
+nullable_at AT TIME ZONE 'UTC'` remained `NULL` after the `ALTER` — confirms AC1's required NULL
    case (settled_at/last_polled_at/access_paused_at) will round-trip correctly, not error or coerce
    to an epoch default.
 3. **Multi-column per-column split in ONE `ALTER TABLE`** (the `payment_checkouts` pattern —
    Locked Decision 3's "never a table-wide cast" requirement): a single `ALTER TABLE ... ALTER
-   COLUMN created_at ..., ALTER COLUMN settled_at ..., ALTER COLUMN last_polled_at ...` with three
+COLUMN created_at ..., ALTER COLUMN settled_at ..., ALTER COLUMN last_polled_at ...` with three
    different per-column `USING` zones in one statement ran cleanly and produced correct,
    independently-converted values for each column.
 
@@ -273,13 +273,13 @@ resolved directly instead of halting.
 
 Verified by direct grep/read of every write site (not re-derived from the SPEC's prose alone):
 
-| Column | Plan classifies as | Write-path evidence found | Verdict |
-|---|---|---|---|
-| `credit_ledger.created_at`, `points_ledger.created_at`, `payment_transactions.created_at` | Manila-wall | Schema `.notNull().defaultNow()`, no explicit override at any insert site (`credits.ts:116`, `points.ts:54`, `reconcilePayments.ts:104` `row` object omits `createdAt`) | CONFIRMED |
-| `payment_checkouts.created_at` | Manila-wall | `top-up/+page.server.ts:212` insert omits `createdAt` → `.defaultNow()` fires | CONFIRMED |
-| `payment_checkouts.settled_at`, `payment_checkouts.last_polled_at` | UTC-wall | `reconcilePayments.ts:240,324` (`settledAt: new Date()`), `:443` (`lastPolledAt: new Date()`) — explicit JS `Date`, schema has no `.defaultNow()` on these two | CONFIRMED |
-| `network_sessions.{started_at, bound_at, last_seen_at, expires_at}` | UTC-wall | Schema shows `.notNull().defaultNow()` as a FALLBACK default, but `sessions.ts:189-199` (`bindMacTx`) **always explicitly sets** `startedAt/boundAt/lastSeenAt: now` and `expiresAt: newWindow` at every insert/update — the schema default never actually fires on this write path. No other insert site exists in application code (only `seed-test-data.ts`/`simulate-live.ts` scripts, dev-only). | CONFIRMED — flagged and traced explicitly because the schema-level `.defaultNow()` presence could otherwise mislead a reviewer into misclassifying these as Manila-wall; the write path overrides it every time. |
-| `customer_profile.{last_free_session_at, access_expires_at, access_paused_at}` | UTC-wall | `sessions.ts:632` (`accessPausedAt: now`), `:758` (`lastFreeSessionAt: now`), explicit `new Date()` throughout; schema has no `.defaultNow()` on any of the three | CONFIRMED |
+| Column                                                                                    | Plan classifies as | Write-path evidence found                                                                                                                                                                                                                                                                                                                                                                             | Verdict                                                                                                                                                                                                          |
+| ----------------------------------------------------------------------------------------- | ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `credit_ledger.created_at`, `points_ledger.created_at`, `payment_transactions.created_at` | Manila-wall        | Schema `.notNull().defaultNow()`, no explicit override at any insert site (`credits.ts:116`, `points.ts:54`, `reconcilePayments.ts:104` `row` object omits `createdAt`)                                                                                                                                                                                                                               | CONFIRMED                                                                                                                                                                                                        |
+| `payment_checkouts.created_at`                                                            | Manila-wall        | `top-up/+page.server.ts:212` insert omits `createdAt` → `.defaultNow()` fires                                                                                                                                                                                                                                                                                                                         | CONFIRMED                                                                                                                                                                                                        |
+| `payment_checkouts.settled_at`, `payment_checkouts.last_polled_at`                        | UTC-wall           | `reconcilePayments.ts:240,324` (`settledAt: new Date()`), `:443` (`lastPolledAt: new Date()`) — explicit JS `Date`, schema has no `.defaultNow()` on these two                                                                                                                                                                                                                                        | CONFIRMED                                                                                                                                                                                                        |
+| `network_sessions.{started_at, bound_at, last_seen_at, expires_at}`                       | UTC-wall           | Schema shows `.notNull().defaultNow()` as a FALLBACK default, but `sessions.ts:189-199` (`bindMacTx`) **always explicitly sets** `startedAt/boundAt/lastSeenAt: now` and `expiresAt: newWindow` at every insert/update — the schema default never actually fires on this write path. No other insert site exists in application code (only `seed-test-data.ts`/`simulate-live.ts` scripts, dev-only). | CONFIRMED — flagged and traced explicitly because the schema-level `.defaultNow()` presence could otherwise mislead a reviewer into misclassifying these as Manila-wall; the write path overrides it every time. |
+| `customer_profile.{last_free_session_at, access_expires_at, access_paused_at}`            | UTC-wall           | `sessions.ts:632` (`accessPausedAt: now`), `:758` (`lastFreeSessionAt: now`), explicit `new Date()` throughout; schema has no `.defaultNow()` on any of the three                                                                                                                                                                                                                                     | CONFIRMED                                                                                                                                                                                                        |
 
 **No misclassification found.** All 13 columns' Locked-Decision-3 group assignment matches actual
 runtime write behavior. The one column group that could plausibly have been mis-derived from schema
@@ -289,12 +289,12 @@ path" the task brief asked to rule out, and it is ruled out.
 
 ### Layer 1 — Dimension findings
 
-| Layer 1 dimensions | Status |
-|---|---|
-| Infra fit | PASS |
-| Test coverage | CONCERN |
-| Breaking changes | PASS |
-| Security surface | CONCERN |
+| Layer 1 dimensions | Status  |
+| ------------------ | ------- |
+| Infra fit          | PASS    |
+| Test coverage      | CONCERN |
+| Breaking changes   | PASS    |
+| Security surface   | CONCERN |
 
 - **Infra fit — PASS.** `packages/db` remains the sole migration authority; no new package, port,
   container, or runtime surface. Migration workflow (`db:generate` + direct-apply verify) matches
@@ -322,13 +322,13 @@ path" the task brief asked to rule out, and it is ruled out.
 
 ### Layer 2 — Section findings
 
-| Layer 2 sections | Status |
-|---|---|
-| Section A — Schema + Migration (customer.ts, 0052 migration, meta files) | PASS |
-| Section B — period.ts rewrite | CONCERN |
+| Layer 2 sections                                                                                  | Status  |
+| ------------------------------------------------------------------------------------------------- | ------- |
+| Section A — Schema + Migration (customer.ts, 0052 migration, meta files)                          | PASS    |
+| Section B — period.ts rewrite                                                                     | CONCERN |
 | Section C — Test gates (round-trip, queries.spec.ts, reconcilePayments spec, check/lint/test/e2e) | CONCERN |
-| Section D — Agent-probe / prod safety gates (AC5, AC7, AC8) | PASS |
-| Section E — Close-out | PASS |
+| Section D — Agent-probe / prod safety gates (AC5, AC7, AC8)                                       | PASS    |
+| Section E — Close-out                                                                             | PASS    |
 
 **Section A — Schema + Migration.** Mechanical feasibility: confirmed — all 13 target columns exist
 in `customer.ts` with the exact names/nullability the plan assumes (verified by grep). Per-column
@@ -395,16 +395,16 @@ record.
 
 Test gates (C3 5-column table — ADDITIVE; existing consumers still parse the legacy line form below it):
 
-| criterion id | behavior | strategy | proving test | gap-resolution |
-|---|---|---|---|---|
-| AC1 | Every in-scope column round-trips the same real instant pre/post migration, incl. NULL cases | Hybrid | `bunx vitest run packages/core/src/services/timestamptz-roundtrip.integration.spec.ts` (from `packages/core/`) — PGlite, full migration chain incl. 0052 | B |
-| AC2, AC3 | Finance date filters / `listUnifiedTransactions` include same-day rows across write conventions | Hybrid | `bunx vitest run apps/admin/src/lib/server/queries.spec.ts` (from `apps/admin/`) — extended with cross-convention same-day case | B |
-| AC4 | `reconcilePayments` age-boundary (minAge/maxAge/throttle) logic correct post-migration | Fully-Automated | `bunx vitest run packages/core/src/services/reconcilePayments*.spec.ts` (from `packages/core/`) | B |
-| AC5 | `pg_notify` dashboard triggers unaffected by column type change | Agent-Probe | Static grep of `0006_dashboard_notify_triggers.sql` (confirmed clean this pass) + dev live-feed smoke check | B |
-| AC6 | KPI/revenue queries byte-identical for already-correct data | Hybrid | Before/after snapshot folded into the AC1 spec file (Item 3.4) | B |
-| AC7 | Session `TimeZone` confirmed per environment before apply | Agent-Probe | `SELECT current_setting('TimeZone');` recorded dev (Item 0.3) + prod (Item 4.2) | B |
-| AC8 | Migration reproducible: `db:generate` scaffold + hand-edit-verified + direct-apply-verified | Agent-Probe | Item 1.2–1.4 (generate+verify) + Item 2.1–2.4 (dev apply+verify) | B |
-| AC9 | No unrelated behavior change | Fully-Automated | `bun run check` → `bun run lint` (scoped per E1) → `bun test` → admin `finance-export.e2e.ts` | B |
+| criterion id | behavior                                                                                        | strategy        | proving test                                                                                                                                             | gap-resolution |
+| ------------ | ----------------------------------------------------------------------------------------------- | --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------- |
+| AC1          | Every in-scope column round-trips the same real instant pre/post migration, incl. NULL cases    | Hybrid          | `bunx vitest run packages/core/src/services/timestamptz-roundtrip.integration.spec.ts` (from `packages/core/`) — PGlite, full migration chain incl. 0052 | B              |
+| AC2, AC3     | Finance date filters / `listUnifiedTransactions` include same-day rows across write conventions | Hybrid          | `bunx vitest run apps/admin/src/lib/server/queries.spec.ts` (from `apps/admin/`) — extended with cross-convention same-day case                          | B              |
+| AC4          | `reconcilePayments` age-boundary (minAge/maxAge/throttle) logic correct post-migration          | Fully-Automated | `bunx vitest run packages/core/src/services/reconcilePayments*.spec.ts` (from `packages/core/`)                                                          | B              |
+| AC5          | `pg_notify` dashboard triggers unaffected by column type change                                 | Agent-Probe     | Static grep of `0006_dashboard_notify_triggers.sql` (confirmed clean this pass) + dev live-feed smoke check                                              | B              |
+| AC6          | KPI/revenue queries byte-identical for already-correct data                                     | Hybrid          | Before/after snapshot folded into the AC1 spec file (Item 3.4)                                                                                           | B              |
+| AC7          | Session `TimeZone` confirmed per environment before apply                                       | Agent-Probe     | `SELECT current_setting('TimeZone');` recorded dev (Item 0.3) + prod (Item 4.2)                                                                          | B              |
+| AC8          | Migration reproducible: `db:generate` scaffold + hand-edit-verified + direct-apply-verified     | Agent-Probe     | Item 1.2–1.4 (generate+verify) + Item 2.1–2.4 (dev apply+verify)                                                                                         | B              |
+| AC9          | No unrelated behavior change                                                                    | Fully-Automated | `bun run check` → `bun run lint` (scoped per E1) → `bun test` → admin `finance-export.e2e.ts`                                                            | B              |
 
 gap-resolution legend: A — proven now; B — fixed in this plan (gate added by this plan's checklist);
 C — deferred to a named later phase/plan; D — backlog test-building stub. All rows are B: every gate
@@ -415,6 +415,7 @@ C-4 reconciliation: `strategy:` carries only Fully-Automated / Hybrid / Agent-Pr
 Known-Gap — every in-scope behavior has a named proving gate.
 
 Legacy line form (retained so existing validate-contract consumers still parse):
+
 - Round-trip (13 cols + NULL): Hybrid — `bunx vitest run packages/core/src/services/timestamptz-roundtrip.integration.spec.ts`
 - Finance date-window (AC2/AC3): Hybrid — `bunx vitest run apps/admin/src/lib/server/queries.spec.ts`
 - Reconcile age-boundary (AC4): Fully-Automated — `bunx vitest run packages/core/src/services/reconcilePayments*.spec.ts`
@@ -428,9 +429,11 @@ Legacy line form (retained so existing validate-contract consumers still parse):
 gate, not a single new-behavior scenario, so no stub is generated for it):**
 
 ```ts
-test("should skip/credit checkouts correctly across minAge/maxAge/lastPolledAt-throttle boundaries against migrated timestamptz payment_checkouts columns", () => {
-  throw new Error("NOT IMPLEMENTED — TDD stub: reconcilePayments age-boundary logic against timestamptz-migrated payment_checkouts.created_at/last_polled_at")
-})
+test('should skip/credit checkouts correctly across minAge/maxAge/lastPolledAt-throttle boundaries against migrated timestamptz payment_checkouts columns', () => {
+	throw new Error(
+		'NOT IMPLEMENTED — TDD stub: reconcilePayments age-boundary logic against timestamptz-migrated payment_checkouts.created_at/last_polled_at'
+	);
+});
 ```
 
 ### What this coverage does NOT prove
@@ -452,7 +455,7 @@ test("should skip/credit checkouts correctly across minAge/maxAge/lastPolledAt-t
   immediately after the preflight check, same session, not deferred).
 - **`bun run check` / `bun run lint` / `bun test` / e2e (AC9)**: proves no NEW failure was
   introduced; per E1, `bun run lint` does not currently prove a clean baseline (297 pre-existing
-  files) — it can only prove no *additional* files were added to that count by this plan's edits.
+  files) — it can only prove no _additional_ files were added to that count by this plan's edits.
 
 ### IV. Proposed Plan Updates / Execute-Agent Instructions / Backlog Artifacts
 
@@ -462,13 +465,13 @@ existing checklist items as clarifications/additions).
 
 **Execute-Agent Instructions:**
 
-| # | Instruction | Trigger condition |
-|---|---|---|
-| E1 | `bun run lint` (Items 3.5–3.6 boundary) has a pre-existing, plan-unrelated repo-wide failure (297 files of prettier drift, per `tests/all-tests.md` §Known Gaps). Do not require literal exit 0. Instead: record the pre-existing failing-file count as a baseline BEFORE touching any file, run `bun run lint` again after the plan's edits, and confirm the failing-file count did not increase and none of the newly-failing files (if any) are files this plan touched. If `prettier --check .` fails before `eslint .` runs (short-circuit), additionally run `eslint .` directly to confirm no new errors on touched files. Document both counts in the phase report. | Item 3.6 |
-| E2 | The EXISTING `apps/admin/src/lib/server/period.spec.ts` (on disk today, not new) asserts OLD wall-clock-spelling values. When rewriting per Item 1.6, explicitly recompute and replace the 2 existing boundary assertions with the new real-instant values (Manila EOD 07-23 → `2026-07-23T15:59:59.999Z`, not `23:59:59.999Z`) — do not merely add new test cases alongside the old (now-wrong) assertions. Hand-verify each new expected value against the −8h offset before writing it into the spec. | Item 1.6 |
-| E3 | At close-out (Item 5.2), re-run `ls packages/db/drizzle/*.sql \| wc -l` and use the ACTUAL resulting count in `all-database.md`'s update — do not hardcode "52 → 53". This VALIDATE pass confirmed the router's existing count line is already stale (shows 47, actual on-disk count today is 52) — treat this as a real re-sync, not an increment. | Item 5.2 |
-| E4 | Before Item 4.3 step 4 (prod DDL apply), produce a `vc-risk-evidence-pack` (5-artifact schema — `risk-gate.json`, `context-snippets.json` citing the per-column `USING` map + write-path evidence table above, `verification.json` covering the round-trip test + backup-restorability test, `review-decision.json` with explicit APPROVE/REJECT) inside this plan's task folder (`.../finance-timestamptz-migration_23-07-26/harness/`), per `orchestration.md` §High-Risk Execution Handoff — this is a "schema/data migration or destructive data mutation" high-risk class. Do not treat the prod apply as ready to finalize without it. | Before Item 4.3 step 4 |
-| E5 | Do not read a green `finance-export.e2e.ts` run (Item 3.8) as AC2/AC3 evidence — it tests CSV-export auth gating only (`period=all`), not date-window correctness. State this explicitly in the phase report so the e2e gate's actual (narrow) meaning isn't over-credited. | Item 3.8 |
+| #   | Instruction                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | Trigger condition      |
+| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------- |
+| E1  | `bun run lint` (Items 3.5–3.6 boundary) has a pre-existing, plan-unrelated repo-wide failure (297 files of prettier drift, per `tests/all-tests.md` §Known Gaps). Do not require literal exit 0. Instead: record the pre-existing failing-file count as a baseline BEFORE touching any file, run `bun run lint` again after the plan's edits, and confirm the failing-file count did not increase and none of the newly-failing files (if any) are files this plan touched. If `prettier --check .` fails before `eslint .` runs (short-circuit), additionally run `eslint .` directly to confirm no new errors on touched files. Document both counts in the phase report. | Item 3.6               |
+| E2  | The EXISTING `apps/admin/src/lib/server/period.spec.ts` (on disk today, not new) asserts OLD wall-clock-spelling values. When rewriting per Item 1.6, explicitly recompute and replace the 2 existing boundary assertions with the new real-instant values (Manila EOD 07-23 → `2026-07-23T15:59:59.999Z`, not `23:59:59.999Z`) — do not merely add new test cases alongside the old (now-wrong) assertions. Hand-verify each new expected value against the −8h offset before writing it into the spec.                                                                                                                                                                    | Item 1.6               |
+| E3  | At close-out (Item 5.2), re-run `ls packages/db/drizzle/*.sql \| wc -l` and use the ACTUAL resulting count in `all-database.md`'s update — do not hardcode "52 → 53". This VALIDATE pass confirmed the router's existing count line is already stale (shows 47, actual on-disk count today is 52) — treat this as a real re-sync, not an increment.                                                                                                                                                                                                                                                                                                                         | Item 5.2               |
+| E4  | Before Item 4.3 step 4 (prod DDL apply), produce a `vc-risk-evidence-pack` (5-artifact schema — `risk-gate.json`, `context-snippets.json` citing the per-column `USING` map + write-path evidence table above, `verification.json` covering the round-trip test + backup-restorability test, `review-decision.json` with explicit APPROVE/REJECT) inside this plan's task folder (`.../finance-timestamptz-migration_23-07-26/harness/`), per `orchestration.md` §High-Risk Execution Handoff — this is a "schema/data migration or destructive data mutation" high-risk class. Do not treat the prod apply as ready to finalize without it.                                | Before Item 4.3 step 4 |
+| E5  | Do not read a green `finance-export.e2e.ts` run (Item 3.8) as AC2/AC3 evidence — it tests CSV-export auth gating only (`period=all`), not date-window correctness. State this explicitly in the phase report so the e2e gate's actual (narrow) meaning isn't over-credited.                                                                                                                                                                                                                                                                                                                                                                                                 | Item 3.8               |
 
 **Backlog Artifacts:** none — all findings are in-scope execute-agent instructions, not deferred work.
 

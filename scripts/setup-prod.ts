@@ -82,7 +82,9 @@ function ensureEnvVar(file: string, key: string, value: string): 'set' | 'kept' 
 	if (current && current.trim() !== '') return 'kept';
 	const line = `${key}="${value}"`;
 	if (DRY) return 'set';
-	text = re.test(text) ? text.replace(re, line) : `${text}${text.endsWith('\n') || !text ? '' : '\n'}${line}\n`;
+	text = re.test(text)
+		? text.replace(re, line)
+		: `${text}${text.endsWith('\n') || !text ? '' : '\n'}${line}\n`;
 	writeFileSync(file, text);
 	return 'set';
 }
@@ -119,8 +121,14 @@ const routerHost = firstExistingEnv('MIKROTIK_HOST') || '10.210.0.1';
 const LAN_IP = IP_OVERRIDE || (await detectLanIp(routerHost)) || '';
 if (IP_OVERRIDE) log(`using forced IP: ${LAN_IP} (--ip / PROD_LAN_IP)`);
 else if (LAN_IP) log(`detected LAN IP: ${LAN_IP} (egress toward ${routerHost})`);
-else warn(`could not detect a LAN IP toward ${routerHost} — ORIGIN/login.html left as-is; set them by hand or pass --ip=<addr>.`);
-if (LAN_IP) log(`LAN URLs → customer http://${LAN_IP}:${APPS[0].port} · admin http://${LAN_IP}:${APPS[1].port} · locator http://${LAN_IP}:${APPS[2].port}`);
+else
+	warn(
+		`could not detect a LAN IP toward ${routerHost} — ORIGIN/login.html left as-is; set them by hand or pass --ip=<addr>.`
+	);
+if (LAN_IP)
+	log(
+		`LAN URLs → customer http://${LAN_IP}:${APPS[0].port} · admin http://${LAN_IP}:${APPS[1].port} · locator http://${LAN_IP}:${APPS[2].port}`
+	);
 
 // ── 1. Provision the local Postgres DB + role ────────────────────────────────
 step('Provisioning local Postgres database');
@@ -131,10 +139,23 @@ if (existingUrl && existingUrl.includes(`/${DB_NAME}`)) {
 } else if (psqlV) {
 	dbPassword = gen(18);
 	const sqlRole = `DO $$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname='${DB_ROLE}') THEN CREATE ROLE ${DB_ROLE} LOGIN PASSWORD '${dbPassword}'; END IF; END $$;`;
-	const dbExists = !DRY && capture('psql', [PG_ADMIN_URL, '-tAc', `SELECT 1 FROM pg_database WHERE datname='${DB_NAME}'`]) === '1';
+	const dbExists =
+		!DRY &&
+		capture('psql', [
+			PG_ADMIN_URL,
+			'-tAc',
+			`SELECT 1 FROM pg_database WHERE datname='${DB_NAME}'`
+		]) === '1';
 	try {
 		run('psql', [PG_ADMIN_URL, '-v', 'ON_ERROR_STOP=1', '-c', sqlRole]);
-		if (!dbExists) run('psql', [PG_ADMIN_URL, '-v', 'ON_ERROR_STOP=1', '-c', `CREATE DATABASE ${DB_NAME} OWNER ${DB_ROLE}`]);
+		if (!dbExists)
+			run('psql', [
+				PG_ADMIN_URL,
+				'-v',
+				'ON_ERROR_STOP=1',
+				'-c',
+				`CREATE DATABASE ${DB_NAME} OWNER ${DB_ROLE}`
+			]);
 		else log(`database "${DB_NAME}" already exists — reused.`);
 		log(`role "${DB_ROLE}" and database "${DB_NAME}" ready.`);
 	} catch {
@@ -191,7 +212,10 @@ run('bun', ['run', 'db:seed']);
 step('Bootstrapping the owner account');
 const ownerEmail = envValue(join(ROOT, 'apps/admin/.env'), 'OWNER_EMAIL');
 if (ownerEmail) run('bun', ['run', '--filter', 'radius-admin', 'bootstrap:owner']);
-else warn('OWNER_EMAIL not set in apps/admin/.env — skipping. Set OWNER_* and run `bun run --filter radius-admin bootstrap:owner`.');
+else
+	warn(
+		'OWNER_EMAIL not set in apps/admin/.env — skipping. Set OWNER_* and run `bun run --filter radius-admin bootstrap:owner`.'
+	);
 
 step('Building all apps');
 run('bun', ['run', 'build']);
@@ -200,7 +224,10 @@ run('bun', ['run', 'build']);
 step('Generating service config');
 const deploy = join(ROOT, 'deploy');
 if (!DRY) mkdirSync(deploy, { recursive: true });
-const nodeBin = PLATFORM === 'win32' ? capture('where', ['node']).split(/\r?\n/)[0] || 'node' : capture('which', ['node']) || '/usr/bin/node';
+const nodeBin =
+	PLATFORM === 'win32'
+		? capture('where', ['node']).split(/\r?\n/)[0] || 'node'
+		: capture('which', ['node']) || '/usr/bin/node';
 
 if (PLATFORM === 'win32') emitWindows();
 else emitSystemd();
@@ -264,12 +291,12 @@ function emitWindows() {
 	// NSSM (https://nssm.cc) registers each app as a Windows Service.
 	const ps = `# Radius Windows services via NSSM (https://nssm.cc). Run in an elevated PowerShell.
 ${APPS.map(
-		(a) => `nssm install Radius-${a.name} "${nodeBin}" "${ROOT}\\apps\\${a.name}\\build"
+	(a) => `nssm install Radius-${a.name} "${nodeBin}" "${ROOT}\\apps\\${a.name}\\build"
 nssm set Radius-${a.name} AppDirectory "${ROOT}"
 nssm set Radius-${a.name} AppEnvironmentExtra PORT=${a.port}
 # NSSM does not read .env — load it, or set each var with: nssm set Radius-${a.name} AppEnvironmentExtra KEY=VALUE
 nssm start Radius-${a.name}`
-	).join('\n\n')}
+).join('\n\n')}
 `;
 	writeOut(join(deploy, 'install-services.ps1'), ps);
 	const tasks = `# Radius cron equivalents — Scheduled Tasks (run elevated). Fires every minute.
@@ -282,7 +309,9 @@ schtasks /Create /SC MINUTE /TN "Radius-Health" /TR "powershell -c \\"Invoke-Web
 	console.log('\n  Next (Windows, elevated PowerShell — install NSSM first):');
 	console.log(`    ${deploy}\\install-services.ps1`);
 	console.log(`    ${deploy}\\scheduled-tasks.ps1`);
-	warn('NSSM does not read .env files — see the comment in install-services.ps1 to inject env vars.');
+	warn(
+		'NSSM does not read .env files — see the comment in install-services.ps1 to inject env vars.'
+	);
 }
 
 // ── 5. Final checklist ───────────────────────────────────────────────────────
@@ -350,7 +379,9 @@ function setLanOrigin(file: string, origin: string): 'set' | 'kept' {
 	const re = /^ORIGIN=.*$/m;
 	let text = existsSync(file) ? readFileSync(file, 'utf8') : '';
 	const line = `ORIGIN="${origin}"`;
-	text = re.test(text) ? text.replace(re, line) : `${text}${text.endsWith('\n') || !text ? '' : '\n'}${line}\n`;
+	text = re.test(text)
+		? text.replace(re, line)
+		: `${text}${text.endsWith('\n') || !text ? '' : '\n'}${line}\n`;
 	writeFileSync(file, text);
 	return 'set';
 }

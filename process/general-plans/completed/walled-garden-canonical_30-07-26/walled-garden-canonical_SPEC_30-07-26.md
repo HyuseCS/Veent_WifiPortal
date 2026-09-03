@@ -9,7 +9,7 @@ feature: general-plans
 
 ## Summary
 
-Right now the router's walled garden (the list of websites a guest phone can reach *before* it
+Right now the router's walled garden (the list of websites a guest phone can reach _before_ it
 pays or logs in) is a mix of things our code put there, things a person typed in by hand months
 ago, and duplicates left over from earlier fixes. Some of those hand-typed rules are doing real
 work today (payments would break without them) but nothing in the code says so — you'd have to go
@@ -31,7 +31,7 @@ is an acceptable cost for getting this right once.
   that I never again have to reverse-engineer which rows are load-bearing before I touch anything.
 - As the operator, I want every surviving row to carry a tag that tells me what group it belongs
   to (payment gateway, captive-probe fix, portal/admin access, etc.), so I can read the live router
-  and understand *why* each row exists without opening the code.
+  and understand _why_ each row exists without opening the code.
 - As a developer maintaining the walled garden, I want one document that always matches the code
   (not "mostly matches, last synced a few weeks ago"), so I can add a new payment host with
   confidence I'm not creating a duplicate or shadowing an existing rule.
@@ -182,7 +182,7 @@ Rebuild sequence (behavioral view — no implementation prescribed):
 
 ## Out Of Scope
 
-- Retiring the disabled reCAPTCHA rows' *decision* is scoped here (see Open Question), but any
+- Retiring the disabled reCAPTCHA rows' _decision_ is scoped here (see Open Question), but any
   broader reCAPTCHA-handling redesign (e.g. changing how per-device checkout access opens
   `www.google.com`/`www.gstatic.com`) is out of scope — that mechanism is unchanged.
 - The dead Stage C DoH/DoT block from `payment-walled-garden-v6` is NOT being resurrected or
@@ -228,7 +228,7 @@ Rebuild sequence (behavioral view — no implementation prescribed):
 
 Today, every code-owned row (payment allows, probe denies, and the admin/portal IP allow) uses one
 single tag: `veent-admin`. That already tells you "the code put this here," but it does not tell
-you *which* group a row belongs to without reading the code. The user's brainstorm explicitly asks
+you _which_ group a row belongs to without reading the code. The user's brainstorm explicitly asks
 for "include tags" as part of making the garden self-explanatory, so this is the central decision
 this SPEC surfaces for review.
 
@@ -237,28 +237,29 @@ this SPEC surfaces for review.
 Options:
 
 **A — Single tag, all code-owned rows (`veent-admin`).** Keeps exactly today's behavior. Simplest,
-lowest risk, but reading the live router still doesn't tell you *why* a given row exists — you'd
+lowest risk, but reading the live router still doesn't tell you _why_ a given row exists — you'd
 still need the doc or the code to know "is this a payment host or a probe-flap fix." Weakest fit
 for "so it won't get confusing."
 
 **B — Descriptive per-group tags (RECOMMENDED).** Split the single `veent-admin` tag into a small,
 fixed set of purpose-named tags, e.g.:
-  - `veent-payment` — payment-gateway allow hosts (Maya, GCash, Alipay/Ant, Google Pay, etc.)
-  - `veent-probe` — the OS captive-probe deny rows (the flap fix)
-  - `veent-portal` — admin/portal origin allows (host or IP layer)
-  - `gcash-auto` — the dynamic scheduler-maintained IP row (already a distinct tag today — keep as-is)
-  - (Google-login hosts fold into `veent-payment` since they exist to support the Google Pay
-    checkout path — no separate tag needed for them)
 
-  This directly satisfies "read a row, know why it's there" without opening the doc or the code.
-  The tradeoff is: every provisioning call site and the reconcile logic that currently matches on
-  a single hardcoded tag string needs to know about (or accept a parameter for) multiple tags —
-  more surface area than option A, but still small and mechanical (this is an INNOVATE/PLAN
-  concern, not a SPEC concern — the SPEC only fixes the *desired end-state taxonomy*, not how the
-  code gets there).
+- `veent-payment` — payment-gateway allow hosts (Maya, GCash, Alipay/Ant, Google Pay, etc.)
+- `veent-probe` — the OS captive-probe deny rows (the flap fix)
+- `veent-portal` — admin/portal origin allows (host or IP layer)
+- `gcash-auto` — the dynamic scheduler-maintained IP row (already a distinct tag today — keep as-is)
+- (Google-login hosts fold into `veent-payment` since they exist to support the Google Pay
+  checkout path — no separate tag needed for them)
+
+This directly satisfies "read a row, know why it's there" without opening the doc or the code.
+The tradeoff is: every provisioning call site and the reconcile logic that currently matches on
+a single hardcoded tag string needs to know about (or accept a parameter for) multiple tags —
+more surface area than option A, but still small and mechanical (this is an INNOVATE/PLAN
+concern, not a SPEC concern — the SPEC only fixes the _desired end-state taxonomy_, not how the
+code gets there).
 
 **C — One tag for everything code-owned, PLUS a documented-only sub-category in the comment
-string** (e.g. `veent-admin:payment`, `veent-admin:probe` — a single tag *family* using a
+string** (e.g. `veent-admin:payment`, `veent-admin:probe` — a single tag _family_ using a
 colon-suffix convention, similar to the existing timestamped-tag pattern already used elsewhere in
 this codebase for admin-bypass bindings). This gets most of Option B's readability while keeping a
 single top-level tag namespace (useful if some downstream code matches broadly on "is this ours at
@@ -335,7 +336,7 @@ This SPEC is built entirely from a live diagnostic session against the staging r
   `alipay.com`, the un-tagged-but-load-bearing Google/Mynt hosts), or a descriptive tag taxonomy.
   It is the doc this task rewrites to be the single, currently-true source.
 - **This task explicitly supersedes item 20** of `process/general-plans/active/
-  payment-walled-garden-v6_29-07-26/` ("document the final canonical rule set" / manual
+payment-walled-garden-v6_29-07-26/` ("document the final canonical rule set" / manual
   walled-garden cleanup, which that plan deferred pending live router access — now available and
   used here). The v6 plan's `--reconcile` opt-in flag (item 22 in that plan) is reused, not
   reinvented, as the verification mechanism for AC3 here.

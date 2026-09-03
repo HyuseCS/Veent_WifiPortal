@@ -91,7 +91,9 @@ export const actions: Actions = {
 		const model = modelId(form.get('model'), models);
 		const range = rangeMeters(form.get('range'));
 		const cluster = String(form.get('cluster') ?? '').trim() || null;
-		if (!(await clusterReachable(cluster, lat, lng, range ?? rangeFor(models, model), null, models))) {
+		if (
+			!(await clusterReachable(cluster, lat, lng, range ?? rangeFor(models, model), null, models))
+		) {
 			return fail(400, { error: 'Too far from that cluster.' });
 		}
 		// Keep full precision from the map click; the column rounds to 6 decimals.
@@ -128,7 +130,9 @@ export const actions: Actions = {
 		const model = modelId(form.get('model'), models);
 		const range = rangeMeters(form.get('range'));
 		const cluster = String(form.get('cluster') ?? '').trim() || null;
-		if (!(await clusterReachable(cluster, lat, lng, range ?? rangeFor(models, model), id, models))) {
+		if (
+			!(await clusterReachable(cluster, lat, lng, range ?? rangeFor(models, model), id, models))
+		) {
 			return fail(400, { error: 'Too far from that cluster.' });
 		}
 		await updateNetworkPlace(db, id, {

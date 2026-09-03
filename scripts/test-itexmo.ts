@@ -33,7 +33,9 @@ const env = loadEnv(fileURLToPath(new URL('../apps/customer/.env', import.meta.u
 const { ITEXMO_API_CODE, ITEXMO_EMAIL, ITEXMO_PASSWORD, ITEXMO_SENDER_ID } = env;
 
 if (!ITEXMO_API_CODE || !ITEXMO_EMAIL || !ITEXMO_PASSWORD) {
-	console.error('Missing creds — uncomment ITEXMO_API_CODE / ITEXMO_EMAIL / ITEXMO_PASSWORD in apps/customer/.env');
+	console.error(
+		'Missing creds — uncomment ITEXMO_API_CODE / ITEXMO_EMAIL / ITEXMO_PASSWORD in apps/customer/.env'
+	);
 	process.exit(1);
 }
 
@@ -46,7 +48,9 @@ const payload: Record<string, unknown> = {
 };
 if (ITEXMO_SENDER_ID) payload.SenderId = ITEXMO_SENDER_ID;
 
-console.log(`→ POST broadcast-otp  recipient=${recipient}  sender=${ITEXMO_SENDER_ID || '(account default)'}`);
+console.log(
+	`→ POST broadcast-otp  recipient=${recipient}  sender=${ITEXMO_SENDER_ID || '(account default)'}`
+);
 const res = await fetch('https://api.itexmo.com/api/broadcast-otp', {
 	method: 'POST',
 	headers: { 'content-type': 'application/json' },

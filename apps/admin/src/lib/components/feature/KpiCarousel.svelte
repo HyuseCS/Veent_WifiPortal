@@ -90,7 +90,10 @@
 
 	<!-- lg+: flat grid, one equal column per metric so the strip always spans full width
 	     regardless of count. -->
-	<div class="hidden gap-4 lg:grid" style="grid-template-columns: repeat({items.length}, minmax(0, 1fr))">
+	<div
+		class="hidden gap-4 lg:grid"
+		style="grid-template-columns: repeat({items.length}, minmax(0, 1fr))"
+	>
 		{#each items as item, i (i)}{@render card(item)}{/each}
 	</div>
 </div>

@@ -46,7 +46,8 @@
 	function confirmRemove(p: Pkg) {
 		dialogProps = {
 			title: `Delete ${p.name}`,
-			message: "This permanently deletes the package and can't be undone. Enter your authenticator code to confirm.",
+			message:
+				"This permanently deletes the package and can't be undone. Enter your authenticator code to confirm.",
 			action: '?/remove',
 			fields: { id: p.id },
 			submitLabel: 'Delete',
@@ -170,158 +171,163 @@
 	{#if editing}
 		<!-- Create / edit panel. Numeric fields show per type so an offer can't be half-configured. -->
 		<div bind:this={editCard}>
-		<Card>
-			<form
-				method="post"
-				action={editing.id ? '?/update' : '?/create'}
-				use:enhance={() => {
-					submitting = true;
-					return async ({ update }) => {
-						await update();
-						submitting = false;
-					};
-				}}
-				class="flex flex-col gap-4"
-			>
-				<div class="flex items-center justify-between">
-					<h3 class="text-sm font-semibold text-ink">
-						{editing.id ? 'Edit package' : 'New package'}
-					</h3>
-					<button
-						type="button"
-						onclick={() => (editing = null)}
-						class="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-surface hover:text-ink"
-						aria-label="Cancel"
-					>
-						<X class="h-4 w-4" />
-					</button>
-				</div>
-
-				{#if editing.id}<input type="hidden" name="id" value={editing.id} />{/if}
-
-				<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-					<label class="flex flex-col gap-1.5 text-xs font-medium text-muted">
-						Name
-						<input
-							bind:this={nameInput}
-							name="name"
-							bind:value={editing.name}
-							required
-							placeholder="e.g. ₱50 — 50 Credits"
-							class="min-h-[44px] rounded-lg border border-border bg-bg px-3 text-sm text-ink"
-						/>
-					</label>
-
-					<label class="flex flex-col gap-1.5 text-xs font-medium text-muted">
-						Type
-						<select
-							name="type"
-							bind:value={editing.type}
-							class="min-h-[44px] rounded-lg border border-border bg-bg px-3 text-sm text-ink"
+			<Card>
+				<form
+					method="post"
+					action={editing.id ? '?/update' : '?/create'}
+					use:enhance={() => {
+						submitting = true;
+						return async ({ update }) => {
+							await update();
+							submitting = false;
+						};
+					}}
+					class="flex flex-col gap-4"
+				>
+					<div class="flex items-center justify-between">
+						<h3 class="text-sm font-semibold text-ink">
+							{editing.id ? 'Edit package' : 'New package'}
+						</h3>
+						<button
+							type="button"
+							onclick={() => (editing = null)}
+							class="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-surface hover:text-ink"
+							aria-label="Cancel"
 						>
-							<option value="bundle">Credit Bundle (peso purchase)</option>
-							<option value="tier">Access Tier (credit purchase)</option>
-							<option value="free">Free Time</option>
-						</select>
+							<X class="h-4 w-4" />
+						</button>
+					</div>
+
+					{#if editing.id}<input type="hidden" name="id" value={editing.id} />{/if}
+
+					<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+						<label class="flex flex-col gap-1.5 text-xs font-medium text-muted">
+							Name
+							<input
+								bind:this={nameInput}
+								name="name"
+								bind:value={editing.name}
+								required
+								placeholder="e.g. ₱50 — 50 Credits"
+								class="min-h-[44px] rounded-lg border border-border bg-bg px-3 text-sm text-ink"
+							/>
+						</label>
+
+						<label class="flex flex-col gap-1.5 text-xs font-medium text-muted">
+							Type
+							<select
+								name="type"
+								bind:value={editing.type}
+								class="min-h-[44px] rounded-lg border border-border bg-bg px-3 text-sm text-ink"
+							>
+								<option value="bundle">Credit Bundle (peso purchase)</option>
+								<option value="tier">Access Tier (credit purchase)</option>
+								<option value="free">Free Time</option>
+							</select>
+						</label>
+
+						{#if editing.type === 'bundle'}
+							<label class="flex flex-col gap-1.5 text-xs font-medium text-muted">
+								Price (₱)
+								<input
+									name="fiatCost"
+									type="number"
+									min="0"
+									step="0.01"
+									bind:value={editing.fiatCost}
+									class="min-h-[44px] rounded-lg border border-border bg-bg px-3 font-mono text-sm text-ink"
+								/>
+							</label>
+							<label class="flex flex-col gap-1.5 text-xs font-medium text-muted">
+								Credits provided
+								<input
+									name="creditsProvided"
+									type="number"
+									min="0"
+									step="1"
+									bind:value={editing.creditsProvided}
+									class="min-h-[44px] rounded-lg border border-border bg-bg px-3 font-mono text-sm text-ink"
+								/>
+							</label>
+						{:else if editing.type === 'tier'}
+							<label class="flex flex-col gap-1.5 text-xs font-medium text-muted">
+								Credit cost
+								<input
+									name="creditCost"
+									type="number"
+									min="0"
+									step="1"
+									bind:value={editing.creditCost}
+									class="min-h-[44px] rounded-lg border border-border bg-bg px-3 font-mono text-sm text-ink"
+								/>
+							</label>
+							<label class="flex flex-col gap-1.5 text-xs font-medium text-muted">
+								Points cost
+								<input
+									name="pointsCost"
+									type="number"
+									min="0"
+									step="1"
+									bind:value={editing.pointsCost}
+									class="min-h-[44px] rounded-lg border border-border bg-bg px-3 font-mono text-sm text-ink"
+								/>
+							</label>
+							<label class="flex flex-col gap-1.5 text-xs font-medium text-muted">
+								Duration (minutes)
+								<input
+									name="durationMinutes"
+									type="number"
+									min="0"
+									step="1"
+									bind:value={editing.durationMinutes}
+									class="min-h-[44px] rounded-lg border border-border bg-bg px-3 font-mono text-sm text-ink"
+								/>
+							</label>
+						{:else}
+							<label class="flex flex-col gap-1.5 text-xs font-medium text-muted">
+								Duration (minutes)
+								<input
+									name="durationMinutes"
+									type="number"
+									min="0"
+									step="1"
+									bind:value={editing.durationMinutes}
+									class="min-h-[44px] rounded-lg border border-border bg-bg px-3 font-mono text-sm text-ink"
+								/>
+							</label>
+						{/if}
+					</div>
+
+					<label class="flex items-center gap-2.5 text-sm text-ink">
+						<input
+							type="checkbox"
+							name="isActive"
+							bind:checked={editing.isActive}
+							class="h-4 w-4"
+						/>
+						Active — visible to guests
 					</label>
 
-					{#if editing.type === 'bundle'}
-						<label class="flex flex-col gap-1.5 text-xs font-medium text-muted">
-							Price (₱)
-							<input
-								name="fiatCost"
-								type="number"
-								min="0"
-								step="0.01"
-								bind:value={editing.fiatCost}
-								class="min-h-[44px] rounded-lg border border-border bg-bg px-3 font-mono text-sm text-ink"
-							/>
-						</label>
-						<label class="flex flex-col gap-1.5 text-xs font-medium text-muted">
-							Credits provided
-							<input
-								name="creditsProvided"
-								type="number"
-								min="0"
-								step="1"
-								bind:value={editing.creditsProvided}
-								class="min-h-[44px] rounded-lg border border-border bg-bg px-3 font-mono text-sm text-ink"
-							/>
-						</label>
-					{:else if editing.type === 'tier'}
-						<label class="flex flex-col gap-1.5 text-xs font-medium text-muted">
-							Credit cost
-							<input
-								name="creditCost"
-								type="number"
-								min="0"
-								step="1"
-								bind:value={editing.creditCost}
-								class="min-h-[44px] rounded-lg border border-border bg-bg px-3 font-mono text-sm text-ink"
-							/>
-						</label>
-						<label class="flex flex-col gap-1.5 text-xs font-medium text-muted">
-							Points cost
-							<input
-								name="pointsCost"
-								type="number"
-								min="0"
-								step="1"
-								bind:value={editing.pointsCost}
-								class="min-h-[44px] rounded-lg border border-border bg-bg px-3 font-mono text-sm text-ink"
-							/>
-						</label>
-						<label class="flex flex-col gap-1.5 text-xs font-medium text-muted">
-							Duration (minutes)
-							<input
-								name="durationMinutes"
-								type="number"
-								min="0"
-								step="1"
-								bind:value={editing.durationMinutes}
-								class="min-h-[44px] rounded-lg border border-border bg-bg px-3 font-mono text-sm text-ink"
-							/>
-						</label>
-					{:else}
-						<label class="flex flex-col gap-1.5 text-xs font-medium text-muted">
-							Duration (minutes)
-							<input
-								name="durationMinutes"
-								type="number"
-								min="0"
-								step="1"
-								bind:value={editing.durationMinutes}
-								class="min-h-[44px] rounded-lg border border-border bg-bg px-3 font-mono text-sm text-ink"
-							/>
-						</label>
-					{/if}
-				</div>
+					<Field
+						id="package-code"
+						name="code"
+						label="Authenticator code"
+						inputmode="numeric"
+						autocomplete="one-time-code"
+						placeholder="6-digit code"
+						value={code}
+						oninput={(e) => (code = e.currentTarget.value)}
+						class="max-w-40 font-mono tracking-widest"
+					/>
 
-				<label class="flex items-center gap-2.5 text-sm text-ink">
-					<input type="checkbox" name="isActive" bind:checked={editing.isActive} class="h-4 w-4" />
-					Active — visible to guests
-				</label>
-
-				<Field
-					id="package-code"
-					name="code"
-					label="Authenticator code"
-					inputmode="numeric"
-					autocomplete="one-time-code"
-					placeholder="6-digit code"
-					value={code}
-					oninput={(e) => (code = e.currentTarget.value)}
-					class="max-w-40 font-mono tracking-widest"
-				/>
-
-				<div class="flex gap-2.5">
-					<Button type="submit" loading={submitting} disabled={!codeValid}>
-						{editing.id ? 'Save changes' : 'Create package'}
-					</Button>
-					<Button variant="secondary" onclick={() => (editing = null)}>Cancel</Button>
-				</div>
-			</form>
-		</Card>
+					<div class="flex gap-2.5">
+						<Button type="submit" loading={submitting} disabled={!codeValid}>
+							{editing.id ? 'Save changes' : 'Create package'}
+						</Button>
+						<Button variant="secondary" onclick={() => (editing = null)}>Cancel</Button>
+					</div>
+				</form>
+			</Card>
 		</div>
 	{/if}
 
@@ -333,7 +339,9 @@
 			</div>
 
 			{#if group.items.length === 0}
-				<p class="rounded-lg border border-dashed border-border px-4 py-6 text-center text-xs text-muted">
+				<p
+					class="rounded-lg border border-dashed border-border px-4 py-6 text-center text-xs text-muted"
+				>
 					No {group.label.toLowerCase()} yet.
 				</p>
 			{:else}

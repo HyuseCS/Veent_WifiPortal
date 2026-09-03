@@ -1,6 +1,6 @@
 ---
 name: report:review-findings-remediation-closeout
-description: "UPDATE PROCESS closeout for the 19-finding review-findings-remediation sweep"
+description: 'UPDATE PROCESS closeout for the 19-finding review-findings-remediation sweep'
 date: 10-07-26
 metadata:
   node_type: memory
@@ -34,7 +34,7 @@ metadata:
 
 4. **Verified vs still unverified**:
    - Verified this closeout session: `cd apps/admin && bunx vitest run
-     src/lib/server/formValidation.test.ts` → 12/12 pass; `... issues.test.ts` → 16/16
+src/lib/server/formValidation.test.ts` → 12/12 pass; `... issues.test.ts` → 16/16
      pass; `grep -rn "46 migrations|0000–0045|3/10 IMS" process/context/` → no matches;
      `validate-context-discovery.mjs`, `validate-protocol-wiring.mjs`,
      `validate-guide-sync.mjs` → all pass, zero warnings/failures.
@@ -45,15 +45,15 @@ metadata:
      Agent-Probe/Hybrid rows at VALIDATE time — carried forward as-is, not re-run here.
 
 4b. **Validate-contract compliance**: Present, inline in plan, `Gate: PASS`
-   (`generated-by: outer-pvl`, dated 10-07-26). One correction applied at this closeout —
-   see item 6.
+(`generated-by: outer-pvl`, dated 10-07-26). One correction applied at this closeout —
+see item 6.
 
 5. **Cleanup done vs still needed**:
    - Done: task folder archived (`active/` → `completed/`, plain `mv`); validate-contract
      gate-command drift fixed (see item 6); checklist items marked `[x]`; Status header
      updated to COMPLETE; Tier-1 audits re-run clean; `process/context/tests/all-tests.md`
      gained a durable gotcha note (bun-native `bun test <file>` vs `bunx vitest run
-     <file>`); a matching memory file + MEMORY.md index entry was added.
+<file>`); a matching memory file + MEMORY.md index entry was added.
    - Still needed: none identified. No uncommitted implementation changes remain (both
      commits already landed on `audit` before this session). This closeout's own edits
      (archived plan corrections, `all-tests.md` gotcha, memory files) are intentionally

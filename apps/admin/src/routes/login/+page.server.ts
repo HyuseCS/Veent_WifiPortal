@@ -32,7 +32,12 @@ export const actions: Actions = {
 		// (10/15min) so a legitimate one-shot sign-in is never locked; the generic message leaks no
 		// account-existence signal. Keyed on the normalized email under its own scope.
 		if (email) {
-			const acct = await rateLimit('admin_login_account', email.trim().toLowerCase(), 10, 15 * 60 * 1000);
+			const acct = await rateLimit(
+				'admin_login_account',
+				email.trim().toLowerCase(),
+				10,
+				15 * 60 * 1000
+			);
 			if (!acct.allowed) {
 				return fail(429, { message: 'Too many sign-in attempts. Please wait a few minutes.' });
 			}

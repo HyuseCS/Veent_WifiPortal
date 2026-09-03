@@ -5,6 +5,7 @@ MikroTik. Written during the first real-router bring-up on `dev/audit-fixes`; th
 and is bench-verified.
 
 **Status**
+
 - ✅ **SOLVED:** device MAC resolves on admin login → `veent-admin:<epoch>` binding is written and
   appears in Winbox (IP → Hotspot → IP Bindings).
 - ✅ **RESOLVED:** the earlier "shows the binding but has **no internet**" report was the OS **"!"
@@ -16,7 +17,7 @@ and is bench-verified.
 ## Symptom (solved part)
 
 Signing into the admin dashboard from a hotspot device did **not** create a `veent-admin`
-ip-binding — only a *customer* plan purchase (which yields a `veent-portal` binding) ever showed up.
+ip-binding — only a _customer_ plan purchase (which yields a `veent-portal` binding) ever showed up.
 
 ## Root causes — three stacked, all IP/config drift
 
@@ -92,15 +93,17 @@ login → `resolveMacByIp(clientIP)` → grant → `veent-admin:<epoch>` binding
 > you do **not** need to add bindings manually. (Clean up any test binding afterward.)
 
 ### Caveat A — logout revokes the bypass (by design)
+
 Signing out fires `revokeAdminBypass` → the `veent-admin` binding is removed and the device drops to
 walled-garden-only. So a device only keeps internet **while the staff member is signed in** (slid
 forward on activity, reaped at the 4h TTL). If you're testing and the binding "disappears," you
 logged out.
 
 ### Caveat B — MAC resolution at login can transiently miss (mitigated by retry)
+
 Because the admin path has no `?mac=`, it does a live IP→MAC lookup at the instant of login. That can
 transiently miss (router-API latency, or the device mid-reconnect so it's briefly absent from the
-hotspot host/lease tables). **Mitigated:** `resolveDeviceMac` now *retries* the live lookup (3 attempts
+hotspot host/lease tables). **Mitigated:** `resolveDeviceMac` now _retries_ the live lookup (3 attempts
 × 2.5 s + ~300 ms backoff, ~8 s worst case) and keeps an age-bounded stale-cache fallback, so a
 transient timeout/empty usually converts into the grant it should have been (`packages/core/src/services/adminAccess.ts`,
 commit 8116b11). If every attempt still misses, that login grants nothing (`skipped — no MAC for
@@ -108,6 +111,7 @@ client ip=…`) and the next dashboard load (the sliding refresh) grants it once
 The DHCP lease is the durable fallback, so a stably-connected device resolves reliably.
 
 ### Caveat C — the sliding-refresh retry (FIXED)
+
 `refreshAdminBypass` (the `(app)` layout retry that should re-grant on each dashboard load, sliding the
 4h window and papering over a Caveat-B miss) used to call `event.getClientAddress()`, which throws
 **`Could not determine clientAddress`** in the layout-load context (SvelteKit `__data.json`
@@ -122,15 +126,17 @@ independently on its own sign-out. _Verify on bench: stay signed in past the ref
 the binding's epoch advances._
 
 ### Slowness after grant (FIXED)
+
 Fresh bypass, snail-slow browsing for a bit: the device's **existing** connections keep riding the
 pre-bypass (hotspot-intercepted) path until they age out of conntrack. **Fixed:** grant now cuts the
-device's conntrack on a fresh bypass (`flush=true`), mirroring what *revoke* already does, so open
+device's conntrack on a fresh bypass (`flush=true`), mirroring what _revoke_ already does, so open
 flows re-evaluate against the bypass at once — fast in seconds, not a minute (`mikrotik.ts` `grant()`).
 It only fires on the non-bypassed→bypassed transition, so sliding renewals / repeat grants never poke a
-live device. (A hand-added binding skips this entirely, so it's the *slowest* path — don't judge settle
+live device. (A hand-added binding skips this entirely, so it's the _slowest_ path — don't judge settle
 time by it.) _Verify on bench: a fresh login-grant should browse fast within seconds._
 
 ### The Wi-Fi "!" (no-internet) warning while internet actually works — EXPECTED
+
 A bypassed device can show the OS **"!" / "No internet"** indicator even though browsing (YouTube,
 sites) works fine. Not a bypass fault. The hotspot's walled-garden explicitly **denies the OS
 connectivity-check probe hosts** — `connectivitycheck.android.com`, `connectivitycheck.gstatic.com`,

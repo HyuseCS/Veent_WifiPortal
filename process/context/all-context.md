@@ -170,13 +170,13 @@ Start here before loading deeper context files.
 captive portal (phone-OTP login, Maya payments), staff run operations through an admin dashboard,
 and a public locator map shows hotspot sites. Monorepo with 3 SvelteKit apps + 2 shared packages:
 
-| Package | Path | Purpose |
-|---|---|---|
-| veent-customer | `apps/customer/` | MikroTik captive WiFi portal — guest phone-OTP login, top-ups (Maya payments), free/paid time grants, SMS OTP delivery |
-| radius-admin | `apps/admin/` | Staff dashboard — network/AP management, finance, incident management (issues), staff/2FA, Sentry-embedded observability |
-| veent-locator | `apps/locator/` | Read-only public map (Leaflet) of hotspot locations — no auth, minimal app |
-| @veent/core | `packages/core/` | Shared business services + integration providers (network/payments/email), Sentry observability helpers, business-rule constants |
-| @veent/db | `packages/db/` | Sole Drizzle/Postgres schema source — single migration authority for all three apps' tables |
+| Package        | Path             | Purpose                                                                                                                          |
+| -------------- | ---------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| veent-customer | `apps/customer/` | MikroTik captive WiFi portal — guest phone-OTP login, top-ups (Maya payments), free/paid time grants, SMS OTP delivery           |
+| radius-admin   | `apps/admin/`    | Staff dashboard — network/AP management, finance, incident management (issues), staff/2FA, Sentry-embedded observability         |
+| veent-locator  | `apps/locator/`  | Read-only public map (Leaflet) of hotspot locations — no auth, minimal app                                                       |
+| @veent/core    | `packages/core/` | Shared business services + integration providers (network/payments/email), Sentry observability helpers, business-rule constants |
+| @veent/db      | `packages/db/`   | Sole Drizzle/Postgres schema source — single migration authority for all three apps' tables                                      |
 
 **Scope note (CLAUDE.md ~/.claude):** agent work on this project is scoped to `/admin` and its
 dependencies/connected resources unless explicitly prompted otherwise.
@@ -245,37 +245,39 @@ For most substantial tasks:
      `--check-routing` fails lint if this block drifts from the frontmatter on disk. -->
 
 <!-- GENERATED:routing -->
-| File | Read when |
-|---|---|
-| `process/context/all-context.md` | any substantial planning, research, review, or implementation task |
-| `process/context/auth/all-auth.md` | Two isolated better-auth instances (admin TOTP 2FA + customer phone-OTP), the auth-guard pattern, and schema codegen — the auth group entrypoint/router |
-| `process/context/database/all-database.md` | Drizzle/Postgres schema, migrations, client setup, and shared cross-app tables — the database group entrypoint/router |
-| `process/context/planning/all-planning.md` | Plan-shape calibration, planning conventions, and implementation-plan examples — the planning group entrypoint/router |
-| `process/context/tests/all-tests.md` | Test runners, exact commands, the admin e2e throwaway-DB harness quirks, and known coverage gaps — the tests group entrypoint/router |
-| `process/context/uxui/all-uxui.md` | Admin's ui/ design-system primitives, Tailwind 4 tokens, and Svelte 5 runes conventions — the uxui group entrypoint/router |
+
+| File                                       | Read when                                                                                                                                               |
+| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `process/context/all-context.md`           | any substantial planning, research, review, or implementation task                                                                                      |
+| `process/context/auth/all-auth.md`         | Two isolated better-auth instances (admin TOTP 2FA + customer phone-OTP), the auth-guard pattern, and schema codegen — the auth group entrypoint/router |
+| `process/context/database/all-database.md` | Drizzle/Postgres schema, migrations, client setup, and shared cross-app tables — the database group entrypoint/router                                   |
+| `process/context/planning/all-planning.md` | Plan-shape calibration, planning conventions, and implementation-plan examples — the planning group entrypoint/router                                   |
+| `process/context/tests/all-tests.md`       | Test runners, exact commands, the admin e2e throwaway-DB harness quirks, and known coverage gaps — the tests group entrypoint/router                    |
+| `process/context/uxui/all-uxui.md`         | Admin's ui/ design-system primitives, Tailwind 4 tokens, and Svelte 5 runes conventions — the uxui group entrypoint/router                              |
 
 ## Current Context Groups
 
-| Group | Entry point | Scope |
-|---|---|---|
-| `auth/` | `process/context/auth/all-auth.md` | Two isolated better-auth instances (admin TOTP 2FA + customer phone-OTP), the auth-guard pattern, and schema codegen — the auth group entrypoint/router |
-| `database/` | `process/context/database/all-database.md` | Drizzle/Postgres schema, migrations, client setup, and shared cross-app tables — the database group entrypoint/router |
-| `planning/` | `process/context/planning/all-planning.md` | Plan-shape calibration, planning conventions, and implementation-plan examples — the planning group entrypoint/router |
-| `tests/` | `process/context/tests/all-tests.md` | Test runners, exact commands, the admin e2e throwaway-DB harness quirks, and known coverage gaps — the tests group entrypoint/router |
-| `uxui/` | `process/context/uxui/all-uxui.md` | Admin's ui/ design-system primitives, Tailwind 4 tokens, and Svelte 5 runes conventions — the uxui group entrypoint/router |
+| Group       | Entry point                                | Scope                                                                                                                                                   |
+| ----------- | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `auth/`     | `process/context/auth/all-auth.md`         | Two isolated better-auth instances (admin TOTP 2FA + customer phone-OTP), the auth-guard pattern, and schema codegen — the auth group entrypoint/router |
+| `database/` | `process/context/database/all-database.md` | Drizzle/Postgres schema, migrations, client setup, and shared cross-app tables — the database group entrypoint/router                                   |
+| `planning/` | `process/context/planning/all-planning.md` | Plan-shape calibration, planning conventions, and implementation-plan examples — the planning group entrypoint/router                                   |
+| `tests/`    | `process/context/tests/all-tests.md`       | Test runners, exact commands, the admin e2e throwaway-DB harness quirks, and known coverage gaps — the tests group entrypoint/router                    |
+| `uxui/`     | `process/context/uxui/all-uxui.md`         | Admin's ui/ design-system primitives, Tailwind 4 tokens, and Svelte 5 runes conventions — the uxui group entrypoint/router                              |
+
 <!-- /GENERATED:routing -->
 
 ## Task Routing Table
 
-| If the task involves... | Load first | Then load |
-|---|---|---|
-| architecture or stack questions | this file | Repository Structure / Technology Stack sections below |
-| DB/schema/migration work | `all-context.md`, `database/all-database.md` | schema files under `packages/db/src/schema/` |
-| auth/2FA/session work | `all-context.md`, `auth/all-auth.md` | `apps/{admin,customer}/src/lib/server/auth.ts` |
-| UI/component/styling work | `all-context.md`, `uxui/all-uxui.md` | `apps/admin/src/lib/components/ui/` |
-| test-running or test-writing | `all-context.md`, `tests/all-tests.md` | the specific test/e2e file |
-| creating or reviewing a plan | `all-context.md`, `planning/all-planning.md` | the relevant PRD example plus active plan |
-| incident-management or staff-governance feature work | `all-context.md` | `process/features/incident-management/` or `process/features/admin-staff-governance/` (see Feature Folders below) |
+| If the task involves...                              | Load first                                   | Then load                                                                                                         |
+| ---------------------------------------------------- | -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| architecture or stack questions                      | this file                                    | Repository Structure / Technology Stack sections below                                                            |
+| DB/schema/migration work                             | `all-context.md`, `database/all-database.md` | schema files under `packages/db/src/schema/`                                                                      |
+| auth/2FA/session work                                | `all-context.md`, `auth/all-auth.md`         | `apps/{admin,customer}/src/lib/server/auth.ts`                                                                    |
+| UI/component/styling work                            | `all-context.md`, `uxui/all-uxui.md`         | `apps/admin/src/lib/components/ui/`                                                                               |
+| test-running or test-writing                         | `all-context.md`, `tests/all-tests.md`       | the specific test/e2e file                                                                                        |
+| creating or reviewing a plan                         | `all-context.md`, `planning/all-planning.md` | the relevant PRD example plus active plan                                                                         |
+| incident-management or staff-governance feature work | `all-context.md`                             | `process/features/incident-management/` or `process/features/admin-staff-governance/` (see Feature Folders below) |
 
 ## Context Group Lifecycle
 
@@ -340,6 +342,7 @@ veent_wifiportal/
 ```
 
 Notes:
+
 - No `apps/cron` package. Cron = (a) HTTP endpoints hit by an EXTERNAL scheduler in prod
   (`apps/customer/src/routes/api/network/revoke`, `apps/customer/src/routes/api/payments/reconcile`,
   `apps/customer/src/routes/api/otp/sweep-delivery`, `apps/admin/src/routes/api/network/health/refresh`),
@@ -380,7 +383,7 @@ Exact resolved versions from `bun.lock`:
   `apps/admin` test-only devDependency 21-07-26 for the unified-transaction-history AC3 anti-join
   negative-control test)
 - **Lint/format:** `eslint` ^10.4.1 (flat config) + `eslint-plugin-svelte` ^3.19.0; `prettier` ^3.8.3
-  + svelte + tailwindcss plugins
+  - svelte + tailwindcss plugins
 - **Package manager:** bun (workspaces: `apps/*`, `packages/*`)
 
 ## Key Patterns and Conventions
@@ -413,9 +416,10 @@ handling.
 
 **Rate limiting:** `packages/core/src/services/rateLimit.ts` → `consumeRateLimit(db, {key, max,
 windowMs})`, a Postgres sliding-window implementation that is race-safe (`INSERT ... ON CONFLICT`
-+ `SELECT FOR UPDATE` in a transaction). Per-app thin wrappers:
-`apps/admin/src/lib/server/{rateLimit,emailRateLimit}.ts`,
-`apps/customer/src/lib/server/{rateLimit,otpRateLimit}.ts`.
+
+- `SELECT FOR UPDATE` in a transaction). Per-app thin wrappers:
+  `apps/admin/src/lib/server/{rateLimit,emailRateLimit}.ts`,
+  `apps/customer/src/lib/server/{rateLimit,otpRateLimit}.ts`.
 
 **`@veent/core` integration factories:** `integrations/{network,payments,email}` each export a
 real provider (mikrotik/maya/resend) plus a `stub.ts` fallback, selected by env. `observability.ts`
@@ -467,6 +471,7 @@ each domain has too few durable docs to warrant its own group, but is important 
 easy to find).
 
 ### MikroTik / RouterOS
+
 - `node-routeros` dependency (`packages/core`)
 - `docs/mikrotik/*.md` (7 files) — RouterOS templating/config reference, including
   `ap-liveness-bypass.md` (added 21-07-26) — every new physical AP MAC must be
@@ -567,6 +572,7 @@ easy to find).
   deferred, runbook is the shipped mitigation.
 
 ### Maya payments
+
 - `packages/core/src/integrations/payments/maya.ts` — hand-rolled HTTP client, no SDK
 - `apps/customer/src/lib/server/payments.ts` + `paymentWebhook.ts`
 - `apps/customer/src/routes/api/webhooks/maya/payment-status`, `api/payments/reconcile`
@@ -595,6 +601,7 @@ easy to find).
   `process/general-plans/completed/payment-walled-garden-v6_29-07-26/` for the full diagnostic trail.
 
 ### Sentry observability
+
 - `@sentry/sveltekit` in all 3 apps; `@sentry/core` in `packages/core`
 - `apps/admin/src/lib/server/sentry/`
 - Admin routes: `(app)/issues/**`, `(app)/sentry/**`
@@ -607,6 +614,7 @@ easy to find).
   is noise reduction, not silence; `scrubEvent` still runs on every branch.
 
 ### SMS / OTP delivery observability
+
 - `customer_otp_delivery_log` (`packages/db/src/schema/customer.ts`, migration `0048`) — append-only
   OTP send-attempt log, no unique constraint; every provider writes a row on synchronous gateway
   accept (`apps/customer/src/lib/server/otp.ts`, `logDeliveryAttempt`, insert **must** be awaited
@@ -617,13 +625,14 @@ easy to find).
   `itexmo`/`unisms`/`smsgate` rows are written (satisfy the `provider` discriminator) but never
   swept — unobservable by design, not a gap in this implementation. Alerts (`captureHandled`,
   constant-message Sentry fingerprint) fire only on `dlr_status === 'REJECTD'` / `status ===
-  'undelivered'` within a 30-min window; unresolved rows age out to `unknown` with no alert. Rows
+'undelivered'` within a 30-min window; unresolved rows age out to `unknown` with no alert. Rows
   are pruned unconditionally after 48h every sweep run, regardless of sweep-loop outcome.
 - See `process/general-plans/completed/otp-delivery-observability_20-07-26/` for the full plan;
   Cast DLR response-shape stability past the one observed `REJECTD` shape remains unproven (blocked
   on Cast activating a real sender ID for live traffic).
 
 ### Resend email
+
 - `resend` dependency in `packages/core`
 - `apps/admin/src/lib/server/emails/`
 - Stub fallback: when `RESEND_API_KEY` is blank, the email provider factory falls back to a stub
@@ -639,6 +648,7 @@ easy to find).
 **Env var groups (names only, never values):**
 
 `apps/customer/.env.example` (28 vars):
+
 - Core: `DATABASE_URL`, `ORIGIN`, `TUNNEL_ORIGIN`
 - Auth: `BETTER_AUTH_SECRET`
 - Network: `NETWORK_CONTROLLER`, `MIKROTIK_HOST`/`USER`/`PASSWORD`/`PORT`/`TLS`/`TLS_INSECURE`/`HOTSPOT_USER`/`HOTSPOT_PASSWORD`
@@ -647,6 +657,7 @@ easy to find).
 - SMS: `SMS_PROVIDER`, `ITEXMO_API_CODE`/`EMAIL`/`PASSWORD`/`SENDER_ID`, `UNISMS_SECRET_KEY`/`SENDER_ID`, `SMSGATE_BASE_URL`/`USERNAME`/`PASSWORD`
 
 `apps/admin/.env.example` (31 vars):
+
 - Core: `DATABASE_URL`, `ORIGIN`
 - Auth: `BETTER_AUTH_SECRET`
 - Network: `NETWORK_CONTROLLER`, `MIKROTIK_*` (same trio as customer, plus more), `HEALTH_EXCLUDE_INTERFACES`
@@ -701,7 +712,7 @@ Approved feature folders under `process/features/`:
   risk-evidence-pack treatment. Key locations: `apps/admin/src/routes/(app)/staff`,
   `routes/{activate,enroll-2fa,login,login/2fa,forgot-password,reset-password,logout}`,
   `lib/server/{auth.ts,auth-guard.ts,twoFactor.ts,step-up.ts,owner-change.ts,wipe-verification.ts,
-  postLogin.ts,adminBypass.ts,adminAccess.spec.ts}`,
+postLogin.ts,adminBypass.ts,adminAccess.spec.ts}`,
   `packages/core/src/services/{staff.ts,adminAccess.ts}`,
   `packages/db/src/schema/{admin.ts,admin-two-factor.ts,admin-owner-change.ts,auth-admin.ts}`.
 

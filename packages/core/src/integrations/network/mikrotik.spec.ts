@@ -89,7 +89,9 @@ vi.mock('node-routeros', () => {
 					return [];
 			}
 			if (menu !== '/ping') return [];
-			const address = (params.find((p) => p.startsWith('=address=')) ?? '').slice('=address='.length);
+			const address = (params.find((p) => p.startsWith('=address=')) ?? '').slice(
+				'=address='.length
+			);
 			pingState.inflight++;
 			pingState.peak = Math.max(pingState.peak, pingState.inflight);
 			try {
@@ -163,7 +165,9 @@ describe('connectHardened', () => {
 
 	it('rejects via timeout instead of hanging when connect never settles', async () => {
 		const t0 = Date.now();
-		await expect(connectHardened(fakeConn({ neverSettles: true }), 50)).rejects.toThrow(/timed out/);
+		await expect(connectHardened(fakeConn({ neverSettles: true }), 50)).rejects.toThrow(
+			/timed out/
+		);
 		await expect(connectHardened(fakeConn({ neverSettles: true }), 50)).rejects.toBeInstanceOf(
 			RouterUnreachableError
 		);
@@ -390,13 +394,34 @@ describe('wipeWalledGarden (walled-garden-wipe — scripted hard-reset teardown)
 		resetRouterTable();
 		routerTable.wg.push(
 			{ '.id': '*1', action: 'allow', 'dst-host': 'maya.ph', comment: 'veent-admin:payment' },
-			{ '.id': '*2', action: 'deny', 'dst-host': 'connectivitycheck.gstatic.com', comment: 'veent-admin:probe' },
-			{ '.id': '*3', action: 'allow', 'dst-host': '*.recaptcha.net', comment: 'veent-admin', disabled: 'true' },
+			{
+				'.id': '*2',
+				action: 'deny',
+				'dst-host': 'connectivitycheck.gstatic.com',
+				comment: 'veent-admin:probe'
+			},
+			{
+				'.id': '*3',
+				action: 'allow',
+				'dst-host': '*.recaptcha.net',
+				comment: 'veent-admin',
+				disabled: 'true'
+			},
 			{ '.id': '*4', action: 'allow', 'dst-host': '*gcash*', comment: '' }, // un-tagged operator row
 			// Dynamic auto-shadow: `D`-flagged, regenerated from the ip-layer row → unremovable.
-			{ '.id': '*5', action: 'allow', 'dst-host': '', comment: 'veent-admin:portal', dynamic: 'true' }
+			{
+				'.id': '*5',
+				action: 'allow',
+				'dst-host': '',
+				comment: 'veent-admin:portal',
+				dynamic: 'true'
+			}
 		);
-		routerTable.wgIp.push({ '.id': '*10', 'dst-address': '10.5.50.1', comment: 'veent-admin:portal' });
+		routerTable.wgIp.push({
+			'.id': '*10',
+			'dst-address': '10.5.50.1',
+			comment: 'veent-admin:portal'
+		});
 	}
 
 	it('removes ALL static rows from BOTH menus (tagged, un-tagged, disabled, allow AND deny) and reports counts', async () => {

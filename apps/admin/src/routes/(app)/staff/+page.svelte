@@ -89,11 +89,7 @@
 		{/snippet}
 	</KpiCarousel>
 
-	<OwnerChangePanel
-		requests={data.ownerChanges}
-		currentUserId={data.currentUserId}
-		{form}
-	/>
+	<OwnerChangePanel requests={data.ownerChanges} currentUserId={data.currentUserId} {form} />
 
 	<StaffTable {staff} {form} currentUserId={data.currentUserId} onadd={() => (inviteOpen = true)} />
 </div>

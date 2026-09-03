@@ -1,6 +1,6 @@
 ---
 name: plan:purchase-ap-attribution-spec
-description: "Record which AP a customer purchase/grant happened through, durably, for staff review"
+description: 'Record which AP a customer purchase/grant happened through, durably, for staff review'
 date: 21-07-26
 feature: general-plans
 ---
@@ -10,7 +10,7 @@ feature: general-plans
 ## Summary
 
 Right now, when a guest buys WiFi time or claims free time, the system does not durably
-record *which access point (AP)* they were connected through at the moment of that
+record _which access point (AP)_ they were connected through at the moment of that
 purchase or grant. Staff cannot answer "how much revenue came through AP-Pabayo?" or
 "who got free time on AP-3 last week?" — that information either doesn't exist, exists
 only in a place that gets pruned, or exists but isn't shown anywhere. This feature makes
@@ -158,7 +158,7 @@ stored
    the AP's new friendly name (because the join key — the raw circuit-id string — did not
    change).
    `proven by:` unit test asserting the read-time label-resolution function returns the
-   *current* friendly name after a simulated rename, using the same durable circuit-id.
+   _current_ friendly name after a simulated rename, using the same durable circuit-id.
    `strategy:` Fully-Automated.
 
 5. **AP identity survives AP removal/pruning.** When the AP a past purchase/grant
@@ -184,7 +184,7 @@ stored
    the resolved AP label (friendly name, fallback raw circuit-id string, or
    "Unattributed") for Maya top-ups, credit/points tier buys, and free-time grants alike.
    `proven by:` unit test on the admin query/mapper layer (`apps/admin/src/lib/server/
-   queries.ts` or equivalent) asserting the AP label appears correctly for all three
+queries.ts` or equivalent) asserting the AP label appears correctly for all three
    purchase/grant types; Agent-Probe visual confirmation of the rendered admin page.
    `strategy:` Hybrid.
 
@@ -277,14 +277,14 @@ mechanism choices, not open product-intent questions.
     `network_sessions.networkId`, and only **post-hoc, asynchronously, best-effort** —
     confirmed in `packages/core/src/services/sessions.ts`: `bindMacTx` (line 56) commits
     the transaction, then `afterBind` (line 188) runs `resolveNetworkIdForMac` (line 273)
-    and updates `network_sessions.networkId` (line 275) *after* the transaction has
+    and updates `network_sessions.networkId` (line 275) _after_ the transaction has
     already committed. `startPaidAccessAndBindDevice` (line 329) and
     `startFreeAccessAndBindDevice` (line 685) both go through this same path. This is a
     live `network_health.id` reference, not a durable string, and it is never surfaced to
     admin (Finance/Users queries select no networkId from ledger tables today because
     there is nothing to select).
 - **Atomicity precedent already exists** in `apps/customer/src/lib/server/
-  grant-atomic.spec.ts` and the money-critical single-`db.transaction` pattern — any new
+grant-atomic.spec.ts` and the money-critical single-`db.transaction` pattern — any new
   AP-capture logic must fit inside or alongside this without becoming a point of failure
   for the transaction itself.
 - **Migration count is 49** (newest: `0048_lying_firedrake.sql`); a new column is

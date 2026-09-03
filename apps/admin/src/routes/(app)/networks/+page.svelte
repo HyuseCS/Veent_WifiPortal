@@ -298,163 +298,168 @@
 		</section>
 	</div>
 {:else}
-<div class="contents">
-	<!-- SCREEN 1: KPIs + coverage map + side panels. min-h-full (the full-screen snap section)
+	<div class="contents">
+		<!-- SCREEN 1: KPIs + coverage map + side panels. min-h-full (the full-screen snap section)
 	     is desktop-only — on mobile the map/log are gone, so let this shrink to content and the
 	     access points pull up right under it instead of sitting a screen-height below. -->
-	<div class="snap-start space-y-5 pt-5 pb-5 md:min-h-full">
-		{#if routerUnreachable}
-			<div class="flex items-center gap-3 rounded-xl border border-blocked/30 bg-blocked/10 px-4 py-3">
-				<TriangleAlert class="h-5 w-5 shrink-0 text-blocked" aria-hidden="true" />
-				<p class="text-sm">
-					<span class="font-semibold text-ink">Router unreachable.</span>
-					<span class="text-muted">
-						Showing last-known data (synced {ago(lastSyncedAt)}) — live health and AP detection
-						resume automatically once the router is back online.
-					</span>
-				</p>
-			</div>
-		{/if}
-		{#if data.outagePausedGuests > 0}
-			<div class="flex items-center gap-3 rounded-xl border border-warning/30 bg-warning/10 px-4 py-3">
-				<TriangleAlert class="h-5 w-5 shrink-0 text-warning" aria-hidden="true" />
-				<p class="text-sm">
-					<span class="font-semibold text-ink">Outage auto-pause active.</span>
-					<span class="text-muted">
-						{data.outagePausedGuests}
-						{data.outagePausedGuests === 1 ? 'guest is' : 'guests are'} auto-paused — their paid time
-						is frozen and resumes automatically when their AP recovers.
-					</span>
-				</p>
-			</div>
-		{/if}
-		<!-- KPI STRIP -->
-		<KpiCarousel items={kpis}>
-			{#snippet card(k)}
-				<KpiCard
-					kpi={{ label: k.label, value: k.value }}
-					icon={k.icon}
-					unit={k.unit}
-					helper={k.caption}
-					tone={k.tone}
-					captionTone={k.captionTone}
-					onclick={k.onclick}
-					compact
-				/>
-			{/snippet}
-		</KpiCarousel>
-
-		<!-- MAP + RIGHT PANELS -->
-		<div class="grid gap-5 xl:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)] xl:items-stretch">
-			<!-- Coverage map — hidden on mobile (display:none also skips Leaflet tile loads); the
-			     interactive map is desktop-only, AP health is still covered by the cards below. -->
-			<Card padding="p-0" class="hidden h-[60dvh] flex-col overflow-hidden md:flex xl:h-[65vh]">
-				<div class="flex flex-wrap items-start justify-between gap-3 px-5 pt-4 pb-3">
-					<div>
-						<h2 class="text-base font-semibold text-ink">Coverage Map</h2>
-					</div>
-					<div class="flex flex-wrap gap-3.5">
-						{#each legend as leg (leg.label)}
-							<span class="flex items-center gap-1.5 text-xs font-medium text-muted">
-								<span class="h-2 w-2 rounded-full {leg.dot}"></span>{leg.label}
-							</span>
-						{/each}
-					</div>
-				</div>
+		<div class="snap-start space-y-5 pt-5 pb-5 md:min-h-full">
+			{#if routerUnreachable}
 				<div
-					bind:this={mapEl}
-					class="relative mx-4 mb-4 min-h-0 flex-1 scroll-mt-4 overflow-hidden rounded-xl border border-border"
+					class="flex items-center gap-3 rounded-xl border border-blocked/30 bg-blocked/10 px-4 py-3"
 				>
-					<div class="absolute inset-0">
-						<CoverageMap {networks} {selectedId} onselect={focusAp} />
-					</div>
+					<TriangleAlert class="h-5 w-5 shrink-0 text-blocked" aria-hidden="true" />
+					<p class="text-sm">
+						<span class="font-semibold text-ink">Router unreachable.</span>
+						<span class="text-muted">
+							Showing last-known data (synced {ago(lastSyncedAt)}) — live health and AP detection
+							resume automatically once the router is back online.
+						</span>
+					</p>
 				</div>
-			</Card>
+			{/if}
+			{#if data.outagePausedGuests > 0}
+				<div
+					class="flex items-center gap-3 rounded-xl border border-warning/30 bg-warning/10 px-4 py-3"
+				>
+					<TriangleAlert class="h-5 w-5 shrink-0 text-warning" aria-hidden="true" />
+					<p class="text-sm">
+						<span class="font-semibold text-ink">Outage auto-pause active.</span>
+						<span class="text-muted">
+							{data.outagePausedGuests}
+							{data.outagePausedGuests === 1 ? 'guest is' : 'guests are'} auto-paused — their paid time
+							is frozen and resumes automatically when their AP recovers.
+						</span>
+					</p>
+				</div>
+			{/if}
+			<!-- KPI STRIP -->
+			<KpiCarousel items={kpis}>
+				{#snippet card(k)}
+					<KpiCard
+						kpi={{ label: k.label, value: k.value }}
+						icon={k.icon}
+						unit={k.unit}
+						helper={k.caption}
+						tone={k.tone}
+						captionTone={k.captionTone}
+						onclick={k.onclick}
+						compact
+					/>
+				{/snippet}
+			</KpiCarousel>
 
-			<!-- Right column: fleet status + router log -->
-			<div class="flex min-w-0 flex-col gap-5 xl:h-[65vh]">
-				<Card class="flex flex-col gap-4">
-					<h2 class="text-base font-semibold text-ink">Fleet Status</h2>
-					<div class="flex items-center gap-5">
-						<div class="relative h-25 w-25 shrink-0 rounded-full" style="background: {donut}">
-							<div
-								class="absolute inset-3.5 flex flex-col items-center justify-center rounded-full bg-bg"
-							>
-								<span class="font-mono text-2xl font-extrabold text-ink">{total}</span>
-								<span class="text-[10px] font-bold tracking-wide text-muted uppercase">Total APs</span
-								>
-							</div>
+			<!-- MAP + RIGHT PANELS -->
+			<div class="grid gap-5 xl:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)] xl:items-stretch">
+				<!-- Coverage map — hidden on mobile (display:none also skips Leaflet tile loads); the
+			     interactive map is desktop-only, AP health is still covered by the cards below. -->
+				<Card padding="p-0" class="hidden h-[60dvh] flex-col overflow-hidden md:flex xl:h-[65vh]">
+					<div class="flex flex-wrap items-start justify-between gap-3 px-5 pt-4 pb-3">
+						<div>
+							<h2 class="text-base font-semibold text-ink">Coverage Map</h2>
 						</div>
-						<ul class="flex min-w-0 flex-1 flex-col gap-2.5">
-							{#each fleet as row (row.label)}
-								<li class="flex items-center gap-2.5">
-									<span class="h-2.5 w-2.5 rounded {row.dot}"></span>
-									<span class="text-sm font-medium text-muted">{row.label}</span>
-									<span class="ml-auto font-mono text-sm font-bold text-ink">{row.count}</span>
-								</li>
+						<div class="flex flex-wrap gap-3.5">
+							{#each legend as leg (leg.label)}
+								<span class="flex items-center gap-1.5 text-xs font-medium text-muted">
+									<span class="h-2 w-2 rounded-full {leg.dot}"></span>{leg.label}
+								</span>
 							{/each}
-						</ul>
+						</div>
+					</div>
+					<div
+						bind:this={mapEl}
+						class="relative mx-4 mb-4 min-h-0 flex-1 scroll-mt-4 overflow-hidden rounded-xl border border-border"
+					>
+						<div class="absolute inset-0">
+							<CoverageMap {networks} {selectedId} onselect={focusAp} />
+						</div>
 					</div>
 				</Card>
 
-				<!-- Inline log — desktop/tablet only; mobile opens /networks/logs from the header. -->
-				<div class="hidden h-[37vh] md:block xl:h-auto xl:min-h-0 xl:flex-1">
-					<RouterLogPanel />
+				<!-- Right column: fleet status + router log -->
+				<div class="flex min-w-0 flex-col gap-5 xl:h-[65vh]">
+					<Card class="flex flex-col gap-4">
+						<h2 class="text-base font-semibold text-ink">Fleet Status</h2>
+						<div class="flex items-center gap-5">
+							<div class="relative h-25 w-25 shrink-0 rounded-full" style="background: {donut}">
+								<div
+									class="absolute inset-3.5 flex flex-col items-center justify-center rounded-full bg-bg"
+								>
+									<span class="font-mono text-2xl font-extrabold text-ink">{total}</span>
+									<span class="text-[10px] font-bold tracking-wide text-muted uppercase"
+										>Total APs</span
+									>
+								</div>
+							</div>
+							<ul class="flex min-w-0 flex-1 flex-col gap-2.5">
+								{#each fleet as row (row.label)}
+									<li class="flex items-center gap-2.5">
+										<span class="h-2.5 w-2.5 rounded {row.dot}"></span>
+										<span class="text-sm font-medium text-muted">{row.label}</span>
+										<span class="ml-auto font-mono text-sm font-bold text-ink">{row.count}</span>
+									</li>
+								{/each}
+							</ul>
+						</div>
+					</Card>
+
+					<!-- Inline log — desktop/tablet only; mobile opens /networks/logs from the header. -->
+					<div class="hidden h-[37vh] md:block xl:h-auto xl:min-h-0 xl:flex-1">
+						<RouterLogPanel />
+					</div>
 				</div>
 			</div>
 		</div>
-	</div>
 
-	<!-- SCREEN 2: access point cards -->
-	<div class="min-h-full snap-start space-y-5 pt-1">
-		<!-- AP CARDS -->
-		<div
-			bind:this={apSectionEl}
-			class="flex scroll-mt-4 flex-wrap items-center justify-between gap-3"
-		>
-			<div>
-				<h2 class="text-base font-semibold text-ink">Access Points</h2>
-				<p class="mt-0.5 text-xs text-muted">Health per access point across the venue</p>
+		<!-- SCREEN 2: access point cards -->
+		<div class="min-h-full snap-start space-y-5 pt-1">
+			<!-- AP CARDS -->
+			<div
+				bind:this={apSectionEl}
+				class="flex scroll-mt-4 flex-wrap items-center justify-between gap-3"
+			>
+				<div>
+					<h2 class="text-base font-semibold text-ink">Access Points</h2>
+					<p class="mt-0.5 text-xs text-muted">Health per access point across the venue</p>
+				</div>
+				<div class="flex flex-wrap items-center gap-3">
+					<FilterTabs tabs={filterDefs} active={filter} onselect={(key) => (filter = key)} />
+					{#if data.isOwner}
+						<Button variant="danger" onclick={() => (wipeOpen = true)}>
+							<Trash2 class="h-4 w-4" aria-hidden="true" />
+							Wipe database
+						</Button>
+					{/if}
+				</div>
 			</div>
-			<div class="flex flex-wrap items-center gap-3">
-				<FilterTabs tabs={filterDefs} active={filter} onselect={(key) => (filter = key)} />
-				{#if data.isOwner}
-					<Button variant="danger" onclick={() => (wipeOpen = true)}>
-						<Trash2 class="h-4 w-4" aria-hidden="true" />
-						Wipe database
-					</Button>
-				{/if}
-			</div>
-		</div>
 
-	{#if renderUnits.length === 0}
-		<p
-			class="rounded-xl border border-dashed border-border px-4 py-8 text-center text-sm text-muted"
-		>
-			No access points match this filter.
-			<button onclick={() => (filter = 'all')} class="cursor-pointer text-brand underline">
-				Show all
-			</button>
-		</p>
-	{:else}
-		<!-- auto-fill (not auto-fit): keeps empty tracks so a lone card stays its natural
+			{#if renderUnits.length === 0}
+				<p
+					class="rounded-xl border border-dashed border-border px-4 py-8 text-center text-sm text-muted"
+				>
+					No access points match this filter.
+					<button onclick={() => (filter = 'all')} class="cursor-pointer text-brand underline">
+						Show all
+					</button>
+				</p>
+			{:else}
+				<!-- auto-fill (not auto-fit): keeps empty tracks so a lone card stays its natural
 		     width instead of stretching across the whole row. -->
-		<section
-			class="grid items-start gap-4"
-			style="grid-template-columns: repeat(auto-fill, minmax(min(330px, 100%), 1fr));"
-		>
-			{#each renderUnits as unit (unit.ap.id)}
-				<NetworkHealthCard
-					ap={unit.ap}
-					group={unit.group}
-					selected={unit.ap.id === selectedId}
-					onopen={() => openUnit(unit)}
-				/>
-			{/each}
-		</section>
-	{/if}
+				<section
+					class="grid items-start gap-4"
+					style="grid-template-columns: repeat(auto-fill, minmax(min(330px, 100%), 1fr));"
+				>
+					{#each renderUnits as unit (unit.ap.id)}
+						<NetworkHealthCard
+							ap={unit.ap}
+							group={unit.group}
+							selected={unit.ap.id === selectedId}
+							onopen={() => openUnit(unit)}
+						/>
+					{/each}
+				</section>
+			{/if}
+		</div>
 	</div>
-</div>
 {/if}
 
 <NetworkApModal

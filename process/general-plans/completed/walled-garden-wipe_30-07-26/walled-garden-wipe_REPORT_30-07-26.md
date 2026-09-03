@@ -36,10 +36,10 @@ plan's own Phase Completion Rules requirement for `VERIFIED` is now satisfied.
 
 ### Test Gate Outcomes
 
-| Gate | Command | Result |
-|---|---|---|
-| Unit | `bunx vitest run packages/core/src/integrations/network/mikrotik.spec.ts` | 21/21 green |
-| Typecheck | `bun run --filter radius-admin check` | 0 errors |
+| Gate      | Command                                                                   | Result      |
+| --------- | ------------------------------------------------------------------------- | ----------- |
+| Unit      | `bunx vitest run packages/core/src/integrations/network/mikrotik.spec.ts` | 21/21 green |
+| Typecheck | `bun run --filter radius-admin check`                                     | 0 errors    |
 
 ### Plan Deviations
 
@@ -56,14 +56,14 @@ None new. The plan itself notes "(none identified yet)" — still true after exe
 No separate `*_SPEC_*.md` for this SIMPLE plan — governed by the plan's own Goal/Acceptance
 Criteria section (7 ACs).
 
-| AC | Criterion | Status |
-|---|---|---|
-| AC1 | Removes all STATIC rows from both menus | met — Fully-Automated (spec) |
-| AC2 | Dynamic rows never removed (negative control) | met — Fully-Automated (spec) |
-| AC3 | `dryRun:true` real no-op, reports intended counts | met — unit-proven + staging-probe confirmed 30-07-26 |
-| AC4 | Returns per-menu removed counts | met — Fully-Automated (spec) |
-| AC5 | `--wipe` wipes-then-rebuilds; `--wipe-only` wipes-then-exits | met — Fully-Automated (typecheck + spec wiring) |
-| AC6 | `--wipe-only` precedence over `--wipe`/`--reconcile` | met — code-level + staging-probe confirmed 30-07-26 |
+| AC  | Criterion                                                    | Status                                               |
+| --- | ------------------------------------------------------------ | ---------------------------------------------------- |
+| AC1 | Removes all STATIC rows from both menus                      | met — Fully-Automated (spec)                         |
+| AC2 | Dynamic rows never removed (negative control)                | met — Fully-Automated (spec)                         |
+| AC3 | `dryRun:true` real no-op, reports intended counts            | met — unit-proven + staging-probe confirmed 30-07-26 |
+| AC4 | Returns per-menu removed counts                              | met — Fully-Automated (spec)                         |
+| AC5 | `--wipe` wipes-then-rebuilds; `--wipe-only` wipes-then-exits | met — Fully-Automated (typecheck + spec wiring)      |
+| AC6 | `--wipe-only` precedence over `--wipe`/`--reconcile`         | met — code-level + staging-probe confirmed 30-07-26  |
 | AC7 | Provision/reconcile/scheduler/tag-model/login.html untouched | met — Fully-Automated (diff review + E1 instruction) |
 
 ### Closeout Packet

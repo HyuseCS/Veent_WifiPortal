@@ -40,7 +40,10 @@
 	const pad = (n: number) => String(n).padStart(2, '0');
 	/** Live remaining-time + tone/status from `expiresAt`, mirroring the server's
 	 * formatting. Falls back to the snapshot values when there's no expiry. */
-	function liveTimer(s: ActiveSession, nowMs: number): { left: string; tone: StatusTone; status: string } {
+	function liveTimer(
+		s: ActiveSession,
+		nowMs: number
+	): { left: string; tone: StatusTone; status: string } {
 		if (!s.expiresAt) return { left: s.timeLeft, tone: s.tone, status: s.status };
 		const total = Math.max(0, Math.floor((new Date(s.expiresAt).getTime() - nowMs) / 1000));
 		const h = Math.floor(total / 3600);
@@ -85,9 +88,15 @@
 		{ label: 'Package', key: 'package' },
 		{ label: 'Time Left', key: 'timeLeft' }
 	];
-	const sessSort = createSort<SessSort>({ mac: 'asc', network: 'asc', package: 'asc', timeLeft: 'asc' });
+	const sessSort = createSort<SessSort>({
+		mac: 'asc',
+		network: 'asc',
+		package: 'asc',
+		timeLeft: 'asc'
+	});
 	// Remaining ms from expiresAt (live-sorts by soonest expiry); no expiry sinks to the bottom.
-	const sessExpiry = (s: ActiveSession) => (s.expiresAt ? new Date(s.expiresAt).getTime() : Infinity);
+	const sessExpiry = (s: ActiveSession) =>
+		s.expiresAt ? new Date(s.expiresAt).getTime() : Infinity;
 	const sortedSessions = $derived(
 		sessSort.apply(activeSessions, (a, b, key) => {
 			if (key === 'mac') return a.mac.localeCompare(b.mac);
@@ -217,17 +226,23 @@
 			{#snippet headRow()}
 				<tr class="border-b border-border bg-surface">
 					{#each sessionCols as c (c.key)}
-						{@render sortTh(c.label, sessSort.key === c.key, sessSort.dir, () => sessSort.toggle(c.key))}
+						{@render sortTh(c.label, sessSort.key === c.key, sessSort.dir, () =>
+							sessSort.toggle(c.key)
+						)}
 					{/each}
 				</tr>
 			{/snippet}
 			{#each sortedSessions as session (session.id)}
 				{@const t = liveTimer(session, now)}
 				<tr class="transition-colors hover:bg-surface">
-					<td data-label="MAC Address" class="px-4 py-3 font-mono text-xs text-ink">{session.mac}</td>
+					<td data-label="MAC Address" class="px-4 py-3 font-mono text-xs text-ink"
+						>{session.mac}</td
+					>
 					<td data-label="Network" class="px-4 py-3 text-ink">{session.network ?? '—'}</td>
 					<td data-label="Package" class="px-4 py-3">
-						<span class="inline-flex rounded-md bg-surface px-2 py-0.5 text-xs font-medium text-ink">
+						<span
+							class="inline-flex rounded-md bg-surface px-2 py-0.5 text-xs font-medium text-ink"
+						>
 							{session.package}
 						</span>
 					</td>
@@ -268,7 +283,9 @@
 			{#snippet headRow()}
 				<tr class="border-b border-border bg-surface">
 					{#each netCols as c (c.key)}
-						{@render sortTh(c.label, netSort.key === c.key, netSort.dir, () => netSort.toggle(c.key))}
+						{@render sortTh(c.label, netSort.key === c.key, netSort.dir, () =>
+							netSort.toggle(c.key)
+						)}
 					{/each}
 				</tr>
 			{/snippet}

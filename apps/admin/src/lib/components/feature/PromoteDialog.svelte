@@ -29,15 +29,17 @@
 	};
 
 	// Both gates must pass before the confirm button enables (server re-checks both).
-	const canSubmit = $derived(!!member && namesMatch(typedName, member.name) && /^\d{6}$/.test(code));
+	const canSubmit = $derived(
+		!!member && namesMatch(typedName, member.name) && /^\d{6}$/.test(code)
+	);
 </script>
 
 <BaseDialog bind:open {reset}>
 	{#if member}
 		<h2 class="text-lg font-semibold text-ink">Promote to owner</h2>
 		<p class="mt-2 text-sm text-muted">
-			This grants <strong>{member.name}</strong> full owner control — including managing staff and
-			destructive actions. There is no self-serve way to undo it.
+			This grants <strong>{member.name}</strong> full owner control — including managing staff and destructive
+			actions. There is no self-serve way to undo it.
 		</p>
 
 		<form

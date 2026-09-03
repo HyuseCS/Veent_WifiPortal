@@ -7,7 +7,9 @@ import type { RouterModel } from './router-models';
 const MODELS: RouterModel[] = [];
 
 // Helper: build a placeable AP. Coords as strings (the DB/NetworkAp shape).
-function ap(over: Partial<ClusterableAp> & { id: string; lat: number; lng: number }): ClusterableAp {
+function ap(
+	over: Partial<ClusterableAp> & { id: string; lat: number; lng: number }
+): ClusterableAp {
 	return {
 		id: over.id,
 		latitude: String(over.lat),
@@ -46,7 +48,10 @@ describe('computeClusters', () => {
 	});
 
 	it('keeps a lone *named* AP as a cluster', () => {
-		const { clusters } = computeClusters([ap({ id: 'a', ...NEAR_A, clusterName: 'Lobby' })], MODELS);
+		const { clusters } = computeClusters(
+			[ap({ id: 'a', ...NEAR_A, clusterName: 'Lobby' })],
+			MODELS
+		);
 		expect(clusters).toHaveLength(1);
 		expect(clusters[0].named).toBe(true);
 		expect(clusters[0].name).toBe('Lobby');
@@ -54,7 +59,10 @@ describe('computeClusters', () => {
 
 	it('unions distant APs sharing a manual cluster name (hybrid auto+manual)', () => {
 		const { clusters } = computeClusters(
-			[ap({ id: 'a', ...NEAR_A, clusterName: 'Campus' }), ap({ id: 'b', ...FAR, clusterName: 'Campus' })],
+			[
+				ap({ id: 'a', ...NEAR_A, clusterName: 'Campus' }),
+				ap({ id: 'b', ...FAR, clusterName: 'Campus' })
+			],
 			MODELS
 		);
 		expect(clusters).toHaveLength(1);

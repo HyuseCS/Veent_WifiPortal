@@ -26,7 +26,10 @@ export function rateLimit(scope: string, identifier: string, max: number, window
  * applies). Returns true if allowed.
  */
 export function cronIpAllowed(event: RequestEvent, allowlist: string | undefined): boolean {
-	const allow = allowlist?.split(',').map((s) => s.trim()).filter(Boolean);
+	const allow = allowlist
+		?.split(',')
+		.map((s) => s.trim())
+		.filter(Boolean);
 	if (!allow?.length) return true;
 	return allow.includes(clientIp(event));
 }

@@ -71,7 +71,9 @@ function parsePackage(form: FormData): { input: PackageInput } | { error: string
 		// Zero is saveable by `num` (>= 0) but unbuyable: `spend*Tx` rejects a non-positive amount,
 		// which the buy action can only surface as a misleading "grant failed" 502. Require > 0.
 		if (creditCost <= 0 || pointsCost <= 0 || durationMinutes <= 0) {
-			return { error: 'A tier’s credit cost, points cost, and duration must be greater than zero.' };
+			return {
+				error: 'A tier’s credit cost, points cost, and duration must be greater than zero.'
+			};
 		}
 	}
 	if (type === 'free') {

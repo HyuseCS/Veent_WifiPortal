@@ -13,26 +13,26 @@ decision**, then per-router config.
 > **The hosting constraint (the thing that decides this):** the portal can only reach a
 > router it has a **network path to**. Today the app is hosted **locally** (on the LAN, e.g.
 > `10.210.0.9` on `10.210.0.0/18`), so it can only talk to routers on that LAN. A router at a far site is on a
-> *different* network — a locally-hosted portal simply can't see it. There are only two ways
+> _different_ network — a locally-hosted portal simply can't see it. There are only two ways
 > around that:
 >
 > 1. **Each site hosts its own portal instance**, talking to its **own local** router — so no
 >    instance ever needs to reach a far router. Unify reporting by pointing them all at **one
->    shared database** hosted somewhere every site can reach (a cloud/VPS Postgres). *(Option A
->    — works today.)*
+>    shared database** hosted somewhere every site can reach (a cloud/VPS Postgres). _(Option A
+>    — works today.)_
 > 2. **Host the portal centrally** (cloud/VPS) and run a **VPN** from it to every site's router,
->    so one instance can reach them all. *(Needs the multi-controller code — Option B.)*
+>    so one instance can reach them all. _(Needs the multi-controller code — Option B.)_
 >
 > Either way, the **database must move off the local box** to a host all sites can reach.
 > Local hosting is fine for one site; it's the first thing that has to change for many.
 
-| | **A. Per-site app instance** (works today) | **B. Central multi-controller** (needs code) |
-|---|---|---|
-| App instances | One per site (each with its own `MIKROTIK_HOST`) | One, talks to every router |
-| Database | **Shared** Postgres (one `DATABASE_URL` for all) so reporting is unified | Shared |
-| Dashboards | One per site, or aggregate from the shared DB | One |
-| Code change | None | Controller registry + per-device routing (see last section) |
-| Best for | A few sites, quick rollout | Many sites, single pane of glass |
+|               | **A. Per-site app instance** (works today)                               | **B. Central multi-controller** (needs code)                |
+| ------------- | ------------------------------------------------------------------------ | ----------------------------------------------------------- |
+| App instances | One per site (each with its own `MIKROTIK_HOST`)                         | One, talks to every router                                  |
+| Database      | **Shared** Postgres (one `DATABASE_URL` for all) so reporting is unified | Shared                                                      |
+| Dashboards    | One per site, or aggregate from the shared DB                            | One                                                         |
+| Code change   | None                                                                     | Controller registry + per-device routing (see last section) |
+| Best for      | A few sites, quick rollout                                               | Many sites, single pane of glass                            |
 
 **Recommended now: Option A with a shared database.** Each site runs `apps/customer`
 (+ optionally `apps/admin`) pointed at its **local** router but the **same** Postgres,
@@ -56,7 +56,7 @@ These mirror the single-site setup; adapt the interface/VLAN names to the site.
 - A guest VLAN/interface (e.g. `vlan70 hotspot`) with a private subnet
   (`/ip/address add address=10.x.0.1/24 interface=<guest-iface>`).
 - A DHCP server + address pool on it. (At our main site, `dhcp1` runs on
-  `vlan70 hotspot`; a network with no DHCP server is *not* a client network.)
+  `vlan70 hotspot`; a network with no DHCP server is _not_ a client network.)
 - If you want **per-AP/zone user counts at this site**, give each zone its own VLAN
   now — the app attributes users by the interface a device's ARP entry lands on
   (`resolveApForMac`). One flat VLAN = one bucket. See
@@ -138,7 +138,7 @@ Then:
 
 ## Recommended: a central database over Tailscale (one admin, all sites)
 
-The simplest way to get **one admin that sees every site's networks** is *not* to make
+The simplest way to get **one admin that sees every site's networks** is _not_ to make
 one app reach every router — it's to keep Option A (an instance per site, each on its
 **local** router) and point them all at **one shared database**. The central admin just
 **reads that DB**, so it sees every site's sessions, revenue, and network health without
@@ -147,7 +147,7 @@ ever touching a remote router.
 The only thing that needs solving is making that shared database reachable from each site
 **privately**. That's where a mesh VPN like **Tailscale** fits.
 
-**What Tailscale is (and isn't) for here:** it's the *transport* — a private WireGuard
+**What Tailscale is (and isn't) for here:** it's the _transport_ — a private WireGuard
 mesh so each site's app reaches the central Postgres over the internet without exposing it
 publicly. It does **not** make the app multi-router-aware. Two separate concerns:
 
@@ -173,9 +173,9 @@ DATABASE_URL="postgres://veent:<pw>@<central-db-tailscale-ip>:5432/veent"
 ```
 
 **MikroTik caveat:** RouterOS — especially **v6.x** — can't run the Tailscale client, and
-v6 has no WireGuard. So you don't put Tailscale *on* the router. You only need it on the
+v6 has no WireGuard. So you don't put Tailscale _on_ the router. You only need it on the
 hosts that talk to the **database** (the per-site app boxes + the DB host). If you later
-go to Option B and need the *central* server to reach each *router's API*, put a small
+go to Option B and need the _central_ server to reach each _router's API_, put a small
 **Tailscale subnet-router** box (Pi / mini-PC / Linux VM) at each site advertising the
 router's management subnet, and reach the MikroTik through it. (RouterOS 7 adds native
 WireGuard if you upgrade — but that's plain WireGuard, not Tailscale.)
@@ -208,7 +208,7 @@ The portal server must reach the router's API (`8728`/`8729`). Across the intern
 ## Per-site attribution — "where they connected"
 
 `resolveApForMac` tags each session with the interface/AP a device is on **for that
-router** (CAPsMAN → wireless → ARP). This already separates *zones within one site* if
+router** (CAPsMAN → wireless → ARP). This already separates _zones within one site_ if
 you put them on separate VLANs.
 
 **Across sites it is not yet enough:** `network_sessions.network_id` points at a

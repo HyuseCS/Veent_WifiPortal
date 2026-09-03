@@ -75,7 +75,8 @@ async function seedAccount(
 	await db.insert(customerProfile).values({
 		userId,
 		accessPackageId: opts.packageId === undefined ? pkgId : opts.packageId,
-		accessExpiresAt: opts.expiresAt === undefined ? new Date(Date.now() + 3_600_000) : opts.expiresAt,
+		accessExpiresAt:
+			opts.expiresAt === undefined ? new Date(Date.now() + 3_600_000) : opts.expiresAt,
 		accessPausedAt: opts.pausedAt ?? null,
 		accessPausedReason: opts.pausedReason ?? null,
 		accessPausedNetworkId: opts.pausedNetworkId ?? null
@@ -150,7 +151,10 @@ describe('outage sweep (real Postgres)', () => {
 		});
 		await seedAccount('free', { packageId: null }); // paid-only filter excludes
 		await seedSession('free', apId, 'f1');
-		await seedAccount('already', { pausedAt: new Date(now.getTime() - 60_000), pausedReason: 'user' });
+		await seedAccount('already', {
+			pausedAt: new Date(now.getTime() - 60_000),
+			pausedReason: 'user'
+		});
 		await seedSession('already', apId, 'a1');
 
 		const res = await sweepOutagePauses(db, controller(), now, { downMs: 3 * 60_000 });
@@ -161,7 +165,10 @@ describe('outage sweep (real Postgres)', () => {
 	it('keeps a held guest paused until their AP is confirmed up for upMs, then resumes', async () => {
 		const now = new Date('2026-07-03T12:00:00Z');
 		// AP back online but only just now → within the up-debounce.
-		const apId = await seedHealth('ap1', { online: true, onlineSince: new Date(now.getTime() - 30_000) });
+		const apId = await seedHealth('ap1', {
+			online: true,
+			onlineSince: new Date(now.getTime() - 30_000)
+		});
 		await seedAccount('h', {
 			expiresAt: new Date(now.getTime() + 20 * 60_000),
 			pausedAt: new Date(now.getTime() - 5 * 60_000),
@@ -229,7 +236,11 @@ describe('outage sweep (real Postgres)', () => {
 			online: false,
 			offlineSince: new Date(now.getTime() - 10 * 60_000)
 		});
-		await seedHealth('ap2', { online: true, wanOk: true, onlineSince: new Date(now.getTime() - 60_000) });
+		await seedHealth('ap2', {
+			online: true,
+			wanOk: true,
+			onlineSince: new Date(now.getTime() - 60_000)
+		});
 
 		await seedAccount('roamer');
 		await seedSession('roamer', down, 'roam'); // bound to down AP, but now on ap2

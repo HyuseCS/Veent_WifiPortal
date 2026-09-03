@@ -14,9 +14,9 @@ feature: incident-management
 
 ## Overview
 
-**TL;DR:** The manager `/issues` board currently ships EVERY issue's FULL append-only event history on every page visit (one `listIssueEventsByIssue` query, N+0 but unbounded growth). This plan removes that eager load and instead fetches a single issue's timeline on-demand when its row is expanded — reusing the EXISTING `/issues/[id]/detail` GET endpoint and mirroring the assignee-side `IssueDetailModal.svelte` fetch pattern. The board looks and behaves identically; only *when* history is fetched changes. Row pagination (Option 1) is explicitly OUT OF SCOPE.
+**TL;DR:** The manager `/issues` board currently ships EVERY issue's FULL append-only event history on every page visit (one `listIssueEventsByIssue` query, N+0 but unbounded growth). This plan removes that eager load and instead fetches a single issue's timeline on-demand when its row is expanded — reusing the EXISTING `/issues/[id]/detail` GET endpoint and mirroring the assignee-side `IssueDetailModal.svelte` fetch pattern. The board looks and behaves identically; only _when_ history is fetched changes. Row pagination (Option 1) is explicitly OUT OF SCOPE.
 
-Complexity: **SIMPLE** (3 touched files + 1 orphan removal; admin-only; no schema/auth/API-contract change — we only *consume* an existing endpoint).
+Complexity: **SIMPLE** (3 touched files + 1 orphan removal; admin-only; no schema/auth/API-contract change — we only _consume_ an existing endpoint).
 
 ---
 
@@ -32,20 +32,21 @@ Complexity: **SIMPLE** (3 touched files + 1 orphan removal; admin-only; no schem
 - Any schema change, migration, or new index.
 - Any change to the `/issues/[id]/detail` endpoint itself, its auth, or its response shape.
 - Any customer / core / db package change. **Admin scope only.**
-- Any change to the single-issue detail *page* (`/issues/[id]/+page.server.ts`) — untouched.
+- Any change to the single-issue detail _page_ (`/issues/[id]/+page.server.ts`) — untouched.
 
 ---
 
 ## Touchpoints (file:symbol)
 
-| # | File | Symbol / location | Change |
-|---|------|-------------------|--------|
-| T1 | `apps/admin/src/routes/(app)/issues/+page.server.ts` | manager `if (canManage)` branch, `events:` field (line ~64) + the L3 CEILING comment (lines ~58-64) + `listIssueEventsByIssue` import (line 12) + non-manager `events:` field (line ~88) | Remove the eager `events` field from BOTH return branches; remove the L3 CEILING comment; remove the now-unused import. |
-| T2 | `apps/admin/src/lib/components/feature/IssuesTable.svelte` | `events` prop (lines 23-34), `toggleExpand` (line 42), expanded-row History block (line 230-233) | Drop the `events` prop; add per-id lazy fetch + cache + loading/error state; render Timeline from the cache. |
-| T3 | `apps/admin/src/routes/(app)/issues/+page.svelte` | `<IssuesTable ... events={data.events} ... />` (line 26) | Remove the `events={data.events}` prop wiring. |
-| T4 | `apps/admin/src/lib/server/issues.ts` | `listIssueEventsByIssue` (line 348) | Orphaned after T1 (grep confirms the board load is its ONLY caller; zero test refs). Remove the export. See Blast Radius note for the certainty check. |
+| #   | File                                                       | Symbol / location                                                                                                                                                                        | Change                                                                                                                                                 |
+| --- | ---------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| T1  | `apps/admin/src/routes/(app)/issues/+page.server.ts`       | manager `if (canManage)` branch, `events:` field (line ~64) + the L3 CEILING comment (lines ~58-64) + `listIssueEventsByIssue` import (line 12) + non-manager `events:` field (line ~88) | Remove the eager `events` field from BOTH return branches; remove the L3 CEILING comment; remove the now-unused import.                                |
+| T2  | `apps/admin/src/lib/components/feature/IssuesTable.svelte` | `events` prop (lines 23-34), `toggleExpand` (line 42), expanded-row History block (line 230-233)                                                                                         | Drop the `events` prop; add per-id lazy fetch + cache + loading/error state; render Timeline from the cache.                                           |
+| T3  | `apps/admin/src/routes/(app)/issues/+page.svelte`          | `<IssuesTable ... events={data.events} ... />` (line 26)                                                                                                                                 | Remove the `events={data.events}` prop wiring.                                                                                                         |
+| T4  | `apps/admin/src/lib/server/issues.ts`                      | `listIssueEventsByIssue` (line 348)                                                                                                                                                      | Orphaned after T1 (grep confirms the board load is its ONLY caller; zero test refs). Remove the export. See Blast Radius note for the certainty check. |
 
 **Read-for-context (not modified):**
+
 - `apps/admin/src/lib/components/feature/IssueDetailModal.svelte` — the canonical on-demand fetch pattern to mirror (AbortController, `r.ok` guard, loading/failed state, `{ events }` destructure).
 - `apps/admin/src/lib/components/feature/Timeline.svelte` — prop is `{ events: IssueEventRow[] }`, unchanged.
 - `apps/admin/src/routes/(app)/issues/[id]/detail/+server.ts` — the reused endpoint. Returns `json({ issue, events }, { 'cache-control': 'no-store' })`; 404 on missing/unauthorized. Not modified.
@@ -137,6 +138,7 @@ function toggleExpand(id: number) {
 **Prop removal:** delete `events` from the `$props()` destructure and its type; the `IssueEventRow` import stays (used by the cache type).
 
 **Design decisions (locked, keep minimal — ponytail):**
+
 - No `AbortController` on the board. The modal needs abort because a single `$effect` re-runs when the user switches between pool cards (stale-request race). The board's fetch is a one-shot per-id keyed by expand and guarded by the cache/in-flight check, so there is no stale-superseding-request scenario to abort. `// ponytail:` skip AbortController — mark with a comment.
 - Cache is never invalidated within a page visit. History is append-only and the board is a preview; a stale-by-seconds timeline on re-expand is acceptable and matches the modal's per-open fetch intent. Fresh data arrives on the next full page load. (No refetch = AC3.)
 - Accessibility: the expand `<button>` keeps its existing `aria-expanded` / `aria-label` exactly as-is — not touched.
@@ -171,24 +173,25 @@ This SIMPLE plan is a single phase. It is **CODE DONE** when steps 1-8 are appli
 
 ## Verification Evidence
 
-| Gate / Scenario | Strategy | Proves SPEC criterion |
-|---|---|---|
-| G1 — `cd apps/admin && bunx grep`-equivalent: manager load no longer references event history. Concretely, after edit, `grep -n "listIssueEventsByIssue\|events:" apps/admin/src/routes/(app)/issues/+page.server.ts` shows no `listIssueEventsByIssue` and no `events:` field in either return branch. | Fully-Automated | AC1 |
-| G2 — `cd apps/admin && bunx vitest run` (unit suite, incl. `issues.test.ts`) exits 0 — confirms no unit regression from the `issues.ts` orphan removal; `eventSummary` test (the source of the "Created this incident" string) still passes. | Fully-Automated | AC1, AC5 |
-| G3 — `cd apps/admin && bunx playwright test e2e/incident-timeline.e2e.ts` green — expands a board row, timeline fetches + shows "Created this incident". | Hybrid (throwaway `radius_admin_test` DB + build/preview harness) | AC2, AC5 |
-| G4 — `cd apps/admin && bunx playwright test e2e/incident-detail.e2e.ts` green — `/issues/[id]/detail` 200/404-by-role contract unchanged (we only consume it). | Hybrid | AC5 |
-| G5 — `cd apps/admin && bunx playwright test` (full admin e2e, 12 specs / 23 tests: self-report, notifications, sentry, etc.) all green — board still shows freshly-created incidents on expand. | Hybrid | AC5 |
-| G6 — `bun run check` exits 0 (svelte-check across apps). | Fully-Automated | AC6 |
-| G7 — `cd apps/admin && bunx prettier --check "src/routes/(app)/issues/+page.server.ts" "src/routes/(app)/issues/+page.svelte" "src/lib/components/feature/IssuesTable.svelte" "src/lib/server/issues.ts"` clean + `bunx eslint <same 4 files>` clean. Scoped to touched files because repo-wide `bun run lint` has 297 files of pre-existing prettier drift (tracked backlog) that this change must neither fix nor worsen. | Fully-Automated | AC6 |
-| G8 — Manual browser pass (agent + human handoff): open `/issues` as owner, expand a row → loading indicator then timeline; collapse + re-expand → no network refetch (DevTools Network); force a fetch failure (offline) → graceful "Couldn't load the history" message, row does not crash. | Agent-Probe | AC2, AC3, AC4 |
+| Gate / Scenario                                                                                                                                                                                                                                                                                                                                                                                                             | Strategy                                                          | Proves SPEC criterion |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- | --------------------- |
+| G1 — `cd apps/admin && bunx grep`-equivalent: manager load no longer references event history. Concretely, after edit, `grep -n "listIssueEventsByIssue\|events:" apps/admin/src/routes/(app)/issues/+page.server.ts` shows no `listIssueEventsByIssue` and no `events:` field in either return branch.                                                                                                                     | Fully-Automated                                                   | AC1                   |
+| G2 — `cd apps/admin && bunx vitest run` (unit suite, incl. `issues.test.ts`) exits 0 — confirms no unit regression from the `issues.ts` orphan removal; `eventSummary` test (the source of the "Created this incident" string) still passes.                                                                                                                                                                                | Fully-Automated                                                   | AC1, AC5              |
+| G3 — `cd apps/admin && bunx playwright test e2e/incident-timeline.e2e.ts` green — expands a board row, timeline fetches + shows "Created this incident".                                                                                                                                                                                                                                                                    | Hybrid (throwaway `radius_admin_test` DB + build/preview harness) | AC2, AC5              |
+| G4 — `cd apps/admin && bunx playwright test e2e/incident-detail.e2e.ts` green — `/issues/[id]/detail` 200/404-by-role contract unchanged (we only consume it).                                                                                                                                                                                                                                                              | Hybrid                                                            | AC5                   |
+| G5 — `cd apps/admin && bunx playwright test` (full admin e2e, 12 specs / 23 tests: self-report, notifications, sentry, etc.) all green — board still shows freshly-created incidents on expand.                                                                                                                                                                                                                             | Hybrid                                                            | AC5                   |
+| G6 — `bun run check` exits 0 (svelte-check across apps).                                                                                                                                                                                                                                                                                                                                                                    | Fully-Automated                                                   | AC6                   |
+| G7 — `cd apps/admin && bunx prettier --check "src/routes/(app)/issues/+page.server.ts" "src/routes/(app)/issues/+page.svelte" "src/lib/components/feature/IssuesTable.svelte" "src/lib/server/issues.ts"` clean + `bunx eslint <same 4 files>` clean. Scoped to touched files because repo-wide `bun run lint` has 297 files of pre-existing prettier drift (tracked backlog) that this change must neither fix nor worsen. | Fully-Automated                                                   | AC6                   |
+| G8 — Manual browser pass (agent + human handoff): open `/issues` as owner, expand a row → loading indicator then timeline; collapse + re-expand → no network refetch (DevTools Network); force a fetch failure (offline) → graceful "Couldn't load the history" message, row does not crash.                                                                                                                                | Agent-Probe                                                       | AC2, AC3, AC4         |
 
 **Acceptance criteria ↔ proving gate:**
-- **AC1** manager load no longer fetches event history eagerly — *proven by:* G1 (source grep) + G2 (unit suite green after orphan removal) — *strategy:* Fully-Automated.
-- **AC2** expanding a row fetches + shows that issue's timeline — *proven by:* G3 (e2e expand→visible) + G8 (browser) — *strategy:* Hybrid.
-- **AC3** fetch cached per-id / not refetched on re-expand — *proven by:* G8 (DevTools Network shows single request per id) — *strategy:* Agent-Probe. (Known-gap for automation: no unit/e2e harness currently asserts network-call counts for this component; see Test Infra Improvement Notes. AC3's gate stays CONDITIONAL on the manual probe — the cache/in-flight guard in code is the mechanism, the probe is the proof.)
-- **AC4** fetch failure degrades gracefully — *proven by:* G8 (offline probe) — *strategy:* Agent-Probe. (Same known-gap: no automated fault-injection harness; CONDITIONAL on manual probe.)
-- **AC5** all IMS e2e specs stay green — *proven by:* G3 + G4 + G5 — *strategy:* Hybrid.
-- **AC6** `bun run check` + lint clean — *proven by:* G6 + G7 — *strategy:* Fully-Automated.
+
+- **AC1** manager load no longer fetches event history eagerly — _proven by:_ G1 (source grep) + G2 (unit suite green after orphan removal) — _strategy:_ Fully-Automated.
+- **AC2** expanding a row fetches + shows that issue's timeline — _proven by:_ G3 (e2e expand→visible) + G8 (browser) — _strategy:_ Hybrid.
+- **AC3** fetch cached per-id / not refetched on re-expand — _proven by:_ G8 (DevTools Network shows single request per id) — _strategy:_ Agent-Probe. (Known-gap for automation: no unit/e2e harness currently asserts network-call counts for this component; see Test Infra Improvement Notes. AC3's gate stays CONDITIONAL on the manual probe — the cache/in-flight guard in code is the mechanism, the probe is the proof.)
+- **AC4** fetch failure degrades gracefully — _proven by:_ G8 (offline probe) — _strategy:_ Agent-Probe. (Same known-gap: no automated fault-injection harness; CONDITIONAL on manual probe.)
+- **AC5** all IMS e2e specs stay green — _proven by:_ G3 + G4 + G5 — _strategy:_ Hybrid.
+- **AC6** `bun run check` + lint clean — _proven by:_ G6 + G7 — _strategy:_ Fully-Automated.
 
 ---
 
@@ -223,20 +226,21 @@ Net gate: CONDITIONAL — 0 FAILs, 1 CONCERN (test-coverage: AC3/AC4 have no aut
 
 ### Test gates (C3 5-column table)
 
-| criterion id | behavior | strategy | proving test | gap-resolution |
-|---|---|---|---|---|
-| AC1 | Manager board load no longer eager-fetches event history | Fully-Automated | `grep -n "listIssueEventsByIssue\|events:" apps/admin/src/routes/(app)/issues/+page.server.ts` shows neither + `cd apps/admin && bunx vitest run` exits 0 (G1+G2) | A |
-| AC2 | Expanding a row fetches + shows that issue's timeline | Hybrid | `cd apps/admin && bunx playwright test e2e/incident-timeline.e2e.ts` green (G3) | A |
-| AC3 | Fetch cached per-id, not refetched on re-expand | Agent-Probe | G8 DevTools Network: exactly one `/issues/[id]/detail` request per id across collapse+re-expand | D |
-| AC4 | Fetch failure degrades gracefully (no row crash) | Agent-Probe | G8 offline expand → "Couldn't load the history" message, row stays intact | D |
-| AC5 | All IMS e2e specs stay green | Hybrid | `cd apps/admin && bunx playwright test` — 12 specs / 23 tests incl. incident-timeline + incident-detail (G3+G4+G5) | A |
-| AC6 | `bun run check` + scoped lint clean | Fully-Automated | `bun run check` exits 0 (G6) + scoped `bunx prettier --check`/`bunx eslint` on the 4 touched files clean (G7) | A |
+| criterion id | behavior                                                 | strategy        | proving test                                                                                                                                                      | gap-resolution |
+| ------------ | -------------------------------------------------------- | --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------- |
+| AC1          | Manager board load no longer eager-fetches event history | Fully-Automated | `grep -n "listIssueEventsByIssue\|events:" apps/admin/src/routes/(app)/issues/+page.server.ts` shows neither + `cd apps/admin && bunx vitest run` exits 0 (G1+G2) | A              |
+| AC2          | Expanding a row fetches + shows that issue's timeline    | Hybrid          | `cd apps/admin && bunx playwright test e2e/incident-timeline.e2e.ts` green (G3)                                                                                   | A              |
+| AC3          | Fetch cached per-id, not refetched on re-expand          | Agent-Probe     | G8 DevTools Network: exactly one `/issues/[id]/detail` request per id across collapse+re-expand                                                                   | D              |
+| AC4          | Fetch failure degrades gracefully (no row crash)         | Agent-Probe     | G8 offline expand → "Couldn't load the history" message, row stays intact                                                                                         | D              |
+| AC5          | All IMS e2e specs stay green                             | Hybrid          | `cd apps/admin && bunx playwright test` — 12 specs / 23 tests incl. incident-timeline + incident-detail (G3+G4+G5)                                                | A              |
+| AC6          | `bun run check` + scoped lint clean                      | Fully-Automated | `bun run check` exits 0 (G6) + scoped `bunx prettier --check`/`bunx eslint` on the 4 touched files clean (G7)                                                     | A              |
 
 gap-resolution legend: A = proven now / by this cycle's gate · B = fixed in this plan · C = deferred to named later phase · D = backlog test-building stub (named residual; keep-active).
 
 C-4 reconciliation: the strategy column carries only the 3 proving strategies (Fully-Automated / Hybrid / Agent-Probe). Known-Gap is NOT a strategy here — the AC3/AC4 automated-harness absence is a named residual carried via gap-resolution D (backlog stub), and the Agent-Probe (G8) is their actual proving strategy.
 
 Legacy line form (retained for existing consumers):
+
 - AC1 (server load): Fully-automated: `grep -n "listIssueEventsByIssue\|events:" apps/admin/src/routes/(app)/issues/+page.server.ts` returns no match + `cd apps/admin && bunx vitest run` exits 0
 - AC2 / AC5 (e2e): hybrid: `cd apps/admin && bunx playwright test e2e/incident-timeline.e2e.ts e2e/incident-detail.e2e.ts` then full `cd apps/admin && bunx playwright test` — precondition: throwaway `radius_admin_test` DB + build/preview harness (`TEST_ENV`), serial (`workers:1`)
 - AC3 (no refetch): agent-probe: DevTools Network shows single request per id on re-expand
@@ -246,6 +250,7 @@ Legacy line form (retained for existing consumers):
 Failing stubs: none authored. The Fully-Automated rows (AC1, AC6) are static-analysis + existing-suite gates (source grep, `svelte-check`, scoped prettier/eslint) and a re-run of the EXISTING `apps/admin/src/lib/server/issues.test.ts` — no NEW red-first behavioral unit test applies. The one genuinely new behavior (client-side lazy fetch / cache / error state) has no automated harness within scope; that is the documented AC3/AC4 known-gap (backlog stub), not a stub-able Fully-Automated row.
 
 Dimension findings:
+
 - Infra fit: PASS — all 4 touched files are in `apps/admin`; no container/port/runtime surface. Test commands verified against `tests/all-tests.md`: `cd apps/admin && bunx vitest run <file>` and `bunx playwright test <spec>` run from inside the app (never `bun test <file>`, which no-ops fake timers).
 - Test coverage: CONCERN — AC3 (no-refetch) and AC4 (graceful-failure) have NO Fully-Automated or Hybrid gate; sole proof is the manual Agent-Probe (G8), because the admin browser-Vitest project has zero `.svelte.test.ts` files repo-wide. Documented known-gap; backlog stub registered; accepted this session.
 - Breaking changes: PASS — `listIssueEventsByIssue` orphan removal verified: exactly one caller (the board load import+usage in `+page.server.ts`), zero refs in `issues.test.ts`, zero refs in `e2e/`. Endpoint contract is byte-identical: `listIssueEvents` (used by `/issues/[id]/detail`) and `listIssueEventsByIssue` (removed) share the SAME `selectEvents` query, `mapEventRow`, `eventSummary` formatter, and `desc(createdAt), desc(id)` ordering — so lazy fetch delivers the same `IssueEventRow[]` (same "Created this incident" summary, same order) to the same Timeline. `listIssueEvents` is untouched.
@@ -253,6 +258,7 @@ Dimension findings:
 - Section feasibility (single SIMPLE phase): PASS — every edit target present and uniquely matchable (import line 12; manager `events:` line 64 + CEILING comment; non-manager `events:` line 88; IssuesTable `events` prop line 25/31, `toggleExpand` line 42, `<Timeline events={events[issue.id] ?? []}>` line 232; `+page.svelte` line 26). Minor gap: plan cited the Timeline block at ~230-233; actual line 232 — matchable by string, not a blocker. Highest-risk edit: T2e loading→render reactive transition (the `incident-timeline.e2e.ts` expand→`toBeVisible('Created this incident')` assertion now depends on the fetch resolving). Mitigation: mirror the proven `IssueDetailModal.svelte` fetch pattern (already renders this exact endpoint's events into Timeline) + rely on Playwright `toBeVisible()` auto-wait (60s test timeout) — no arbitrary `waitForTimeout`.
 
 Open gaps:
+
 - AC3/AC4 automated coverage: known-gap: no admin browser-Vitest harness (zero `.svelte.test.ts` files in any app). Resolution D — backlog stub to write at UPDATE PROCESS: `process/features/incident-management/backlog/issuestable-component-test_NOTE_22-07-26.md` (add `IssuesTable.svelte.test.ts`: fetch-mock asserts one call on double-expand + renders error branch on fetch failure) once the browser Vitest project gets its first spec.
 - Repo-wide `bun run lint` is red (297 files pre-existing prettier drift, tracked in `repo-wide-lint-prettier-drift_NOTE_10-07-26.md`). G7 is deliberately scoped to the 4 touched files — this change must neither fix nor worsen the pre-existing drift.
 

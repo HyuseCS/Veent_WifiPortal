@@ -7,9 +7,7 @@ import type { EmailProvider, EmailMessage } from './types';
  *
  * Swap for a real impl (Resend) behind the same interface via the factory.
  */
-export function createStubEmailProvider(
-	log: (msg: string) => void = console.log
-): EmailProvider {
+export function createStubEmailProvider(log: (msg: string) => void = console.log): EmailProvider {
 	return {
 		name: 'stub',
 		async send(msg: EmailMessage): Promise<{ id: string }> {

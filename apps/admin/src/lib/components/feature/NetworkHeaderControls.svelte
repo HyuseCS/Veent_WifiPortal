@@ -17,7 +17,11 @@
 </script>
 
 {#if onLogs || onModels}
-	<a href="/networks" class="{btn} max-sm:w-11 max-sm:justify-center max-sm:px-0" aria-label="Networks">
+	<a
+		href="/networks"
+		class="{btn} max-sm:w-11 max-sm:justify-center max-sm:px-0"
+		aria-label="Networks"
+	>
 		<Router class="h-4 w-4" aria-hidden="true" />
 		<span class="hidden sm:inline">Networks</span>
 	</a>

@@ -1,13 +1,13 @@
 ---
 name: protocol:plan-lifecycle
-description: "How plans are named, where they live, when to use feature folders, EXECUTE handoff, and how mixed legacy plan shapes are treated."
+description: 'How plans are named, where they live, when to use feature folders, EXECUTE handoff, and how mixed legacy plan shapes are treated.'
 date: 09-06-26
 metadata:
   node_type: memory
   type: protocol
   read_order: 4
   required: false
-  read_when: "creating, naming, locating, archiving, or resuming a plan, or choosing feature-scoped storage"
+  read_when: 'creating, naming, locating, archiving, or resuming a plan, or choosing feature-scoped storage'
 ---
 
 # Plan Lifecycle
@@ -56,6 +56,7 @@ Feature folder structure (new repos):
 - `backlog/` — flat NOTE files
 
 Legacy repos may also have:
+
 - `reports/` — legacy read-only sibling dir (deprecated for new writes)
 - `references/` — legacy read-only sibling dir (deprecated for new writes)
 
@@ -89,18 +90,19 @@ the phase-program owner) and must carry frontmatter `phase: umbrella`.
 
 **At plan creation time — decision logic:**
 
-| Signal | Action |
-|--------|--------|
-| `process/features/{topic}/` already exists | Use it — pass `Feature: {topic}` to subagent |
-| Topic clearly belongs to an existing feature | Use that feature's folder |
-| New multi-phase project (3+ planned phases) | Create feature folder upfront |
-| User says "this is a big feature" or names a product area | Create feature folder upfront |
-| Single plan, no backlog, unclear scope | Use `process/general-plans/active/` (general) |
-| Cross-cutting work touching multiple features | Use general folders |
+| Signal                                                    | Action                                        |
+| --------------------------------------------------------- | --------------------------------------------- |
+| `process/features/{topic}/` already exists                | Use it — pass `Feature: {topic}` to subagent  |
+| Topic clearly belongs to an existing feature              | Use that feature's folder                     |
+| New multi-phase project (3+ planned phases)               | Create feature folder upfront                 |
+| User says "this is a big feature" or names a product area | Create feature folder upfront                 |
+| Single plan, no backlog, unclear scope                    | Use `process/general-plans/active/` (general) |
+| Cross-cutting work touching multiple features             | Use general folders                           |
 
 **Promotion protocol (general → feature folder):**
 
 When general artifacts for a single topic reach 5+, or when a user requests it:
+
 1. Create `process/features/{new-feature}/` with subdirs: `active/`, `completed/`, `backlog/` (do NOT create `reports/` or `references/` — these are deprecated for new repos)
 2. Move related artifacts from `process/general-plans/` into the new feature's task folders; legacy `reports/` and `references/` content moves into appropriate task folders
 3. Update the **Current features** list in `process/context/all-context.md`
@@ -145,8 +147,8 @@ convention (`node_type: memory`) already in use across context and protocol docs
 ```yaml
 ---
 name: plan:{slug}
-description: "{one-line plan summary}"
-date: {dd-mm-yy}
+description: '{one-line plan summary}'
+date: { dd-mm-yy }
 metadata:
   node_type: memory
   type: plan
@@ -155,13 +157,13 @@ metadata:
 
 **Required fields:**
 
-| Field | Value |
-|-------|-------|
-| `name` | `plan:{slug}` — where `{slug}` is the kebab-case task slug matching the filename (e.g. `plan:model-selector`) |
-| `description` | One-line plain-English summary of what the plan covers |
-| `date` | Today in `dd-mm-yy` format (e.g. `16-06-26` for 16 June 2026) |
-| `metadata.node_type` | Always `memory` — matches the convention used by context docs, protocol docs, and skill references |
-| `metadata.type` | One of: `plan` · `phase-plan` · `umbrella` · `reference` · `implementation` |
+| Field                | Value                                                                                                         |
+| -------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `name`               | `plan:{slug}` — where `{slug}` is the kebab-case task slug matching the filename (e.g. `plan:model-selector`) |
+| `description`        | One-line plain-English summary of what the plan covers                                                        |
+| `date`               | Today in `dd-mm-yy` format (e.g. `16-06-26` for 16 June 2026)                                                 |
+| `metadata.node_type` | Always `memory` — matches the convention used by context docs, protocol docs, and skill references            |
+| `metadata.type`      | One of: `plan` · `phase-plan` · `umbrella` · `reference` · `implementation`                                   |
 
 **`status` is optional** — omit it unless the plan explicitly tracks lifecycle state in frontmatter.
 
@@ -184,17 +186,20 @@ machine-only schema.
 ## Reports and References
 
 New artifacts follow the task-folder convention — co-located inside the task folder:
+
 - Feature-specific reports: `process/features/{feature}/active/{slug}_{date}/{slug}_REPORT_{date}.md`
 - Feature-specific references: `process/features/{feature}/active/{slug}_{date}/{slug}_REF_{date}.md`
 - Cross-cutting reports and references: `process/general-plans/active/{slug}_{date}/{slug}_REPORT_{date}.md`
 
 Legacy paths (deprecated for new writes; existing content is read-only):
+
 - `process/general-plans/reports/` — legacy cross-cutting reports; `reports/visuals/` stays for binary assets
 - `process/general-plans/references/` — legacy cross-cutting research
 - `process/features/{feature}/reports/` — legacy feature reports
 - `process/features/{feature}/references/` — legacy feature references
 
 Migration expectation:
+
 - `vc-setup` and `vc-update` should migrate safe legacy `reports/` / `references/` artifacts into the relevant task folder when exactly one destination task folder can be inferred in the same scope.
 - After safe migration, remove the emptied legacy sibling dir so the target steady-state is `active/`, `completed/`, and `backlog/` only.
 - Leave ambiguous, shared, or unowned legacy artifacts in place and surface them for manual review rather than forcing a risky move.
@@ -257,12 +262,12 @@ Every task's artifacts — plan, spec, reports, and references — live together
 
 ### Artifact Types
 
-| TYPE | Purpose |
-|------|---------|
-| `PLAN` | Implementation plan — one per task, required |
-| `SPEC` | Living specification — process rules, behavior reference, architecture spec |
-| `REPORT` | Execution report, audit, research output for this task |
-| `REF` | Reference material, external research, source snapshots |
+| TYPE     | Purpose                                                                     |
+| -------- | --------------------------------------------------------------------------- |
+| `PLAN`   | Implementation plan — one per task, required                                |
+| `SPEC`   | Living specification — process rules, behavior reference, architecture spec |
+| `REPORT` | Execution report, audit, research output for this task                      |
+| `REF`    | Reference material, external research, source snapshots                     |
 
 ### Lifecycle Rule
 
@@ -323,6 +328,7 @@ durable fact into the appropriate `process/context/` doc, then drop the pointer.
 ### Backward Compatibility
 
 During the migration window, agents must tolerate both shapes:
+
 - flat `*_PLAN_*.md` files at `active/` root (legacy, being migrated)
 - task folder `{slug}_{date}/{slug}_PLAN_{date}.md` (new canonical shape)
 

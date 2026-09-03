@@ -1,5 +1,15 @@
 import { sql } from 'drizzle-orm';
-import { pgTable, serial, integer, text, timestamp, index, uniqueIndex, primaryKey, check } from 'drizzle-orm/pg-core';
+import {
+	pgTable,
+	serial,
+	integer,
+	text,
+	timestamp,
+	index,
+	uniqueIndex,
+	primaryKey,
+	check
+} from 'drizzle-orm/pg-core';
 import { adminUser } from './auth-admin';
 
 /**

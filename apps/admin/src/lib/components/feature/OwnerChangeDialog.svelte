@@ -42,8 +42,8 @@
 			{isSelf ? 'Step down as owner' : `Change ${member.name}'s owner role`}
 		</h2>
 		<p class="mt-2 text-sm text-muted">
-			This needs the approval of <strong>every other owner</strong> before it takes effect. Your
-			request counts as your approval.
+			This needs the approval of <strong>every other owner</strong> before it takes effect. Your request
+			counts as your approval.
 		</p>
 
 		<form
@@ -61,11 +61,23 @@
 			<fieldset class="space-y-2">
 				<legend class="text-sm font-medium text-ink">Action</legend>
 				<label class="flex items-center gap-2 text-sm text-ink">
-					<input type="radio" name="action" value="demote" bind:group={action} class="accent-blue-600" />
+					<input
+						type="radio"
+						name="action"
+						value="demote"
+						bind:group={action}
+						class="accent-blue-600"
+					/>
 					Demote to admin (keeps the account)
 				</label>
 				<label class="flex items-center gap-2 text-sm text-ink">
-					<input type="radio" name="action" value="remove" bind:group={action} class="accent-blue-600" />
+					<input
+						type="radio"
+						name="action"
+						value="remove"
+						bind:group={action}
+						class="accent-blue-600"
+					/>
 					Remove entirely (deletes the account)
 				</label>
 			</fieldset>

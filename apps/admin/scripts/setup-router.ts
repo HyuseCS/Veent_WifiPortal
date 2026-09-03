@@ -129,7 +129,7 @@ try {
 if (originHost === 'localhost' || originHost === '127.0.0.1') {
 	console.error(
 		`ORIGIN host is "${originHost}" — that's loopback, not a LAN address guests can reach.\n` +
-			'Set ORIGIN to the admin box\'s LAN URL (e.g. http://10.5.50.1:5174 or http://admin.veent.lan)\n' +
+			"Set ORIGIN to the admin box's LAN URL (e.g. http://10.5.50.1:5174 or http://admin.veent.lan)\n" +
 			'before provisioning the walled garden.'
 	);
 	process.exit(1);
@@ -186,14 +186,18 @@ if (WIPE || WIPE_ONLY) {
 	}
 }
 
-console.log(`Provisioning walled garden on ${config.host}:${config.port ?? (config.tls ? 8729 : 8728)}`);
+console.log(
+	`Provisioning walled garden on ${config.host}:${config.port ?? (config.tls ? 8729 : 8728)}`
+);
 console.log('  3 tagged groups (load-bearing order: probe → payment → portal):');
 if (PROBE_DENIES.length)
 	console.log(
 		`  [veent-admin:probe]   denies: ${PROBE_DENIES.map((d) => d.host + (d.path ?? '')).join(', ')}`
 	);
-if (paymentHostList.length) console.log(`  [veent-admin:payment] hosts:  ${paymentHostList.join(', ')}`);
-if (portalHostList.length) console.log(`  [veent-admin:portal]  hosts:  ${portalHostList.join(', ')}`);
+if (paymentHostList.length)
+	console.log(`  [veent-admin:payment] hosts:  ${paymentHostList.join(', ')}`);
+if (portalHostList.length)
+	console.log(`  [veent-admin:portal]  hosts:  ${portalHostList.join(', ')}`);
 if (portalIpList.length) console.log(`  [veent-admin:portal]  ips:    ${portalIpList.join(', ')}`);
 
 try {
@@ -303,7 +307,9 @@ function detectSourceIp(host: string, port: number): Promise<string> {
 			fn();
 		};
 		sock.setTimeout(4000);
-		sock.once('timeout', () => finish(() => reject(new Error('timed out connecting to the router'))));
+		sock.once('timeout', () =>
+			finish(() => reject(new Error('timed out connecting to the router')))
+		);
 		sock.once('error', (e) => finish(() => reject(e)));
 		sock.connect(port, host, () => {
 			const ip = sock.localAddress?.replace(/^::ffff:/, '');

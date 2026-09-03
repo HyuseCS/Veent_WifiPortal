@@ -1,6 +1,6 @@
 ---
 name: plan:m2-secret-rotation-reminder
-description: "M2 — RESOLVED (no action): e2e auth fixtures self-rotate each run against a throwaway DB, so leaked history values are dead test creds; git rm --cached was sufficient"
+description: 'M2 — RESOLVED (no action): e2e auth fixtures self-rotate each run against a throwaway DB, so leaked history values are dead test creds; git rm --cached was sufficient'
 date: 10-07-26
 feature: incident-management
 ---

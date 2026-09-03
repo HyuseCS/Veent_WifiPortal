@@ -179,7 +179,9 @@
 						defaultValue={form?.values?.email ?? data.buyer.email}
 						class="h-[48px] w-full rounded-xl border-[1.5px] border-border bg-bg px-4 text-[15px] text-ink transition-colors placeholder:text-muted focus:border-brand focus:outline-none"
 					/>
-					<label class="mt-0.5 flex min-h-[44px] cursor-pointer items-center gap-2.5 text-[13px] text-ink">
+					<label
+						class="mt-0.5 flex min-h-[44px] cursor-pointer items-center gap-2.5 text-[13px] text-ink"
+					>
 						<input
 							type="checkbox"
 							name="saveDetails"

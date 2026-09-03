@@ -10,35 +10,35 @@
 
 **Verification pass (2026-07-16, 7 Fable/high-effort adversarial verifiers, one per division):** of 94 findings — 77 CONFIRMED, 13 PARTIAL, 4 REFUTED, 0 INCONCLUSIVE. Each finding now carries a `Fable verification` note beneath it (original text untouched). PARTIAL = kernel of truth but materially wrong in some respect; REFUTED = claim does not hold — read the note before acting on either.
 
-| Division | Findings | High | Med | Low |
-|---|---|---|---|---|
-| Admin — Server Side (routes, lib/server, auth/2FA, cron) | 14 | 0 | 2 | 12 |
-| Admin — UI / Client Side (Svelte components, ui/ primitives) | 16 | 0 | 4 | 12 |
-| packages/core — Services + Integrations (incl. uncommitted per-AP code) | 16 | 0 | 4 | 12 |
-| packages/db + Admin Test Surface (schema, migrations, e2e, seeds) | 8 | 0 | 3 | 5 |
-| Customer — Server Side (payments, OTP, grants, webhooks) | 12 | 0 | 3 | 9 |
-| Customer — UI / Client + Locator App | 15 | 0 | 2 | 13 |
-| Repo Infra / Root Scripts / Config / Docs | 13 | 0 | 1 | 12 |
+| Division                                                                | Findings | High | Med | Low |
+| ----------------------------------------------------------------------- | -------- | ---- | --- | --- |
+| Admin — Server Side (routes, lib/server, auth/2FA, cron)                | 14       | 0    | 2   | 12  |
+| Admin — UI / Client Side (Svelte components, ui/ primitives)            | 16       | 0    | 4   | 12  |
+| packages/core — Services + Integrations (incl. uncommitted per-AP code) | 16       | 0    | 4   | 12  |
+| packages/db + Admin Test Surface (schema, migrations, e2e, seeds)       | 8        | 0    | 3   | 5   |
+| Customer — Server Side (payments, OTP, grants, webhooks)                | 12       | 0    | 3   | 9   |
+| Customer — UI / Client + Locator App                                    | 15       | 0    | 2   | 13  |
+| Repo Infra / Root Scripts / Config / Docs                               | 13       | 0    | 1   | 12  |
 
 ## Start Here — Highest-Signal Items
 
-- **[MED]** cron.ts docstring falsely claims validateEnv hard-fails on CRON_SECRET — `apps/admin/src/lib/server/cron.ts:16` *(admin-server)*
-- **[MED]** regenBackupCodes / reenroll2faStart gated only by password, not TOTP step-up — `apps/admin/src/routes/(app)/profile/+page.server.ts:244` *(admin-server)*
-- **[MED]** Card is role="button" but wraps interactive form controls (nested interactive) — `apps/admin/src/lib/components/feature/NetworkHealthCard.svelte:122` *(admin-ui)*
-- **[MED]** Desktop sortable-header <th><button> markup copy-pasted across 5 tables — `apps/admin/src/lib/components/feature/UsersTable.svelte:159` *(admin-ui)*
-- **[MED]** Bulk user delete has no confirmation step — `apps/admin/src/lib/components/feature/UsersTable.svelte:384` *(admin-ui)*
-- **[MED]** Dashboard tables opt into card mode but ship no mobile sort control — `apps/admin/src/routes/(app)/dashboard/+page.svelte:206` *(admin-ui)*
-- **[MED]** createCheckout uses bare fetch with no timeout/retry, unlike every other Maya call — `packages/core/src/integrations/payments/maya.ts:279` *(core-services)*
-- **[MED]** Per-lease attribution-cache upsert issues one sequential DB round-trip per DHCP lease — `packages/core/src/services/networkHealth.ts:221` *(core-services)*
-- **[MED]** Outage sweep does an N+1 live MAC→AP resolution inside nested loops each cron minute — `packages/core/src/services/outage.ts:133` *(core-services)*
-- **[MED]** No index on network_health.ap_circuit_id despite being a query filter + join key — `packages/db/src/schema/admin.ts:166` *(db-and-tests)*
-- **[MED]** network_client_attribution grows unbounded — no prune/TTL sweep — `packages/db/src/schema/admin.ts:221` *(db-and-tests)*
-- **[MED]** Shared-ONU group-peer computation has no unit test — `apps/admin/src/lib/server/queries.ts:394` *(db-and-tests)*
-- **[MED]** resend action's OTP send is not wrapped in try/catch — a gateway failure 500s the verify page — `apps/customer/src/routes/auth/verify/+page.server.ts:98` *(customer-server)*
-- **[MED]** Per-IP OTP send/verify caps collapse to one bucket for the whole venue behind a NAT'ing hotspot — `apps/customer/src/lib/server/otpRateLimit.ts:21` *(customer-server)*
-- **[MED]** Locator loads Google Fonts over external @import, contradicting the portal's deliberate self-hosting — `apps/locator/src/routes/layout.css:4` *(customer-ui-locator)*
-- **[MED]** Sidebar search filters the location list but not the map markers — `apps/locator/src/routes/+page.svelte:165` *(customer-ui-locator)*
-- **[MED]** Postgres named volume mounted at wrong path — data may not persist — `compose.yaml:12` *(infra-root)*
+- **[MED]** cron.ts docstring falsely claims validateEnv hard-fails on CRON*SECRET — `apps/admin/src/lib/server/cron.ts:16` *(admin-server)\_
+- **[MED]** regenBackupCodes / reenroll2faStart gated only by password, not TOTP step-up — `apps/admin/src/routes/(app)/profile/+page.server.ts:244` _(admin-server)_
+- **[MED]** Card is role="button" but wraps interactive form controls (nested interactive) — `apps/admin/src/lib/components/feature/NetworkHealthCard.svelte:122` _(admin-ui)_
+- **[MED]** Desktop sortable-header <th><button> markup copy-pasted across 5 tables — `apps/admin/src/lib/components/feature/UsersTable.svelte:159` _(admin-ui)_
+- **[MED]** Bulk user delete has no confirmation step — `apps/admin/src/lib/components/feature/UsersTable.svelte:384` _(admin-ui)_
+- **[MED]** Dashboard tables opt into card mode but ship no mobile sort control — `apps/admin/src/routes/(app)/dashboard/+page.svelte:206` _(admin-ui)_
+- **[MED]** createCheckout uses bare fetch with no timeout/retry, unlike every other Maya call — `packages/core/src/integrations/payments/maya.ts:279` _(core-services)_
+- **[MED]** Per-lease attribution-cache upsert issues one sequential DB round-trip per DHCP lease — `packages/core/src/services/networkHealth.ts:221` _(core-services)_
+- **[MED]** Outage sweep does an N+1 live MAC→AP resolution inside nested loops each cron minute — `packages/core/src/services/outage.ts:133` _(core-services)_
+- **[MED]** No index on network*health.ap_circuit_id despite being a query filter + join key — `packages/db/src/schema/admin.ts:166` *(db-and-tests)\_
+- **[MED]** network*client_attribution grows unbounded — no prune/TTL sweep — `packages/db/src/schema/admin.ts:221` *(db-and-tests)\_
+- **[MED]** Shared-ONU group-peer computation has no unit test — `apps/admin/src/lib/server/queries.ts:394` _(db-and-tests)_
+- **[MED]** resend action's OTP send is not wrapped in try/catch — a gateway failure 500s the verify page — `apps/customer/src/routes/auth/verify/+page.server.ts:98` _(customer-server)_
+- **[MED]** Per-IP OTP send/verify caps collapse to one bucket for the whole venue behind a NAT'ing hotspot — `apps/customer/src/lib/server/otpRateLimit.ts:21` _(customer-server)_
+- **[MED]** Locator loads Google Fonts over external @import, contradicting the portal's deliberate self-hosting — `apps/locator/src/routes/layout.css:4` _(customer-ui-locator)_
+- **[MED]** Sidebar search filters the location list but not the map markers — `apps/locator/src/routes/+page.svelte:165` _(customer-ui-locator)_
+- **[MED]** Postgres named volume mounted at wrong path — data may not persist — `compose.yaml:12` _(infra-root)_
 
 ## Admin — Server Side (routes, lib/server, auth/2FA, cron)
 
@@ -110,9 +110,9 @@ The docstring says it 'streams the filtered transactions as a CSV download', but
 
 `apps/admin/src/hooks.server.ts:64` — performance, confidence: speculative
 
-handleBetterAuth calls auth.api.getSession (which hits the DB) then, sequentially, getStaffStatus(db, session.user.id) (another DB read) on EVERY request whose session resolves — including every (app) page, API route, and __data.json load. The comment notes the extra read is 'cheap' but it runs serially after getSession on the hot path for all authed traffic. Acceptable, but a per-request status cache or joining status into the session lookup would halve round-trips.
+handleBetterAuth calls auth.api.getSession (which hits the DB) then, sequentially, getStaffStatus(db, session.user.id) (another DB read) on EVERY request whose session resolves — including every (app) page, API route, and \_\_data.json load. The comment notes the extra read is 'cheap' but it runs serially after getSession on the hot path for all authed traffic. Acceptable, but a per-request status cache or joining status into the session lookup would halve round-trips.
 
-> **Fable verification (high effort): `CONFIRMED`** — hooks.server.ts:55 awaits auth.api.getSession then :64 sequentially awaits getStaffStatus on every request whose session resolves, including all (app) pages, API routes, and __data.json. The comment (:57-62) explicitly justifies it as a deliberate immediate-disable tradeoff ('this adds one cheap status read'). Accurate as a LOW/acceptable observation.
+> **Fable verification (high effort): `CONFIRMED`** — hooks.server.ts:55 awaits auth.api.getSession then :64 sequentially awaits getStaffStatus on every request whose session resolves, including all (app) pages, API routes, and \_\_data.json. The comment (:57-62) explicitly justifies it as a deliberate immediate-disable tradeoff ('this adds one cheap status read'). Accurate as a LOW/acceptable observation.
 
 ### admin-server-10. [LOW] No rate limiting on password-verify in reenroll2faStart / regenBackupCodes
 
@@ -192,7 +192,7 @@ Both dashboard Tables pass `cards`, so on mobile the sortable <thead> is hidden 
 
 `apps/admin/src/lib/live.svelte.ts:34` — bug-risk, confidence: speculative
 
-`snapshot = JSON.parse(event.data) as DashboardSnapshot`. Only a JSON *syntax* error is caught; a syntactically-valid but structurally-wrong frame flows straight into every panel's derivations (e.g. .networks/.kpis undefined → runtime errors downstream). A minimal shape guard would fail safe to the SSR seed.
+`snapshot = JSON.parse(event.data) as DashboardSnapshot`. Only a JSON _syntax_ error is caught; a syntactically-valid but structurally-wrong frame flows straight into every panel's derivations (e.g. .networks/.kpis undefined → runtime errors downstream). A minimal shape guard would fail safe to the SSR seed.
 
 > **Fable verification (high effort): `CONFIRMED`** — live.svelte.ts:34 is exactly `snapshot = JSON.parse(event.data) as DashboardSnapshot` with a catch that only traps parse (syntax) errors (35-37); a structurally-wrong frame flows into consumers like dashboard's `live.snapshot?.networks ?? data.networks` derivations. The optional-chaining at the top level softens some failure modes, but no shape guard exists; LOW/speculative is calibrated correctly.
 
@@ -274,7 +274,7 @@ The account popup uses role=menu with role=menuitem children but only wires Esc 
 
 The error page prints `page.error.message` verbatim in a mono box when it differs from the friendly title. Admin-internal so low risk, but SvelteKit only sanitizes 5xx messages — thrown error()/redirect messages and 4xx surface as-is, which can leak internal wording to staff-but-not-owner viewers. Worth a conscious decision to keep or gate.
 
-> **Fable verification (high effort): `CONFIRMED`** — routes/+error.svelte:87-91 renders `page.error.message` verbatim in a mono box when it differs from the friendly title. One mechanism nuance: SvelteKit redacts *unexpected* thrown errors (any status) via default handleError, while expected `error(status, msg)` messages of any status — including 5xx — surface as-is; the finding's '5xx only' phrasing is slightly off but the conclusion (internal wording can leak to staff viewers, admin-internal, LOW) holds.
+> **Fable verification (high effort): `CONFIRMED`** — routes/+error.svelte:87-91 renders `page.error.message` verbatim in a mono box when it differs from the friendly title. One mechanism nuance: SvelteKit redacts _unexpected_ thrown errors (any status) via default handleError, while expected `error(status, msg)` messages of any status — including 5xx — surface as-is; the finding's '5xx only' phrasing is slightly off but the conclusion (internal wording can leak to staff viewers, admin-internal, LOW) holds.
 
 ### admin-ui-16. [LOW] Two independent 1s tickers run simultaneously on the dashboard
 
@@ -502,7 +502,7 @@ The `resend` action calls `await auth.api.sendPhoneNumberOTP(...)` with no try/c
 
 `apps/customer/src/lib/server/otpRateLimit.ts:21` — ux, confidence: likely
 
-OTP_SENDS_PER_HOUR_IP=20 and OTP_VERIFY_PER_HOUR_{IP}=20 key on `clientIp(event)` = getClientAddress(). The codebase's own MAC-resolution comments (network-location.ts lines 117-123) document that many hotspot setups NAT all client traffic to the router's single IP (e.g. 10.210.0.1). In those setups every guest device shares one source IP, so 20 OTP sends/hr and 20 verifies/hr are shared across the ENTIRE venue — a busy cafe can exhaust the aggregate and lock out legitimate new guests from logging in. The per-phone cap (5/hr) still protects individuals, but the per-IP axis becomes a venue-wide throttle rather than a per-source one.
+OTP*SENDS_PER_HOUR_IP=20 and OTP_VERIFY_PER_HOUR*{IP}=20 key on `clientIp(event)` = getClientAddress(). The codebase's own MAC-resolution comments (network-location.ts lines 117-123) document that many hotspot setups NAT all client traffic to the router's single IP (e.g. 10.210.0.1). In those setups every guest device shares one source IP, so 20 OTP sends/hr and 20 verifies/hr are shared across the ENTIRE venue — a busy cafe can exhaust the aggregate and lock out legitimate new guests from logging in. The per-phone cap (5/hr) still protects individuals, but the per-IP axis becomes a venue-wide throttle rather than a per-source one.
 
 > **Fable verification (high effort): `CONFIRMED`** — otpRateLimit.ts:21,31 confirm OTP_SENDS_PER_HOUR_IP=20 and OTP_VERIFY_PER_HOUR_IP=20 keyed on clientIp() = getClientAddress (rateLimit.ts:14-16), and network-location.ts:115-123 itself documents that these hotspots NAT all guest traffic to the router's single IP (e.g. 10.210.0.1). In such venues the per-IP axis is one shared bucket: 20 sends + 20 verifies/hr for the whole site, so a busy venue locks out new legitimate guests (per-phone 5/hr still protects individuals). The per-IP cap is a deliberate M-3 anti-drain axis (lines 18-20), but the venue-collapse side effect is real and unaddressed. MED/ux is fair.
 
@@ -668,13 +668,13 @@ The credit-payment button (line 123) sets type="submit" explicitly; the sibling 
 
 > **Fable verification (high effort): `CONFIRMED`** — BuySheet.svelte:124 sets type="submit" on the credits button; the points button at :155-156 omits it. Each form has exactly one button so behavior is identical today — a correct, minor consistency nit at the right severity.
 
-### customer-ui-locator-12. [LOW] Locator wires Sentry from PUBLIC_SENTRY_* env vars not present in its .env.example
+### customer-ui-locator-12. [LOW] Locator wires Sentry from PUBLIC*SENTRY*\* env vars not present in its .env.example
 
 `apps/locator/src/hooks.client.ts:11` — inconsistency, confidence: speculative
 
 hooks.client.ts reads PUBLIC_SENTRY_DSN / PUBLIC_SENTRY_TRACES_SAMPLE_RATE / PUBLIC_SENTRY_ENVIRONMENT etc., but per the repo context the locator's .env.example only declares DATABASE_URL and ORIGIN. Sentry therefore never initializes for the locator (fail-open, so no runtime harm), but the observability wiring is effectively dormant/undocumented — either add the vars to .env.example or drop the Sentry block.
 
-> **Fable verification (high effort): `REFUTED`** — apps/locator/.env.example explicitly documents PUBLIC_SENTRY_DSN, PUBLIC_SENTRY_ENVIRONMENT, PUBLIC_SENTRY_TRACES_SAMPLE_RATE, PUBLIC_SENTRY_RELEASE (plus server-side SENTRY_* twins), commented out with a rationale for why they're left unset — the scanner trusted the stale repo-context claim ('only DATABASE_URL and ORIGIN') instead of reading the file. The wiring (hooks.client.ts:11-26, hooks.server.ts:14-21) is documented and deliberately fail-open, not dormant/undocumented; the suggested fix is already in place. The only residual issue is that process/context/all-context.md's '2 vars' description is stale — a context-doc problem, not a locator-code problem.
+> **Fable verification (high effort): `REFUTED`** — apps/locator/.env.example explicitly documents PUBLIC*SENTRY_DSN, PUBLIC_SENTRY_ENVIRONMENT, PUBLIC_SENTRY_TRACES_SAMPLE_RATE, PUBLIC_SENTRY_RELEASE (plus server-side SENTRY*\* twins), commented out with a rationale for why they're left unset — the scanner trusted the stale repo-context claim ('only DATABASE_URL and ORIGIN') instead of reading the file. The wiring (hooks.client.ts:11-26, hooks.server.ts:14-21) is documented and deliberately fail-open, not dormant/undocumented; the suggested fix is already in place. The only residual issue is that process/context/all-context.md's '2 vars' description is stale — a context-doc problem, not a locator-code problem.
 
 ### customer-ui-locator-13. [LOW] Resend-cooldown interval keeps ticking forever after reaching 0
 
@@ -804,4 +804,4 @@ apps/locator/src/hooks.{client,server}.ts reference Sentry and package.json depe
 
 The gitignored root .env contains a fixed BETTER_AUTH_SECRET (a static UUID). It's not tracked so not leaked, but a committed-in-spirit static secret invites copy-paste into real deploys and is far below the 32-char high-entropy bar the admin app enforces. Low risk because it's dev-only and gitignored.
 
-> **Fable verification (high effort): `PARTIAL`** — Root .env is gitignored (git check-ignore confirms) and contains a static UUID BETTER_AUTH_SECRET — at line 9, not line 5. But 'far below the 32-char high-entropy bar' is overstated: a 36-char UUIDv4 passes the admin >=32-char check and carries ~122 bits of randomness (the adjacent comment at .env:7-8 even flags the production requirement). Impact is further reduced because each app reads its own apps/*/.env and setup-prod generates fresh per-app secrets (setup-prod.ts:169), so the root value appears vestigial (root .env mainly feeds drizzle-kit's DATABASE_URL).
+> **Fable verification (high effort): `PARTIAL`** — Root .env is gitignored (git check-ignore confirms) and contains a static UUID BETTER_AUTH_SECRET — at line 9, not line 5. But 'far below the 32-char high-entropy bar' is overstated: a 36-char UUIDv4 passes the admin >=32-char check and carries ~122 bits of randomness (the adjacent comment at .env:7-8 even flags the production requirement). Impact is further reduced because each app reads its own apps/\*/.env and setup-prod generates fresh per-app secrets (setup-prod.ts:169), so the root value appears vestigial (root .env mainly feeds drizzle-kit's DATABASE_URL).

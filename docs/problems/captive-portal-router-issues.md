@@ -180,16 +180,16 @@ router-side. **No application code is outstanding.**
 2. **Re-upload `docs/mikrotik/login.html` to the router** (the repo copy is correct at
    `10.210.0.9:5173` after the 2026-06-30 re-IP; re-upload if the router's copy still points at
    an old `10.0.0.x` host).
-3. *(optional)* Fix the Winbox LAN allowlist to cover the new subnet (`10.210.0.0/18`; the old
+3. _(optional)_ Fix the Winbox LAN allowlist to cover the new subnet (`10.210.0.0/18`; the old
    entry was a no-op `10.0.0.0/32`, see Problem #1 box).
-4. *(optional, enables #2)* set `MIKROTIK_HOTSPOT_USER`/`MIKROTIK_HOTSPOT_PASSWORD` in both `.env`.
+4. _(optional, enables #2)_ set `MIKROTIK_HOTSPOT_USER`/`MIKROTIK_HOTSPOT_PASSWORD` in both `.env`.
 
 ---
 
 ## Related (application-side, not router/ops)
 
 - **[Second account's MAC not captured](second-account-mac-not-captured.md)** — after logout, buying
-  time on a *second* account doesn't grant the device internet because MAC resolution is
+  time on a _second_ account doesn't grant the device internet because MAC resolution is
   browser-scoped (`veent_portal` cookie) or per-user (`last_known_mac`), and both miss for a fresh
   account. Distinct from the blockers above: this one is a customer-app logic bug, open for a later fix.
 - **[CNA "Connected" flap on free time](captive-connected-flap-on-free-time.md)** — intermittent

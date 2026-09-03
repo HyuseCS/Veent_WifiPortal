@@ -21,16 +21,21 @@ for (const file of readdirSync(dir).filter((f) => f.endsWith('.sql'))) {
 		.split('\n')
 		.map((line) => {
 			if (line.startsWith('DO $$')) return line; // already guarded
-			if (line.startsWith('CREATE TABLE "')) return line.replace('CREATE TABLE "', 'CREATE TABLE IF NOT EXISTS "');
+			if (line.startsWith('CREATE TABLE "'))
+				return line.replace('CREATE TABLE "', 'CREATE TABLE IF NOT EXISTS "');
 			if (line.startsWith('CREATE UNIQUE INDEX "'))
 				return line.replace('CREATE UNIQUE INDEX "', 'CREATE UNIQUE INDEX IF NOT EXISTS "');
-			if (line.startsWith('CREATE INDEX "')) return line.replace('CREATE INDEX "', 'CREATE INDEX IF NOT EXISTS "');
+			if (line.startsWith('CREATE INDEX "'))
+				return line.replace('CREATE INDEX "', 'CREATE INDEX IF NOT EXISTS "');
 			if (line.includes('ADD COLUMN "') && !line.includes('ADD COLUMN IF NOT EXISTS'))
 				return line.replace('ADD COLUMN "', 'ADD COLUMN IF NOT EXISTS "');
 			// Wrap a single-line ADD CONSTRAINT so a duplicate is ignored.
-			const m = line.match(/^(ALTER TABLE .*ADD CONSTRAINT .*?;)(\s*--> statement-breakpoint)?\s*$/);
+			const m = line.match(
+				/^(ALTER TABLE .*ADD CONSTRAINT .*?;)(\s*--> statement-breakpoint)?\s*$/
+			);
 			// Catch both: FKs raise duplicate_object, UNIQUE/PK raise duplicate_table (backing index).
-			if (m) return `DO $$ BEGIN ${m[1]} EXCEPTION WHEN duplicate_object OR duplicate_table THEN null; END $$;${m[2] ?? ''}`;
+			if (m)
+				return `DO $$ BEGIN ${m[1]} EXCEPTION WHEN duplicate_object OR duplicate_table THEN null; END $$;${m[2] ?? ''}`;
 			return line;
 		})
 		.join('\n');

@@ -35,7 +35,7 @@ human verification per the hard scope boundary.
   instant values (Manila EOD 07-23 → `2026-07-23T15:59:59.999Z`), added 7d/30d/90d boundary cases +
   cross-UTC-midnight edge + `all` passthrough. 5 tests, green.
 - **Item 2.1 GATE:** double-apply guard — all 13 columns confirmed still `timestamp without time
-  zone` before apply.
+zone` before apply.
 - **Item 2.2:** applied `0052_pink_maginty.sql` to dev DB atomically
   (`psql --single-transaction -v ON_ERROR_STOP=1`), exit 0.
 - **Item 2.3 GATE:** all 13 columns now `timestamp with time zone`.
@@ -71,6 +71,7 @@ human verification per the hard scope boundary.
 ## New migration file + hand-edited USING SQL
 
 `packages/db/drizzle/0052_pink_maginty.sql` (migration #53, `0000`–`0052`). USING map applied:
+
 - Manila-wall `AT TIME ZONE 'Asia/Manila'`: credit_ledger.created_at, points_ledger.created_at,
   payment_transactions.created_at, payment_checkouts.created_at
 - UTC-wall `AT TIME ZONE 'UTC'`: payment_checkouts.settled_at/last_polled_at,
@@ -94,16 +95,16 @@ human verification per the hard scope boundary.
 
 ## Test Gate Outcomes
 
-| Gate | Result |
-|---|---|
-| AC1 round-trip (incl. NULL) — timestamptz-roundtrip.integration.spec.ts | PASS |
-| AC2/AC3 same-day cross-convention — queries.spec.ts | PASS |
-| AC4 reconcile age-boundary — reconcilePayments.integration.spec.ts | PASS |
-| AC5 static trigger grep | PASS (dynamic smoke deferred) |
-| AC6 KPI bucket byte-identical | PASS |
-| AC7 dev TZ preflight | PASS (Asia/Manila) |
-| AC8 db:generate + hand-edit + dev direct-apply-verify | PASS |
-| AC9 bun run check / lint(scoped) / bun run test | PASS (391 tests, 0 fail) + Item 3.8 admin e2e 23/23 green (24-07-26) |
+| Gate                                                                    | Result                                                               |
+| ----------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| AC1 round-trip (incl. NULL) — timestamptz-roundtrip.integration.spec.ts | PASS                                                                 |
+| AC2/AC3 same-day cross-convention — queries.spec.ts                     | PASS                                                                 |
+| AC4 reconcile age-boundary — reconcilePayments.integration.spec.ts      | PASS                                                                 |
+| AC5 static trigger grep                                                 | PASS (dynamic smoke deferred)                                        |
+| AC6 KPI bucket byte-identical                                           | PASS                                                                 |
+| AC7 dev TZ preflight                                                    | PASS (Asia/Manila)                                                   |
+| AC8 db:generate + hand-edit + dev direct-apply-verify                   | PASS                                                                 |
+| AC9 bun run check / lint(scoped) / bun run test                         | PASS (391 tests, 0 fail) + Item 3.8 admin e2e 23/23 green (24-07-26) |
 
 ## Plan Deviations
 
@@ -137,18 +138,22 @@ human verification per the hard scope boundary.
 ## Forward Preview
 
 ### Test Infra Found
+
 - PGlite full-chain migrator + two-phase (journal-truncation) pattern works for migration-DDL tests.
 - `bun run test` (not `bun test`) is the repo-wide vitest gate.
 
 ### Blast Radius Changes
+
 - `packages/db/src/schema/customer.ts` (13 cols), new `0052_pink_maginty.sql` + snapshot/journal,
   `apps/admin/src/lib/server/period.ts` + `period.spec.ts` + `queries.spec.ts`, 2 new `packages/core`
   integration specs. `packages/core` source (sessions.ts/reconcilePayments.ts) untouched.
 
 ### Commands to Stay Green
+
 - `bun run check` · `bun run test` · scoped `bunx prettier --check`/`eslint` on touched files.
 
 ### Dependency Changes
+
 - None. (`@electric-sql/pglite` already a devDependency in admin + core.)
 
 ---
@@ -212,17 +217,17 @@ human verification per the hard scope boundary.
 
 9. **SPEC achievement** (against the locked `finance-timestamptz-migration_SPEC_23-07-26.md`, 9 ACs):
 
-   | AC | Criterion | Status |
-   |---|---|---|
-   | AC1 | Round-trip instant correctness, incl. NULL | **met** — Hybrid gate green |
-   | AC2 | Finance date filters include same-day rows across sources | **met** — Hybrid gate green |
-   | AC3 | `listUnifiedTransactions` windows correctly cross-convention | **met** — Hybrid gate green |
-   | AC4 | `reconcilePayments` age-boundary logic correct | **met** — Fully-Automated gate green |
-   | AC5 | No dashboard live-feed regression | **unmet (partial)** — static half PASS; dynamic browser smoke not yet run |
-   | AC6 | KPI/revenue byte-identical | **met** — folded into AC1 spec, green |
-   | AC7 | TZ preflight confirmed per environment before apply | **unmet (partial)** — dev confirmed `Asia/Manila`; prod preflight not yet run |
-   | AC8 | Migration reproducible (generate/hand-edit/apply/verify) | **unmet (partial)** — dev apply-and-verify done; prod apply not yet run |
-   | AC9 | No unrelated behavior change | **met** — automated gates + admin e2e (23/23) green, zero new failures |
+   | AC  | Criterion                                                    | Status                                                                        |
+   | --- | ------------------------------------------------------------ | ----------------------------------------------------------------------------- |
+   | AC1 | Round-trip instant correctness, incl. NULL                   | **met** — Hybrid gate green                                                   |
+   | AC2 | Finance date filters include same-day rows across sources    | **met** — Hybrid gate green                                                   |
+   | AC3 | `listUnifiedTransactions` windows correctly cross-convention | **met** — Hybrid gate green                                                   |
+   | AC4 | `reconcilePayments` age-boundary logic correct               | **met** — Fully-Automated gate green                                          |
+   | AC5 | No dashboard live-feed regression                            | **unmet (partial)** — static half PASS; dynamic browser smoke not yet run     |
+   | AC6 | KPI/revenue byte-identical                                   | **met** — folded into AC1 spec, green                                         |
+   | AC7 | TZ preflight confirmed per environment before apply          | **unmet (partial)** — dev confirmed `Asia/Manila`; prod preflight not yet run |
+   | AC8 | Migration reproducible (generate/hand-edit/apply/verify)     | **unmet (partial)** — dev apply-and-verify done; prod apply not yet run       |
+   | AC9 | No unrelated behavior change                                 | **met** — automated gates + admin e2e (23/23) green, zero new failures        |
 
    Unmet-partial criteria (AC5, AC7, AC8) are exactly the criteria whose remaining half is the
    prod-apply sequence — this is expected given the deliberate dev-only scope boundary, not a gap
@@ -254,7 +259,7 @@ The deferred Finance e2e gate was run against the throwaway e2e DB (`radius_admi
 `e2e/global-setup.ts`), Playwright + stub router, never the dev DB or a real MikroTik.
 
 - **Scoped run** (`e2e/finance-export.e2e.ts`, the only spec matching Item 3.8's glob — `ls
-  apps/admin/e2e/` shows no `**transactions**` spec): **2/2 green**.
+apps/admin/e2e/` shows no `**transactions**` spec): **2/2 green**.
 - **Full suite** (all 12 spec files) run for the AC9 breadth this gate actually exists to prove:
   **23/23 green, 0 failures.**
 - Meaning is unchanged per **E5**: this is AC9 regression breadth, NOT AC2/AC3 date-window evidence.

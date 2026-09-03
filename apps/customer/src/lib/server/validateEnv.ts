@@ -25,11 +25,15 @@ export function validateEnv(): void {
 	if (building) return; // env isn't populated during build/prerender
 
 	if (isTestMode()) {
-		const m = 'TEST_MODE is enabled — dev/test-only behavior is active (first consumer: the login OTP '
-			+ 'is shown in the UI instead of sent via SMS). This MUST NOT run in production.';
+		const m =
+			'TEST_MODE is enabled — dev/test-only behavior is active (first consumer: the login OTP ' +
+			'is shown in the UI instead of sent via SMS). This MUST NOT run in production.';
 		if (!dev) {
 			if (!allowTestModeInProd()) {
-				throw new Error(m + ' Set ALLOW_TEST_MODE_IN_PROD to deliberately allow it in a prod build (staging only).');
+				throw new Error(
+					m +
+						' Set ALLOW_TEST_MODE_IN_PROD to deliberately allow it in a prod build (staging only).'
+				);
 			}
 			console.warn(
 				`[env] ⚠️  STAGING OPT-IN: ${m} ALLOW_TEST_MODE_IN_PROD is set, so this prod build is booting with ` +
@@ -72,7 +76,9 @@ export function validateEnv(): void {
 
 	// Observability degrades to off, so warn (don't fail) when the Sentry DSN is unset in prod.
 	if (!dev && !pub.PUBLIC_SENTRY_DSN) {
-		console.warn('[env] PUBLIC_SENTRY_DSN unset — error tracking & performance tracing are disabled.');
+		console.warn(
+			'[env] PUBLIC_SENTRY_DSN unset — error tracking & performance tracing are disabled.'
+		);
 	}
 
 	if (missing.length === 0) return;

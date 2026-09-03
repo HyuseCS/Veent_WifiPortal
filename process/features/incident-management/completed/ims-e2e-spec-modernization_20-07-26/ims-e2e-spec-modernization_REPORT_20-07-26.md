@@ -14,6 +14,7 @@ All 3 pieces implemented, test-only. Full admin e2e suite: **23/23 passed**. Zer
 ## What Was Done
 
 ### Piece 1 — `apps/admin/e2e/incident-notifications.e2e.ts`
+
 - Replaced both stale `getByRole('menuitem', ...)` queries with a button-role query **scoped to the
   panel region** (`getByRole('region', { name: 'Notifications' })`). Panel scoping was required, not
   optional: an unscoped title query hit 3 elements (the notification entry plus the manager board's
@@ -27,12 +28,13 @@ All 3 pieces implemented, test-only. Full admin e2e suite: **23/23 passed**. Zer
   local `markEverythingRead(ownerId)` helper — a single idempotent
   `INSERT ... SELECT ... ON CONFLICT DO NOTHING` that parks a read row on every existing event for
   the owner. This is the "equivalent unconditional cleanup" 1.5a permits, chosen over a UI click
-  because it cannot itself throw or time out on a missing element. It runs on pass *and* fail, so a
+  because it cannot itself throw or time out on a missing element. It runs on pass _and_ fail, so a
   future throw before the cleanup can never re-open test 2's cascade.
 - **Item 1.6 honoured: test 2 was not touched.** Its `:113` `"Notifications (2 unread)"` assertion is
   byte-identical and passes.
 
 ### Piece 2 — `apps/admin/e2e/finance-export.e2e.ts`
+
 - Both `context.request.get()` calls now pass `{ maxRedirects: 0 }` and assert `302` +
   `location` (`/login`, `/enroll-2fa`). Exact `.toBe()` matches are safe as the VALIDATE note
   confirmed — `hooks.server.ts:83-90` returns a raw `Response` with a literal static `location`, not
@@ -41,6 +43,7 @@ All 3 pieces implemented, test-only. Full admin e2e suite: **23/23 passed**. Zer
 - **Item 2.3 honoured:** `finance/export/+server.ts:17-18`'s own 401/403 checks were not touched.
 
 ### Piece 3 — `apps/admin/e2e/incident-self-report.e2e.ts` (NEW, 4 tests)
+
 - `withSql` / `userIdByEmail` / `loginNonManager` duplicated locally (VALIDATE confirmed none are
   exported); no new shared-helpers module introduced.
 - Uses `cleo@veent.test` (item 3.2 / E4). `bea@veent.test` untouched, so `finance-export.e2e.ts`'s
@@ -66,12 +69,12 @@ Nothing. All checklist items 1.1–3.8 plus AC5 completed.
 
 ## Test Gate Outcomes
 
-| Gate | Command | Result |
-|---|---|---|
-| AC1/AC2/AC3/AC4a-d | `bun run test:e2e -- incident-notifications finance-export incident-self-report` | **8 passed (51.5s)** |
-| AC5 | `git diff --stat apps/admin/src/ \| wc -l` | **0** |
-| AC5 (untracked-file check) | `git status --porcelain apps/admin/src/` | **empty** |
-| AC6 | `bun run test:e2e` (full suite) | **23 passed (1.1m)** |
+| Gate                       | Command                                                                          | Result               |
+| -------------------------- | -------------------------------------------------------------------------------- | -------------------- |
+| AC1/AC2/AC3/AC4a-d         | `bun run test:e2e -- incident-notifications finance-export incident-self-report` | **8 passed (51.5s)** |
+| AC5                        | `git diff --stat apps/admin/src/ \| wc -l`                                       | **0**                |
+| AC5 (untracked-file check) | `git status --porcelain apps/admin/src/`                                         | **empty**            |
+| AC6                        | `bun run test:e2e` (full suite)                                                  | **23 passed (1.1m)** |
 
 Pre-existing known-flaky baseline (`incident-detail`, `incident-notifications`, `incident-timeline`
 per `all-tests.md` §Known Gaps): **all three now green**. No new failures anywhere.

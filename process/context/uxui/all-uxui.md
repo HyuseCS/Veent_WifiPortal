@@ -71,8 +71,8 @@ pre-existing project docs — treat them as deeper reading, not part of this man
 - `apps/admin/src/lib/components/layout/` — `Sidebar.svelte`, `Topbar.svelte`,
   `MobileDrawer.svelte`, `ModeToggle.svelte` + `index.ts`
 - `apps/admin/src/routes/layout.css` — design tokens: `@theme` block (light-mode `--color-*` vars)
-  + `:root[data-theme='dark']` override block; rationale documented in
-  `docs/design/DESIGN_GUIDELINES.md`
+  - `:root[data-theme='dark']` override block; rationale documented in
+    `docs/design/DESIGN_GUIDELINES.md`
 - `apps/customer/src/routes/layout.css`, `apps/locator/src/routes/layout.css` — each app has its
   OWN token file; none are shared with admin
 - `apps/admin/vite.config.ts` (and the customer/locator equivalents) — `@tailwindcss/vite` plugin
@@ -87,7 +87,7 @@ pre-existing project docs — treat them as deeper reading, not part of this man
   customer's non-dashboard shared components, living at `lib/` root (no `ui/`/`feature/` split like
   admin)
 - `docs/design/DESIGN_GUIDELINES.md`, `docs/design/DESIGN_BRIEF_pricing-prelogin.md` — pre-existing
-  design docs (not managed by this group, but the authoritative source for token *rationale*)
+  design docs (not managed by this group, but the authoritative source for token _rationale_)
 
 ## Update Triggers
 

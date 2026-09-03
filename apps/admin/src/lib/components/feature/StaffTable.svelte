@@ -237,7 +237,9 @@
 				>
 					<Avatar src={member.image} name={member.name} class="h-9 w-9 text-xs" />
 					<span class="min-w-0">
-						<span class="block truncate font-medium text-ink group-hover:text-brand">{member.name}</span>
+						<span class="block truncate font-medium text-ink group-hover:text-brand"
+							>{member.name}</span
+						>
 						<span class="block truncate font-mono text-xs text-muted">{member.email}</span>
 					</span>
 				</button>

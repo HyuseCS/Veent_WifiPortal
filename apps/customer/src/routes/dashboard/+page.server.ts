@@ -57,7 +57,8 @@ export const load: PageServerLoad = async (event) => {
 	// already online, and buying stacks a redundant window (never a hard block; see mac-guard).
 	// Gated on `live`: never derive cross-account occupancy from a fallback (unverified) MAC — a
 	// stale/wrong fallback could match another account's last-known MAC and show a spurious warning.
-	const deviceBusyUntil = mac && live ? await otherAccountAccessUntilForMac(db, mac, user.id) : null;
+	const deviceBusyUntil =
+		mac && live ? await otherAccountAccessUntilForMac(db, mac, user.id) : null;
 
 	const tiers = await db
 		.select()
@@ -113,7 +114,8 @@ export const load: PageServerLoad = async (event) => {
 	let handoffUrl: string | null = null;
 	try {
 		const r = await auth.api.generateOneTimeToken({ headers: event.request.headers });
-		if (r?.token) handoffUrl = `${event.url.origin}/auth/handoff?token=${encodeURIComponent(r.token)}`;
+		if (r?.token)
+			handoffUrl = `${event.url.origin}/auth/handoff?token=${encodeURIComponent(r.token)}`;
 	} catch (err) {
 		// Low-priority: the link is simply omitted; the dashboard still renders. log.error routes
 		// through the seam → Sentry at warning level, so it's the rate that matters, not one miss.
@@ -136,8 +138,7 @@ export const load: PageServerLoad = async (event) => {
  * and anything the captive portal didn't actually populate, so we never hand the
  * router an invalid MAC (which it rejects → an opaque 500). */
 const MAC_RE = /^[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}$/;
-const NO_DEVICE =
-	'Could not detect your device. Reconnect through the WiFi portal and try again.';
+const NO_DEVICE = 'Could not detect your device. Reconnect through the WiFi portal and try again.';
 
 // Per-user grant throttle (L-4): the grant/bind actions share the JSON endpoint's `grant_user`
 // budget so a user can't sidestep it via the dashboard form. `bindThisDevice` in particular can
@@ -162,13 +163,19 @@ export const actions: Actions = {
 
 		let result;
 		try {
-			result = await startFreeAccessAndBindDevice(db, network, { userId: user.id, macAddress: mac });
+			result = await startFreeAccessAndBindDevice(db, network, {
+				userId: user.id,
+				macAddress: mac
+			});
 		} catch (err) {
 			log.error('startFreeTime grant failed:', err);
 			return fail(502, { error: 'Could not reach the network controller. Please try again.' });
 		}
 		if (!result.ok) {
-			return fail(429, { error: 'Free time not available yet', nextEligibleAt: result.nextEligibleAt });
+			return fail(429, {
+				error: 'Free time not available yet',
+				nextEligibleAt: result.nextEligibleAt
+			});
 		}
 		return { connected: true };
 	},
@@ -224,8 +231,7 @@ export const actions: Actions = {
 		}
 		if (!result.ok) {
 			return fail(402, {
-				error:
-					currency === 'points' ? 'Insufficient points balance' : 'Insufficient credit balance'
+				error: currency === 'points' ? 'Insufficient points balance' : 'Insufficient credit balance'
 			});
 		}
 		return { connected: true };
@@ -332,9 +338,7 @@ export const actions: Actions = {
 		}
 		if (!result.ok) {
 			const error =
-				result.reason === 'no_remaining'
-					? 'No held time left to resume.'
-					: 'Nothing to resume.';
+				result.reason === 'no_remaining' ? 'No held time left to resume.' : 'Nothing to resume.';
 			return fail(409, { error });
 		}
 		return { resumed: true };

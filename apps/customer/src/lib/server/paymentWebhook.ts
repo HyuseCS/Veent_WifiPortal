@@ -122,8 +122,13 @@ export async function handlePaymentWebhook(event: RequestEvent): Promise<Respons
 		).length > 0;
 	const pkgExists =
 		refPackageId !== null &&
-		(await db.select({ id: packages.id }).from(packages).where(eq(packages.id, refPackageId)).limit(1))
-			.length > 0;
+		(
+			await db
+				.select({ id: packages.id })
+				.from(packages)
+				.where(eq(packages.id, refPackageId))
+				.limit(1)
+		).length > 0;
 	const attributedUserId = userExists ? refUserId : null;
 	const attributedPackageId = pkgExists ? refPackageId : null;
 

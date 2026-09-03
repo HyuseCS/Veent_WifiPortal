@@ -112,7 +112,11 @@ function deriveStatusDisplay(
 		? { label: 'Assigned', tone: 'warning' } // owned, not yet started
 		: { label: 'Open', tone: 'blocked' }; // unowned — the pool; draws the eye
 }
-const PRIORITY_LABEL: Record<IssuePriority, string> = { low: 'Low', medium: 'Medium', high: 'High' };
+const PRIORITY_LABEL: Record<IssuePriority, string> = {
+	low: 'Low',
+	medium: 'Medium',
+	high: 'High'
+};
 const PRIORITY_TONE: Record<IssuePriority, StatusTone> = {
 	high: 'blocked',
 	medium: 'warning',
@@ -279,9 +283,7 @@ export async function isAssignee(db: DB, issueId: number, userId: string): Promi
 	const [row] = await db
 		.select({ issueId: adminIssueAssignee.issueId })
 		.from(adminIssueAssignee)
-		.where(
-			and(eq(adminIssueAssignee.issueId, issueId), eq(adminIssueAssignee.adminUserId, userId))
-		)
+		.where(and(eq(adminIssueAssignee.issueId, issueId), eq(adminIssueAssignee.adminUserId, userId)))
 		.limit(1);
 	return !!row;
 }
@@ -567,10 +569,7 @@ export async function updateIssue(
 			await tx
 				.delete(adminIssueAssignee)
 				.where(
-					and(
-						eq(adminIssueAssignee.issueId, id),
-						inArray(adminIssueAssignee.adminUserId, toRemove)
-					)
+					and(eq(adminIssueAssignee.issueId, id), inArray(adminIssueAssignee.adminUserId, toRemove))
 				);
 			for (const adminUserId of toRemove) {
 				await recordEvent(tx, {

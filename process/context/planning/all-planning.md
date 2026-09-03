@@ -1,6 +1,6 @@
 ---
 name: context:all-planning
-description: "Plan-shape calibration, planning conventions, and implementation-plan examples — the planning group entrypoint/router"
+description: 'Plan-shape calibration, planning conventions, and implementation-plan examples — the planning group entrypoint/router'
 keywords: plan, planning, prd, roadmap, plan shape, simple plan, complex plan, task folder, plan conventions
 related: []
 date: 10-07-26

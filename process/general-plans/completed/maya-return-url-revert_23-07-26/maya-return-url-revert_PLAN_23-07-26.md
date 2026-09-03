@@ -1,6 +1,6 @@
 ---
 name: plan:maya-return-url-revert
-description: "Revert the misdirected Maya browser return-URL change; restore ${origin} for success/cancel URLs"
+description: 'Revert the misdirected Maya browser return-URL change; restore ${origin} for success/cancel URLs'
 date: 23-07-26
 feature: general-plans
 ---
@@ -67,10 +67,10 @@ domain. Result: file returns to committed (HEAD) state. Supersedes
 
 ## Verification Evidence
 
-| Gate / Scenario | Strategy | Proves SPEC criterion |
-|---|---|---|
-| `bun run --filter veent-customer check` exits 0 | Fully-Automated | Reverted code typechecks (no dangling `returnOrigin` ref) |
-| `bun run check` exits 0 | Fully-Automated | Whole-repo typecheck clean |
+| Gate / Scenario                                                             | Strategy        | Proves SPEC criterion                                         |
+| --------------------------------------------------------------------------- | --------------- | ------------------------------------------------------------- |
+| `bun run --filter veent-customer check` exits 0                             | Fully-Automated | Reverted code typechecks (no dangling `returnOrigin` ref)     |
+| `bun run check` exits 0                                                     | Fully-Automated | Whole-repo typecheck clean                                    |
 | `git diff HEAD -- apps/customer/src/routes/top-up/+page.server.ts` is empty | Fully-Automated | File byte-identical to committed HEAD state (revert complete) |
 
 ## Test Infra Improvement Notes

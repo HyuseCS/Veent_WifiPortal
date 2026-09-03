@@ -1,6 +1,6 @@
 ---
 name: report:ims-e2e-spec-modernization-pvl-iteration-001
-description: "PVL cycle 1 — 3 CONCERNs + 1 non-blocking recommendation from the first-pass CONDITIONAL promoted from Execute-Agent Instructions into the plan checklist body."
+description: 'PVL cycle 1 — 3 CONCERNs + 1 non-blocking recommendation from the first-pass CONDITIONAL promoted from Execute-Agent Instructions into the plan checklist body.'
 date: 20-07-26
 metadata:
   node_type: memory
@@ -33,12 +33,12 @@ reader may not open.
 
 ## Gaps addressed
 
-| # | Severity | Gap | Resolution |
-|---|---|---|---|
-| 1 | CONCERN | Piece 1's "Mark all read" cleanup had no failure-resilience; an early throw in the 1.1–1.5 rewrite would silently reintroduce test 2's cascade failure | New item 1.5a — `try/finally` (or `afterEach`) around the modal-interaction block |
-| 2 | CONCERN | Piece 3's raw tamper POST omitted `Origin`; SvelteKit's CSRF guard 403s form-content-type POSTs with a missing/mismatched `Origin`, so the request would never reach `selfReport` | Item 3.3 — mandates `headers: { origin: TEST_ORIGIN }` **and** a pre-assertion that the response is not a CSRF 403, ordered before any assignee-discard assertion |
-| 3 | CONCERN | Item 3.3's wording implied both an honest UI submit and a raw tamper POST — ambiguous, and the honest submit proves nothing while consuming a rate-limit slot | Item 3.3 — raw tamper POST is now the sole create action; 3.4 targets its issue id |
-| 4 | non-blocking | Piece 3 reused `bea@veent.test`, the fixture `finance-export.e2e.ts` depends on staying un-enrolled; `loginNonManager` would enroll it permanently, with only alphabetical file ordering preventing breakage | Items 3.2/3.3 — swapped to `cleo@veent.test`, confirmed untouched by every other spec |
+| #   | Severity     | Gap                                                                                                                                                                                                          | Resolution                                                                                                                                                        |
+| --- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | CONCERN      | Piece 1's "Mark all read" cleanup had no failure-resilience; an early throw in the 1.1–1.5 rewrite would silently reintroduce test 2's cascade failure                                                       | New item 1.5a — `try/finally` (or `afterEach`) around the modal-interaction block                                                                                 |
+| 2   | CONCERN      | Piece 3's raw tamper POST omitted `Origin`; SvelteKit's CSRF guard 403s form-content-type POSTs with a missing/mismatched `Origin`, so the request would never reach `selfReport`                            | Item 3.3 — mandates `headers: { origin: TEST_ORIGIN }` **and** a pre-assertion that the response is not a CSRF 403, ordered before any assignee-discard assertion |
+| 3   | CONCERN      | Item 3.3's wording implied both an honest UI submit and a raw tamper POST — ambiguous, and the honest submit proves nothing while consuming a rate-limit slot                                                | Item 3.3 — raw tamper POST is now the sole create action; 3.4 targets its issue id                                                                                |
+| 4   | non-blocking | Piece 3 reused `bea@veent.test`, the fixture `finance-export.e2e.ts` depends on staying un-enrolled; `loginNonManager` would enroll it permanently, with only alphabetical file ordering preventing breakage | Items 3.2/3.3 — swapped to `cleo@veent.test`, confirmed untouched by every other spec                                                                             |
 
 ## Note on gap 2's assertion ordering
 

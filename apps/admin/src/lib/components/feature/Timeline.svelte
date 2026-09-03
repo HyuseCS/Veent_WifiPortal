@@ -88,7 +88,9 @@
 					</div>
 					<p class="text-xs text-muted">by {e.actor}</p>
 					{#if e.note}
-						<p class="mt-1 rounded-md border border-border bg-surface px-2.5 py-1.5 text-xs whitespace-pre-wrap text-ink">
+						<p
+							class="mt-1 rounded-md border border-border bg-surface px-2.5 py-1.5 text-xs whitespace-pre-wrap text-ink"
+						>
 							{e.note}
 						</p>
 					{/if}

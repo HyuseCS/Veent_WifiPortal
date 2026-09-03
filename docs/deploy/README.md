@@ -6,9 +6,9 @@ Postgres database and the cron jobs.
 
 **Pick your path:**
 
-| You are… | Use | Section |
-|---|---|---|
-| Standing up **production** on a VM (Docker) | `compose.prod.yaml` | **[Part 1 — Production (Docker)](#part-1--production-docker)** |
+| You are…                                                            | Use                    | Section                                                            |
+| ------------------------------------------------------------------- | ---------------------- | ------------------------------------------------------------------ |
+| Standing up **production** on a VM (Docker)                         | `compose.prod.yaml`    | **[Part 1 — Production (Docker)](#part-1--production-docker)**     |
 | Running on a **bare-metal host, no Docker** (dev boxes / self-host) | `setup:prod` + systemd | **[Part 2 — Bare-metal host](#part-2--bare-metal-host-no-docker)** |
 
 Both paths share the same router, Sentry, and secrets setup — those live in three references linked
@@ -60,11 +60,12 @@ file maps `CUSTOMER_*` / `ADMIN_*` onto the var name each app reads. `.env` is g
 commit it. Secret rules: **[secrets-hardening.md](secrets-hardening.md)**.
 
 > **Editing `.env` after the stack is up:** a plain `docker compose ... up -d <svc>` does **not**
-> reload `env_file` changes — compose only recreates on a *compose-file* change. Force it:
+> reload `env_file` changes — compose only recreates on a _compose-file_ change. Force it:
 > `docker compose -f compose.prod.yaml up -d --force-recreate <svc>` (or rebuild). Confirm with
 > `docker compose -f compose.prod.yaml exec <svc> printenv <VAR>`.
 
 > **Staging vs production env differences** (a staging box that shows the OTP on-device):
+>
 > - **On-device OTP:** set `TEST_MODE=true` **and** `ALLOW_TEST_MODE_IN_PROD=true` (the two-flag
 >   opt-in — the customer prod build refuses to boot with `TEST_MODE` on unless the second flag is
 >   also set). A **real production** portal leaves **both blank** so it fails closed. Boot logs the
@@ -129,10 +130,12 @@ Data lives in the `pgdata` named volume; dumps go to the `pgbackups` volume. Add
 ```
 
 Restore (runs inside the `db` container — `/backups` is the `pgbackups` volume, not a host path):
+
 ```bash
 docker compose -f compose.prod.yaml exec -T db \
   sh -c 'gunzip -c /backups/radius-YYYY-MM-DD.sql.gz | psql -U radius radius'
 ```
+
 Prune inside the container too: `docker compose -f compose.prod.yaml exec -T db find /backups -mtime +14 -delete`.
 
 ## 7. Updating (pull new images / rebuild)
@@ -209,9 +212,9 @@ Minimum per app (full var list is in each `.env.example`):
 
 - **customer:** `DATABASE_URL`, `ORIGIN` (`http://<ip>:3001` on a private LAN; `https://<domain>`
   otherwise — validateEnv hard-fails on public http), `BETTER_AUTH_SECRET`, `NETWORK_CONTROLLER=mikrotik`
-  + `MIKROTIK_*`, `CRON_SECRET`, `MAYA_PUBLIC_KEY`/`MAYA_SECRET_KEY` + `MAYA_SANDBOX=false`,
-  `TUNNEL_ORIGIN` (the site's public https tunnel — **required for Maya on a NAT'd LAN**), `SMS_PROVIDER`
-  + its keys (iTexMo `ITEXMO_*` default, or UniSMS `UNISMS_*`).
+  - `MIKROTIK_*`, `CRON_SECRET`, `MAYA_PUBLIC_KEY`/`MAYA_SECRET_KEY` + `MAYA_SANDBOX=false`,
+    `TUNNEL_ORIGIN` (the site's public https tunnel — **required for Maya on a NAT'd LAN**), `SMS_PROVIDER`
+  - its keys (iTexMo `ITEXMO_*` default, or UniSMS `UNISMS_*`).
 - **admin:** `DATABASE_URL`, `ORIGIN` (the admin's LAN address matching `PORT=3002`),
   a **distinct** `BETTER_AUTH_SECRET`, `NETWORK_CONTROLLER=mikrotik` + `MIKROTIK_*`,
   `HEALTH_EXCLUDE_INTERFACES`, `ADMIN_WG_HOSTS`/`ADMIN_WG_IPS` (optional), `CRON_SECRET`,
@@ -361,14 +364,17 @@ Two live-testing failures, both operator config (not code):
 Most setup failures are a **missing env var** or the **router IP restriction**.
 
 **`createDb: connection string is required` during `bun run build`**
+
 - `bun run build` builds every app; each creates its DB client at import, so an empty/missing
   `DATABASE_URL` in **any** app's `.env` fails the whole build. Fix: give every app a `.env` with a
   non-empty `DATABASE_URL` (needn't reach a live DB to build — postgres-js connects lazily).
 
 **App aborts on boot with "… is required in production"**
+
 - `validateEnv()` hard-fails on a missing required var. Fix: set the named var. (In dev these only warn.)
 
 **DB: `ECONNREFUSED` / `password authentication failed` / `database "local" does not exist`**
+
 - Postgres isn't running, or `DATABASE_URL` doesn't match it. Dev Docker: `docker compose up -d db`
   (`compose.yaml` → user `root`, password `mysecretpassword`, db `local`, host port `5433`). Prod:
   change the default password in **both** the compose/db config and `DATABASE_URL`.
@@ -376,9 +382,11 @@ Most setup failures are a **missing env var** or the **router IP restriction**.
 **Router / api-ssl / OTP / Maya-checkout / captive-portal issues** → **[router-api-ssl.md](router-api-ssl.md)**.
 
 **Migrations "applied successfully" but a column is missing**
+
 - A **dev-only** quirk (a migration whose timestamp predates a since-discarded recorded one is skipped).
   A fresh prod DB applies everything in order. On a dev box, apply the skipped one's SQL by hand
   (migrations are idempotent). **Never `db:push` in prod.**
 
 **App "runs" but behaves like dev (placeholder MAC, OTP printed to console, weak secret)**
+
 - You're running `vite dev`, not `node build` / the app image — production must run the built output.

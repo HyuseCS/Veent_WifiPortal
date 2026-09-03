@@ -1,6 +1,6 @@
 ---
 name: report:ap-name-collision-retry-pvl-iteration-001
-description: "PVL cycle 1 — G-NC2 leg-2 test staging gap closed; re-validating from V1"
+description: 'PVL cycle 1 — G-NC2 leg-2 test staging gap closed; re-validating from V1'
 date: 20-07-26
 metadata:
   node_type: report

@@ -164,10 +164,7 @@ export async function executeOwnerChange(
 				.update(adminProfile)
 				.set({ role: STAFF_ROLE.admin })
 				.where(
-					and(
-						eq(adminProfile.userId, target.targetUserId),
-						eq(adminProfile.role, STAFF_ROLE.owner)
-					)
+					and(eq(adminProfile.userId, target.targetUserId), eq(adminProfile.role, STAFF_ROLE.owner))
 				)
 				.returning({ userId: adminProfile.userId });
 			return updated.length > 0;

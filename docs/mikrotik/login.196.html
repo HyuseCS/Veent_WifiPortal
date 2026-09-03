@@ -15,12 +15,18 @@
   (IP → Hotspot → Walled Garden IP List) or trapped devices can't reach it.
 -->
 <html>
-<head>
-	<meta http-equiv="refresh" content="0; url=http://10.210.63.17:5173/?mac=$(mac)&ip=$(ip)&link-login-only=$(link-login-only)&link-orig=$(link-orig)&ssid=$(ssid)" />
-	<title>Connecting…</title>
-</head>
-<body>
-	<p>Redirecting to the WiFi portal…</p>
-	<p>If nothing happens, <a href="http://10.210.63.17:5173/?mac=$(mac)&link-orig=$(link-orig)">tap here</a>.</p>
-</body>
+	<head>
+		<meta
+			http-equiv="refresh"
+			content="0; url=http://10.210.63.17:5173/?mac=$(mac)&ip=$(ip)&link-login-only=$(link-login-only)&link-orig=$(link-orig)&ssid=$(ssid)"
+		/>
+		<title>Connecting…</title>
+	</head>
+	<body>
+		<p>Redirecting to the WiFi portal…</p>
+		<p>
+			If nothing happens,
+			<a href="http://10.210.63.17:5173/?mac=$(mac)&link-orig=$(link-orig)">tap here</a>.
+		</p>
+	</body>
 </html>
