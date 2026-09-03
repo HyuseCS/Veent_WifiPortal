@@ -15,7 +15,14 @@
 	import { enhance } from '$app/forms';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
-	import { Button, EmptyState, IconButton, SearchInput, StatusBadge, Table } from '$lib/components/ui';
+	import {
+		Button,
+		EmptyState,
+		IconButton,
+		SearchInput,
+		StatusBadge,
+		Table
+	} from '$lib/components/ui';
 	import Timeline from './Timeline.svelte';
 	import type { AdminIssueRow, IssueEventRow } from '$lib/server/issues';
 
@@ -211,7 +218,11 @@
 					</div>
 				{:else}
 					<div class="flex items-center justify-end gap-1">
-						<IconButton icon={icon(Pencil)} label="Edit {issue.title}" onclick={() => onedit(issue)} />
+						<IconButton
+							icon={icon(Pencil)}
+							label="Edit {issue.title}"
+							onclick={() => onedit(issue)}
+						/>
 						<IconButton
 							icon={icon(Trash2)}
 							label="Delete {issue.title}"
@@ -235,9 +246,14 @@
 						<div class="flex flex-wrap gap-x-6 gap-y-1 text-xs text-muted">
 							<span>
 								<span class="font-medium text-ink">Assignees:</span>
-								{issue.assignees.length ? issue.assignees.map((a) => a.name).join(', ') : 'Unassigned'}
+								{issue.assignees.length
+									? issue.assignees.map((a) => a.name).join(', ')
+									: 'Unassigned'}
 							</span>
-							<span><span class="font-medium text-ink">Access point:</span> {issue.networkName ?? 'General'}</span>
+							<span
+								><span class="font-medium text-ink">Access point:</span>
+								{issue.networkName ?? 'General'}</span
+							>
 							<span><span class="font-medium text-ink">Due:</span> {dueLabel(issue.dueDate)}</span>
 							<span>
 								<span class="font-medium text-ink">Created:</span>
@@ -283,7 +299,9 @@
 				<EmptyState
 					icon={icon(query ? Search : ClipboardList)}
 					title={query ? 'No incidents match' : 'No incidents yet'}
-					description={query ? 'Try a different search term.' : 'Create the first incident to start tracking.'}
+					description={query
+						? 'Try a different search term.'
+						: 'Create the first incident to start tracking.'}
 					compact
 				/>
 			</td>
@@ -291,6 +309,8 @@
 	{/if}
 
 	{#snippet footer()}
-		<p class="px-4 py-3 text-xs text-muted">Showing {filtered.length} of {issues.length} incidents</p>
+		<p class="px-4 py-3 text-xs text-muted">
+			Showing {filtered.length} of {issues.length} incidents
+		</p>
 	{/snippet}
 </Table>

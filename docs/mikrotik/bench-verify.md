@@ -14,7 +14,7 @@ command execution — the checks below. Tick each box; anything red stops the sh
   `CRON_SECRET` set. (Admin app too, if testing sign-in flows.)
 - A real **test device** (phone/laptop) joined to the hotspot — gives a MAC + IP the router
   actually sees, and lets you observe the captive banner and real internet.
-- A **router terminal**: Winbox → *New Terminal*, or SSH to the router.
+- A **router terminal**: Winbox → _New Terminal_, or SSH to the router.
 
 **Fire the sweep on demand** (don't wait for the 1-minute cron tick). The customer revoke cron runs
 `expireDueAccounts → reconcileGuestBindings → sweepCheckoutAccess → sweepAdminAccess`:
@@ -23,9 +23,11 @@ command execution — the checks below. Tick each box; anything red stops the sh
 curl -sS -X POST http://127.0.0.1:5173/api/network/revoke -H "x-cron-secret: $CRON_SECRET"
 # → { "revoked": n, "reconciled": n, "sweptCheckoutAccess": n, "sweptAdminAccess": n }
 ```
+
 (Adjust the port to your customer dev server. `sweptAdminAccess` is the count of admin bindings reaped.)
 
 **Inspect router state** (RouterOS terminal):
+
 ```
 /ip/hotspot/ip-binding/print detail      # mac-address · type · comment  ← the bypass bindings
 /ip/hotspot/walled-garden/print detail   # pre-auth allow/deny rules (checkout + admin dashboard)
@@ -34,6 +36,7 @@ curl -sS -X POST http://127.0.0.1:5173/api/network/revoke -H "x-cron-secret: $CR
 
 **Fast-forward the 4h clock.** The reap decision is `now − comment_epoch ≥ 4h`, so don't wait — edit
 a binding's timestamp to an old epoch (`1000000000000` = Sept 2001, always "expired"):
+
 ```
 /ip/hotspot/ip-binding/set [find comment~"veent-admin"] comment="veent-admin:1000000000000"
 ```
@@ -44,8 +47,9 @@ a binding's timestamp to an old epoch (`1000000000000` = Sept 2001, always "expi
 
 > **Expected latency — the admin bypass is NOT instant, unlike a guest `?mac=` purchase.** Two
 > lags, both normal (don't read them as "broken"):
+>
 > 1. **The binding shows in Winbox only once the grant fires.** The admin path has no captive
->    `?mac=`; it resolves the MAC with a *live* router lookup (`resolveDeviceMac`, which now **retries**
+>    `?mac=`; it resolves the MAC with a _live_ router lookup (`resolveDeviceMac`, which now **retries**
 >    — 3 attempts × 2.5 s + ~300 ms backoff, ~8 s worst case — plus an age-bounded stale-cache
 >    fallback). If the device still isn't in the router's host/lease/ARP tables after the retries, no
 >    binding is written that login — the next dashboard load (the sliding refresh) writes it once the
@@ -53,54 +57,60 @@ a binding's timestamp to an old epoch (`1000000000000` = Sept 2001, always "expi
 >    `admin bypass granted: ip=… mac=…` vs `skipped — no MAC for client ip=…`.
 > 2. **The device gets internet within seconds of the grant.** A fresh bypass (non-bypassed→bypassed)
 >    now **cuts the device's already-open conntrack rows** and flushes the stale hotspot host
->    (mirroring *revoke*), so existing flows re-evaluate against the bypass at once instead of riding
+>    (mirroring _revoke_), so existing flows re-evaluate against the bypass at once instead of riding
 >    the pre-bypass path until they age out (`grant()` in `mikrotik.ts`, `flush=true` only on the
 >    transition — a comment-only sliding renewal never pokes a live device). The OS **"!" banner** can
 >    still linger until the device's next captive re-probe (~30–60 s) — that's cosmetic; browsing works
->    (see `admin-bypass-troubleshooting.md`). Hotspot-login *activation*, which clears the banner at
+>    (see `admin-bypass-troubleshooting.md`). Hotspot-login _activation_, which clears the banner at
 >    once, is opt-in via `MIKROTIK_HOTSPOT_USER` and simply not enabled on this deployment.
 
 ### Expiry + grandfather (router-only, fast — no device flows needed)
-- [ ] **Grandfather a legacy binding.** Add a *bare* admin binding, then sweep:
+
+- [ ] **Grandfather a legacy binding.** Add a _bare_ admin binding, then sweep:
   ```
   /ip/hotspot/ip-binding/add mac-address="DE:AD:00:00:00:01" type=bypassed comment="veent-admin"
   ```
   `curl … /api/network/revoke` → the bare binding **survives** (only timestamped `veent-admin:<epoch>`
   is reaped). `sweptAdminAccess` does not count it.
 - [ ] **Reap a timestamped binding.** Sign into the admin dashboard on the device (creates
-  `comment=veent-admin:<recent-epoch>`), fast-forward its comment to `veent-admin:1000000000000`, sweep
-  → binding **removed**, response `sweptAdminAccess:1`, the device's live connections drop, and the
-  **admin dashboard still loads** (walled-garden — never a lockout).
+      `comment=veent-admin:<recent-epoch>`), fast-forward its comment to `veent-admin:1000000000000`, sweep
+      → binding **removed**, response `sweptAdminAccess:1`, the device's live connections drop, and the
+      **admin dashboard still loads** (walled-garden — never a lockout).
 
 ### Grant precedence / no-clobber (device + app flows)
-- [ ] **Admin then guest.** Sign into admin (`veent-admin` binding) → buy a package on the *same*
-  device → binding **stays `veent-admin`** (the guest grant no-ops; it never demotes the admin bypass).
+
+- [ ] **Admin then guest.** Sign into admin (`veent-admin` binding) → buy a package on the _same_
+      device → binding **stays `veent-admin`** (the guest grant no-ops; it never demotes the admin bypass).
 - [ ] **Guest then admin.** Buy a package first (`veent-portal` binding) → sign into admin on the same
-  device → binding **stays `veent-portal`** (admin rides the existing bypass; paid time is untouched).
+      device → binding **stays `veent-portal`** (admin rides the existing bypass; paid time is untouched).
 
 ### Tag-scoped revoke (security-critical isolation)
+
 - [ ] **Guest expiry leaves the admin bypass.** Sign into admin (`veent-admin`) **then** buy a short
-  guest package (creates an active session row + a window). Let the window lapse (or set
-  `customer_profile.access_expires_at` to the past), then sweep → the **`veent-admin` binding survives**
-  (the guest-lifecycle revoke is scoped to `veent-portal` and can't match it). *Without the fix it
-  would be gone.*
+      guest package (creates an active session row + a window). Let the window lapse (or set
+      `customer_profile.access_expires_at` to the past), then sweep → the **`veent-admin` binding survives**
+      (the guest-lifecycle revoke is scoped to `veent-portal` and can't match it). _Without the fix it
+      would be gone._
 - [ ] **Security lever cuts fully.** From admin, Block or Kick that customer → the binding is
-  **removed regardless of tag** (`{all:true}` full cut — defeats a MAC-spoofer riding an admin bypass).
+      **removed regardless of tag** (`{all:true}` full cut — defeats a MAC-spoofer riding an admin bypass).
 
 ### Restore across the expiry (mutual exclusion holds through the reap)
+
 - [ ] Admin-first (`veent-admin`) + buy a guest package on the same device (live window; binding stays
-  `veent-admin`) → fast-forward the comment → sweep → the **`veent-admin` binding is removed AND a fresh
-  `veent-portal` binding is added** for the MAC, so the still-paid device doesn't go dark.
+      `veent-admin`) → fast-forward the comment → sweep → the **`veent-admin` binding is removed AND a fresh
+      `veent-portal` binding is added** for the MAC, so the still-paid device doesn't go dark.
 
 ### Sign-out + sliding
+
 - [ ] **Logout revokes.** Sign in (`veent-admin` binding) → click logout → binding **gone immediately**.
 - [ ] **Sliding window.** Sign in, note the epoch in the comment; sign out and back in → the epoch
-  **advances** (a fresh 4h). *(The on-activity slide from the `(app)` layout is throttled ~2h; to watch
-  it live, temporarily lower `REFRESH_INTERVAL_MS` in `apps/admin/src/lib/server/adminBypass.ts`.)*
+      **advances** (a fresh 4h). _(The on-activity slide from the `(app)` layout is throttled ~2h; to watch
+      it live, temporarily lower `REFRESH_INTERVAL_MS` in `apps/admin/src/lib/server/adminBypass.ts`.)_
 
 ---
 
 ## B3.1 — reconcile drops orphaned bindings (the DB-first swallow's safety net)
+
 - [ ] Add an orphan portal binding (no backing DB session), then sweep:
   ```
   /ip/hotspot/ip-binding/add mac-address="DE:AD:00:00:00:02" type=bypassed comment="veent-portal"
@@ -112,25 +122,29 @@ a binding's timestamp to an old epoch (`1000000000000` = Sept 2001, always "expi
 ---
 
 ## B3.6 — checkout walled-garden tag-guard
+
 - [ ] Ensure the walled garden is provisioned: `bun run setup:router` (admin app).
 - [ ] Add an **operator** rule for a reCAPTCHA host, scoped to the device IP, **un-tagged**:
   ```
   /ip/hotspot/walled-garden/add action=allow dst-host="www.google.com" src-address="<device-ip>" comment="ops-keepme"
   ```
 - [ ] Start a checkout on that device (reach the Maya checkout page → fires `openCheckoutAccess`, which
-  opens the reCAPTCHA hosts scoped to the device IP, tagged `veent-checkout:<ts>`).
+      opens the reCAPTCHA hosts scoped to the device IP, tagged `veent-checkout:<ts>`).
 - [ ] `/ip/hotspot/walled-garden/print detail` shows **both** the `ops-keepme` rule (survived) **and** a
-  new `veent-checkout:<ts>` rule. Re-run the checkout → the `veent-checkout` row **refreshes** (old
-  removed, new added — no duplicate accumulation for the same host/IP); the operator rule is **still
-  there**. *Without the guard the operator rule would be deleted on re-checkout.*
+      new `veent-checkout:<ts>` rule. Re-run the checkout → the `veent-checkout` row **refreshes** (old
+      removed, new added — no duplicate accumulation for the same host/IP); the operator rule is **still
+      there**. _Without the guard the operator rule would be deleted on re-checkout._
 
 ---
 
 ## Cleanup
+
 Remove any bindings/rules added by hand:
+
 ```
 /ip/hotspot/ip-binding/remove [find comment~"veent-admin" or comment="veent-portal"]   # test-added only — verify first!
 /ip/hotspot/walled-garden/remove [find comment="ops-keepme"]
 ```
+
 Reset any test data touched in the DB (e.g. a `access_expires_at` you set to the past). Confirm the
 test device's real bindings are back to a correct state before leaving the bench.

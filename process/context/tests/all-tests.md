@@ -1,6 +1,6 @@
 ---
 name: context:all-tests
-description: "Test runners, exact commands, the admin e2e throwaway-DB harness quirks, and known coverage gaps — the tests group entrypoint/router"
+description: 'Test runners, exact commands, the admin e2e throwaway-DB harness quirks, and known coverage gaps — the tests group entrypoint/router'
 keywords: test, tests, vitest, playwright, e2e, unit test, svelte-check, lint, coverage, test:seed, radius_admin_test, TEST_ENV, browser test, requireAssertions
 related: []
 date: 20-07-26
@@ -66,18 +66,22 @@ Each app's Vitest config splits into two projects:
 All apps set `expect: { requireAssertions: true }` — an assertion-less test is a **failing** test, not a silent pass.
 
 ### Use Vitest (server project) when
+
 - testing server-side logic: route handlers, `lib/server/*`, validation, rate limiting, DB-adjacent logic (mocked)
 - this is the default for nearly all new unit tests today — every existing unit test file in the repo runs here
 
 ### Use Vitest (client project) when
+
 - testing `.svelte` component behavior in a real browser context
 - note: this is a green field — no existing `.svelte.test.ts` file to pattern-match from yet; needs Playwright's Chromium installed locally
 
 ### Use Playwright e2e when
+
 - the behavior depends on real navigation, auth/2FA redirects, or full-stack admin governance flows
 - only `apps/admin` has actual specs today; `apps/customer` and `apps/locator` have Playwright configs wired but zero specs
 
 ### Use `packages/core` Vitest when
+
 - testing shared services (`observability`, `outage`) — includes one integration spec that talks to a real in-process PGlite instance (no external DB needed)
 
 ## Default Verification Order
@@ -94,26 +98,26 @@ Recommended gate order for this repo (no CI to enforce it, so run manually in th
 
 **Root (`package.json`):**
 
-| Command | What it does |
-|---|---|
-| `bun test` | `bun run --filter './apps/*' --filter '@veent/core' test` — CI-style one-shot across all 3 apps + core. **`packages/db` is excluded (no test script).** |
-| `bun run check` | `bun run --filter './apps/*' check` — svelte-check per app. **`packages/core` and `packages/db` are NOT in this fan-out** (they have tsconfigs but no `check` script). |
-| `bun run lint` | `prettier --check . && eslint .` |
-| `bun run format` | `prettier --write .` |
+| Command          | What it does                                                                                                                                                           |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `bun test`       | `bun run --filter './apps/*' --filter '@veent/core' test` — CI-style one-shot across all 3 apps + core. **`packages/db` is excluded (no test script).**                |
+| `bun run check`  | `bun run --filter './apps/*' check` — svelte-check per app. **`packages/core` and `packages/db` are NOT in this fan-out** (they have tsconfigs but no `check` script). |
+| `bun run lint`   | `prettier --check . && eslint .`                                                                                                                                       |
+| `bun run format` | `prettier --write .`                                                                                                                                                   |
 
 **Per app** (`apps/admin`, `apps/customer`, `apps/locator` — identical scripts):
 
-| Command | What it does |
-|---|---|
-| `vitest run --passWithNoTests` (via `bun run test`) | one-shot unit run |
-| `vitest` (via `bun run test:unit`) | watch mode |
-| `playwright test` (via `bun run test:e2e`) | e2e run |
-| `svelte-kit sync && svelte-check --tsconfig ./tsconfig.json` (via `bun run check`) | typecheck |
+| Command                                                                            | What it does      |
+| ---------------------------------------------------------------------------------- | ----------------- |
+| `vitest run --passWithNoTests` (via `bun run test`)                                | one-shot unit run |
+| `vitest` (via `bun run test:unit`)                                                 | watch mode        |
+| `playwright test` (via `bun run test:e2e`)                                         | e2e run           |
+| `svelte-kit sync && svelte-check --tsconfig ./tsconfig.json` (via `bun run check`) | typecheck         |
 
 **`packages/core`:**
 
-| Command | What it does |
-|---|---|
+| Command                           | What it does      |
+| --------------------------------- | ----------------- |
 | `vitest run` (via `bun run test`) | one-shot unit run |
 
 **`packages/db`:** no test script — zero tests, not covered by any root fan-out.
@@ -135,19 +139,19 @@ failing `$lib` alias resolution. Confirmed during the M4d Sentry-provenance EVL 
 
 **Admin harness scripts** (`apps/admin/scripts/`):
 
-| Command | What it does |
-|---|---|
-| `bun run test:seed` | seeds the throwaway `radius_admin_test` DB (`scripts/seed-test-data.ts`) |
-| `bun run test:simulate` | simulate against seeded data |
-| `bun run test:simulate:fresh` | fresh simulate run |
-| `bun run test:clear` | clear throwaway test data |
+| Command                       | What it does                                                             |
+| ----------------------------- | ------------------------------------------------------------------------ |
+| `bun run test:seed`           | seeds the throwaway `radius_admin_test` DB (`scripts/seed-test-data.ts`) |
+| `bun run test:simulate`       | simulate against seeded data                                             |
+| `bun run test:simulate:fresh` | fresh simulate run                                                       |
+| `bun run test:clear`          | clear throwaway test data                                                |
 
 **Customer loadtest scripts** (`apps/customer/loadtest/`):
 
-| Command | What it does |
-|---|---|
-| `bun run loadtest:seed` | seed data for load testing |
-| `bun run loadtest:cleanup` | cleanup after load testing |
+| Command                          | What it does                                           |
+| -------------------------------- | ------------------------------------------------------ |
+| `bun run loadtest:seed`          | seed data for load testing                             |
+| `bun run loadtest:cleanup`       | cleanup after load testing                             |
 | `k6 run loadtest/grant-spike.js` | manual k6 invocation (not wrapped in a package script) |
 
 ## Debugging Quick Reference

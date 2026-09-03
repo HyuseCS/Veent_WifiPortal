@@ -42,7 +42,9 @@ export function shapeDevices(
 			lastSeenAt: d.lastSeenAt.toISOString()
 		}))
 		// Most-recently-seen first; the current device floats to the top.
-		.sort((a, b) => (a.thisDevice ? -1 : b.thisDevice ? 1 : b.lastSeenAt.localeCompare(a.lastSeenAt)));
+		.sort((a, b) =>
+			a.thisDevice ? -1 : b.thisDevice ? 1 : b.lastSeenAt.localeCompare(a.lastSeenAt)
+		);
 
 	const matched = list.some((d) => d.thisDevice);
 	// A fallback (unverified) MAC that matches a bound device is NOT proof of connection — the match

@@ -1,6 +1,6 @@
 ---
 name: note:per-ap-throughput-alt-source
-description: "Optional future option — an alternative traffic source for per-AP guest throughput, since /ip hotspot active is structurally unavailable for bypass-granted paid guests. Not started, not committed to."
+description: 'Optional future option — an alternative traffic source for per-AP guest throughput, since /ip hotspot active is structurally unavailable for bypass-granted paid guests. Not started, not committed to.'
 date: 21-07-26
 metadata:
   node_type: memory

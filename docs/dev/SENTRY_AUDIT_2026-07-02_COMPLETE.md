@@ -19,20 +19,20 @@ See `docs/dev/SENTRY_REMEDIATION_PLAN_2026-07-02_COMPLETE.md` for step-by-step d
 three apps; 108 unit tests + 7 core tests green; all apps build with no Sentry env, 0 leaked
 source maps).
 
-| Finding | Disposition |
-|---------|-------------|
-| S1 — permalink could carry a `javascript:` URL | ✅ fixed — `httpsUrl()` guard in `map.ts` (https-only) + tests |
-| S2 — unbounded read-cache `Map` | ✅ fixed — folded into I1: 100-entry cap with eviction in `client.ts` |
-| S3 — any active staff can resolve/ignore | ⛔ closed — confirmed intended (owner-only gate deliberately NOT added) |
-| I1 — no failure caching / no in-flight dedup | ✅ fixed — in-flight promise cache + 10s failure TTL in `client.ts` |
-| I2 — client trace sampling hardcoded | ✅ fixed — `PUBLIC_SENTRY_TRACES_SAMPLE_RATE` + customer env mirror |
-| I3 — no `release` on client inits | ✅ fixed — `PUBLIC_SENTRY_RELEASE` on both client inits |
-| I4 — MAC scrub regex colon-only | ✅ fixed — colon/hyphen/bare-12-hex in `observability.ts` + tests |
-| E1 — grant/bind `console.error` never reach Sentry | ✅ fixed — 7 customer + 1 admin catch sites now `log.error` |
-| E2 — locator app has zero telemetry | ✅ done — locator client+server hooks, dep, `app: 'locator'` |
-| E3 — no cron/scheduler liveness | ✅ done — `Sentry.withMonitor` check-ins on revoke/reconcile/health-refresh |
-| E4 — DB query tracing (deferred) | ✅ resolved — already emitted by the default `postgresJsIntegration` (no code) |
-| E5 — source-maps upload (deferred) | ✅ done — gated `sentrySvelteKit` upload in both apps' `vite.config.ts` |
+| Finding                                            | Disposition                                                                    |
+| -------------------------------------------------- | ------------------------------------------------------------------------------ |
+| S1 — permalink could carry a `javascript:` URL     | ✅ fixed — `httpsUrl()` guard in `map.ts` (https-only) + tests                 |
+| S2 — unbounded read-cache `Map`                    | ✅ fixed — folded into I1: 100-entry cap with eviction in `client.ts`          |
+| S3 — any active staff can resolve/ignore           | ⛔ closed — confirmed intended (owner-only gate deliberately NOT added)        |
+| I1 — no failure caching / no in-flight dedup       | ✅ fixed — in-flight promise cache + 10s failure TTL in `client.ts`            |
+| I2 — client trace sampling hardcoded               | ✅ fixed — `PUBLIC_SENTRY_TRACES_SAMPLE_RATE` + customer env mirror            |
+| I3 — no `release` on client inits                  | ✅ fixed — `PUBLIC_SENTRY_RELEASE` on both client inits                        |
+| I4 — MAC scrub regex colon-only                    | ✅ fixed — colon/hyphen/bare-12-hex in `observability.ts` + tests              |
+| E1 — grant/bind `console.error` never reach Sentry | ✅ fixed — 7 customer + 1 admin catch sites now `log.error`                    |
+| E2 — locator app has zero telemetry                | ✅ done — locator client+server hooks, dep, `app: 'locator'`                   |
+| E3 — no cron/scheduler liveness                    | ✅ done — `Sentry.withMonitor` check-ins on revoke/reconcile/health-refresh    |
+| E4 — DB query tracing (deferred)                   | ✅ resolved — already emitted by the default `postgresJsIntegration` (no code) |
+| E5 — source-maps upload (deferred)                 | ✅ done — gated `sentrySvelteKit` upload in both apps' `vite.config.ts`        |
 
 **Correction to §3 / E1 below:** the customer dashboard had **7** raw `console.error`
 catch sites (the "8" figure counted `buyTier`, which already used `log.error`). All 7 were
@@ -60,22 +60,22 @@ migrated, plus the 1 admin `networks` site.
 
 ### Nits (priority order)
 
-| # | Finding | Location | Fix size |
-|---|---------|----------|----------|
-| S1 | `permalink` rendered as `href` with only `str()` coercion. Trusted source (authenticated Sentry API), but a compromised org response could inject a `javascript:` URL into an admin page. | `map.ts:45` | 1 line: `permalink.startsWith('https://') ? permalink : ''` |
-| S2 | Read cache is an unbounded `Map` — `event:${id}` keys accumulate; stale entries never evicted (only overwritten or cleared by `invalidate()`). Rate limit bounds growth in practice: slow leak, not a hole. | `client.ts:73` | ~3 lines: size-capped sweep |
-| S3 | Any active staff member can resolve/ignore issues. Code comments say this is deliberate — confirming intent only. If triage should be owner-only, the gate is one role check in `mutate()`. | `+page.server.ts:16` | 1 line if wanted |
+| #   | Finding                                                                                                                                                                                                     | Location             | Fix size                                                    |
+| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------- | ----------------------------------------------------------- |
+| S1  | `permalink` rendered as `href` with only `str()` coercion. Trusted source (authenticated Sentry API), but a compromised org response could inject a `javascript:` URL into an admin page.                   | `map.ts:45`          | 1 line: `permalink.startsWith('https://') ? permalink : ''` |
+| S2  | Read cache is an unbounded `Map` — `event:${id}` keys accumulate; stale entries never evicted (only overwritten or cleared by `invalidate()`). Rate limit bounds growth in practice: slow leak, not a hole. | `client.ts:73`       | ~3 lines: size-capped sweep                                 |
+| S3  | Any active staff member can resolve/ignore issues. Code comments say this is deliberate — confirming intent only. If triage should be owner-only, the gate is one role check in `mutate()`.                 | `+page.server.ts:16` | 1 line if wanted                                            |
 
 ---
 
 ## 2. Implementation improvements
 
-| # | Finding | Location | Notes |
-|---|---------|----------|-------|
-| I1 | No failure caching / no in-flight dedup. During a Sentry outage every dashboard load waits out two 8s timeouts; concurrent cache misses double-fetch (cache stores resolved data, not the promise). | `client.ts` `cached()` | Cache the in-flight promise instead of the result — ~2 lines, fixes both |
-| I2 | Client-side trace sampling hardcoded at `0.2` in both apps' `hooks.client.ts` while servers read `SENTRY_TRACES_SAMPLE_RATE`. Changing prod browser sampling requires a rebuild. Related: admin's client hooks respect `PUBLIC_SENTRY_ENVIRONMENT`, customer's don't. | `apps/{admin,customer}/src/hooks.client.ts` | Add `PUBLIC_SENTRY_TRACES_SAMPLE_RATE` fallback, mirror env handling |
-| I3 | No `release` on client inits — server passes `SENTRY_RELEASE`, browsers send nothing. Client errors can't be tied to a deploy; the deferred source-maps work requires this anyway. | `apps/{admin,customer}/src/hooks.client.ts` | Needs a `PUBLIC_` release var (client can't read private env) |
-| I4 | MAC scrub regex only matches colon-separated MACs; hyphenated (`AA-BB-…`) and bare 12-hex forms pass unmasked. MikroTik uses colons so exposure is low, but router log lines are where odd formats show up. | `observability.ts:29` | Broaden regex |
+| #   | Finding                                                                                                                                                                                                                                                               | Location                                    | Notes                                                                    |
+| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------- | ------------------------------------------------------------------------ |
+| I1  | No failure caching / no in-flight dedup. During a Sentry outage every dashboard load waits out two 8s timeouts; concurrent cache misses double-fetch (cache stores resolved data, not the promise).                                                                   | `client.ts` `cached()`                      | Cache the in-flight promise instead of the result — ~2 lines, fixes both |
+| I2  | Client-side trace sampling hardcoded at `0.2` in both apps' `hooks.client.ts` while servers read `SENTRY_TRACES_SAMPLE_RATE`. Changing prod browser sampling requires a rebuild. Related: admin's client hooks respect `PUBLIC_SENTRY_ENVIRONMENT`, customer's don't. | `apps/{admin,customer}/src/hooks.client.ts` | Add `PUBLIC_SENTRY_TRACES_SAMPLE_RATE` fallback, mirror env handling     |
+| I3  | No `release` on client inits — server passes `SENTRY_RELEASE`, browsers send nothing. Client errors can't be tied to a deploy; the deferred source-maps work requires this anyway.                                                                                    | `apps/{admin,customer}/src/hooks.client.ts` | Needs a `PUBLIC_` release var (client can't read private env)            |
+| I4  | MAC scrub regex only matches colon-separated MACs; hyphenated (`AA-BB-…`) and bare 12-hex forms pass unmasked. MikroTik uses colons so exposure is low, but router log lines are where odd formats show up.                                                           | `observability.ts:29`                       | Broaden regex                                                            |
 
 ---
 
@@ -127,24 +127,19 @@ Sentry but are human-run throwaways — instrumenting them adds nothing.
 ## 4. Suggested action plan
 
 **Bundle A — small, high value (~15 lines, all within current scope):**
+
 1. S1 — `permalink` https guard
 2. I1 — promise-caching in `client.ts`
 3. E1 — the 9 `console.error → log.error` migrations
    (customer dashboard sites are outside `/admin` — flag before touching)
 
-**Bundle B — config consistency (small):**
-4. I2 + I3 — client sampling/environment/release env wiring
-5. I4 — MAC regex broaden
-6. S2 — cache size cap (optional)
+**Bundle B — config consistency (small):** 4. I2 + I3 — client sampling/environment/release env wiring 5. I4 — MAC regex broaden 6. S2 — cache size cap (optional)
 
-**Bundle C — new surfaces (each its own task, needs go-ahead):**
-7. E2 — locator hooks
-8. E3 — cron check-ins
-9. E4/E5 — DB tracing + source maps (previously deferred)
+**Bundle C — new surfaces (each its own task, needs go-ahead):** 7. E2 — locator hooks 8. E3 — cron check-ins 9. E4/E5 — DB tracing + source maps (previously deferred)
 
 ---
 
-*Audit context note: the graphify knowledge graph (`graphify-out/`) is stale — built
+_Audit context note: the graphify knowledge graph (`graphify-out/`) is stale — built
 from commit `7e8f08fe`, it still references the deleted `SentryVolumeChart` /
 `mapVolume`. Consistent with the known `graphify --update` misfire issue; re-build
-before relying on it.*
+before relying on it._

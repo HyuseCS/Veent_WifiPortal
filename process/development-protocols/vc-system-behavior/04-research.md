@@ -1,13 +1,13 @@
 ---
 name: protocol:vc-system-behavior-04-research
-description: "RESEARCH phase reference: required skills, outputs, and skip conditions."
+description: 'RESEARCH phase reference: required skills, outputs, and skip conditions.'
 date: 09-06-26
 metadata:
   node_type: memory
   type: protocol
   read_order: 1
   required: false
-  read_when: "running or auditing the RESEARCH phase"
+  read_when: 'running or auditing the RESEARCH phase'
 ---
 
 # RESEARCH Phase Reference
@@ -34,7 +34,7 @@ RESEARCH is the first phase of every non-trivial task. The agent reads the codeb
 
 These run in order. Do not skip any of them.
 
-> **Single-trip rule (PHASE-GATES).** All Tier-0 skills below (intent-clarify, context/plan discovery, review-situation, strategy-compare) run as *preparation* but produce exactly **one** user pause: the **Combined Clarification Gate** from `03-session-start.md` Step 6.5. Intent restatement + clarifying questions + the 4 strategy options are presented together in a single `AskUserQuestion`. Do NOT pause separately at R-S0 and again at R-S4. Under `/goal` the gate auto-proceeds. See `12-reference.md` (`PHASE-GATES`).
+> **Single-trip rule (PHASE-GATES).** All Tier-0 skills below (intent-clarify, context/plan discovery, review-situation, strategy-compare) run as _preparation_ but produce exactly **one** user pause: the **Combined Clarification Gate** from `03-session-start.md` Step 6.5. Intent restatement + clarifying questions + the 4 strategy options are presented together in a single `AskUserQuestion`. Do NOT pause separately at R-S0 and again at R-S4. Under `/goal` the gate auto-proceeds. See `12-reference.md` (`PHASE-GATES`).
 
 ### [R-S0] vc-intent-clarify (Tier 0) — REQUIRED
 
@@ -56,14 +56,17 @@ find process/development-protocols/ -type f | sort
 Then read `process/context/all-context.md`. Follow its routing table to load the smallest set of relevant context files. Each `all-{group}.md` file is also a router — follow it to the 1–2 deeper files that matter for this task.
 
 If the prompt includes `Feature:`, also run:
+
 ```bash
 find process/features/{feature}/ -type f | sort
 ```
 
 If the task involves testing, debugging, or verification:
+
 ```bash
 find process/context/tests/ -type f | sort
 ```
+
 Then load `process/context/tests/all-tests.md` and follow its routing chain.
 
 **Part B — Frontmatter extraction:**
@@ -104,11 +107,13 @@ The `test-runner` field comes from `all-tests.md` routing. For a blast radius th
 Also has two parts. Both are required. Run alongside R-S1.
 
 **Part A — Scope scan:**
+
 - Same feature folder: scan everything — `active/`, `backlog/`, `completed/`, `reports/`, `references/`
 - Other feature folders: scan `active/` only
 - `process/general-plans/active/`: always scan
 
 **Frontmatter match rules:**
+
 - (a) A plan matches if its `feature` frontmatter field equals the current feature folder name exactly; OR
 - (b) If no `feature` field: the feature name appears in the `description` field (case-insensitive)
 - (c) If no `Feature:` is in the prompt, rule (b) does not apply. Plans without a feature frontmatter field are grouped as "unmatched (no feature context)"
@@ -117,6 +122,7 @@ Also has two parts. Both are required. Run alongside R-S1.
 
 **Stale plan rule:**
 A plan is stale for discovery if it is more than 90 days old AND any of:
+
 - It matched only by substring (no exact feature name match), OR
 - Its status is CONDITIONAL or BLOCKED AND no Implementation Checklist items have been ticked since the plan was created
 
@@ -160,6 +166,7 @@ When you first encounter a library, framework, or SDK: run vc-docs-seeker before
 ### [R3] vc-sequential-thinking — (Tier 2) — CONDITIONAL
 
 Use this when:
+
 - Two or more competing explanations exist
 - Three or more components interact
 - Evidence points in conflicting directions
@@ -211,9 +218,9 @@ Before ending the phase, present ONE consolidated recommendation block for the u
 - the findings summary (the named sections from the Exit Gate)
 - a recommended **next step** — mark the **recommended** one. The next step is NOT advance-only; it is one of:
   - **advance** to SPEC (RESEARCH always hands off to SPEC for non-trivial work; SPEC turns these findings into a user-reviewable requirements doc). Skip straight to PLAN only for an orchestrator-classified trivial fix.
-  - **re-run RESEARCH** (loop back) when findings are insufficient — open questions remain unresolved, the user request still has un-clarified ambiguity, the blast radius grew during research, or a key library/behavior could not be confirmed. The recommendation must name the *specific gaps* driving the re-research and the *questions to ask the user* (these feed the next entry gate's clarification).
+  - **re-run RESEARCH** (loop back) when findings are insufficient — open questions remain unresolved, the user request still has un-clarified ambiguity, the blast radius grew during research, or a key library/behavior could not be confirmed. The recommendation must name the _specific gaps_ driving the re-research and the _questions to ask the user_ (these feed the next entry gate's clarification).
 - the recommended execution strategy for that next step — full 4-option suite with signal score (N/7) and cost estimates, with one option marked **recommended**
-- any optional deep work offered as a *choice*, not a separate pause (e.g. run `vc-validate-findings`)
+- any optional deep work offered as a _choice_, not a separate pause (e.g. run `vc-validate-findings`)
 - if 2+ distinct investigation directions were found: a fan-out recommendation
 
 This is the single end-of-phase ask. Do not split strategy confirmation and "go" into separate round-trips. Under `/goal` the gate auto-proceeds on the recommended option — including a re-RESEARCH loop, bounded by the active-loop cap (`vc-autoresearch`, 10-cycle ceiling) to prevent infinite re-research. See `12-reference.md` (`PHASE-GATES`).
@@ -223,11 +230,13 @@ This is the single end-of-phase ask. Do not split strategy confirmation and "go"
 ## Orchestrator Behavior
 
 **Before spawning the agent:**
+
 - Check `process/general-plans/active/` and `process/features/*/active/` for any existing plan. Do not create a duplicate.
 - Pass `all-context.md`, the full file listing, and the feature scope.
 - If the task is feature-scoped: include `Feature: {name}` with override paths for Reports and Plans.
 
 **After the agent finishes:**
+
 - Receive the strategy recommendation for SPEC.
 - Check: does the output include Test Gap Analysis AND infra improvement suggestions? Flag if missing.
 - Read the status code: DONE / DONE_WITH_CONCERNS / BLOCKED / NEEDS_CONTEXT.

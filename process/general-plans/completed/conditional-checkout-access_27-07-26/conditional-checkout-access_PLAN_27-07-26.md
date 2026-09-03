@@ -1,6 +1,6 @@
 ---
 name: plan:conditional-checkout-access
-description: "Dedicated per-device full-internet primitive during Maya checkout: device-scoped IP-layer walled-garden allow, revoked on payment resolution with a ~6-min backstop TTL sweep, plus a deviceMac column on payment_checkouts"
+description: 'Dedicated per-device full-internet primitive during Maya checkout: device-scoped IP-layer walled-garden allow, revoked on payment resolution with a ~6-min backstop TTL sweep, plus a deviceMac column on payment_checkouts'
 date: 27-07-26
 feature: general-plans
 ---
@@ -114,22 +114,22 @@ gate↔criterion mapping in Verification Evidence below.)
 
 Files this plan reads or changes:
 
-| # | File | Change |
-|---|---|---|
-| 1 | `packages/db/src/schema/customer.ts` | Add nullable `deviceMac: text('device_mac')` to `paymentCheckouts` |
-| 2 | `packages/db/drizzle/0053_*.sql` | NEW migration: `ALTER TABLE payment_checkouts ADD COLUMN device_mac text` |
-| 3 | `packages/core/src/integrations/network/types.ts` | Add 3 OPTIONAL methods to `NetworkController`: `openFullAccessForDevice`, `revokeFullAccessForDevice`, `sweepFullAccess` |
-| 4 | `packages/core/src/integrations/network/mikrotik.ts` | Implement the 3 methods (new `FULL_CHECKOUT_TAG`, reuse `currentHotspotIpForMac`) |
-| 5 | `packages/core/src/integrations/network/stub.ts` | Add no-op impls of the 3 methods |
-| 6 | `packages/core/src/services/checkoutFullAccess.ts` (NEW) | Sibling service: `openFullAccess`, `revokeFullAccessForCheckout`, `sweepFullAccess`; own tag + `FULL_ACCESS_TTL_MINUTES = 6` |
-| 7 | `packages/core/src/services/index.ts` (or barrel) | Export the new sibling service |
-| 8 | `apps/customer/src/routes/top-up/+page.server.ts` | Persist `deviceMac`; call `openFullAccess` after checkout-create, gated on resolved MAC, best-effort |
-| 9 | `apps/customer/src/lib/server/paymentWebhook.ts` | Select `deviceMac` on `co`; call revoke on ANY resolved status, best-effort |
-| 10 | `packages/core/src/services/reconcilePayments.ts` | Thread `NetworkController` into `reconcilePendingPayments` / `reconcileCheckout`; revoke on `markUnpaid` + credit resolution |
-| 11 | `apps/customer/src/routes/api/network/revoke/+server.ts` | Wire `sweepFullAccess(network)` into the cron alongside `sweepCheckoutAccess` |
-| 12 | `packages/core/src/services/checkoutFullAccess.spec.ts` (NEW) | Unit tests (mock controller): open/revoke/sweep + MAC-tag match |
-| 13 | `apps/customer/src/routes/api/payments/reconcile/+server.ts` | *(VALIDATE-added, P1)* Pass `network` into `reconcilePendingPayments` (caller of the reconcile signature change) |
-| 14 | `apps/customer/src/routes/top-up/processing/+page.server.ts` | *(VALIDATE-added, P1)* Pass `network` into `reconcileCheckout` (caller of the reconcile signature change) |
+| #   | File                                                          | Change                                                                                                                       |
+| --- | ------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| 1   | `packages/db/src/schema/customer.ts`                          | Add nullable `deviceMac: text('device_mac')` to `paymentCheckouts`                                                           |
+| 2   | `packages/db/drizzle/0053_*.sql`                              | NEW migration: `ALTER TABLE payment_checkouts ADD COLUMN device_mac text`                                                    |
+| 3   | `packages/core/src/integrations/network/types.ts`             | Add 3 OPTIONAL methods to `NetworkController`: `openFullAccessForDevice`, `revokeFullAccessForDevice`, `sweepFullAccess`     |
+| 4   | `packages/core/src/integrations/network/mikrotik.ts`          | Implement the 3 methods (new `FULL_CHECKOUT_TAG`, reuse `currentHotspotIpForMac`)                                            |
+| 5   | `packages/core/src/integrations/network/stub.ts`              | Add no-op impls of the 3 methods                                                                                             |
+| 6   | `packages/core/src/services/checkoutFullAccess.ts` (NEW)      | Sibling service: `openFullAccess`, `revokeFullAccessForCheckout`, `sweepFullAccess`; own tag + `FULL_ACCESS_TTL_MINUTES = 6` |
+| 7   | `packages/core/src/services/index.ts` (or barrel)             | Export the new sibling service                                                                                               |
+| 8   | `apps/customer/src/routes/top-up/+page.server.ts`             | Persist `deviceMac`; call `openFullAccess` after checkout-create, gated on resolved MAC, best-effort                         |
+| 9   | `apps/customer/src/lib/server/paymentWebhook.ts`              | Select `deviceMac` on `co`; call revoke on ANY resolved status, best-effort                                                  |
+| 10  | `packages/core/src/services/reconcilePayments.ts`             | Thread `NetworkController` into `reconcilePendingPayments` / `reconcileCheckout`; revoke on `markUnpaid` + credit resolution |
+| 11  | `apps/customer/src/routes/api/network/revoke/+server.ts`      | Wire `sweepFullAccess(network)` into the cron alongside `sweepCheckoutAccess`                                                |
+| 12  | `packages/core/src/services/checkoutFullAccess.spec.ts` (NEW) | Unit tests (mock controller): open/revoke/sweep + MAC-tag match                                                              |
+| 13  | `apps/customer/src/routes/api/payments/reconcile/+server.ts`  | _(VALIDATE-added, P1)_ Pass `network` into `reconcilePendingPayments` (caller of the reconcile signature change)             |
+| 14  | `apps/customer/src/routes/top-up/processing/+page.server.ts`  | _(VALIDATE-added, P1)_ Pass `network` into `reconcileCheckout` (caller of the reconcile signature change)                    |
 
 Read-for-context only: `packages/core/src/services/checkoutAccess.ts` (pattern precedent — DO NOT
 modify), `apps/admin/scripts/setup-router.ts` (`PAYMENT_HOSTS` — see Deprecation & Cleanup).
@@ -147,7 +147,7 @@ sweepFullAccess?(input?: { maxAgeMs?: number }): Promise<number>
 - `openFullAccessForDevice` — resolves device IP via `currentHotspotIpForMac` (hotspot host table
   only, so a stale MAC can't scope to a reused IP); adds
   `/ip/hotspot/walled-garden/ip add dst-address=0.0.0.0/0 src-address=<ip> action=accept
-  comment=veent-checkout-full:<MAC>:<epoch>`; refresh-not-stack for the same device. Returns the IP
+comment=veent-checkout-full:<MAC>:<epoch>`; refresh-not-stack for the same device. Returns the IP
   scoped to, or null when the device isn't a current hotspot client (nothing added). Best-effort.
 - `revokeFullAccessForDevice` — removes `veent-checkout-full:` rows whose comment MAC-segment matches
   `macAddress` (MAC-in-comment match — NOT live-IP re-resolution, NOT a stored-IP snapshot). Returns
@@ -229,7 +229,7 @@ Ordered so each step is independently verifiable and nothing depends on a later 
      `FULL_CHECKOUT_TAG` rows for this src-ip before adding — match by `src-address == ip` AND
      own-tag, mirroring `openHostAccessForDevice`'s B3.6 own-tag guard); add on the IP-layer table
      `/ip/hotspot/walled-garden/ip/add` with `=action=accept =dst-address=0.0.0.0/0 =src-address=${ip}
-     =comment=${comment}`. NOTE: this exact table + `=action=accept =dst-address= =comment=` triple is
+=comment=${comment}`. NOTE: this exact table + `=action=accept =dst-address= =comment=` triple is
      already proven in-repo at `mikrotik.ts:1104` (`provisionWalledGarden` ip block); `=src-address=`
      is a standard sibling field, live-CLI-confirmed this session. Distinct from the `dst-host`
      table `openHostAccessForDevice` uses.
@@ -238,7 +238,7 @@ Ordered so each step is independently verifiable and nothing depends on a later 
      the open path wrote — uppercase, colon-free if that encoding is chosen); remove each; return
      count. Idempotent. Exact-match on the reconstructed MAC (never substring/`includes`).
    - `sweepFullAccess`: parse trailing epoch (LAST segment), remove rows older than `maxAgeMs`
-     (default 6*60_000), skip unparseable, return count. Confirm the epoch parse survives the
+     (default 6\*60_000), skip unparseable, return count. Confirm the epoch parse survives the
      colon-MAC comment (this is the AC5b latent-bug guard — see E2).
 5. In `packages/core/src/integrations/network/stub.ts`, add no-op impls:
    `openFullAccessForDevice → { ipAddress: null }`, `revokeFullAccessForDevice → { removed: 0 }`,
@@ -264,7 +264,7 @@ Ordered so each step is independently verifiable and nothing depends on a later 
    - After the existing `openCheckoutAccess` call (or immediately after checkout-create, gated on a
      resolved `mac`), add a best-effort `openFullAccess(network, { macAddress: mac })` in its own
      try/catch → `captureHandled(e, { level: 'warning', tags: { area: 'network', scope:
-     'checkout-full-access' } })`. NEVER throw into the checkout flow. (`network` is already imported
+'checkout-full-access' } })`. NEVER throw into the checkout flow. (`network` is already imported
      at line 14.)
    - Keep the existing `openCheckoutAccess` call UNTOUCHED (both run; do not merge).
 
@@ -377,21 +377,21 @@ Ordered so each step is independently verifiable and nothing depends on a later 
 
 ## Verification Evidence
 
-| Gate / Scenario | Strategy | Proves SPEC criterion |
-|---|---|---|
-| Unit: `openFullAccess` calls controller with resolved mac; no-op when method absent | Fully-Automated | AC4 (device-scoped grant) |
-| Unit: grant rule is scoped to the originating device (mock asserts `src-address`/MAC passed, not network-wide) | Fully-Automated | AC4 |
-| Unit: `revokeFullAccessForCheckout` matches + removes rows by `deviceMac` in-comment (COLON-FORMAT MAC round-trip); no-op when `deviceMac` null; idempotent double-revoke | Fully-Automated | AC5(a) resolve-triggers-revoke |
-| Unit: `sweepFullAccess` removes rows older than TTL (colon-MAC epoch parse), skips fresh + unparseable | Fully-Automated | AC5(b) backstop |
-| Unit/integration: no session/grant record created at checkout-open (only at payment-success) | Fully-Automated | AC7 (no auth from checkout) |
-| Integration/static: probe-deny rules unaffected by / evaluated ahead of the new allow (assert new rule is `walled-garden/ip accept`, probe denies are separate top `dst-host` denies) | Fully-Automated | AC6 (device stays captive) |
-| Existing checkout rate-limit test still passes with feature enabled | Fully-Automated | AC8 (rate limit unchanged) |
-| Schema/migration check: `0053` adds `device_mac`; `packages/core` typecheck + `bun run check` 0 errors | Fully-Automated | Constraint: schema touch present |
-| `cd packages/core && bunx tsc --noEmit` + `bun run check` + `bun run lint` + `bun test` all green | Fully-Automated | Regression safety |
-| LIVE device: card+3DS bank redirect completes without connection error | Agent-Probe (MANUAL human gate) | AC1 |
-| LIVE device: GCash/Alipay cashier + all CDN domains load | Agent-Probe (MANUAL human gate) | AC2 |
-| LIVE device: Maya wallet/credit, QRPH, Billease, Google Wallet each complete | Agent-Probe (MANUAL human gate) | AC3 |
-| LIVE device: removed rule actually blocks browsing (real network effect of revoke) | Agent-Probe (MANUAL human gate) | AC5 network effect |
+| Gate / Scenario                                                                                                                                                                       | Strategy                        | Proves SPEC criterion            |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------- | -------------------------------- |
+| Unit: `openFullAccess` calls controller with resolved mac; no-op when method absent                                                                                                   | Fully-Automated                 | AC4 (device-scoped grant)        |
+| Unit: grant rule is scoped to the originating device (mock asserts `src-address`/MAC passed, not network-wide)                                                                        | Fully-Automated                 | AC4                              |
+| Unit: `revokeFullAccessForCheckout` matches + removes rows by `deviceMac` in-comment (COLON-FORMAT MAC round-trip); no-op when `deviceMac` null; idempotent double-revoke             | Fully-Automated                 | AC5(a) resolve-triggers-revoke   |
+| Unit: `sweepFullAccess` removes rows older than TTL (colon-MAC epoch parse), skips fresh + unparseable                                                                                | Fully-Automated                 | AC5(b) backstop                  |
+| Unit/integration: no session/grant record created at checkout-open (only at payment-success)                                                                                          | Fully-Automated                 | AC7 (no auth from checkout)      |
+| Integration/static: probe-deny rules unaffected by / evaluated ahead of the new allow (assert new rule is `walled-garden/ip accept`, probe denies are separate top `dst-host` denies) | Fully-Automated                 | AC6 (device stays captive)       |
+| Existing checkout rate-limit test still passes with feature enabled                                                                                                                   | Fully-Automated                 | AC8 (rate limit unchanged)       |
+| Schema/migration check: `0053` adds `device_mac`; `packages/core` typecheck + `bun run check` 0 errors                                                                                | Fully-Automated                 | Constraint: schema touch present |
+| `cd packages/core && bunx tsc --noEmit` + `bun run check` + `bun run lint` + `bun test` all green                                                                                     | Fully-Automated                 | Regression safety                |
+| LIVE device: card+3DS bank redirect completes without connection error                                                                                                                | Agent-Probe (MANUAL human gate) | AC1                              |
+| LIVE device: GCash/Alipay cashier + all CDN domains load                                                                                                                              | Agent-Probe (MANUAL human gate) | AC2                              |
+| LIVE device: Maya wallet/credit, QRPH, Billease, Google Wallet each complete                                                                                                          | Agent-Probe (MANUAL human gate) | AC3                              |
+| LIVE device: removed rule actually blocks browsing (real network effect of revoke)                                                                                                    | Agent-Probe (MANUAL human gate) | AC5 network effect               |
 
 **Why the LIVE leg is a human gate:** the router's real ambiguity (hotspot host table, NAT, unbounded
 3DS/CDN domains) is not reproducible by the test-double controller — per project convention (see
@@ -420,12 +420,12 @@ test("sweepFullAccess removes rows older than TTL (colon-MAC epoch parse), skips
 RULE: never remove an old payment-path allow in the SAME change that introduces the replacement.
 Remove only AFTER live verification. NOTHING below is scheduled for removal in THIS changeset.
 
-| Item | What it is | Why it becomes redundant | Disposition | Removal trigger |
-|---|---|---|---|---|
-| Manual `gcash-test` Akamai IP allow on the router | Temporary operator-added `/ip hotspot walled-garden ip` allow for GCash HTTPS | The device-scoped catch-all allow reaches GCash/Alipay CDN without hostname/IP curation | REMOVE-IN-FOLLOWUP (operator step, not code) | After AC2 live-verified on real hardware |
-| `PAYMENT_HOSTS` hostname whitelist in `apps/admin/scripts/setup-router.ts` | Curated per-hostname walled-garden allow for payment domains | Full-access covers the same reachability during checkout | KEEP-NOW (belt-and-suspenders through rollout); flag for follow-up | After AC1-3 live-verified AND a rollout window with no dead-ends |
-| 3-host reCAPTCHA `openCheckoutAccess`/`sweepCheckoutAccess` | Shipped flash-fix for reCAPTCHA hosts | Full-access superset covers reCAPTCHA hosts too | KEEP-NOW UNTOUCHED (avoid regressing the shipped flash-fix) | Evaluate for retirement post-verification (separate decision) |
-| Backlog `gcash-walled-garden-ip-productionize_NOTE_23-07-26.md` | Note to productionize the GCash IP allow | This feature makes hostname/IP curation for GCash unnecessary | Mark SUPERSEDED at UPDATE PROCESS | This plan reaching VERIFIED |
+| Item                                                                       | What it is                                                                    | Why it becomes redundant                                                                | Disposition                                                        | Removal trigger                                                  |
+| -------------------------------------------------------------------------- | ----------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- | ------------------------------------------------------------------ | ---------------------------------------------------------------- |
+| Manual `gcash-test` Akamai IP allow on the router                          | Temporary operator-added `/ip hotspot walled-garden ip` allow for GCash HTTPS | The device-scoped catch-all allow reaches GCash/Alipay CDN without hostname/IP curation | REMOVE-IN-FOLLOWUP (operator step, not code)                       | After AC2 live-verified on real hardware                         |
+| `PAYMENT_HOSTS` hostname whitelist in `apps/admin/scripts/setup-router.ts` | Curated per-hostname walled-garden allow for payment domains                  | Full-access covers the same reachability during checkout                                | KEEP-NOW (belt-and-suspenders through rollout); flag for follow-up | After AC1-3 live-verified AND a rollout window with no dead-ends |
+| 3-host reCAPTCHA `openCheckoutAccess`/`sweepCheckoutAccess`                | Shipped flash-fix for reCAPTCHA hosts                                         | Full-access superset covers reCAPTCHA hosts too                                         | KEEP-NOW UNTOUCHED (avoid regressing the shipped flash-fix)        | Evaluate for retirement post-verification (separate decision)    |
+| Backlog `gcash-walled-garden-ip-productionize_NOTE_23-07-26.md`            | Note to productionize the GCash IP allow                                      | This feature makes hostname/IP curation for GCash unnecessary                           | Mark SUPERSEDED at UPDATE PROCESS                                  | This plan reaching VERIFIED                                      |
 
 ---
 
@@ -510,20 +510,20 @@ Rationale: Signal score 4/7 (S1 multi-package, S2 schema/payments surface, S6 hi
 
 Test gates (C3 5-column table — ADDITIVE; legacy line form below it):
 
-| criterion id | behavior | strategy | proving test | gap-resolution |
-|---|---|---|---|---|
-| AC4 | grant is device-scoped (src-address/MAC, not network-wide) | Fully-Automated | `checkoutFullAccess.spec.ts`: openFullAccess passes resolved mac; mock asserts src-scoped, not network-wide; no-op when method absent | B |
-| AC5a | resolve-triggers-revoke by deviceMac in-comment; no-op on null; idempotent | Fully-Automated | spec: revoke removes rows matching a COLON-FORMAT deviceMac (open→revoke round-trip); double-revoke = `{removed:0}` | B |
-| AC5b | backstop TTL sweep removes aged rows | Fully-Automated | spec: sweepFullAccess removes rows older than TTL (colon-MAC epoch parse); negative controls: fresh not swept, unparseable skipped | B |
-| AC6 | probe-deny wins / device stays captive | Fully-Automated | integration/static: new rule is `walled-garden/ip accept`; probe denies are separate top `dst-host` denies (unaffected) | B (A: live-settled fact #4 corroborates) |
-| AC7 | no session/grant record at checkout-open | Fully-Automated | integration: assert no session/grant row created at checkout-open, only at payment-success | B |
-| AC8 | existing 20/window checkout rate limit unchanged | Fully-Automated | existing checkout rate-limit test passes with feature enabled | A |
-| schema-0053 | migration adds device_mac; consumers typecheck | Fully-Automated | `grep -c device_mac packages/db/drizzle/0053_*.sql` ≥1; `cd packages/core && bunx tsc --noEmit` + `bun run check` 0 errors | B |
-| regression | full gate order green | Fully-Automated | `cd packages/core && bunx tsc --noEmit` → `bun run check` → `bun run lint` → `bun test` | A |
-| AC1 | card+3DS bank redirect completes | Agent-Probe | LIVE device probe (card 3DS) — operator-signed | D |
-| AC2 | GCash/Alipay cashier + CDN load | Agent-Probe | LIVE device probe (GCash) — operator-signed | D |
-| AC3 | Maya wallet/QRPH/Billease/Google Wallet complete | Agent-Probe | LIVE device probe per method — operator-signed | D |
-| AC5-net | removed rule actually blocks browsing | Agent-Probe | LIVE probe of revoke network effect — operator-signed | D |
+| criterion id | behavior                                                                   | strategy        | proving test                                                                                                                          | gap-resolution                           |
+| ------------ | -------------------------------------------------------------------------- | --------------- | ------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------- |
+| AC4          | grant is device-scoped (src-address/MAC, not network-wide)                 | Fully-Automated | `checkoutFullAccess.spec.ts`: openFullAccess passes resolved mac; mock asserts src-scoped, not network-wide; no-op when method absent | B                                        |
+| AC5a         | resolve-triggers-revoke by deviceMac in-comment; no-op on null; idempotent | Fully-Automated | spec: revoke removes rows matching a COLON-FORMAT deviceMac (open→revoke round-trip); double-revoke = `{removed:0}`                   | B                                        |
+| AC5b         | backstop TTL sweep removes aged rows                                       | Fully-Automated | spec: sweepFullAccess removes rows older than TTL (colon-MAC epoch parse); negative controls: fresh not swept, unparseable skipped    | B                                        |
+| AC6          | probe-deny wins / device stays captive                                     | Fully-Automated | integration/static: new rule is `walled-garden/ip accept`; probe denies are separate top `dst-host` denies (unaffected)               | B (A: live-settled fact #4 corroborates) |
+| AC7          | no session/grant record at checkout-open                                   | Fully-Automated | integration: assert no session/grant row created at checkout-open, only at payment-success                                            | B                                        |
+| AC8          | existing 20/window checkout rate limit unchanged                           | Fully-Automated | existing checkout rate-limit test passes with feature enabled                                                                         | A                                        |
+| schema-0053  | migration adds device_mac; consumers typecheck                             | Fully-Automated | `grep -c device_mac packages/db/drizzle/0053_*.sql` ≥1; `cd packages/core && bunx tsc --noEmit` + `bun run check` 0 errors            | B                                        |
+| regression   | full gate order green                                                      | Fully-Automated | `cd packages/core && bunx tsc --noEmit` → `bun run check` → `bun run lint` → `bun test`                                               | A                                        |
+| AC1          | card+3DS bank redirect completes                                           | Agent-Probe     | LIVE device probe (card 3DS) — operator-signed                                                                                        | D                                        |
+| AC2          | GCash/Alipay cashier + CDN load                                            | Agent-Probe     | LIVE device probe (GCash) — operator-signed                                                                                           | D                                        |
+| AC3          | Maya wallet/QRPH/Billease/Google Wallet complete                           | Agent-Probe     | LIVE device probe per method — operator-signed                                                                                        | D                                        |
+| AC5-net      | removed rule actually blocks browsing                                      | Agent-Probe     | LIVE probe of revoke network effect — operator-signed                                                                                 | D                                        |
 
 gap-resolution legend: A — proven now; B — fixed in this plan (gate added by checklist); C — deferred to later phase; D — backlog test-building stub / named residual (keep-active; continue).
 
@@ -532,30 +532,39 @@ C-4 reconciliation: `strategy` column carries only the 3 proving strategies (Ful
 Failing stubs (Fully-Automated rows):
 
 AC4:
+
 ```
 test("openFullAccess passes resolved mac to controller, scoped not network-wide", () => {
   throw new Error("NOT IMPLEMENTED — TDD stub for: device-scoped grant (AC4)")
 })
 ```
+
 AC5a:
+
 ```
 test("revokeFullAccessForCheckout removes rows matching a colon-format deviceMac in-comment; no-op on null; idempotent", () => {
   throw new Error("NOT IMPLEMENTED — TDD stub for: resolve-triggers-revoke (AC5a)")
 })
 ```
+
 AC5b:
+
 ```
 test("sweepFullAccess removes rows older than TTL (colon-MAC epoch parse), skips fresh and unparseable", () => {
   throw new Error("NOT IMPLEMENTED — TDD stub for: backstop TTL sweep (AC5b)")
 })
 ```
+
 AC6:
+
 ```
 test("new full-access rule is a walled-garden/ip accept and does not alter the top probe-deny rules", () => {
   throw new Error("NOT IMPLEMENTED — TDD stub for: probe-deny wins (AC6)")
 })
 ```
+
 AC7:
+
 ```
 test("starting a checkout creates no session/grant record (only payment-success does)", () => {
   throw new Error("NOT IMPLEMENTED — TDD stub for: no auth from checkout (AC7)")
@@ -563,6 +572,7 @@ test("starting a checkout creates no session/grant record (only payment-success 
 ```
 
 Legacy line form (retained so existing validate-contract consumers still parse):
+
 - checkoutFullAccess service: Fully-automated: `cd packages/core && bunx vitest run src/services/checkoutFullAccess.spec.ts`
 - core typecheck: Fully-automated: `cd packages/core && bunx tsc --noEmit`
 - consumer + regression: Fully-automated: `bun run check && bun run lint && bun test`
@@ -571,6 +581,7 @@ Legacy line form (retained so existing validate-contract consumers still parse):
 - revoke network effect (AC5-net): agent-probe: operator LIVE probe — known-gap for automated tier (risk-pack artifact 5)
 
 Dimension findings:
+
 - Infra fit: PASS — the IP-layer table `/ip/hotspot/walled-garden/ip/add` with `=action=accept =dst-address= =comment=` is already proven in-repo at `mikrotik.ts:1104`; `=src-address=` is a standard sibling field, live-CLI-confirmed; the four live-hardware facts are settled; stub omits all 3 methods so dev/e2e is unaffected. No feasibility probe needed.
 - Test coverage: CONCERN — Fully-Automated unit suite is realistic (mirrors `checkoutAccess.ts`, mock controller, vitest); MUST add a colon-format-MAC round-trip test + TTL-sweep-of-colon-MAC test with negative controls; `packages/core` is NOT in `bun run check`, so an explicit `bunx tsc --noEmit` gate was added; live-hardware leg is an unavoidable documented human gate.
 - Breaking changes: CONCERN — the reconcile signature change (new `NetworkController` param) has TWO callers not in the original Touchpoints (`api/payments/reconcile/+server.ts`, `top-up/processing/+page.server.ts`) — now added as Touchpoints 13 & 14. Additive nullable column + OPTIONAL controller methods are backward-compatible; internal-contract change is safe once both callers are updated (or the param is made optional).
@@ -584,10 +595,12 @@ Dimension findings:
 - Section 7 (Tests + gates) feasibility: CONCERN — the colon-MAC round-trip + TTL-sweep tests and the `packages/core` typecheck gate must be present or AC5a/AC5b are only nominally covered.
 
 Open gaps:
+
 - Live-hardware verification of AC1, AC2, AC3, and AC5 network-effect: known-gap: documented as MANUAL human gate — not automatable (router ambiguity + unbounded 3DS/CDN domains). Carried as risk-evidence-pack artifact 5 (operator-signed live log); auto-stop before VERIFIED. This is the reason the net gate is CONDITIONAL, not PASS.
 - E1/E2 (MAC comment colon-ambiguity), E3 (webhook terminal-status gate), and P1 (reconcile caller updates) are execute-agent instructions folded into the checklist/Touchpoints above — the orchestrator SHOULD route one PVL supplement cycle to confirm the plan text is tightened before EXECUTE.
 
 What this coverage does NOT prove:
+
 - `checkoutFullAccess.spec.ts` (mock controller): does NOT prove the real RouterOS `/ip/hotspot/walled-garden/ip` add/remove behaves as the mock assumes, does NOT prove the device actually reaches 3DS/GCash/CDN hosts, and does NOT prove a removed rule actually blocks browsing on real hardware — only the SQL/branch/MAC-tag/TTL logic.
 - `cd packages/core && bunx tsc --noEmit` + `bun run check`: prove type-correctness of the new code and its consumers; do NOT prove runtime router behavior.
 - `bun run lint` / `bun test`: prove regression safety of existing suites with the feature present; do NOT cover the live network effect (no automated tier can).

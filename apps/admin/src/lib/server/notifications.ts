@@ -126,7 +126,11 @@ export async function listNotifications(
 				eq(adminNotificationRead.eventId, adminIssueEvent.id)
 			)
 		)
-		.where(unreadOnly ? and(notifWhere(userId), isNull(adminNotificationRead.eventId)) : notifWhere(userId))
+		.where(
+			unreadOnly
+				? and(notifWhere(userId), isNull(adminNotificationRead.eventId))
+				: notifWhere(userId)
+		)
 		.orderBy(desc(adminIssueEvent.createdAt), desc(adminIssueEvent.id))
 		.limit(limit);
 
@@ -146,11 +150,7 @@ export async function listNotifications(
  *  A VALID event id on an incident the user can't actually see is likewise harmless: the read row
  *  is (user, event)-scoped, so it never reveals or alters anything outside this user's own feed
  *  (it just parks a read marker no query of theirs will surface) (L6c). */
-export async function markNotificationRead(
-	db: DB,
-	userId: string,
-	eventId: number
-): Promise<void> {
+export async function markNotificationRead(db: DB, userId: string, eventId: number): Promise<void> {
 	await db.insert(adminNotificationRead).values({ userId, eventId }).onConflictDoNothing();
 }
 

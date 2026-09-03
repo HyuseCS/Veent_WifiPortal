@@ -7,6 +7,7 @@ An in-depth, "everything that can be improved" analysis of the **admin** app, pl
 code changes. Two separated outputs below.
 
 Scope notes:
+
 - **Output 1 (admin audit)** stays inside `apps/admin/` + its `packages/core` / `packages/db`
   dependencies, per the project rule.
 - **Output 2 (Sentry)** is whole-system (admin + customer + locator), written admin-first since
@@ -36,20 +37,20 @@ done well. The items below are refinements, not rescues.
 
 ## Priority summary
 
-| # | Sev | Area | Issue | Fix location |
-|---|-----|------|-------|--------------|
-| 1 | High | Testing | ✅ **Done** — governance E2E suite added (`apps/admin/e2e/*.e2e.ts`) | new `*.e2e.ts`, action unit tests |
-| 2 | High | Resilience | DB/grant/email calls unwrapped → raw 500s, swallowed failures | map/users/networks/staff `+page.server.ts` |
-| 3 | High | A11y | ✅ **Done** — dialogs now modal via `BaseDialog.svelte` (`.showModal()` + focus restore) | `PromoteDialog`, `OwnerChangeDialog`, `WipeDialog`, `AddStaffForm` |
-| 4 | Med | DRY | ✅ **Done** — `requireOwner()` centralized in `$lib/server/auth-guard.ts` | ~~`$lib/server/auth.ts`~~ → `auth-guard.ts` |
-| 5 | Med | DRY | Email send + numeric-field validation duplicated 4×/3× | `$lib/server/email.ts`, `$lib/server/formValidation.ts` |
-| 6 | Med | Perf | ✅ **Done** — N+1 batched into one approvals query | `owner-change.ts` (`listOpenRequests`) |
-| 7 | Med | UX | Missing loading skeletons (Users, Staff, Finance/transactions) | those `+page.svelte` |
-| 8 | Med | DRY | ✅ **Done** (`BaseDialog.svelte`) — `TableToolbar.svelte` still open | `BaseDialog.svelte`, `TableToolbar.svelte` |
-| 9 | Low | Observability | All-`console.*` logging, no centralized capture (feeds Output 2) | new `$lib/server/logger.ts` |
-| 10 | Low | Auth | Session not server-invalidated on demote (role re-check covers it) | `owner-change.ts` |
-| 11 | Low | Schema | No index on `adminOwnerChangeRequest.initiatedBy` | `schema/admin-owner-change.ts` |
-| 12 | Low | Perf | `listTransactions`/session-log queries fetch wide then slice in memory | `queries.ts` |
+| #   | Sev  | Area          | Issue                                                                                    | Fix location                                                       |
+| --- | ---- | ------------- | ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| 1   | High | Testing       | ✅ **Done** — governance E2E suite added (`apps/admin/e2e/*.e2e.ts`)                     | new `*.e2e.ts`, action unit tests                                  |
+| 2   | High | Resilience    | DB/grant/email calls unwrapped → raw 500s, swallowed failures                            | map/users/networks/staff `+page.server.ts`                         |
+| 3   | High | A11y          | ✅ **Done** — dialogs now modal via `BaseDialog.svelte` (`.showModal()` + focus restore) | `PromoteDialog`, `OwnerChangeDialog`, `WipeDialog`, `AddStaffForm` |
+| 4   | Med  | DRY           | ✅ **Done** — `requireOwner()` centralized in `$lib/server/auth-guard.ts`                | ~~`$lib/server/auth.ts`~~ → `auth-guard.ts`                        |
+| 5   | Med  | DRY           | Email send + numeric-field validation duplicated 4×/3×                                   | `$lib/server/email.ts`, `$lib/server/formValidation.ts`            |
+| 6   | Med  | Perf          | ✅ **Done** — N+1 batched into one approvals query                                       | `owner-change.ts` (`listOpenRequests`)                             |
+| 7   | Med  | UX            | Missing loading skeletons (Users, Staff, Finance/transactions)                           | those `+page.svelte`                                               |
+| 8   | Med  | DRY           | ✅ **Done** (`BaseDialog.svelte`) — `TableToolbar.svelte` still open                     | `BaseDialog.svelte`, `TableToolbar.svelte`                         |
+| 9   | Low  | Observability | All-`console.*` logging, no centralized capture (feeds Output 2)                         | new `$lib/server/logger.ts`                                        |
+| 10  | Low  | Auth          | Session not server-invalidated on demote (role re-check covers it)                       | `owner-change.ts`                                                  |
+| 11  | Low  | Schema        | No index on `adminOwnerChangeRequest.initiatedBy`                                        | `schema/admin-owner-change.ts`                                     |
+| 12  | Low  | Perf          | `listTransactions`/session-log queries fetch wide then slice in memory                   | `queries.ts`                                                       |
 
 ---
 
@@ -66,6 +67,7 @@ done well. The items below are refinements, not rescues.
 `vite.config.ts:27-53`.
 
 **What's missing:**
+
 - **No E2E at all.** `playwright.config.ts` exists and `test:e2e` is wired, but there are **zero
   `*.e2e.ts` files**. The riskiest flows in the app — login→2FA, promote (name + TOTP step-up),
   demote/remove (unanimous owner approval), user wipe, network wipe, staff invite→activation —
@@ -77,11 +79,12 @@ done well. The items below are refinements, not rescues.
   tests** for the sortable/filterable tables.
 
 **Recommended roadmap (checkpoint-gated):**
-1. *Governance E2E first* — `login → 2FA → promote → demote` and `wipe (request code → confirm)`.
+
+1. _Governance E2E first_ — `login → 2FA → promote → demote` and `wipe (request code → confirm)`.
    Highest risk, highest regression cost.
-2. *Action unit tests* — invoke each `actions.*` with a mocked `db`/`auth`, assert the
+2. _Action unit tests_ — invoke each `actions.*` with a mocked `db`/`auth`, assert the
    `requireOwner` gate, the rate-limit call, and the success/`fail()` shape.
-3. *Component + SSE* — table sort/filter/select-all; `connectLive()` open/close ref-count.
+3. _Component + SSE_ — table sort/filter/select-all; `connectLive()` open/close ref-count.
 
 This is item #1 because every other change below is safer to make once these exist.
 
@@ -131,7 +134,7 @@ Smaller: dialog close doesn't return focus to the invoking control.
 - **`requireOwner()` ×6.** ✅ **Resolved (2026-07-06)** — extracted to one
   `requireOwner(userId, message?)` in `$lib/server/auth-guard.ts` (re-reads role from DB, returns
   `fail(403)` or null); the six server files now import it. (Note: it landed in `auth-guard.ts`, kept
-  separate from the better-auth setup in `auth.ts`.) *Original finding:* re-implemented in
+  separate from the better-auth setup in `auth.ts`.) _Original finding:_ re-implemented in
   staff/users/networks and content/{packages,limits,faq} server files.
 - **Email send ×4.** `try { mailer.send } catch { console.warn }` repeated in auth/staff/users/
   networks. Extract `sendEmail(to, msg, context): Promise<boolean>` into `$lib/server/email.ts`,
@@ -165,6 +168,7 @@ Bind a pending state to the period form and show the skeleton while the new rang
 ## 8. Component architecture
 
 Solid shared `ui/` + `feature/` libraries and a reused `sortable.svelte.ts`. Two consolidations:
+
 - **`BaseDialog.svelte`** — ✅ **Resolved (2026-07-06)** — extracted; `PromoteDialog`/
   `OwnerChangeDialog`/`WipeDialog`/`AddStaffForm` now render through `ui/BaseDialog.svelte`, which also
   carries the modal a11y fix (#3) in one place.
@@ -186,6 +190,7 @@ Solid shared `ui/` + `feature/` libraries and a reused `sortable.svelte.ts`. Two
 
 > **Status (2026-07-06): IMPLEMENTED in `apps/admin` and `apps/customer`** (error capture + tracing +
 > PII scrub). What shipped, and where it deviates from the plan below:
+>
 > - **Init is inline, not via `instrument.server.ts`.** Each app's `src/hooks.server.ts` calls
 >   `Sentry.init(sentryOptions({ app }))` (guarded by `PUBLIC_SENTRY_DSN && !building`), then
 >   `handle = sequence(Sentry.sentryHandle(), handleBetterAuth)` and
@@ -216,7 +221,7 @@ and `apps/locator`; wiring is identical per app, shown admin-first.
 
 ## Stack gotchas to resolve first (read before installing)
 
-1. **No `svelte.config.js`.** Both apps put the SvelteKit config *inside* `vite.config.ts`
+1. **No `svelte.config.js`.** Both apps put the SvelteKit config _inside_ `vite.config.ts`
    (`sveltekit({ ... })`). The Sentry SvelteKit wizard (`npx @sentry/wizard`) assumes a
    `svelte.config.js` and may not patch correctly — **wire manually** (steps below) rather than
    trusting the wizard.
@@ -232,17 +237,20 @@ and `apps/locator`; wiring is identical per app, shown admin-first.
 ## Env vars (follow the existing `validateEnv` convention)
 
 Per app, add to `.env.example` and the deploy env:
+
 - `PUBLIC_SENTRY_DSN` — client + server DSN (`$env/static/public`; `PUBLIC_` so it reaches the browser).
 - `SENTRY_ENVIRONMENT` — `production` / `staging` (optional; default from `dev`).
 - `SENTRY_RELEASE` — git SHA or `package.json` version (optional).
 - `SENTRY_AUTH_TOKEN` — **build-time only**, for source-map upload (never shipped to client).
 
 Extend each `validateEnv.ts` in the established loud-in-prod / quiet-in-dev style:
+
 ```
 if (!dev && !env.PUBLIC_SENTRY_DSN) {
   console.warn('[env] PUBLIC_SENTRY_DSN unset — error tracking disabled');
 }
 ```
+
 Keep it a **warning, not a hard requirement**, so a missing DSN degrades to "no telemetry," never
 to a boot failure.
 
@@ -250,6 +258,7 @@ to a boot failure.
 
 **A. `src/hooks.server.ts`** — currently a single `handle = handleBetterAuth` with no `sequence`,
 no `handleError`. Change to:
+
 - `Sentry.init({ dsn, environment, release, tracesSampleRate, beforeSend, beforeSendTransaction })`
   at the top (after `validateEnv()`).
 - `export const handle = sequence(Sentry.sentryHandle(), handleBetterAuth)`.
@@ -259,11 +268,13 @@ no `handleError`. Change to:
   only, never email/name** (see scrubbing). Tag `app: 'admin'`.
 
 **B. `src/hooks.client.ts`** — **does not exist in any app; create it:**
+
 - `Sentry.init({ dsn: PUBLIC_SENTRY_DSN, ... , beforeSend })` (same scrubbing).
 - `export const handleError = Sentry.handleErrorWithSentry()`.
 
 **C. Build config (`vite.config.ts`, since there's no `svelte.config.js`)** — wrap the exported
 config with the Sentry plugin for source maps + release:
+
 - add `build: { sourcemap: true }`,
 - apply `sentrySvelteKit({ sourceMapsUploadOptions: { org, project, authToken: env.SENTRY_AUTH_TOKEN } })`
   in `plugins` (gated so it no-ops without a token, keeping local dev clean).
@@ -280,6 +291,7 @@ so OpenTelemetry auto-instruments Postgres/HTTP. Skip if you only want error cap
 
 Centralize a `beforeSend` (and `beforeSendTransaction`) redactor, shared via a small
 `packages/core` helper so all three apps use one implementation. It must:
+
 - **Drop** outright: OTP codes, TOTP secrets, session IDs, `BETTER_AUTH_SECRET`, `MAYA_SECRET_KEY`,
   `RESEND_API_KEY`, passwords.
 - **Mask** in messages, breadcrumbs, request data, and stack frames: phone numbers
@@ -296,6 +308,7 @@ message or breadcrumb.
 ## High-value context to add (optional, after baseline works)
 
 Breadcrumbs/tags at the moments worth tracing — all id/status only, no PII:
+
 - **Admin:** login success/2FA, owner-change request/approve/execute (actor id, target id, action),
   network grant/revoke result, email send success/failure.
 - **Customer:** payment webhook (txId, status — **not** buyer), access grant (free/paid, result),
@@ -316,10 +329,11 @@ Breadcrumbs/tags at the moments worth tracing — all id/status only, no PII:
 ## Verification
 
 This is an **analysis-only** document — nothing to run. To validate the findings:
+
 - **Audit claims:** open the cited `file:line` (e.g. `owner-change.ts:258`, `PromoteDialog.svelte:26`,
   the `requireOwner` copies); confirm there's no `svelte.config.js`
   (`find apps -name 'svelte.config.*'` returns nothing).
 - **When any item is later implemented:** the regression gate is Output 1 #1 — stand up the
-  governance E2E + action tests *first*, then make changes against that safety net. For Sentry,
+  governance E2E + action tests _first_, then make changes against that safety net. For Sentry,
   the acceptance check is "a deliberately thrown error appears in Sentry with phone/email/MAC
   **masked** and no secrets present."

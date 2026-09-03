@@ -1,6 +1,6 @@
 ---
 name: plan:walled-garden-wipe
-description: "Add scripted --wipe / --wipe-only walled-garden teardown to setup:router (both menus, skip dynamic rows, dry-run safe)"
+description: 'Add scripted --wipe / --wipe-only walled-garden teardown to setup:router (both menus, skip dynamic rows, dry-run safe)'
 date: 30-07-26
 feature: general
 ---
@@ -46,13 +46,13 @@ into `setup:router`. Add unit tests + update the hard-reset doc runbook.
 
 ## Touchpoints
 
-| File | Change |
-|---|---|
-| `packages/core/src/integrations/network/mikrotik.ts` | Add `WipeWalledGardenResult` interface + `wipeWalledGarden()` fn (new export). Mirrors `reconcileWalledGarden`'s `openConn`/print/remove-by-`.id`. |
-| `packages/core/src/integrations/network/index.ts` (the barrel re-exporting `reconcileWalledGarden`) | Re-export `wipeWalledGarden` alongside `reconcileWalledGarden` (this barrel enumerates exports). |
-| `apps/admin/scripts/setup-router.ts` | Parse `--wipe` / `--wipe-only`; import `wipeWalledGarden`; wipe block before provisioning; `--wipe-only` early exit. |
-| `packages/core/src/integrations/network/mikrotik.spec.ts` | New `describe('wipeWalledGarden')` block reusing the in-memory test double. |
-| `docs/mikrotik/walled-garden.md` | Replace manual "remove each row" console steps in §Hard reset with the `--wipe` / `--wipe-only` flags (keep dry-run-first recommendation). |
+| File                                                                                                | Change                                                                                                                                             |
+| --------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `packages/core/src/integrations/network/mikrotik.ts`                                                | Add `WipeWalledGardenResult` interface + `wipeWalledGarden()` fn (new export). Mirrors `reconcileWalledGarden`'s `openConn`/print/remove-by-`.id`. |
+| `packages/core/src/integrations/network/index.ts` (the barrel re-exporting `reconcileWalledGarden`) | Re-export `wipeWalledGarden` alongside `reconcileWalledGarden` (this barrel enumerates exports).                                                   |
+| `apps/admin/scripts/setup-router.ts`                                                                | Parse `--wipe` / `--wipe-only`; import `wipeWalledGarden`; wipe block before provisioning; `--wipe-only` early exit.                               |
+| `packages/core/src/integrations/network/mikrotik.spec.ts`                                           | New `describe('wipeWalledGarden')` block reusing the in-memory test double.                                                                        |
+| `docs/mikrotik/walled-garden.md`                                                                    | Replace manual "remove each row" console steps in §Hard reset with the `--wipe` / `--wipe-only` flags (keep dry-run-first recommendation).         |
 
 ## Public Contracts
 
@@ -96,11 +96,11 @@ dry-run no-op are the safety guards; both mirror existing verified `reconcileWal
 
 ## Verification Evidence
 
-| Gate / Scenario | Strategy | Proves SPEC criterion |
-|---|---|---|
-| `bunx vitest run packages/core/src/integrations/network/mikrotik.spec.ts` — wipe tests + existing reconcile tests green | Fully-Automated | AC1–AC4 (both menus, dynamic skip, dry-run no-op, counts) |
-| `bun run --filter radius-admin check` (tsc/svelte-check) | Fully-Automated | AC5–AC7 (flag wiring typechecks, no contract drift) |
-| Manual: `setup:router --wipe-only --dry-run` on staging prints intended removals, changes nothing | Agent-Probe (staging) — **run and confirmed 30-07-26, true no-op** | AC3/AC6 against real RouterOS |
+| Gate / Scenario                                                                                                         | Strategy                                                           | Proves SPEC criterion                                     |
+| ----------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ | --------------------------------------------------------- |
+| `bunx vitest run packages/core/src/integrations/network/mikrotik.spec.ts` — wipe tests + existing reconcile tests green | Fully-Automated                                                    | AC1–AC4 (both menus, dynamic skip, dry-run no-op, counts) |
+| `bun run --filter radius-admin check` (tsc/svelte-check)                                                                | Fully-Automated                                                    | AC5–AC7 (flag wiring typechecks, no contract drift)       |
+| Manual: `setup:router --wipe-only --dry-run` on staging prints intended removals, changes nothing                       | Agent-Probe (staging) — **run and confirmed 30-07-26, true no-op** | AC3/AC6 against real RouterOS                             |
 
 ## Test Infra Improvement Notes
 
@@ -122,37 +122,39 @@ dry-run no-op are the safety guards; both mirror existing verified `reconcileWal
 
 ### Layer 1 dimensions
 
-| Dimension | Status |
-|---|---|
-| Infra fit | PASS |
-| Test coverage | PASS |
-| Breaking changes | PASS |
+| Dimension        | Status             |
+| ---------------- | ------------------ |
+| Infra fit        | PASS               |
+| Test coverage    | PASS               |
+| Breaking changes | PASS               |
 | Security surface | CONCERN (accepted) |
 
 ### Layer 2 sections
 
-| Section | Status |
-|---|---|
-| A — wipeWalledGarden fn | PASS |
-| B — setup-router wiring | PASS |
-| C — spec | PASS |
-| D — doc | PASS |
+| Section                 | Status |
+| ----------------------- | ------ |
+| A — wipeWalledGarden fn | PASS   |
+| B — setup-router wiring | PASS   |
+| C — spec                | PASS   |
+| D — doc                 | PASS   |
 
 **Totals: 0 FAILs / 1 CONCERN / 7 PASSes → Net Gate: CONDITIONAL**
 
 ### Accepted concerns (known-gaps)
+
 - Destructive router-mutating op. Mitigations REQUIRED in EXECUTE: (a) `dryRun:true` must be a real
   no-op — assert zero deletion in the spec; (b) skip `dynamic==='true'` rows in BOTH menus.
 
 ### Execute-agent instructions
 
-| # | Instruction | Trigger |
-|---|---|---|
-| E1 | Do NOT modify `reconcileWalledGarden`/`provisionWalledGarden`/`provisionGcashResolveScheduler` bodies or signatures. Add-only. | Section A |
-| E2 | `wipeWalledGarden` skips ONLY `dynamic==='true'` rows — disabled/deny static rows ARE removed (documented hard-reset behavior). | Section A |
-| E3 | `--wipe-only` must `process.exit(0)` before the provisioning `try` block; `--wipe` falls through to it. | Section B |
-| E4 | Spec negative control: seed one `dynamic:'true'` row, assert it survives and is not counted. | Section C |
+| #   | Instruction                                                                                                                     | Trigger   |
+| --- | ------------------------------------------------------------------------------------------------------------------------------- | --------- |
+| E1  | Do NOT modify `reconcileWalledGarden`/`provisionWalledGarden`/`provisionGcashResolveScheduler` bodies or signatures. Add-only.  | Section A |
+| E2  | `wipeWalledGarden` skips ONLY `dynamic==='true'` rows — disabled/deny static rows ARE removed (documented hard-reset behavior). | Section A |
+| E3  | `--wipe-only` must `process.exit(0)` before the provisioning `try` block; `--wipe` falls through to it.                         | Section B |
+| E4  | Spec negative control: seed one `dynamic:'true'` row, assert it survives and is not counted.                                    | Section C |
 
 ### Test gates
+
 1. `bunx vitest run packages/core/src/integrations/network/mikrotik.spec.ts` — new wipe tests + existing reconcile tests green.
 2. `bun run --filter radius-admin check` — 0 errors.

@@ -326,7 +326,10 @@ export const actions: Actions = {
 		// Throttle the TOTP step-up to blunt code brute-forcing (per source IP).
 		const rl = await rateLimit('admin_promote_step_up', clientIp(event), 5, 15 * 60 * 1000);
 		if (!rl.allowed) {
-			return fail(429, { action: 'promote', error: 'Too many attempts. Please wait a few minutes.' });
+			return fail(429, {
+				action: 'promote',
+				error: 'Too many attempts. Please wait a few minutes.'
+			});
 		}
 
 		const form = await event.request.formData();
@@ -345,7 +348,10 @@ export const actions: Actions = {
 		// authenticated session, verifyTOTP checks the code against the stored secret and
 		// throws on mismatch (no login two-factor cookie needed). headers → reads the session.
 		if (!isTotpCode(code)) {
-			return fail(400, { action: 'promote', error: 'Enter the 6-digit code from your authenticator.' });
+			return fail(400, {
+				action: 'promote',
+				error: 'Enter the 6-digit code from your authenticator.'
+			});
 		}
 		try {
 			await auth.api.verifyTOTP({ body: { code }, headers: event.request.headers });
@@ -359,7 +365,10 @@ export const actions: Actions = {
 
 		const promoted = await promoteToOwner(db, userId);
 		if (!promoted) {
-			return fail(400, { action: 'promote', error: 'Only an active admin can be promoted to owner.' });
+			return fail(400, {
+				action: 'promote',
+				error: 'Only an active admin can be promoted to owner.'
+			});
 		}
 		return { ok: true, action: 'promote' };
 	},
@@ -373,7 +382,8 @@ export const actions: Actions = {
 	requestOwnerChange: async (event) => {
 		const actorId = event.locals.user?.id;
 		const denied = await requireOwner(actorId);
-		if (denied || !actorId) return denied ?? fail(403, { action: 'requestOwnerChange', error: 'Forbidden' });
+		if (denied || !actorId)
+			return denied ?? fail(403, { action: 'requestOwnerChange', error: 'Forbidden' });
 
 		const form = await event.request.formData();
 		const targetUserId = String(form.get('targetUserId') ?? '');
@@ -409,7 +419,8 @@ export const actions: Actions = {
 	approveOwnerChange: async (event) => {
 		const actorId = event.locals.user?.id;
 		const denied = await requireOwner(actorId);
-		if (denied || !actorId) return denied ?? fail(403, { action: 'approveOwnerChange', error: 'Forbidden' });
+		if (denied || !actorId)
+			return denied ?? fail(403, { action: 'approveOwnerChange', error: 'Forbidden' });
 
 		const form = await event.request.formData();
 		const requestId = String(form.get('requestId') ?? '');
@@ -432,7 +443,8 @@ export const actions: Actions = {
 	cancelOwnerChange: async (event) => {
 		const actorId = event.locals.user?.id;
 		const denied = await requireOwner(actorId);
-		if (denied || !actorId) return denied ?? fail(403, { action: 'cancelOwnerChange', error: 'Forbidden' });
+		if (denied || !actorId)
+			return denied ?? fail(403, { action: 'cancelOwnerChange', error: 'Forbidden' });
 
 		const form = await event.request.formData();
 		const requestId = String(form.get('requestId') ?? '');

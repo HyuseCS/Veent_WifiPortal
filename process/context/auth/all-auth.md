@@ -1,6 +1,6 @@
 ---
 name: context:all-auth
-description: "Two isolated better-auth instances (admin TOTP 2FA + customer phone-OTP), the auth-guard pattern, and schema codegen — the auth group entrypoint/router"
+description: 'Two isolated better-auth instances (admin TOTP 2FA + customer phone-OTP), the auth-guard pattern, and schema codegen — the auth group entrypoint/router'
 keywords: auth, better-auth, 2fa, totp, step-up, otp, phone auth, cookie, session, auth-guard, auth:schema, login, enroll-2fa, handoff, one-time-token, isolation
 related: [context:all-database]
 date: 10-07-26
@@ -92,7 +92,7 @@ when a `two-instance-isolation.md`, `2fa-and-step-up.md`, or `customer-otp-flow.
 - `packages/db/src/schema/admin-two-factor.ts` — `admin_two_factor` table (encrypted TOTP secret +
   backup codes)
 - Admin pre-auth route surface: `apps/admin/src/routes/{login,login/2fa,enroll-2fa,
-  forgot-password,reset-password,activate,logout}`
+forgot-password,reset-password,activate,logout}`
 - `apps/admin/package.json` / `apps/customer/package.json` — each app's `auth:schema` script
 
 ## Update Triggers

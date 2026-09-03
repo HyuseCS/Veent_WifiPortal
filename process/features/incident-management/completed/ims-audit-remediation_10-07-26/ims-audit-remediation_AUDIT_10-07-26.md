@@ -25,6 +25,7 @@ the client-supplied Sentry permalink, and resolution-note edits that silently no
 ## High
 
 ### H1 — Stored XSS via unvalidated `sentryPermalink` (`javascript:` URI)
+
 - **Where:** `apps/admin/src/routes/(app)/sentry/+page.server.ts:85-90` (`?/track` action)
   → rendered as `<a href={issue.sentryPermalink}>` in
   `apps/admin/src/routes/(app)/issues/[id]/+page.svelte:93` and
@@ -43,6 +44,7 @@ the client-supplied Sentry permalink, and resolution-note edits that silently no
   `sentryIssueId`/`sentryShortId` formats while there.
 
 ### H2 — Resolution-note edits are silently dropped (`setIssueStatus` same-status short-circuit)
+
 - **Where:** `apps/admin/src/lib/server/issues.ts:637` (`if (before.status === status) return false;`),
   callers at `.../issues/[id]/+page.server.ts` (`?/updateStatus`) and
   `.../issues/+page.server.ts:236-237` — both ignore the `false` return and answer `{ ok: true }`.
@@ -65,8 +67,9 @@ the client-supplied Sentry permalink, and resolution-note edits that silently no
 ## Medium
 
 ### M1 — Newly assigned staff inherit the incident's entire history as "unread"
+
 - **Where:** `apps/admin/src/lib/server/notifications.ts:47-53` (`notifWhere`).
-- **What:** the feed predicate is *current assignee × notifiable event × not-my-action*. It
+- **What:** the feed predicate is _current assignee × notifiable event × not-my-action_. It
   never compares `adminIssueEvent.createdAt` to `adminIssueAssignee.assignedAt` (the column
   exists — `packages/db/src/schema/admin-issue.ts:70`). Assign someone to a long-lived, busy
   incident and every historical status change/comment by others instantly becomes their
@@ -74,16 +77,18 @@ the client-supplied Sentry permalink, and resolution-note edits that silently no
 - **Fix:** add `gte(adminIssueEvent.createdAt, adminIssueAssignee.assignedAt)` to `notifWhere`.
 
 ### M2 — Live session token + TOTP secret committed to the repo
+
 - **Where:** `apps/admin/e2e/.auth/owner.json` (better-auth session cookie, expiry ≈ 2026-07-15),
   `apps/admin/e2e/.auth/owner-totp.txt` (TOTP secret).
-- **What:** the PR adds `e2e/.auth/` to `apps/admin/.gitignore` *and* commits the artifacts.
+- **What:** the PR adds `e2e/.auth/` to `apps/admin/.gitignore` _and_ commits the artifacts.
   gitignore never applies to tracked files, so every future harness run that rewrites them
   will show up as a diff and re-commit fresh tokens. Test-env-only (localhost, throwaway DB),
   so no production exposure — but it normalizes secrets-shaped files in history.
 - **Fix:** `git rm --cached apps/admin/e2e/.auth/owner.json apps/admin/e2e/.auth/owner-totp.txt`,
   commit, and let the harness regenerate locally.
 
-### M3 — Detail endpoint over-grants on *unassigned* (not merely *open*) incidents
+### M3 — Detail endpoint over-grants on _unassigned_ (not merely _open_) incidents
+
 - **Where:** `apps/admin/src/routes/(app)/issues/[id]/detail/+server.ts:29-30`
   (`isPoolItem = issue.assignees.length === 0`).
 - **What:** the stated contract is parity with `listOpenPool()` (open + unassigned, visible
@@ -93,11 +98,12 @@ the client-supplied Sentry permalink, and resolution-note edits that silently no
 - **Fix:** `const isPoolItem = issue.assignees.length === 0 && issue.status === ISSUE_STATUS.open;`
 
 ### M4 — Server-side validation gaps and cross-path inconsistencies
+
 - `?/track` accepts **past due dates** (`sentry/+page.server.ts:99-106`); `?/create`/`?/update`
   reject them (`issues/+page.server.ts` `todayUtcMs` check). Same field, two rules.
 - **Title length is client-side only** (`maxlength=200` on the input). `createIssue`,
   `createIssueFromSentry`, and the parsers accept unbounded text for title, description, and
-  all four sentry snapshot fields — a tampered POST can store megabytes (comment bodies *are*
+  all four sentry snapshot fields — a tampered POST can store megabytes (comment bodies _are_
   capped at 2000 server-side, so the codebase already knows the pattern).
 - `?/track` is open to all staff while the PR body and dialog copy say "managers track". The
   code comment says this is deliberate (same model as resolve/ignore) — fine, but it also
@@ -108,6 +114,7 @@ the client-supplied Sentry permalink, and resolution-note edits that silently no
   member can fabricate a "Tracked from Sentry RADIUS-…" incident. Integrity nit, related to H1.
 
 ### M5 — Design drift left in the PR: watermark vs read-rows
+
 - Migration `0042` adds `admin_profile.notifications_seen_at`; `0043` drops it and creates
   `admin_notification_read`. Both ship in the same PR (harmless but noisy — and per the
   project's migration-chain situation, two extra journal entries for nothing).
@@ -121,6 +128,7 @@ the client-supplied Sentry permalink, and resolution-note edits that silently no
 ## Low
 
 ### L1 — `BaseDialog` light-dismiss closes on legitimate in-dialog interactions
+
 - **Where:** `apps/admin/src/lib/components/ui/BaseDialog.svelte:52-58`.
 - **What:** the `click` handler on `<dialog>` checks only coordinates, not `e.target`.
   (a) Firefox dispatches keyboard-activated button clicks with `clientX/Y = 0` — that bubbles
@@ -128,17 +136,19 @@ the client-supplied Sentry permalink, and resolution-note edits that silently no
   inner button. (b) mousedown inside a text field + mouseup over the backdrop (text-selection
   drag) fires the click on `<dialog>` with outside coordinates — closes the form mid-edit and
   discards input. Both matter for the big IssueForm.
-- **Fix:** require `e.target === el` *and* track `pointerdown` origin (only dismiss when the
+- **Fix:** require `e.target === el` _and_ track `pointerdown` origin (only dismiss when the
   press started on the backdrop).
 
 ### L2 — Assignment emails block the request, serially
+
 - **Where:** `notifyAssignees` awaited at `issues/+page.server.ts:164,201` and
   `sentry/+page.server.ts:130`; sends are sequential per recipient (`issueNotify.ts`).
 - **What:** the design intent is "best-effort, never blocks the assignment" — and it never
-  *fails* it, but it does delay the HTTP response by up to N × mailer latency. `void
-  notifyAssignees(...)` (or `Promise.allSettled` inside) matches the stated contract better.
+  _fails_ it, but it does delay the HTTP response by up to N × mailer latency. `void
+notifyAssignees(...)` (or `Promise.allSettled` inside) matches the stated contract better.
 
 ### L3 — Manager board payload grows without bound
+
 - `load` for managers ships **every** issue (no pagination) plus the **full event history of
   every issue** (`listIssueEventsByIssue`) on each `/issues` visit — the event table is
   append-only, so this only grows. The assignee modal already demonstrates the fix (fetch
@@ -149,17 +159,20 @@ the client-supplied Sentry permalink, and resolution-note edits that silently no
   note, which the code mostly already carries elsewhere.
 
 ### L4 — `unassigned` notifications never reach the person who was unassigned
-- `NOTIFIABLE_EVENTS` includes `unassigned`, but the feed requires a *current* assignee row —
+
+- `NOTIFIABLE_EVENTS` includes `unassigned`, but the feed requires a _current_ assignee row —
   the unassignment that would notify you also removes you from the audience (and hides all
   your other unread items on that incident). Remaining assignees do see it. If notifying the
   removed person was the intent, this needs an audience exception; if not, document it.
 
 ### L5 — `packages/core/probe.sample.ts` is a stray debug script
+
 - A MikroTik API probe (plain JS in a `.ts` file, `rejectUnauthorized: false`, raw
   `process.env`, no trailing newline) unrelated to the IMS, sitting in the package root. The
   PR body flags the smsgate rider but not this one. Move to a `scripts/`/docs location or drop.
 
 ### L6 — Minor a11y & cosmetics
+
 - `NotificationBell` uses `role="menu"` but the panel contains forms/buttons that are not
   `menuitem`s; the mark-read button inside each row breaks the menu interaction model — a
   plain labelled region/list would be more honest. `aria-live` on a scrollable list re-announces

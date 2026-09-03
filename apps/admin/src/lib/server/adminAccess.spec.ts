@@ -80,7 +80,10 @@ describe('resolveDeviceMac retries a transient miss', () => {
 	it('resolves on a later attempt after an early error', async () => {
 		stubNow(1_000_000);
 		const mac = 'AA:BB:CC:DD:EE:04';
-		const resolveMacByIp = vi.fn().mockRejectedValueOnce(new Error('tls timeout')).mockResolvedValue(mac);
+		const resolveMacByIp = vi
+			.fn()
+			.mockRejectedValueOnce(new Error('tls timeout'))
+			.mockResolvedValue(mac);
 		const network = { resolveMacByIp } as never;
 
 		expect(await resolveDeviceMac(network, '10.0.0.4')).toBe(mac);

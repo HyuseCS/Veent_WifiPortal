@@ -102,95 +102,96 @@
 		</section>
 	</div>
 {:else}
-<!-- Period selector + Export CSV now live in the Topbar header (FinanceHeaderControls).
+	<!-- Period selector + Export CSV now live in the Topbar header (FinanceHeaderControls).
      Desktop (md+) is a full-height one-screen column; mobile flows naturally and scrolls. -->
-<div class="flex flex-col gap-6 md:h-full">
-	<!-- KPIs -->
-	<section class="grid shrink-0 grid-cols-2 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-4">
-		{#each snapshot.kpis as kpi (kpi.label)}
-			{@const c = chromeFor(kpi)}
-			<KpiCard
-				{kpi}
-				icon={c.icon}
-				helper={c.helper}
-				progress={c.progress ? Number.parseInt(kpi.value, 10) || 0 : undefined}
-				compact
-			/>
-		{/each}
-	</section>
+	<div class="flex flex-col gap-6 md:h-full">
+		<!-- KPIs -->
+		<section class="grid shrink-0 grid-cols-2 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-4">
+			{#each snapshot.kpis as kpi (kpi.label)}
+				{@const c = chromeFor(kpi)}
+				<KpiCard
+					{kpi}
+					icon={c.icon}
+					helper={c.helper}
+					progress={c.progress ? Number.parseInt(kpi.value, 10) || 0 : undefined}
+					compact
+				/>
+			{/each}
+		</section>
 
-	<!-- Revenue + method/access-point breakdowns (transactions list moved to /finance/transactions).
+		<!-- Revenue + method/access-point breakdowns (transactions list moved to /finance/transactions).
 	     On md+, flex-1 + min-h-0 make the cards fill the leftover height down to the page bottom
 	     (one screen); on mobile they keep natural height and the page scrolls. Revenue spans 2 of
 	     3 columns; the two donuts stack vertically in the 3rd column. -->
-	<section class="grid grid-cols-1 gap-4 md:min-h-0 md:flex-1 2xl:grid-cols-3 2xl:items-stretch">
-		<Card class="flex min-h-65 flex-col lg:col-span-2">
-			<SectionHeading title="Settled revenue over time" class="mb-4">
-				{#snippet aside()}
-					<span class="font-mono text-sm text-muted">₱{revenueTotal.toLocaleString('en-PH')}</span>
-				{/snippet}
-			</SectionHeading>
-			<div class="min-h-[200px] flex-1 md:min-h-0">
-				{#if snapshot.revenue.length > 0}
-					<RevenueChart data={snapshot.revenue} />
-				{:else}
-					<p class="grid h-full place-items-center text-sm text-muted">
-						No settled revenue in this period.
-					</p>
-				{/if}
-			</div>
-		</Card>
+		<section class="grid grid-cols-1 gap-4 md:min-h-0 md:flex-1 2xl:grid-cols-3 2xl:items-stretch">
+			<Card class="flex min-h-65 flex-col lg:col-span-2">
+				<SectionHeading title="Settled revenue over time" class="mb-4">
+					{#snippet aside()}
+						<span class="font-mono text-sm text-muted">₱{revenueTotal.toLocaleString('en-PH')}</span
+						>
+					{/snippet}
+				</SectionHeading>
+				<div class="min-h-[200px] flex-1 md:min-h-0">
+					{#if snapshot.revenue.length > 0}
+						<RevenueChart data={snapshot.revenue} />
+					{:else}
+						<p class="grid h-full place-items-center text-sm text-muted">
+							No settled revenue in this period.
+						</p>
+					{/if}
+				</div>
+			</Card>
 
-		<!-- Two donuts. Below lg: a 2-up grid (compact cards) so they sit side-by-side instead of
+			<!-- Two donuts. Below lg: a 2-up grid (compact cards) so they sit side-by-side instead of
 		     two tall stacked blocks. At lg they return to the stacked 3rd column, sharing its height
 		     (one screen, no overflow) — desktop is byte-identical (compact hidden, original shown). -->
-		<div class="grid grid-cols-2 gap-4 md:min-h-0 2xl:flex 2xl:flex-col">
-			<Card padding="p-3 lg:p-5" class="flex flex-col 2xl:min-h-0 2xl:flex-1">
-				<SectionHeading title="By payment method" class="mb-3 lg:mb-4" />
-				<!-- lg: center the donut in the leftover column height (avoids a top-heavy card next to
+			<div class="grid grid-cols-2 gap-4 md:min-h-0 2xl:flex 2xl:flex-col">
+				<Card padding="p-3 lg:p-5" class="flex flex-col 2xl:min-h-0 2xl:flex-1">
+					<SectionHeading title="By payment method" class="mb-3 lg:mb-4" />
+					<!-- lg: center the donut in the leftover column height (avoids a top-heavy card next to
 				     the taller chart). Below lg: plain flow so the donut sits right under the title. -->
-				<div class="md:min-h-0 lg:flex lg:flex-1 lg:items-center">
-					<div class="w-full lg:hidden">
-						<DonutChart
-							data={snapshot.breakdown}
-							compact
-							centerValue="₱{settledTotal.toLocaleString('en-PH')}"
-							centerLabel="Settled"
-						/>
+					<div class="md:min-h-0 lg:flex lg:flex-1 lg:items-center">
+						<div class="w-full lg:hidden">
+							<DonutChart
+								data={snapshot.breakdown}
+								compact
+								centerValue="₱{settledTotal.toLocaleString('en-PH')}"
+								centerLabel="Settled"
+							/>
+						</div>
+						<div class="hidden w-full lg:block">
+							<DonutChart
+								data={snapshot.breakdown}
+								centerValue="₱{settledTotal.toLocaleString('en-PH')}"
+								centerLabel="Settled"
+							/>
+						</div>
 					</div>
-					<div class="hidden w-full lg:block">
-						<DonutChart
-							data={snapshot.breakdown}
-							centerValue="₱{settledTotal.toLocaleString('en-PH')}"
-							centerLabel="Settled"
-						/>
-					</div>
-				</div>
-			</Card>
+				</Card>
 
-			<Card padding="p-3 lg:p-5" class="flex flex-col md:min-h-0 md:flex-1">
-				<SectionHeading title="By access point" class="mb-3 lg:mb-4" />
-				<div class="md:min-h-0 lg:flex lg:flex-1 lg:items-center">
-					<div class="w-full lg:hidden">
-						<DonutChart
-							data={snapshot.apRevenue}
-							label="Revenue by access point"
-							compact
-							centerValue="₱{settledTotal.toLocaleString('en-PH')}"
-							centerLabel="Settled"
-						/>
+				<Card padding="p-3 lg:p-5" class="flex flex-col md:min-h-0 md:flex-1">
+					<SectionHeading title="By access point" class="mb-3 lg:mb-4" />
+					<div class="md:min-h-0 lg:flex lg:flex-1 lg:items-center">
+						<div class="w-full lg:hidden">
+							<DonutChart
+								data={snapshot.apRevenue}
+								label="Revenue by access point"
+								compact
+								centerValue="₱{settledTotal.toLocaleString('en-PH')}"
+								centerLabel="Settled"
+							/>
+						</div>
+						<div class="hidden w-full lg:block">
+							<DonutChart
+								data={snapshot.apRevenue}
+								label="Revenue by access point"
+								centerValue="₱{settledTotal.toLocaleString('en-PH')}"
+								centerLabel="Settled"
+							/>
+						</div>
 					</div>
-					<div class="hidden w-full lg:block">
-						<DonutChart
-							data={snapshot.apRevenue}
-							label="Revenue by access point"
-							centerValue="₱{settledTotal.toLocaleString('en-PH')}"
-							centerLabel="Settled"
-						/>
-					</div>
-				</div>
-			</Card>
-		</div>
-	</section>
-</div>
+				</Card>
+			</div>
+		</section>
+	</div>
 {/if}

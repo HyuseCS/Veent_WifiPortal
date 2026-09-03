@@ -1,12 +1,12 @@
 ---
 name: report:payment-walled-garden-v6-live-diagnostic-29-07-26
-description: "Live router diagnostic session (Stage B) for the RouterOS v6 payment walled-garden fix — GCash root cause found (CNAME-to-Akamai, not DoH), Google Pay reachability fixed but hard-blocked by WebView policy, Android captive-icon non-issue overturned, walled-garden cleanup debt catalogued"
+description: 'Live router diagnostic session (Stage B) for the RouterOS v6 payment walled-garden fix — GCash root cause found (CNAME-to-Akamai, not DoH), Google Pay reachability fixed but hard-blocked by WebView policy, Android captive-icon non-issue overturned, walled-garden cleanup debt catalogued'
 date: 29-07-26
 metadata:
   node_type: memory
   type: report
   feature: general-plans
-  phase: "stage-b-live-diagnostic"
+  phase: 'stage-b-live-diagnostic'
 ---
 
 # Payment Walled-Garden Fix (RouterOS v6) — Live Diagnostic Session Report
@@ -28,8 +28,8 @@ Google Pay reachability once GCash's root cause turned out not to be DoH-related
    `payments.gcash.com` CNAMEs to Akamai (`cac_payments.gcash.com.edgekey.net` →
    `e9816.cj.akamaiedge.net`). RouterOS v6 `dst-host` walled-garden matching cannot follow a CNAME
    chain to a wildcard like `*.gcash.com` — so no dynamic IP allow is ever created, regardless of
-   whether the query used encrypted or plain DNS. The router was never failing to *see* the DNS
-   query (the plan's DoH-hidden hypothesis); it was failing to *match* a CNAME'd host. This means
+   whether the query used encrypted or plain DNS. The router was never failing to _see_ the DNS
+   query (the plan's DoH-hidden hypothesis); it was failing to _match_ a CNAME'd host. This means
    the whole-network DoT/DoH block designed in Stage C would not have fixed GCash at all — the
    answer to the plan's own branch question (Q1: contacted? yes. Q2: DoH-hidden? **no — the real
    problem is CNAME, not DoH**) is a new, fourth outcome the plan's CASE 1/2/3 branch didn't
@@ -173,15 +173,15 @@ live router state, with no corresponding test coverage because they don't yet ex
 
 Scoring against the locked SPEC's AC1–AC7 (`payment-walled-garden-v6_SPEC_29-07-26.md`):
 
-| AC | Criterion | Status this session | Note |
-|---|---|---|---|
-| AC1 | Live capture proves root cause fixed | **MET for GCash, differently than SPEC's DoH mechanism** | Root cause was CNAME-to-Akamai, not DoH-hiding; fixed via `:resolve` scheduler, not the DoT/DoH block. The behavioral outcome (dst-host rules see nonzero-equivalent traffic via the IP-layer fix) is achieved for GCash. |
-| AC2 | GCash checkout completes while captive | **MET** | User-confirmed live. |
-| AC3 | Google Pay checkout completes while captive | **UNMET — structurally, not from a gap that more router config can close** | Reachability fixed; checkout itself blocked by Google's `OR_BIBED_15` WebView policy check. Backlog note required — see plan revision. |
-| AC4 | Stay-captive invariant holds (PROBE_DENIES) | Not re-verified this session | No PROBE_DENIES changes were made; carried forward as previously proven, not re-tested live this session — flag as a residual to re-confirm before calling the plan VERIFIED. |
-| AC5 | Browser return URL unaffected | Not directly re-tested this session | No changes touched `ORIGIN`/`TUNNEL_ORIGIN`; carried forward as previously proven (see `maya-return-url-revert_23-07-26`). |
-| AC6 | Idempotent provisioning | **UNMET for this session's live changes** | The `gcash-resolve` script and Google host rules were applied directly on the router, not through `setup:router` — so they are not yet idempotent-by-code; a fresh `setup:router` run would not reproduce or preserve them. This is the primary EXECUTE-phase gap this session leaves behind. |
-| AC7 | Non-payment plain DNS unchanged | **Trivially satisfied — no DNS block shipped** | Consistent with the plan's own CASE 2/3 fallback language; the DoT/DoH block was never built. |
+| AC  | Criterion                                   | Status this session                                                        | Note                                                                                                                                                                                                                                                                                          |
+| --- | ------------------------------------------- | -------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| AC1 | Live capture proves root cause fixed        | **MET for GCash, differently than SPEC's DoH mechanism**                   | Root cause was CNAME-to-Akamai, not DoH-hiding; fixed via `:resolve` scheduler, not the DoT/DoH block. The behavioral outcome (dst-host rules see nonzero-equivalent traffic via the IP-layer fix) is achieved for GCash.                                                                     |
+| AC2 | GCash checkout completes while captive      | **MET**                                                                    | User-confirmed live.                                                                                                                                                                                                                                                                          |
+| AC3 | Google Pay checkout completes while captive | **UNMET — structurally, not from a gap that more router config can close** | Reachability fixed; checkout itself blocked by Google's `OR_BIBED_15` WebView policy check. Backlog note required — see plan revision.                                                                                                                                                        |
+| AC4 | Stay-captive invariant holds (PROBE_DENIES) | Not re-verified this session                                               | No PROBE_DENIES changes were made; carried forward as previously proven, not re-tested live this session — flag as a residual to re-confirm before calling the plan VERIFIED.                                                                                                                 |
+| AC5 | Browser return URL unaffected               | Not directly re-tested this session                                        | No changes touched `ORIGIN`/`TUNNEL_ORIGIN`; carried forward as previously proven (see `maya-return-url-revert_23-07-26`).                                                                                                                                                                    |
+| AC6 | Idempotent provisioning                     | **UNMET for this session's live changes**                                  | The `gcash-resolve` script and Google host rules were applied directly on the router, not through `setup:router` — so they are not yet idempotent-by-code; a fresh `setup:router` run would not reproduce or preserve them. This is the primary EXECUTE-phase gap this session leaves behind. |
+| AC7 | Non-payment plain DNS unchanged             | **Trivially satisfied — no DNS block shipped**                             | Consistent with the plan's own CASE 2/3 fallback language; the DoT/DoH block was never built.                                                                                                                                                                                                 |
 
 Unmet criteria → backlog notes (see plan revision §6 below for the walled-garden-cleanup task; AC3
 and AC6 gaps are folded into the plan's Stage C replacement design and Implementation Checklist,

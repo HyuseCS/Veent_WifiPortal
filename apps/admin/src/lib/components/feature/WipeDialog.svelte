@@ -43,7 +43,8 @@
 <BaseDialog bind:open {reset}>
 	<h2 class="text-lg font-semibold text-blocked">{title}</h2>
 	<p class="mt-2 text-sm text-muted">
-		This permanently deletes <strong>all {count} {noun}</strong> and {detail}. This cannot be undone.
+		This permanently deletes <strong>all {count} {noun}</strong> and {detail}. This cannot be
+		undone.
 	</p>
 
 	{#if step === 'request'}
@@ -97,7 +98,8 @@
 				</p>{/if}
 			<div class="flex justify-end gap-2">
 				<Button type="button" variant="secondary" onclick={() => (open = false)}>Cancel</Button>
-				<Button type="submit" variant="danger-solid" disabled={!code.trim()}>Wipe everything</Button>
+				<Button type="submit" variant="danger-solid" disabled={!code.trim()}>Wipe everything</Button
+				>
 			</div>
 		</form>
 	{/if}

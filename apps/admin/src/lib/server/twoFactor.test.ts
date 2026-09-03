@@ -23,7 +23,8 @@ describe('isTotpCode', () => {
 
 describe('secretFromTotpUri', () => {
 	it('extracts the secret query param from an otpauth URI', () => {
-		const uri = 'otpauth://totp/RADIUS%20Admin:a@b.com?secret=JBSWY3DPEHPK3PXP&issuer=RADIUS%20Admin';
+		const uri =
+			'otpauth://totp/RADIUS%20Admin:a@b.com?secret=JBSWY3DPEHPK3PXP&issuer=RADIUS%20Admin';
 		expect(secretFromTotpUri(uri)).toBe('JBSWY3DPEHPK3PXP');
 	});
 

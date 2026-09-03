@@ -315,23 +315,23 @@ installed kit by its `validate-guide-sync` check.
 
 ### Agents
 
-| Agent | Role |
-|---|---|
-| `vc-research-agent` | RESEARCH — read-only information gathering |
-| `vc-spec-agent` | SPEC — product-discovery requirements doc |
-| `vc-innovate-agent` | INNOVATE — compare approaches, decision summary |
-| `vc-plan-agent` | PLAN — implementation plan artifacts |
-| `vc-validate-agent` | VALIDATE — turn a plan into an executable contract |
-| `vc-execute-agent` | EXECUTE — implement the approved plan exactly |
-| `vc-update-process-agent` | UPDATE PROCESS — archive plans, capture learnings |
-| `vc-fast-mode-agent` | Compressed research→spec→innovate→plan→validate flow |
-| `vc-quick-fix-agent` | Small low-risk edits with a scoped check |
-| `vc-tester` | Diff-aware test verification |
-| `vc-debugger` | Evidence-first root-cause investigation |
-| `vc-code-reviewer` | Production-readiness review |
-| `vc-code-simplifier` | Clarity refactors, no behavior change |
-| `vc-ui-ux-designer` | Design-aware UI implementation |
-| `vc-git-manager` | Staging + conventional commit preparation |
+| Agent                     | Role                                                 |
+| ------------------------- | ---------------------------------------------------- |
+| `vc-research-agent`       | RESEARCH — read-only information gathering           |
+| `vc-spec-agent`           | SPEC — product-discovery requirements doc            |
+| `vc-innovate-agent`       | INNOVATE — compare approaches, decision summary      |
+| `vc-plan-agent`           | PLAN — implementation plan artifacts                 |
+| `vc-validate-agent`       | VALIDATE — turn a plan into an executable contract   |
+| `vc-execute-agent`        | EXECUTE — implement the approved plan exactly        |
+| `vc-update-process-agent` | UPDATE PROCESS — archive plans, capture learnings    |
+| `vc-fast-mode-agent`      | Compressed research→spec→innovate→plan→validate flow |
+| `vc-quick-fix-agent`      | Small low-risk edits with a scoped check             |
+| `vc-tester`               | Diff-aware test verification                         |
+| `vc-debugger`             | Evidence-first root-cause investigation              |
+| `vc-code-reviewer`        | Production-readiness review                          |
+| `vc-code-simplifier`      | Clarity refactors, no behavior change                |
+| `vc-ui-ux-designer`       | Design-aware UI implementation                       |
+| `vc-git-manager`          | Staging + conventional commit preparation            |
 
 ### 35 Skills
 

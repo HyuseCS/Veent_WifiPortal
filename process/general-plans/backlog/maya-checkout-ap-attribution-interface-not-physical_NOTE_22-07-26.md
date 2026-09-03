@@ -1,6 +1,6 @@
 ---
 name: note:maya-checkout-ap-attribution-interface-not-physical
-description: "Maya payments attribute to the shared hotspot interface (bridge1_WiFi_Project) instead of the physical AP, because checkout resolves by interface-name while grants resolve by Option 82 circuit-id. Diagnosed 22-07-26, fix deferred."
+description: 'Maya payments attribute to the shared hotspot interface (bridge1_WiFi_Project) instead of the physical AP, because checkout resolves by interface-name while grants resolve by Option 82 circuit-id. Diagnosed 22-07-26, fix deferred.'
 date: 22-07-26
 metadata:
   node_type: memory
@@ -28,7 +28,7 @@ For the same guest session, the two transaction sources disagree on which AP the
 - **Maya payment** → `network_id = 11`, `ap_circuit_id = NULL`, `ap_name_snapshot = "bridge1_WiFi_Project"`
 - **Credit spend (grant)** → `ap_circuit_id = "OLT-9 xpon 0/1/0/4:16.3.70"`, `ap_name_snapshot = "AP-RENAMED2"` (the real physical AP)
 
-So topups (Maya) show the shared bridge; only when the guest *spends* credits to buy a plan does the
+So topups (Maya) show the shared bridge; only when the guest _spends_ credits to buy a plan does the
 real physical AP appear.
 
 ## Root cause
@@ -46,7 +46,7 @@ The two paths resolve the AP differently:
 - **Checkout path** — `resolveCheckoutLocation`
   (`apps/customer/src/lib/server/network-location.ts`) resolves by **interface name**: the `?ap=`
   portal param and/or `network.resolveApForMac(mac)` → `resolveNetworkIdByApName`. On a shared bridge
-  the hotspot interface (hence `?ap=`) is `bridge1_WiFi_Project` for *everyone*, so every Maya payment
+  the hotspot interface (hence `?ap=`) is `bridge1_WiFi_Project` for _everyone_, so every Maya payment
   collapses onto interface row id 11, with a null circuit-id. ❌
 
 The AP-name-snapshot feature faithfully froze whatever checkout resolved — it did not cause this; it

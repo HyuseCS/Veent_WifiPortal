@@ -1,6 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import { and, desc, eq, inArray } from 'drizzle-orm';
-import { adminOwnerChangeRequest, adminOwnerChangeApproval, adminUser, adminSession } from '@veent/db';
+import {
+	adminOwnerChangeRequest,
+	adminOwnerChangeApproval,
+	adminUser,
+	adminSession
+} from '@veent/db';
 import { listOwners, executeOwnerChange, type Owner } from '@veent/core';
 import { db } from '$lib/server/db';
 import { logger } from '$lib/server/logger';
@@ -133,8 +138,10 @@ export async function recordApproval(requestId: string, ownerId: string): Promis
 		.from(adminOwnerChangeRequest)
 		.where(eq(adminOwnerChangeRequest.id, requestId))
 		.limit(1);
-	if (!req || req.status !== 'pending') return { ok: false, error: 'This request is no longer open.' };
-	if (req.expiresAt.getTime() < Date.now()) return { ok: false, error: 'This request has expired.' };
+	if (!req || req.status !== 'pending')
+		return { ok: false, error: 'This request is no longer open.' };
+	if (req.expiresAt.getTime() < Date.now())
+		return { ok: false, error: 'This request has expired.' };
 
 	const owners = await listOwners(db);
 	const target = owners.find((o) => o.id === req.targetUserId) ?? null;
@@ -143,10 +150,7 @@ export async function recordApproval(requestId: string, ownerId: string): Promis
 		return { ok: false, error: 'You are not eligible to approve this request.' };
 	}
 
-	await db
-		.insert(adminOwnerChangeApproval)
-		.values({ requestId, ownerId })
-		.onConflictDoNothing();
+	await db.insert(adminOwnerChangeApproval).values({ requestId, ownerId }).onConflictDoNothing();
 
 	const executed = await evaluate(requestId);
 	return { ok: true, executed, action: req.action as OwnerChangeAction, target, owners };

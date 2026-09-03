@@ -253,9 +253,15 @@ async function refreshAccessPoints(
 				lastSampleAt: networkHealth.lastSampleAt
 			})
 			.from(networkHealth)
-			.where(inArray(networkHealth.mac, apLeases.map((l) => l.mac.toUpperCase())));
+			.where(
+				inArray(
+					networkHealth.mac,
+					apLeases.map((l) => l.mac.toUpperCase())
+				)
+			);
 		for (const r of rows) {
-			if (r.mac) prevByMac.set(r.mac, { trafficBytes: r.trafficBytes, lastSampleAt: r.lastSampleAt });
+			if (r.mac)
+				prevByMac.set(r.mac, { trafficBytes: r.trafficBytes, lastSampleAt: r.lastSampleAt });
 		}
 	}
 
@@ -362,10 +368,7 @@ export async function upsertApRow(
 				latencyMs: vals.latencyMs,
 				uptimePct: vals.uptimePct,
 				throughputMbps: vals.throughputMbps,
-				trafficBytes:
-					currBytes != null
-						? currBytes
-						: sql`${networkHealth.trafficBytes}`,
+				trafficBytes: currBytes != null ? currBytes : sql`${networkHealth.trafficBytes}`,
 				lastSampleAt: vals.lastSampleAt,
 				offlineSince: offlineSinceOnUpdate,
 				onlineSince: onlineSinceOnUpdate
@@ -589,10 +592,7 @@ export async function resolveNetworkIdForMac(
  * Pure read, no side effects. Best-effort by contract: attribution is advisory staff-review data,
  * never a gate. `?mac=`/AP signals remain client-influenceable — this label is NOT tamper-proof.
  */
-export async function resolveApCircuitLabel(
-	db: DB,
-	circuitId: string | null
-): Promise<string> {
+export async function resolveApCircuitLabel(db: DB, circuitId: string | null): Promise<string> {
 	if (!circuitId) return 'Unattributed';
 	const [ap] = await db
 		.select({ name: networkHealth.name, displayName: networkHealth.displayName })

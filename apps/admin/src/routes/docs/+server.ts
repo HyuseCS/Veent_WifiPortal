@@ -70,7 +70,9 @@ const spec = {
 				responses: {
 					'200': {
 						description: 'Granted',
-						content: { 'application/json': { schema: { $ref: '#/components/schemas/GrantResult' } } }
+						content: {
+							'application/json': { schema: { $ref: '#/components/schemas/GrantResult' } }
+						}
 					},
 					'400': { description: 'macAddress missing' },
 					'401': { description: 'Not authenticated' },
@@ -215,7 +217,12 @@ const spec = {
 					timeLeft: { type: 'string', example: '14:52' },
 					tone: { type: 'string', enum: ['online', 'warning', 'blocked'] },
 					status: { type: 'string' },
-					expiresAt: { type: 'string', format: 'date-time', nullable: true, example: '2026-06-18T09:55:00.000Z' }
+					expiresAt: {
+						type: 'string',
+						format: 'date-time',
+						nullable: true,
+						example: '2026-06-18T09:55:00.000Z'
+					}
 				}
 			}
 		}

@@ -1,13 +1,13 @@
 ---
 name: protocol:vc-system-behavior-11-phase-programs
-description: "Phase program reference: umbrella plan, inner loop, blast-radius coordination, and cascade BLOCKED handling."
+description: 'Phase program reference: umbrella plan, inner loop, blast-radius coordination, and cascade BLOCKED handling.'
 date: 09-06-26
 metadata:
   node_type: memory
   type: protocol
   read_order: 1
   required: false
-  read_when: "running or auditing a multi-phase program inner loop"
+  read_when: 'running or auditing a multi-phase program inner loop'
 ---
 
 # Phase Programs
@@ -34,6 +34,7 @@ The outer PLAN step produces two artifacts via `vc-generate-phase-program`:
 2. **Full phase plan per phase** — one complete plan file per identified phase, to the same standard as a standalone COMPLEX plan
 
 Each phase plan must contain:
+
 - Session Goal + observable outcome for this phase
 - Full Implementation Checklist with concrete steps, file paths, edit targets
 - Touchpoints and Public Contracts
@@ -46,22 +47,26 @@ Each phase plan must contain:
 
 **Goal Block Coexistence (Autopilot Mode):**
 When autopilot is triggered on a phase program, two goal-block artifacts are required:
+
 1. Provisional goal file: `{slug}_AUTOPILOT_GOAL_{dd-mm-yy}.md` in the task folder (written at session start, immutable).
 2. Umbrella plan section: `## Stable Program Goal` in the umbrella plan file (written during outer PLAN, fixed until final UPDATE PROCESS).
 
 Do NOT treat the umbrella section as a replacement for the provisional file. Both are durable artifacts serving different purposes:
+
 - Provisional file: session-level resume artifact, immutable across all phases.
 - Umbrella section: program-level charter reference for orchestrator routing during inner phases.
 
 **When to use agent team:** `vc-agent-strategy-compare` must recommend **agent-team** — not parallel-subagents — when 3 or more phase plans are being created. Agent team members communicate. Parallel subagents cannot.
 
 Agent team coordination covers:
+
 - Which scope belongs in phase N vs N+1
 - Blast radius non-overlap (two phases claiming the same file is a conflict)
 - Dependency declarations (what phase N delivers that phase N+1 relies on)
 - Test infra decisions that affect multiple phases
 
 **Examples where agent-team is the right call:**
+
 - Creating 3+ phase plans for a large feature (one teammate per phase)
 - Running outer PVL across N phase plans (one validator per plan plus coordinator)
 - Parallel research across 4+ independent subsystems
@@ -89,6 +94,7 @@ One registry per program lives FLAT inside the program task folder (see plan-lif
 **Before appending:** Read the current registry and check that it ends with a complete `## Phase [N]` section (has at least one non-heading content line after the heading). If the file ends with an incomplete heading with no content below it: complete the previous section with: `status: unknown — interrupted write detected; coordinator must resolve before proceeding`.
 
 **Valid registry status values:**
+
 - (no status field) = active claim — phase is in progress
 - `status: BLOCKED-skipped` = phase was skipped due to dependency failure (files never modified)
 - `status: DONE` = phase completed successfully
@@ -116,6 +122,7 @@ After all phase plan agents complete, the orchestrator reads all `## Potential B
 Every conflict must have a Resolution and Action before the outer PVL begins.
 
 Valid `Action` values:
+
 - `update Phase [A] blast-radius claim`
 - `update Phase [B] blast-radius claim`
 - `no action needed`
@@ -131,6 +138,7 @@ Valid `Action` values:
 **No-conflict case:** If no conflicts are found, still write `## Pre-PVL Conflict Resolution` with the note: "No blast-radius conflicts found — all phase plans have clean blast-radius claims."
 
 **BLOCKED conflict re-scope sub-procedure:** When a conflict has no safe resolution:
+
 1. Spawn a single vc-plan-agent for the conflicted phase only (not a full agent-team re-run).
 2. Scope to only the conflicted blast-radius section.
 3. Outer PVL halts until the re-scoped phase plan is written and the conflict is resolved.
@@ -192,6 +200,7 @@ Also read prior phase reports before any work begins for this phase.
 Step 0 Dependency-BLOCKED is handled entirely by the orchestrator — no agent is spawned, no machine-readable signal is emitted.
 
 Action on Dependency-BLOCKED:
+
 - Write a minimal phase report noting: `Dependency-BLOCKED — dependency phase [N] was BLOCKED-skipped; this phase cannot proceed until Phase [N] deliverables exist.`
 - Register as BLOCKED in the umbrella plan.
 - Append `status: BLOCKED-skipped — dependency BLOCKED at Step 0; files never modified` to this phase's entry in `phase-blast-radius-registry.md`.
@@ -203,11 +212,13 @@ Phase Loop Progress notation for Step 0 Dependency-BLOCKED:
 If the umbrella plan has no `## Phase Ordering` section: treat as "no dependencies declared" and proceed. Emit a CONCERN in the phase report: "Umbrella plan missing `## Phase Ordering` — dependency pre-check could not run; proceeding with no-dependency assumption."
 
 **Prior phase report reading strategy:**
+
 - Read the immediately prior phase report (Phase N-1) in full.
 - For all earlier phases (Phase N-2 and before): read only the `## Forward Preview` section.
 - Phase 1 edge case: no prior reports exist. Skip prior-report reading entirely. Read the umbrella plan's `## Stable Program Goal` section for program context instead.
 
 **Boundary definition:**
+
 - Phase 2 (first inner phase): Phase 1 is immediately prior → read in full. No earlier phases.
 - Phase N (N ≥ 3): Phase N-1 → read in full. Phases 1 through N-2 → read Forward Preview only.
 
@@ -238,6 +249,7 @@ STEP 3: PLAN-SUPPLEMENT (update the existing phase plan with inner R+I findings)
 Step 3 runs BEFORE the inner PVL (Step 4). Any V7-triggered supplement from Step 4's inner PVL uses a narrow scope fence from Section 5 V7. These are two distinct supplement invocations with different scope permissions — never combine them in one plan-agent invocation.
 
 Under /goal: when Step 3 completes, vc-plan-agent emits:
+
 - If changes were made: `PHASE_COMPLETE: PLAN-SUPPLEMENT — phase plan [N] updated; Inner Loop Refresh Note written`
 - If no changes needed: `PHASE_COMPLETE: PLAN-SUPPLEMENT — no changes; plan current`
 
@@ -255,6 +267,7 @@ STEP 4: PVL (full V1→V7 — with current inner-loop evidence)
 ```
 
 BLOCKED handling at Step 4:
+
 1. Write a backlog NOTE for the entire phase.
 2. Append `status: BLOCKED-skipped — blast-radius claim unresolved; files never modified` to this phase's entry in `phase-blast-radius-registry.md`.
 3. Cascade check: if the immediately prior phase (N-1) is also BLOCKED-skipped with no intervening PASS phase — trigger Cascade BLOCKED Protocol immediately. Do not continue to step 3.
@@ -356,6 +369,7 @@ This list is the concrete expansion of "both per-phase gates auto-proceed": unde
   **Skill sequence for mid-program plan creation:** Use abbreviated PLAN scope: Tier-0 skills + vc-scout + vc-generate-plan + vc-test-coverage-plan. Do NOT invoke vc-generate-phase-program. Do NOT use agent-team. DO invoke vc-agent-strategy-compare. Scope fence: the new plan covers only the conflict-resolution surface.
 
 **Step-class rule** (applies to BLOCKED, NEEDS_CONTEXT, and CONTEXT_PARTIAL at any inner-loop step):
+
 - Steps 1–3 (R, I, P-supplement) → continue with degraded quality; emit `CONTEXT_PARTIAL` warning in phase report
 - Step 4 (PVL) BLOCKED → write backlog NOTE for the entire phase; skip to next phase (not next step); register as BLOCKED in umbrella
 - Step 5 (EXECUTE) BLOCKED → treat as EVL L1 failure; create follow-up plan stub scoped to the missing context surface
@@ -375,7 +389,7 @@ Emit this when the umbrella plan's `## Phase Ordering` sequence changes. Marking
 
 ### Real-World Side-Effect Actions (deferred to backlog under /goal — never performed autonomously)
 
-A true `/goal` run pauses for nothing, so it also never *performs* an irreversible / outward-facing / costful real-world action on its own. When the loop reaches one of the actions below, it does **NOT** stop and does **NOT** execute it — it writes a **backlog note** describing the action that needs a human to perform/approve, **skips** it, and continues. (Interactive sessions stop and ask instead.)
+A true `/goal` run pauses for nothing, so it also never _performs_ an irreversible / outward-facing / costful real-world action on its own. When the loop reaches one of the actions below, it does **NOT** stop and does **NOT** execute it — it writes a **backlog note** describing the action that needs a human to perform/approve, **skips** it, and continues. (Interactive sessions stop and ask instead.)
 
 Actions that are deferred-to-backlog under /goal rather than performed:
 
@@ -413,6 +427,7 @@ If two or more consecutive phases are BLOCKED (Phase N AND Phase N+1 are both BL
 **Consecutive** means phases N and N+1 in the umbrella plan's `## Phase Ordering` are both BLOCKED with no PASS phase between them. Phase 2 BLOCKED + Phase 4 BLOCKED with Phase 3 PASS does NOT trigger this. Phase 2 BLOCKED + Phase 3 BLOCKED DOES trigger it.
 
 Actions:
+
 1. Write a structured dependency analysis to `process/features/{feature}/reports/cascade-blocked-{YYYY-MM-DD}.md` (or `process/general-plans/reports/` for general plans).
 2. Surface to user with a recommendation (restructure phases, resolve Phase N gap first, or scope-reduce).
 3. Await user input before continuing.
@@ -420,10 +435,10 @@ Actions:
 Required fields in the analysis file:
 
 ```yaml
-phases_blocked: ["Phase N", "Phase N+1"]
+phases_blocked: ['Phase N', 'Phase N+1']
 dependency_chain: "Phase N BLOCKED because [reason]; Phase N+1 BLOCKED because it depends on Phase N's [deliverable] which was never produced"
 attempts_made: [validate-fix loops tried, re-scope attempts]
-recommendation: "restructure | resolve Phase N first | scope-reduce Phase N+1"
+recommendation: 'restructure | resolve Phase N first | scope-reduce Phase N+1'
 ```
 
 **Owner:** orchestrator (coordination artifact exception). After writing the cascade analysis file: paste a summary in chat and await the user's decision.
@@ -431,6 +446,7 @@ recommendation: "restructure | resolve Phase N first | scope-reduce Phase N+1"
 **Cascade BLOCKED applies during inner-loop execution only.** Outer PVL isolated BLOCKs trigger the BLOCKED conflict re-scope sub-procedure instead.
 
 **All-phases-BLOCKED terminal condition:** If all phases in the umbrella plan show BLOCKED or BLOCKED-skipped (no COMPLETE or COMPLETE_WITH_GAPS phases):
+
 1. Write a minimal program failure report to `process/features/{feature}/reports/`.
 2. Update umbrella `## Current Execution State` to show all-blocked.
 3. Write a single backlog note summarizing the program-level failure.
@@ -452,7 +468,7 @@ If a /goal session is interrupted mid-phase:
 4. Orchestrator reads the latest phase report for the current phase to recover in-flight detail (last EVL gate run, recorded cycle counts, known gaps).
 5. **Git reconciliation (integrity check).** Before resuming, cross-check the claimed umbrella/report state against actual git state — the last EVL-green commit, the working-tree diff, and the blast-radius registry status. If the umbrella claims a phase is COMPLETE/EVL-green but no corresponding source commit or diff exists (a stale or lying umbrella): trust the git evidence, correct the umbrella state, and resume from the genuinely-reached position rather than the claimed one.
 6. If phase was mid-EXECUTE (some section items ticked): execute-agent reads the plan, finds the last ticked item, resumes from the next item. Do not re-run ticked sections.
-7. If EVL was in progress: re-run EVL from step 1. EVL gate *results* are not persisted, so re-running the gates is safe — but the *cycle count* IS recovered from the phase report (see Cycle count preservation below) so the re-run does not reset the 10-cycle bound.
+7. If EVL was in progress: re-run EVL from step 1. EVL gate _results_ are not persisted, so re-running the gates is safe — but the _cycle count_ IS recovered from the phase report (see Cycle count preservation below) so the re-run does not reset the 10-cycle bound.
 
 **Cycle count preservation:** Before re-running EVL, check the phase report for any `EVL execute-validate-fix loop count` recorded during the interrupted session. If count N was recorded: start the re-run counter at N, not 0.
 
@@ -489,6 +505,7 @@ The 5-step model in orchestration.md (steps 1a, 1b, 2, 3, 4) describes which age
 When vc-plan-agent creates a new plan mid-program (for conflict resolution or phase insertion), it emits: `MID_PROGRAM_PLAN_CREATED: [plan file path] — inner PVL required`
 
 Orchestrator reaction:
+
 1. Trigger inner PVL for the new plan only.
 2. Do NOT output a new /goal block.
 3. Umbrella Stable Program Goal remains authoritative and unchanged.
@@ -526,13 +543,13 @@ Never halt the program for a conflict that can be resolved by updating plans and
 
 ## Agent Team Coordination — Templates
 
-| Template | Path |
-|---|---|
-| Umbrella plan | `vc-generate-phase-program/templates/umbrella-plan-template.md` |
-| Phase stub | `vc-generate-phase-program/templates/phase-stub-template.md` |
-| Program Goal Charter | `vc-generate-phase-program/references/program-goal-charter-template.md` |
-| Program SPEC (umbrella product-discovery requirements doc governing inner phases) | `vc-generate-phase-program/templates/program-spec-template.md` |
-| Phase loop workflow | `vc-generate-phase-program/templates/phase-loop-workflow-template.js` |
+| Template                                                                          | Path                                                                    |
+| --------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| Umbrella plan                                                                     | `vc-generate-phase-program/templates/umbrella-plan-template.md`         |
+| Phase stub                                                                        | `vc-generate-phase-program/templates/phase-stub-template.md`            |
+| Program Goal Charter                                                              | `vc-generate-phase-program/references/program-goal-charter-template.md` |
+| Program SPEC (umbrella product-discovery requirements doc governing inner phases) | `vc-generate-phase-program/templates/program-spec-template.md`          |
+| Phase loop workflow                                                               | `vc-generate-phase-program/templates/phase-loop-workflow-template.js`   |
 
 **Phase-loop workflow template — context slots:** the template carries `{test-runner}` (from the Context Envelope; the multi-runner `bun test | vitest` form is a display convention only — the template must expand to SEQUENTIAL execution, never a literal shell pipe), `{blast-radius-paths}` (from Context Envelope blast-radius-packages), `{validate-contract-path}` (the phase plan's validate-contract), and `{infra-context-group}` (the relevant context group for the phase).
 

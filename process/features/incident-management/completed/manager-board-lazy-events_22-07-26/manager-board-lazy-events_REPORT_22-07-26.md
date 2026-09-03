@@ -23,16 +23,16 @@ plan: process/features/incident-management/active/manager-board-lazy-events_22-0
 
 ## Test Gate Outcomes
 
-| Gate | Command | Result |
-|---|---|---|
-| G1 | `grep -n "listIssueEventsByIssue\|events:" +page.server.ts` | PASS (exit 1, no match) |
-| G6 | `cd apps/admin && bun run check` | PASS — 2314 files, 0 errors, 0 warnings |
-| G7 | scoped `bunx eslint` on 4 files | PASS (exit 0) |
-| G7 | scoped `bunx prettier --check` | 3/4 files show DRIFT — confirmed pre-existing on HEAD (untouched lines: `assigneeIds`, `notifyAssignees`, `PRIORITY_LABEL`, `ui` import grouping); my added lines conform. NOT `--write`-fixed (plan forbids touching pre-existing drift). `+page.svelte` clean. |
-| G2 | `cd apps/admin && bunx vitest run` | PASS — 21 files, 156 tests |
-| G3+G4 | `bunx playwright test e2e/incident-timeline.e2e.ts e2e/incident-detail.e2e.ts` | PASS — 4/4 |
-| G5 | `cd apps/admin && bunx playwright test` | PASS — 23/23 |
-| G8 | manual browser + human handoff | DEFERRED (Agent-Probe, accepted CONDITIONAL) |
+| Gate  | Command                                                                        | Result                                                                                                                                                                                                                                                           |
+| ----- | ------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| G1    | `grep -n "listIssueEventsByIssue\|events:" +page.server.ts`                    | PASS (exit 1, no match)                                                                                                                                                                                                                                          |
+| G6    | `cd apps/admin && bun run check`                                               | PASS — 2314 files, 0 errors, 0 warnings                                                                                                                                                                                                                          |
+| G7    | scoped `bunx eslint` on 4 files                                                | PASS (exit 0)                                                                                                                                                                                                                                                    |
+| G7    | scoped `bunx prettier --check`                                                 | 3/4 files show DRIFT — confirmed pre-existing on HEAD (untouched lines: `assigneeIds`, `notifyAssignees`, `PRIORITY_LABEL`, `ui` import grouping); my added lines conform. NOT `--write`-fixed (plan forbids touching pre-existing drift). `+page.svelte` clean. |
+| G2    | `cd apps/admin && bunx vitest run`                                             | PASS — 21 files, 156 tests                                                                                                                                                                                                                                       |
+| G3+G4 | `bunx playwright test e2e/incident-timeline.e2e.ts e2e/incident-detail.e2e.ts` | PASS — 4/4                                                                                                                                                                                                                                                       |
+| G5    | `cd apps/admin && bunx playwright test`                                        | PASS — 23/23                                                                                                                                                                                                                                                     |
+| G8    | manual browser + human handoff                                                 | DEFERRED (Agent-Probe, accepted CONDITIONAL)                                                                                                                                                                                                                     |
 
 ## Plan Deviations
 

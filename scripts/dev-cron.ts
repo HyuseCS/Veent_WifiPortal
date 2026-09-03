@@ -46,7 +46,10 @@ const ADMIN_SECRET = process.env.ADMIN_CRON_SECRET ?? adminEnv.CRON_SECRET ?? ''
 // Use `localhost`, not `127.0.0.1`: Vite's dev server binds IPv6 loopback (`::1`) only, so an
 // IPv4 literal is refused ("unreachable"). `localhost` resolves to whichever family is listening.
 const CUST_URL = (process.env.DEV_CRON_BASE_URL ?? 'http://localhost:5173').replace(/\/$/, '');
-const ADMIN_URL = (process.env.DEV_CRON_ADMIN_BASE_URL ?? 'http://localhost:5174').replace(/\/$/, '');
+const ADMIN_URL = (process.env.DEV_CRON_ADMIN_BASE_URL ?? 'http://localhost:5174').replace(
+	/\/$/,
+	''
+);
 const INTERVAL_MS = Number(process.env.DEV_CRON_INTERVAL_MS ?? 60_000);
 
 if (!CUST_SECRET) {
@@ -70,7 +73,11 @@ const TARGETS: Target[] = [
 	{ url: `${CUST_URL}/api/otp/sweep-delivery`, secret: CUST_SECRET, label: 'otp-sweep' }
 ];
 if (ADMIN_SECRET) {
-	TARGETS.push({ url: `${ADMIN_URL}/api/network/health/refresh`, secret: ADMIN_SECRET, label: 'health' });
+	TARGETS.push({
+		url: `${ADMIN_URL}/api/network/health/refresh`,
+		secret: ADMIN_SECRET,
+		label: 'health'
+	});
 } else {
 	console.warn(
 		'[dev-cron] admin CRON_SECRET not found (apps/admin/.env) — skipping health refresh; ' +

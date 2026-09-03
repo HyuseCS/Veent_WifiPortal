@@ -11,7 +11,14 @@
 	import type { Component } from 'svelte';
 	import type { SubmitFunction } from '@sveltejs/kit';
 	import { enhance } from '$app/forms';
-	import { EmptyState, FilterTabs, IconButton, Sparkline, StatusBadge, Table } from '$lib/components/ui';
+	import {
+		EmptyState,
+		FilterTabs,
+		IconButton,
+		Sparkline,
+		StatusBadge,
+		Table
+	} from '$lib/components/ui';
 	import type { StatusTone } from '$lib/types';
 	import type { SentryIssue } from '$lib/server/sentry/types';
 	import TableSortControl from '../TableSortControl.svelte';
@@ -86,7 +93,10 @@
 		return () => {
 			actionError = null;
 			ignored = ignored.filter((i) => i.id !== issue.id);
-			unresolved = [{ ...issue, status: 'unresolved' }, ...unresolved.filter((i) => i.id !== issue.id)];
+			unresolved = [
+				{ ...issue, status: 'unresolved' },
+				...unresolved.filter((i) => i.id !== issue.id)
+			];
 			return async ({ result }) => {
 				if (result.type !== 'success' && result.type !== 'redirect') {
 					unresolved = unresolved.filter((i) => i.id !== issue.id);
@@ -239,7 +249,9 @@
 			</div>
 		</div>
 		{#if actionError}
-			<div class="flex items-center gap-2 border-t border-border bg-blocked/10 px-4 py-2 text-xs text-blocked">
+			<div
+				class="flex items-center gap-2 border-t border-border bg-blocked/10 px-4 py-2 text-xs text-blocked"
+			>
 				<TriangleAlert class="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
 				<span>{actionError}</span>
 			</div>
@@ -332,12 +344,18 @@
 				{issue.count.toLocaleString('en-US')}
 			</td>
 			<td data-label="Trend" class="px-4 py-3">
-				<Sparkline values={trendOf(issue)} label={issue.shortId || issue.title} window={trendLabel} />
+				<Sparkline
+					values={trendOf(issue)}
+					label={issue.shortId || issue.title}
+					window={trendLabel}
+				/>
 			</td>
 			<td data-label="Users" class="px-4 py-3 font-mono text-muted">
 				{issue.userCount.toLocaleString('en-US')}
 			</td>
-			<td data-label="Last seen" class="px-4 py-3 font-mono text-muted">{seenAgo(issue.lastSeen)}</td>
+			<td data-label="Last seen" class="px-4 py-3 font-mono text-muted"
+				>{seenAgo(issue.lastSeen)}</td
+			>
 			<td class="tc-full px-4 py-3">
 				<div class="flex items-center justify-end gap-1">
 					<IconButton
@@ -415,4 +433,11 @@
 	{/if}
 </Table>
 
-<SentryIssueDialog issue={selected} bind:open={dialogOpen} {levelTone} {seenAgo} {startTracking} {assignableStaff} />
+<SentryIssueDialog
+	issue={selected}
+	bind:open={dialogOpen}
+	{levelTone}
+	{seenAgo}
+	{startTracking}
+	{assignableStaff}
+/>

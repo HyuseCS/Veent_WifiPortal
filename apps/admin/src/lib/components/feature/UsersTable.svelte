@@ -232,10 +232,8 @@
 					{user.points} pts
 				</span>
 			</td>
-			<td
-				data-label="Time Left"
-				class="px-4 py-3 font-mono text-ink"
-				class:tc-skip={!user.timeLeft}>{user.timeLeft ?? '—'}</td
+			<td data-label="Time Left" class="px-4 py-3 font-mono text-ink" class:tc-skip={!user.timeLeft}
+				>{user.timeLeft ?? '—'}</td
 			>
 			<td data-label="Devices" class="px-4 py-3">
 				{#if user.deviceCount > 0}

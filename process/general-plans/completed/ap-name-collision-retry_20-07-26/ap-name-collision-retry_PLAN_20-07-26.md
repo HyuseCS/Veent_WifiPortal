@@ -1,6 +1,6 @@
 ---
 name: plan:ap-name-collision-retry
-description: "Complete per-ap-visibility checklist 2.6 / constraint E3: catch the network_health_name_key unique violation on the AP upsert and retry once with the MAC-tail-suffixed name. Concurrency-hardening fix in packages/core/src/services/networkHealth.ts plus integration + unit specs. SIMPLE plan."
+description: 'Complete per-ap-visibility checklist 2.6 / constraint E3: catch the network_health_name_key unique violation on the AP upsert and retry once with the MAC-tail-suffixed name. Concurrency-hardening fix in packages/core/src/services/networkHealth.ts plus integration + unit specs. SIMPLE plan.'
 date: 20-07-26
 feature: general-plans
 ---
@@ -41,7 +41,7 @@ follows 2.6. **2.6 is authoritative**; R2's prose is imprecise, not a conflict.
 ## Scope
 
 - **In:** `packages/core/src/services/networkHealth.ts` (AP upsert in `refreshAccessPoints`, `resolveApName` docstring), `packages/core/src/services/networkHealth.integration.spec.ts`, one small pure error-identification helper + its unit spec (same file family).
-- **Out:** schema, migrations, `resolveApName` logic (pre-check STAYS — the retry is the second layer), mac-keyed identity, `trafficBytes` COALESCE, since-transitions, apps/*, any retry loop beyond ONE retry.
+- **Out:** schema, migrations, `resolveApName` logic (pre-check STAYS — the retry is the second layer), mac-keyed identity, `trafficBytes` COALESCE, since-transitions, apps/\*, any retry loop beyond ONE retry.
 
 ## Key Design Facts (established during planning research)
 
@@ -81,17 +81,17 @@ controller callback between them. Honest retry-path assertion requires extractin
 into a directly-testable internal function and testing it against a pre-seeded row that already
 holds the target name under a different MAC — the first insert then genuinely violates
 `network_health_name_key`. PGlite is real Postgres (WASM) and raises unique violations as
-catchable errors with SQLSTATE; the E3 caveat concerned abort-on-violation *transaction*
+catchable errors with SQLSTATE; the E3 caveat concerned abort-on-violation _transaction_
 semantics, which do not apply here (F1: no transaction). If EXECUTE finds PGlite's raised error
 lacks a usable `code`/`constraint` field, fall back per checklist 5 (known-gap protocol).
 
 ## Touchpoints
 
-| File | Change |
-|---|---|
-| `packages/core/src/services/networkHealth.ts` | Extract AP upsert (~308-331) into internal `upsertApRow(...)` (exported for tests, e.g. via existing test-export convention or a named export documented as internal); wrap its insert in the once-retry; add small `isNameUniqueViolation(e)` helper (cause-chain walk per F2); fix `resolveApName` docstring (~389-393) |
-| `packages/core/src/services/networkHealth.integration.spec.ts` | New tests G-NC1/G-NC2 (retry path, second-collision propagation) |
-| `packages/core/src/services/networkHealth.ts` unit surface (existing spec file or co-located) | Unit tests for `isNameUniqueViolation` with fabricated bare/wrapped/doubly-wrapped errors (record-payment.spec.ts style), incl. a postgres.js-shaped error with `constraint_name` |
+| File                                                                                          | Change                                                                                                                                                                                                                                                                                                                    |
+| --------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `packages/core/src/services/networkHealth.ts`                                                 | Extract AP upsert (~308-331) into internal `upsertApRow(...)` (exported for tests, e.g. via existing test-export convention or a named export documented as internal); wrap its insert in the once-retry; add small `isNameUniqueViolation(e)` helper (cause-chain walk per F2); fix `resolveApName` docstring (~389-393) |
+| `packages/core/src/services/networkHealth.integration.spec.ts`                                | New tests G-NC1/G-NC2 (retry path, second-collision propagation)                                                                                                                                                                                                                                                          |
+| `packages/core/src/services/networkHealth.ts` unit surface (existing spec file or co-located) | Unit tests for `isNameUniqueViolation` with fabricated bare/wrapped/doubly-wrapped errors (record-payment.spec.ts style), incl. a postgres.js-shaped error with `constraint_name`                                                                                                                                         |
 
 ## Public Contracts
 
@@ -108,7 +108,7 @@ schema, API, auth, or billing surface.
 
 - [ ] **1. Re-verify F1 (E3 branch).** Grep for `db.transaction` in `networkHealth.ts` and both `refreshNetworkHealth` call sites. Confirm no wrapping transaction. If one exists → STOP, plan must be revised to the savepoint branch of E3.
 - [ ] **2. Error-identification helper.** In `networkHealth.ts`, add `isNameUniqueViolation(e: unknown): boolean` implementing F2: bounded cause-chain walk (self, `.cause`, `.cause.cause` — mirroring reconcilePayments.ts) collecting `code` and the constraint field (`constraint_name` OR `constraint`); return true iff code `'23505'` and (constraint === `'network_health_name_key'` when a constraint field was found anywhere on the chain, else true on code alone per F2's mac-target-absorption argument). JSDoc must state the F2 reasoning.
-- [ ] **3. Retry in the AP upsert.** Extract the current insert+`onConflictDoUpdate(target: mac)` block into `upsertApRow(db, vals, currBytes, offlineSinceOnUpdate, onlineSinceOnUpdate)` (exact param shape at EXECUTE's discretion — must carry everything the current block uses, unchanged). In `refreshAccessPoints`, call it inside `try/catch`: on `isNameUniqueViolation(e)`, recompute `name = \`${base} (${mac.slice(-5).replace(':','')})\`` — where base is the name that just failed — update `vals.name`/set.name, push the SUFFIXED name into the prune `names` array (replacing the failed one), and call `upsertApRow` once more WITHOUT a catch (second failure propagates, F3). Any non-matching error rethrows immediately. **E1 constraint:** no new timestamp SQL — the retry reuses the already-built `vals` + `sinceTransitionSet` outputs verbatim; if any new `sql` template touches timestamps it must interpolate `nowIso`, never a `Date`.
+- [ ] **3. Retry in the AP upsert.** Extract the current insert+`onConflictDoUpdate(target: mac)` block into `upsertApRow(db, vals, currBytes, offlineSinceOnUpdate, onlineSinceOnUpdate)` (exact param shape at EXECUTE's discretion — must carry everything the current block uses, unchanged). In `refreshAccessPoints`, call it inside `try/catch`: on `isNameUniqueViolation(e)`, recompute `name = \`${base} (${mac.slice(-5).replace(':','')})\``— where base is the name that just failed — update`vals.name`/set.name, push the SUFFIXED name into the prune `names`array (replacing the failed one), and call`upsertApRow`once more WITHOUT a catch (second failure propagates, F3). Any non-matching error rethrows immediately. **E1 constraint:** no new timestamp SQL — the retry reuses the already-built`vals`+`sinceTransitionSet`outputs verbatim; if any new`sql`template touches timestamps it must interpolate`nowIso`, never a `Date`.
 - [ ] **4. Prune-name correctness check.** Verify the `names.push(name)` bookkeeping: the name actually written must be the one in the prune set. Adjust so the pushed name reflects the retry outcome (push after successful upsert, or replace on retry).
 - [ ] **5. Integration tests (PGlite)** in `networkHealth.integration.spec.ts`:
   - **G-NC1 (retry path):** pre-seed a `network_health` row holding name `X` with a different (or null) mac; call `upsertApRow` directly with `vals.name = 'X'` and a new mac → first insert raises the real `network_health_name_key` violation → assert the function resolves and a row exists with the suffixed name and the new mac; assert the pre-seeded row is untouched. Additionally assert (or log-and-assert) the caught error's `code`/constraint field shape so PGlite's behavior is empirically recorded, not assumed.
@@ -121,24 +121,24 @@ schema, API, auth, or billing surface.
 
 ## Acceptance Criteria
 
-| ID | Criterion | proven by / strategy |
-|---|---|---|
-| AC1 | A `network_health_name_key` violation on the AP upsert is caught and retried exactly once with `${base} (${mac.slice(-5).replace(':','')})`; retried insert keeps `target: mac` | proven by: G-NC1 — strategy: Fully-Automated |
-| AC2 | A second collision (suffixed name also taken) propagates; cycle degrades to interface-only via the existing catch; no retry loop | proven by: G-NC2 — strategy: Fully-Automated |
-| AC3 | Only the name-key violation triggers retry; every other error (incl. mac-key-shaped 23505, non-23505) propagates unchanged | proven by: unit suite (checklist 6) — strategy: Fully-Automated |
-| AC4 | E3 compliance: no wrapping `db.transaction` anywhere in the call chain (else savepoint required) | proven by: checklist 1 grep evidence recorded in EXECUTE report — strategy: Hybrid (code-inspection precondition) |
-| AC5 | `resolveApName` pre-check behavior and docstring-corrected intent unchanged; existing G1-G15 integration tests stay green | proven by: full `packages/core` suite (checklist 8) — strategy: Fully-Automated |
-| AC6 | Prune name-set contains the name actually written (suffixed on retry) | proven by: G-NC1 assertion on prune bookkeeping (or a targeted sub-assertion) — strategy: Fully-Automated |
+| ID  | Criterion                                                                                                                                                                       | proven by / strategy                                                                                              |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| AC1 | A `network_health_name_key` violation on the AP upsert is caught and retried exactly once with `${base} (${mac.slice(-5).replace(':','')})`; retried insert keeps `target: mac` | proven by: G-NC1 — strategy: Fully-Automated                                                                      |
+| AC2 | A second collision (suffixed name also taken) propagates; cycle degrades to interface-only via the existing catch; no retry loop                                                | proven by: G-NC2 — strategy: Fully-Automated                                                                      |
+| AC3 | Only the name-key violation triggers retry; every other error (incl. mac-key-shaped 23505, non-23505) propagates unchanged                                                      | proven by: unit suite (checklist 6) — strategy: Fully-Automated                                                   |
+| AC4 | E3 compliance: no wrapping `db.transaction` anywhere in the call chain (else savepoint required)                                                                                | proven by: checklist 1 grep evidence recorded in EXECUTE report — strategy: Hybrid (code-inspection precondition) |
+| AC5 | `resolveApName` pre-check behavior and docstring-corrected intent unchanged; existing G1-G15 integration tests stay green                                                       | proven by: full `packages/core` suite (checklist 8) — strategy: Fully-Automated                                   |
+| AC6 | Prune name-set contains the name actually written (suffixed on retry)                                                                                                           | proven by: G-NC1 assertion on prune bookkeeping (or a targeted sub-assertion) — strategy: Fully-Automated         |
 
 ## Verification Evidence
 
-| Gate / Scenario | Strategy | Proves SPEC criterion |
-|---|---|---|
-| G-NC1: pre-seeded name clash → real 23505 → single retry writes suffixed row, pre-seeded row untouched, error shape recorded (`cd packages/core && bunx vitest run src/services/networkHealth.integration.spec.ts`) | Fully-Automated | AC1, AC6 |
-| G-NC2: both base and suffixed names taken → second 23505 propagates → `refreshNetworkHealth` degrades to interface-only without throwing (same command) | Fully-Automated | AC2 |
-| Unit: `isNameUniqueViolation` matrix — bare / wrapped / doubly-wrapped / wrong-constraint / code-only / non-23505 (`cd packages/core && bunx vitest run <unit spec file>`) | Fully-Automated | AC3 |
-| Call-chain transaction grep (`grep -rn "db.transaction" packages/core/src/services/networkHealth.ts` + both caller files) recorded in EXECUTE evidence | Hybrid (precondition: manual code inspection, deterministic once run) | AC4 |
-| Full regression: `cd packages/core && bun run test` green | Fully-Automated | AC5 |
+| Gate / Scenario                                                                                                                                                                                                     | Strategy                                                              | Proves SPEC criterion |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- | --------------------- |
+| G-NC1: pre-seeded name clash → real 23505 → single retry writes suffixed row, pre-seeded row untouched, error shape recorded (`cd packages/core && bunx vitest run src/services/networkHealth.integration.spec.ts`) | Fully-Automated                                                       | AC1, AC6              |
+| G-NC2: both base and suffixed names taken → second 23505 propagates → `refreshNetworkHealth` degrades to interface-only without throwing (same command)                                                             | Fully-Automated                                                       | AC2                   |
+| Unit: `isNameUniqueViolation` matrix — bare / wrapped / doubly-wrapped / wrong-constraint / code-only / non-23505 (`cd packages/core && bunx vitest run <unit spec file>`)                                          | Fully-Automated                                                       | AC3                   |
+| Call-chain transaction grep (`grep -rn "db.transaction" packages/core/src/services/networkHealth.ts` + both caller files) recorded in EXECUTE evidence                                                              | Hybrid (precondition: manual code inspection, deterministic once run) | AC4                   |
+| Full regression: `cd packages/core && bun run test` green                                                                                                                                                           | Fully-Automated                                                       | AC5                   |
 
 Failing stub (G-NC1): `test("G-NC1: name_key violation retries once with MAC-tail suffix", () => { throw new Error("NOT IMPLEMENTED — TDD stub: G-NC1") })`
 Failing stub (G-NC2): `test("G-NC2: second collision propagates; cycle degrades to interface-only", () => { throw new Error("NOT IMPLEMENTED — TDD stub: G-NC2") })`
@@ -184,6 +184,7 @@ Parallel strategy: sequential
 Rationale: 1/7 signals (S5 requested-depth only) — single package, 2-3 files, no high-risk class; fan-out and EXECUTE both run sequentially.
 
 Validation evidence highlights (recorded so EXECUTE does not re-derive):
+
 - Live PGlite probe (repo's actual `@electric-sql/pglite` + drizzle versions, 20-07-26): a name-key
   23505 escaping `onConflictDoUpdate(target: mac)` surfaces as `DrizzleQueryError` → `.cause` at
   depth 1 with `{ code: '23505', constraint: 't_name_key' }` — on BOTH the fresh-insert path and
@@ -206,26 +207,28 @@ Validation evidence highlights (recorded so EXECUTE does not re-derive):
 
 Test gates (C3 5-column table — ADDITIVE; legacy line form below):
 
-| criterion id | behavior | strategy | proving test | gap-resolution |
-|---|---|---|---|---|
-| AC1 | name-key 23505 on AP upsert caught, retried exactly once with `${base} (${mac.slice(-5).replace(':','')})`, `target: mac` kept | Fully-Automated | `cd packages/core && bunx vitest run src/services/networkHealth.integration.spec.ts` — G-NC1 | B |
-| AC6 | prune name-set contains the name actually written (suffixed on retry) | Fully-Automated | same command — G-NC1 prune sub-assertion | B |
-| AC2 | second collision propagates; cycle degrades to interface-only via existing catch; no loop | Fully-Automated | same command — G-NC2 (staging per supplement: three pre-seeded names) | B |
-| AC3 | only name-key violations trigger retry; all other errors propagate unchanged | Fully-Automated | `cd packages/core && bunx vitest run src/services/networkHealth.spec.ts` (new co-located unit spec — no existing unit spec file for networkHealth) | B |
-| AC4 | no wrapping `db.transaction` in the call chain (E3 standalone branch) | Hybrid | `grep -rn "db.transaction" packages/core/src/services/networkHealth.ts "apps/admin/src/routes/(app)/networks/+page.server.ts" apps/admin/src/routes/api/network/health/refresh/+server.ts` — precondition: run + record in EXECUTE report | B |
-| AC5 | extraction is behavior-preserving; G1-G15 + outage regression green | Fully-Automated | `cd packages/core && bun run test` | A |
+| criterion id | behavior                                                                                                                       | strategy        | proving test                                                                                                                                                                                                                              | gap-resolution |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------ | --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------- |
+| AC1          | name-key 23505 on AP upsert caught, retried exactly once with `${base} (${mac.slice(-5).replace(':','')})`, `target: mac` kept | Fully-Automated | `cd packages/core && bunx vitest run src/services/networkHealth.integration.spec.ts` — G-NC1                                                                                                                                              | B              |
+| AC6          | prune name-set contains the name actually written (suffixed on retry)                                                          | Fully-Automated | same command — G-NC1 prune sub-assertion                                                                                                                                                                                                  | B              |
+| AC2          | second collision propagates; cycle degrades to interface-only via existing catch; no loop                                      | Fully-Automated | same command — G-NC2 (staging per supplement: three pre-seeded names)                                                                                                                                                                     | B              |
+| AC3          | only name-key violations trigger retry; all other errors propagate unchanged                                                   | Fully-Automated | `cd packages/core && bunx vitest run src/services/networkHealth.spec.ts` (new co-located unit spec — no existing unit spec file for networkHealth)                                                                                        | B              |
+| AC4          | no wrapping `db.transaction` in the call chain (E3 standalone branch)                                                          | Hybrid          | `grep -rn "db.transaction" packages/core/src/services/networkHealth.ts "apps/admin/src/routes/(app)/networks/+page.server.ts" apps/admin/src/routes/api/network/health/refresh/+server.ts` — precondition: run + record in EXECUTE report | B              |
+| AC5          | extraction is behavior-preserving; G1-G15 + outage regression green                                                            | Fully-Automated | `cd packages/core && bun run test`                                                                                                                                                                                                        | A              |
 
 Failing stub (AC1/AC6 row): `test("G-NC1: name_key violation retries once with MAC-tail suffix", () => { throw new Error("NOT IMPLEMENTED — TDD stub: G-NC1") })`
 Failing stub (AC2 row): `test("G-NC2: second collision propagates; cycle degrades to interface-only", () => { throw new Error("NOT IMPLEMENTED — TDD stub: G-NC2") })`
 Failing stub (AC3 row): `test("isNameUniqueViolation matrix per AC3", () => { throw new Error("NOT IMPLEMENTED — TDD stub: AC3 matrix") })`
 
 Legacy line form:
+
 - AP retry path: [Fully-automated: `cd packages/core && bunx vitest run src/services/networkHealth.integration.spec.ts`]
 - Error discriminator: [Fully-automated: `cd packages/core && bunx vitest run src/services/networkHealth.spec.ts`]
 - E3 transaction check: [hybrid: grep for `db.transaction` in service + both callers + precondition: record output in EXECUTE report]
 - Full regression: [Fully-automated: `cd packages/core && bun run test`]
 
 Dimension findings:
+
 - Infra fit: PASS — packages/core only; PGlite harness applies real migrations; commands match tests/all-tests.md runner rules (cwd inside packages/core, never `bun test <file>`).
 - Test coverage: PASS — all 6 ACs gated (5 Fully-Automated, 1 Hybrid); no Known-Gap on developed behavior; probe evidence retires the R-A risk.
 - Breaking changes: PASS — no public contract change; note: `services/index.ts:10` does `export * from './networkHealth'`, so new exports auto-flow into `@veent/core` — JSDoc-mark them internal, do NOT edit any barrel.
@@ -237,6 +240,7 @@ Dimension findings:
 - Section E (docstring + gate, checklist 7+8): PASS — misleading framing confirmed at networkHealth.ts:390-392; gate commands exact per test context.
 
 Execute-agent instructions:
+
 - E-1: AC3 unit matrix goes in a NEW co-located file `packages/core/src/services/networkHealth.spec.ts` (no existing unit spec for networkHealth; `outage.spec.ts` is the in-dir precedent).
 - E-2: Do not edit `services/index.ts` or any barrel — `export * from './networkHealth'` already propagates new exports; JSDoc-mark `upsertApRow` and `isNameUniqueViolation` as test-only internals.
 - E-3: `isNameUniqueViolation` JSDoc must note the theoretical `network_health_pkey` 23505 source (sequence drift only; excluded because both drivers attach the constraint field — probe evidence above) alongside the F2 mac-absorption reasoning.
@@ -247,6 +251,7 @@ Execute-agent instructions:
 Open gaps: none
 
 What this coverage does NOT prove:
+
 - G-NC1/G-NC2 provoke the violation via pre-seeding, not true two-writer concurrency — a real simultaneous-refresh race is never executed.
 - The unit matrix proves the discriminator against FABRICATED postgres.js-shaped errors; no live postgres.js integration run exists (mitigated by the wire-field source check + PGlite probe, but the prod driver path is not executed end-to-end).
 - AC4's grep proves transaction absence at EXECUTE time only — a future caller wrapping `refreshNetworkHealth` in `db.transaction` re-opens the E3 savepoint requirement with no automated guard (JSDoc is the only tripwire).
@@ -262,12 +267,13 @@ SESSION GOAL: TOCTOU-harden the AP name write in packages/core networkHealth —
 Charter + umbrella plan: N/A — single plan
 Autonomy: per orchestration.md §Autonomy Mode — CONDITIONAL findings: apply fixes, proceed; BLOCKED: backlog note + continue; approval pauses removed only, subagent delegation stays mandatory.
 Hard stop conditions / safety constraints:
+
 - Checklist 1 is a hard gate: if a wrapping db.transaction is found around refreshNetworkHealth, STOP — the plan must be revised to E3's savepoint branch before any code is written.
 - packages/core only. No schema change, no migration, no new dependency. resolveApName's pre-check stays — the retry is a second layer, not a replacement.
 - Existing AP behavior must not regress: mac-keyed identity, trafficBytes COALESCE, since-transitions (full-suite gate AC5).
 - Never run `bun test <file>` — always `cd packages/core && bunx vitest run <file>` (bun's native runner silently no-ops vitest mocks).
 - Any new timestamp SQL must interpolate nowIso strings, never a JS Date (E1).
 - Do not commit — the user commits himself; do not entangle with unrelated uncommitted per-AP work on feat/multi-controller.
-Next phase: EXECUTE: process/general-plans/active/ap-name-collision-retry_20-07-26/ap-name-collision-retry_PLAN_20-07-26.md (Gate: PASS — terminal after 1 recorded PVL supplement cycle)
-Validate contract: inline in plan (## Validate Contract above)
-Execute start: cd packages/core && bunx vitest run src/services/networkHealth.integration.spec.ts | e2e spec: none (PGlite integration tier) | probe scenario: none | high-risk pack: no
+  Next phase: EXECUTE: process/general-plans/active/ap-name-collision-retry_20-07-26/ap-name-collision-retry_PLAN_20-07-26.md (Gate: PASS — terminal after 1 recorded PVL supplement cycle)
+  Validate contract: inline in plan (## Validate Contract above)
+  Execute start: cd packages/core && bunx vitest run src/services/networkHealth.integration.spec.ts | e2e spec: none (PGlite integration tier) | probe scenario: none | high-risk pack: no

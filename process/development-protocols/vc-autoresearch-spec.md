@@ -1,13 +1,13 @@
 ---
 name: protocol:vc-autoresearch-spec
-description: "Deeper design reference for the vc-autoresearch loop primitive (PVL/EVL bookkeeper); SKILL.md is the operative contract."
+description: 'Deeper design reference for the vc-autoresearch loop primitive (PVL/EVL bookkeeper); SKILL.md is the operative contract.'
 date: 09-06-26
 metadata:
   node_type: memory
   type: protocol
   read_order: 8
   required: false
-  read_when: "designing or deeply understanding the autoresearch gap-loop primitive used by PVL/EVL"
+  read_when: 'designing or deeply understanding the autoresearch gap-loop primitive used by PVL/EVL'
 ---
 
 > **STATUS: ACTIVE**
@@ -64,17 +64,17 @@ Termination check — should we stop?
 
 All three loops in the vc-system follow this shape:
 
-| | What we ran (I1–I11) | PVL | EVL |
-|---|---|---|---|
-| **Corpus** | spec .md files + agent files | plan .md file | changed source + test files |
-| **Research step** | 2 parallel agents scan for behavioral gaps | vc-validate-agent runs V1-V7 gates | vc-tester runs validate-contract gate commands |
-| **Gap signal** | agents list findings with severity | FAIL / CONDITIONAL / CONCERN | failing gate command (non-zero exit) |
-| **Fix step** | 3 parallel agents edit the files | vc-plan-agent supplements the plan | vc-execute-agent fixes failing code (supplement mode) |
-| **How we know done** | until agents find no gaps | validate-agent returns PASS | hit the metric goal |
-| **"Done" signal** | all agents ALL_CLEAR for 2 consecutive iterations | PASS (or CONDITIONAL accepted after 10-cycle cap) | all validate-contract fully-automated gates pass |
-| **Commands** | configured per invocation | V1-V7 gate sequence (vc-validate-agent owns) | exact commands from validate-contract "Test gates" field — never invented |
-| **Iteration cap** | 15 (spec domain default) | 10 validate-fix loops | 10 execute-validate-fix loops |
-| **Logs** | .md report + TSV per iteration | not formally logged | EVL HANDOFF SUMMARY + preliminary closeout packet |
+|                      | What we ran (I1–I11)                              | PVL                                               | EVL                                                                       |
+| -------------------- | ------------------------------------------------- | ------------------------------------------------- | ------------------------------------------------------------------------- |
+| **Corpus**           | spec .md files + agent files                      | plan .md file                                     | changed source + test files                                               |
+| **Research step**    | 2 parallel agents scan for behavioral gaps        | vc-validate-agent runs V1-V7 gates                | vc-tester runs validate-contract gate commands                            |
+| **Gap signal**       | agents list findings with severity                | FAIL / CONDITIONAL / CONCERN                      | failing gate command (non-zero exit)                                      |
+| **Fix step**         | 3 parallel agents edit the files                  | vc-plan-agent supplements the plan                | vc-execute-agent fixes failing code (supplement mode)                     |
+| **How we know done** | until agents find no gaps                         | validate-agent returns PASS                       | hit the metric goal                                                       |
+| **"Done" signal**    | all agents ALL_CLEAR for 2 consecutive iterations | PASS (or CONDITIONAL accepted after 10-cycle cap) | all validate-contract fully-automated gates pass                          |
+| **Commands**         | configured per invocation                         | V1-V7 gate sequence (vc-validate-agent owns)      | exact commands from validate-contract "Test gates" field — never invented |
+| **Iteration cap**    | 15 (spec domain default)                          | 10 validate-fix loops                             | 10 execute-validate-fix loops                                             |
+| **Logs**             | .md report + TSV per iteration                    | not formally logged                               | EVL HANDOFF SUMMARY + preliminary closeout packet                         |
 
 The domain-specific details (which agents run, what the gates check, how supplementing works) stay where they are. vc-autoresearch provides the loop mechanics: iteration counter, convergence detection, iteration reports, plateau detection.
 
@@ -133,6 +133,7 @@ When vc-autoresearch runs a plan-validate-fix or execute-validate-fix loop in an
 ## What the skill owns vs what stays in the phase agents
 
 **vc-autoresearch owns:**
+
 - Iteration counter (how many times have we looped)
 - Convergence check (are we done? — by verdict or metric)
 - Plateau detection (gap count not improving for N iterations → stop)
@@ -141,6 +142,7 @@ When vc-autoresearch runs a plan-validate-fix or execute-validate-fix loop in an
 - Regression detection (did a fix introduce new gaps in previously-clear areas)
 
 **Phase agents keep their own mechanics:**
+
 - PVL: V1-V7 gate sequence, SUPPLEMENT REQUEST format, validate-contract write, known-gap exclusion, supersedes: logic → stays in vc-validate-agent and vc-plan-agent
 - EVL: which gate commands to run, execute-supplement scoping, HANDOFF SUMMARY format, agent-probe re-invocation → stays in vc-tester and vc-execute-agent
 - Spec iterations: which investigation threads to run, which files to assign to which agent → configured per invocation
@@ -173,14 +175,14 @@ Checked after every research pass, in priority order:
 
 vc-autoresearch is invoked directly — no RIPER-5 plan or validate-contract required.
 
-| Situation | Invoke as | Notes |
-|---|---|---|
-| Iteratively improve a spec/doc | `domain: spec` | What we ran for I1–I11 — until agents find no gaps |
-| Add test coverage to a package | `domain: tests`, `verify: pnpm test --coverage` | Hit the metric goal — coverage target |
-| Fix all lint/type errors | `domain: errors`, `verify: pnpm typecheck` | Hit the metric goal — zero errors |
-| Improve UI component consistency | `domain: ux` | Agents find nothing |
-| Refresh stale context docs | `domain: docs` | Agents find nothing |
-| Quick plan quality check before PVL | `domain: plan` | 1–3 iterations max |
+| Situation                           | Invoke as                                       | Notes                                              |
+| ----------------------------------- | ----------------------------------------------- | -------------------------------------------------- |
+| Iteratively improve a spec/doc      | `domain: spec`                                  | What we ran for I1–I11 — until agents find no gaps |
+| Add test coverage to a package      | `domain: tests`, `verify: pnpm test --coverage` | Hit the metric goal — coverage target              |
+| Fix all lint/type errors            | `domain: errors`, `verify: pnpm typecheck`      | Hit the metric goal — zero errors                  |
+| Improve UI component consistency    | `domain: ux`                                    | Agents find nothing                                |
+| Refresh stale context docs          | `domain: docs`                                  | Agents find nothing                                |
+| Quick plan quality check before PVL | `domain: plan`                                  | 1–3 iterations max                                 |
 
 **PVL kickoff prompt (when not under /goal):** At the start of a PVL-backed autoresearch run, the skill prompts once: "Auto-run (no pauses between cycles) or confirm before each fix batch?" The choice is sticky for the full loop. Under `/goal`, always auto — no prompts.
 
@@ -193,6 +195,7 @@ Under `/goal` generally: all termination conditions auto-accepted except regress
 These are reusable starting configurations. All fields can be overridden per invocation.
 
 ### spec
+
 - **Corpus:** `process/development-protocols/*.md`, `.claude/agents/*.md`
 - **Investigation threads (per agent):** cross-file signal consistency, undefined cycle caps, missing fallback cases, contradictions, PVL/EVL gate omissions, signal vocabulary gaps
 - **Research agents:** 2 (split: behavior-reference + orchestration | agent .md files)
@@ -201,6 +204,7 @@ These are reusable starting configurations. All fields can be overridden per inv
 - **Max iterations:** 15 | Severity escalation at: 7 | Consecutive ALL_CLEAR needed: 2
 
 ### tests
+
 - **Corpus:** source files in blast-radius + existing test files
 - **Investigation threads:** uncovered public functions, untested error paths, missing edge cases, missing integration tests
 - **Verify command:** `pnpm test --coverage` (loop stops when coverage hits metric goal)
@@ -208,6 +212,7 @@ These are reusable starting configurations. All fields can be overridden per inv
 - **Max iterations:** 20 | Consecutive clear needed: 1
 
 ### ux
+
 - **Corpus:** component files + design token files
 - **Investigation threads:** hardcoded colors, missing semantic tokens, missing states (hover/focus/disabled), white/[opacity] anti-patterns, inconsistent spacing
 - **Research agents:** 2 (split by component subtree)
@@ -215,12 +220,14 @@ These are reusable starting configurations. All fields can be overridden per inv
 - **Max iterations:** 10 | Severity escalation at: 5 | Consecutive ALL_CLEAR needed: 2
 
 ### docs
+
 - **Corpus:** `process/context/**/*.md`
 - **Investigation threads:** stale file references, missing routing entries, broken cross-links, outdated procedures, orphaned files
 - **Safety check:** `node .claude/skills/vc-audit-context/scripts/validate-context-discovery.mjs`
 - **Max iterations:** 8 | Consecutive ALL_CLEAR needed: 1
 
 ### plan (lightweight pre-PVL pass)
+
 - **Corpus:** the plan .md file
 - **Investigation threads:** missing verification evidence, blast-radius gaps, undefined rollback, incomplete touchpoint list
 - **Research agents:** 1 | **Fix agents:** 1
@@ -249,7 +256,7 @@ backlogged_count: N
 all_clear: true | false
 consecutive_all_clear: K
 saturation_status: ACTIVE | PLATEAU | SATURATED
-new_gaps: N          # compared to previous iteration — used for plateau detection
+new_gaps: N # compared to previous iteration — used for plateau detection
 loop_status: CONTINUE | HALTED_SUCCESS | HALTED_PLATEAU | HALTED_SEVERITY | HALTED_CAP | HALTED_REGRESSION
 ---
 ```
@@ -267,6 +274,7 @@ loop_status: CONTINUE | HALTED_SUCCESS | HALTED_PLATEAU | HALTED_SEVERITY | HALT
 
 ```markdown
 ### GAP-I{N}-{ID} — {short title}
+
 - **SEVERITY:** FAIL | CONCERN | OBSERVATION
 - **LOCATION:** {file} §{section}
 - **GAP:** {what is missing or wrong}
@@ -302,12 +310,14 @@ The TSV complements the .md reports: use TSV for trend analysis across iteration
 ## Relationship to the autoresearch reference repo
 
 The external autoresearch tool at `Agent-Software-Development-Harness/autoresearch` is:
+
 - Single-agent, sequential
 - Metric-driven only (needs a shell command that returns a number)
 - Commits each change to git, reverts on failure
 - 13 subcommands for different loop shapes (fix, debug, probe, reason, etc.)
 
 vc-autoresearch differs:
+
 - Multi-agent parallel (N research agents + M fix agents running simultaneously)
 - Verdict-driven OR metric-driven
 - Report-based (no per-iteration git commits during the loop)

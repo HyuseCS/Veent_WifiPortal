@@ -3,7 +3,7 @@
 **Every new physical AP MAC must be exempted from the hotspot walled garden — as a
 `type=bypassed` entry in `/ip/hotspot/ip-binding` — or the admin dashboard reads that AP as
 permanently DOWN even when it is fully healthy.** This is currently **THE primary mitigation** for
-the AP false-DOWN bug (paid guests getting frozen on an AP that only *looks* offline), because the
+the AP false-DOWN bug (paid guests getting frozen on an AP that only _looks_ offline), because the
 code-side outage guard was found impossible as designed — see
 [the deferral note](../../process/general-plans/backlog/ap-outage-false-down-code-safeguard_NOTE_21-07-26.md).
 

@@ -1,13 +1,13 @@
 ---
 name: protocol:orchestration
-description: "Delegation rules, subagent status protocol, context isolation, feature-scope routing, intent clarification, validate gate, BLOCKED escalation, two-tier fan-out, and research-first rules."
+description: 'Delegation rules, subagent status protocol, context isolation, feature-scope routing, intent clarification, validate gate, BLOCKED escalation, two-tier fan-out, and research-first rules.'
 date: 09-06-26
 metadata:
   node_type: memory
   type: protocol
   read_order: 2
   required: true
-  read_when: "orchestrating phases, routing to subagents, fan-out/strategy decisions, validate gate, or BLOCKED escalation"
+  read_when: 'orchestrating phases, routing to subagents, fan-out/strategy decisions, validate gate, or BLOCKED escalation'
 ---
 
 # Orchestration Protocol
@@ -156,6 +156,7 @@ Controller rules for phase programs:
 4. after each phase, update reports and downstream phase plans before advancing
 
 **Compatibility note:** The 10-step loop above is the legacy orchestrator spawn-event view. The canonical 7-step inner loop (per phase) is defined in behavior-reference Section 8. Mapping:
+
 - Step 1 (research subagent) = Step 1 RESEARCH
 - Step 2 (execution approval checkpoint) = /goal block gate (Section 5 V7)
 - Step 3 (execute subagent) = Step 5 EXECUTE
@@ -180,6 +181,7 @@ INNOVATE (Step 2) and PLAN-SUPPLEMENT (Step 3) from the 7-step are required sub-
 After research-agent returns findings, orchestrator spawns plan-agent in supplement
 mode if research identified gaps, pre-conditions, or new items not in the current
 phase plan checklist. Plan-agent in supplement mode:
+
 - Reads research findings from conversation context
 - Adds new checklist items, pre-conditions, or notes to the phase plan only
 - Does NOT create new plan files
@@ -195,6 +197,7 @@ is treated as a placeholder.
 ### Current Execution State Format
 
 The umbrella plan's `## Current Execution State` (or equivalent status section) must always include:
+
 - Current loop step: `1a-research | 1b-plan-supplement | 2-validate | 3-execute | 4-update-process`
 - Validate-contract status: `written (date)` or `not written`
 
@@ -208,20 +211,21 @@ For orchestrator routing decisions: use the Phase Loop Progress checkboxes in th
 
 Read `## Phase Loop Progress` section of the phase plan file.
 
-| Phase State | Action |
-|---|---|
-| Step 1 (RESEARCH) | vc-research-agent |
-| Step 2 (INNOVATE) | vc-innovate-agent |
-| Step 3 (PLAN-SUPPLEMENT) | vc-plan-agent — supplement mode: update existing outer-loop phase plan; do NOT create a new plan file |
-| Step 4 (PVL) OR validate-contract is placeholder | vc-validate-agent |
-| Step 0 checkpoint shows "Dependency-BLOCKED" (detected from Phase Loop Progress checkbox notation — `Dependency-BLOCKED` text in Step 0) | Advance to Phase N+1 Step 0; do NOT spawn any agent for this phase |
-| Step 4 checkbox marked BLOCKED-skipped (via `PHASE_SKIPPED: BLOCKED` signal) | Advance to Phase N+1 Step 0 — do NOT spawn vc-execute-agent for this phase; Steps 5–7 are not run |
+| Phase State                                                                                                                              | Action                                                                                                |
+| ---------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| Step 1 (RESEARCH)                                                                                                                        | vc-research-agent                                                                                     |
+| Step 2 (INNOVATE)                                                                                                                        | vc-innovate-agent                                                                                     |
+| Step 3 (PLAN-SUPPLEMENT)                                                                                                                 | vc-plan-agent — supplement mode: update existing outer-loop phase plan; do NOT create a new plan file |
+| Step 4 (PVL) OR validate-contract is placeholder                                                                                         | vc-validate-agent                                                                                     |
+| Step 0 checkpoint shows "Dependency-BLOCKED" (detected from Phase Loop Progress checkbox notation — `Dependency-BLOCKED` text in Step 0) | Advance to Phase N+1 Step 0; do NOT spawn any agent for this phase                                    |
+| Step 4 checkbox marked BLOCKED-skipped (via `PHASE_SKIPPED: BLOCKED` signal)                                                             | Advance to Phase N+1 Step 0 — do NOT spawn vc-execute-agent for this phase; Steps 5–7 are not run     |
 
 **Supplement mode note:** Step 3 (PLAN-SUPPLEMENT) invokes vc-plan-agent in supplement mode. Supplement mode is required whenever the outer-loop phase plan file already exists. Creation mode applies only when no plan file exists yet for this phase.
 
 After Step 3 completion (PHASE_COMPLETE: PLAN-SUPPLEMENT signal received): tick Step 3 checkbox; advance to Step 4 — spawn vc-validate-agent for inner PVL. The SUPPLEMENT_APPLIED signal routes differently (V7 PVL re-trigger — see behavior-reference Section 5 V7).
 
 **Step 4 (PVL) — outer vs inner branch:**
+
 - **Outer PVL** (umbrella plan present AND validate-contract absent from all phase plans): spawn vc-validate-agent agent-team — one vc-validate-agent per phase plan running concurrently. See behavior-reference Section 8 §Outer PVL for coordination token and registry initialization.
 - **Inner PVL** (phase plan has existing validate-contract and Inner Loop Refresh Note triggers re-run): spawn single vc-validate-agent for the specific phase plan.
 
@@ -235,6 +239,7 @@ Pre-check: if Step 4 checkbox is marked "BLOCKED-skipped" (no validate-contract 
 (Note: the Pre-Routing Check table above routes BLOCKED-skipped phases directly to Phase N+1 before reaching this check. Step 4b's pre-check is a safety fallback for cases where the checkbox text is ambiguous or the routing table is bypassed.)
 
 Check the `generated-by:` field in the validate-contract.
+
 - If `generated-by: outer-pvl`:
   - Scan the plan file for `## Inner Loop Refresh Note` with a date newer than the validate-contract date.
   - If note FOUND and note date > contract date → "inner R+I has run" = TRUE → re-run PVL from V1.
@@ -259,6 +264,7 @@ They run and complete before execute begins.
 
 Every phase program umbrella plan must include a `## Stable Program Goal` section
 containing a copy-pasteable /goal block. Requirements:
+
 - Hard limit: ≤ 4000 characters (the /goal command rejects longer blocks)
 - Required sections (in order): TARGET / PER-PHASE LOOP / HARD STOPS /
   SAFETY / TEST GATES / VALIDATE CONTRACT / START
@@ -303,6 +309,7 @@ and routing summaries are skipped.
 
 What autonomy does NOT override: the "ENTER EXECUTE MODE" approval gate, plan review checkpoint,
 phase-program phase boundaries, and high-risk execution handoff gates.
+
 - Subagent delegation (no-inline-execution) and the ban on direct orchestrator artifact writes remain mandatory under autonomy — autonomy removes approval pauses ONLY.
 
 Exception: Autopilot Mode — the consolidated clarification round replaces the ENTER EXECUTE MODE
@@ -362,22 +369,26 @@ full spec here.
 ### Step 1 — Lane Detection + Situation Review (before clarification)
 
 **Lane suffix detection (runs FIRST, before standard phrase matching):** Check whether the user message begins with `autopilot quick:`, `autopilot fast:`, or `autopilot full:` (standalone or sentence-initial). When matched:
+
 - Extract the task description after the colon (trim leading whitespace).
 - Set the lane (`quick` / `fast` / `full`) for the CLR and the provisional goal block `LANE:` field.
 - Continue the standard flow below (situation review → CLR).
-When no suffix is found, lane defaults to `full` (standard autopilot behavior unchanged).
+  When no suffix is found, lane defaults to `full` (standard autopilot behavior unchanged).
 
 **Situation review:** Detect the current RIPER-5 phase from on-disk artifacts:
+
 - Session start (no artifacts): entry phase = RESEARCH
 - SPEC file present: entry phase = post-SPEC (skip RESEARCH and SPEC)
 - Plan file present: entry phase = post-PLAN
 - Validate contract present with PASS/CONDITIONAL: entry phase = post-VALIDATE
-Read `process/development-protocols/autopilot.md` §Trigger-Anywhere Detection Flow for the full
-artifact-to-phase mapping table.
+  Read `process/development-protocols/autopilot.md` §Trigger-Anywhere Detection Flow for the full
+  artifact-to-phase mapping table.
 
 ### Step 2 — Consolidated Clarification Round (exactly once)
+
 Issue exactly ONE structured clarification round using `AskUserQuestion`. This is the sole user
 interaction before the autonomous run begins. It covers:
+
 - Intent restatement
 - Scope, hard-stop, and gate-deviation questions (all dimensions needed)
 - Autonomy boundaries confirmation (vc-intent-clarify Dimension 6, treated as CRITICAL)
@@ -387,6 +398,7 @@ After the user responds, the session is fully locked — no more questions durin
 (except the three hard stops listed in §Autopilot Hard Stops below).
 
 ### Step 3 — Provisional Goal Block Emission
+
 Emit the provisional goal block (≤4000 chars) in chat immediately after clarification resolves.
 The block is copy-pasteable for session resume.
 Required fields: SESSION GOAL / ENTRY PHASE / REMAINING PHASES (checklist) / CLARIFICATIONS
@@ -395,6 +407,7 @@ Read `process/development-protocols/autopilot.md` §Provisional Goal Block Forma
 definitions and the EXECUTE CONSENT field requirement.
 
 ### Step 4 — Autonomous Run
+
 Drive the full remaining RIPER-5 phase sequence without user gates, per the decision policy in
 the provisional goal block. Apply /goal autonomous execution rules from §Autonomous /goal Phase
 Program Execution and §BLOCKED Escalation Path, plus the autopilot-specific gate policies in
@@ -407,30 +420,36 @@ AUTOPILOT_ACTIVATED: [task description] — entry phase: [phase] — goal block 
 ```
 
 ### Autopilot Hard Stops (these still surface for user input)
+
 - Irreversible / outward-facing actions not in the validate-contract
 - Live-provider billed feasibility probe (`cost-class: needs-live-provider`)
 - Cascade BLOCKED (two consecutive phases BLOCKED with no intervening PASS)
-High-risk evidence pack is also manual-first always — see §High-Risk Execution Handoff.
+  High-risk evidence pack is also manual-first always — see §High-Risk Execution Handoff.
 
 ### Autopilot Deactivation
+
 Autopilot mode deactivates when:
+
 - The run completes normally (UPDATE PROCESS phase finishes)
 - The user explicitly says "stop autopilot", "pause autopilot", "exit autonomous mode", or similar
 - A hard stop is triggered and the user chooses not to resume
 - The session ends (deactivation is per-session — re-paste the goal block from disk to resume)
-On deactivation: return to standard interactive RIPER-5 behavior.
+  On deactivation: return to standard interactive RIPER-5 behavior.
 
 ### V7 Goal Block Update
+
 When VALIDATE V7 completes during an autopilot run, the orchestrator emits an `(UPDATE)`
 variant of the provisional goal block with real test gate commands substituted for TBD
 placeholders. The original provisional block is NOT modified (chat history is immutable).
 
 ### Re-paste for Session Resume
+
 Pasting the provisional or UPDATE goal block into a new session resumes autopilot from the
 phase named in the START field, with clarifications and decision policy already active.
 No new clarification round is issued.
 
 ### Maintenance pointer
+
 **Single source of truth for Autopilot Mode:** `process/development-protocols/autopilot.md`.
 Orchestration.md carries summary rules and pointers only. For full spec, gate policy table,
 provisional block format, and D1 validator contract: read autopilot.md directly.
@@ -459,6 +478,7 @@ that needs coordination.
 At the END of every RIPER-5 phase step (research/innovate/plan/validate/execute/update-process),
 the active agent invokes `vc-agent-strategy-compare` to recommend the execution strategy for the
 NEXT phase step. This is not optional and not only at VALIDATE V4. Specifically:
+
 - End of RESEARCH → strategy recommendation for SPEC
 - End of SPEC → strategy recommendation for INNOVATE
 - End of INNOVATE → strategy recommendation for PLAN
@@ -494,7 +514,7 @@ When parallel subagents are recommended, use the appropriate tier:
   parallel agent's output, use vc-team instead of Tier 1
 - Tier 2 is an **agent team** with the full machinery: TeamCreate provisions named teammates,
   each gets a TaskCreate assignment, they coordinate via SendMessage, and TaskList tracks
-  in-flight work. Spawning bare parallel Agent calls and *calling* it a team is the failure mode
+  in-flight work. Spawning bare parallel Agent calls and _calling_ it a team is the failure mode
   this tier exists to prevent — without TeamCreate + SendMessage there is no team, only
   uncoordinated subagents.
 
@@ -527,7 +547,7 @@ When vc-spec-agent, vc-innovate-agent, OR vc-validate-agent (Layer 2) emits `VC-
    - `needs-container` → vc-debugger must use a **disposable** container only; NEVER `docker exec` the shared dev container (`app-*`) or shared Postgres. If no disposable container is available, the verdict will be `INCONCLUSIVE`.
    - `needs-live-provider` → requires explicit **double opt-in** from the user before dispatching (billed/live 3rd-party call). Under /goal: do NOT auto-grant — surface the opt-in request; if not granted, the verdict is `INCONCLUSIVE`.
    - `needs-browser` / `needs-cf` → ensure a browser session / `wrangler dev` sandbox is available; never drive a shared user session or a deployed production worker.
-   The cost class is the agent's best guess; vc-debugger finalizes and records the actual class in the VERDICT's `## Probe Cost Class` section.
+     The cost class is the agent's best guess; vc-debugger finalizes and records the actual class in the VERDICT's `## Probe Cost Class` section.
 1. Spawn `vc-debugger` with the `vc-feasibility-test` playbook context, the hypothesis text, the resolved cost class, and the active task folder path.
 2. `vc-debugger` runs the empirical probe and writes the VERDICT artifact: `{task_folder}/{slug}_FEASIBILITY_{dd-mm-yy}.md`.
 3. `vc-debugger` emits `VC-FEASIBILITY-VERDICT-READY: [verdict keyword] — [full VERDICT file path]` (NOT `PHASE_COMPLETE:` — the emitting phase is NOT complete yet).
@@ -538,11 +558,13 @@ When vc-spec-agent, vc-innovate-agent, OR vc-validate-agent (Layer 2) emits `VC-
 **Required Prior Feasibility density:** The orchestrator MUST pass AT MINIMUM: the original hypothesis text + the verdict keyword (VIABLE / NOT-VIABLE / INCONCLUSIVE) + the verbatim three-part `Resulting Design Constraint` (What this licenses / What this forbids / What remains uncertain). Passing only the verdict keyword without all three constraint parts violates the signal contract — the re-spawned agent needs `licenses` to lock the approach, `forbids` to reject dead ends, and `uncertain` to carry forward the known-gap.
 
 Example re-spawn block:
+
 ```
 Prior Feasibility: Does the gateway forward params.provider.sort? — verdict: NOT-VIABLE — licenses: Designs may rely on params.model and params.messages reaching the gateway unchanged. — forbids: Do not design any approach that depends on params.provider.sort being forwarded; the forwarding layer strips it. — uncertain: Whether params.provider.order survives is untested — treat as a known-gap until probed.
 ```
 
 **Structural difference from VC-PREDICT-DEEP-NEEDED:**
+
 - VC-PREDICT-DEEP-NEEDED spawns `vc-research-agent` for deeper context; VC-FEASIBILITY-PROBE-NEEDED spawns `vc-debugger` for an empirical probe.
 - VC-PREDICT-DEEP-NEEDED produces research findings; VC-FEASIBILITY-PROBE-NEEDED produces a one-shot VERDICT artifact with a structured verdict and design constraint.
 - VC-FEASIBILITY-PROBE-NEEDED can fire from SPEC (vc-spec-agent), INNOVATE (vc-innovate-agent), OR VALIDATE Layer 2 (vc-validate-agent dimension agents); VC-PREDICT-DEEP-NEEDED fires only from INNOVATE.
@@ -557,7 +579,7 @@ This signal is listed in `12-reference.md` §Signal Inventory. The emitting agen
 A deliberately light lane for small, low-risk fixes where full RIPER-5 (research-agent → plan →
 validate → execute → tester) is disproportionate. It is lighter than FAST MODE: FAST MODE still
 writes a plan file, writes a validate-contract, and pauses after VALIDATE; the QUICK FIX lane writes
-neither artifact and runs no EVL. It covers the band *above* a trivial single-file edit but *below*
+neither artifact and runs no EVL. It covers the band _above_ a trivial single-file edit but _below_
 "needs a plan."
 
 **Trigger:** `ENTER QUICK FIX MODE`, or intent keywords ("quick fix", "hotfix", "small fix",
@@ -568,10 +590,10 @@ edits within a small bounded scope.
 **Protocol (orchestrator-driven — preserves §PVL/EVL "no inline execution"):**
 
 1. **Read-only scout.** The orchestrator locates the gap with Grep/Read/Glob and drafts the exact
-   edit. Reading inline is allowed; only *editing source* and *running gate commands* inline are
+   edit. Reading inline is allowed; only _editing source_ and _running gate commands_ inline are
    forbidden. This replaces a full `vc-research-agent` spawn for small fixes.
-2. **One-line confirm.** Emit `Quick fix: edit \`path:line\` — [what] to [why]. Proceed?` and wait.
-   Under a standing `/goal`, auto-proceed (no user gate) unless the scope guard trips.
+2. **One-line confirm.** Emit `Quick fix: edit \`path:line\` — [what] to [why]. Proceed?`and wait.
+Under a standing`/goal`, auto-proceed (no user gate) unless the scope guard trips.
 3. **One spawn.** Spawn `vc-quick-fix-agent` (opus) with the exact target (file + line + change). The
    agent re-checks scope, applies the edit, and runs a **scoped check on touched files only** —
    typecheck of the touched package and/or the single covering test file. It does NOT run the full
@@ -617,6 +639,7 @@ a validate-contract must document why VALIDATE was skipped.
 ### What to pass to execute-agent after VALIDATE
 
 When routing to vc-execute-agent after VALIDATE completes:
+
 - Pass the validate-contract section path or note "inline in plan"
 - Pass the gate status (PASS or CONDITIONAL) and any accepted concerns
 - Pass the test gate commands from the validate-contract so execute-agent knows which tier to run
@@ -653,6 +676,7 @@ When routing to vc-execute-agent after VALIDATE completes:
    - Steps 6-7 (EVL, UP) BLOCKED → continue with note; EVL can run partially
 
 > **Escalation path differs by execution context:**
+>
 > - **Outside /goal:** Step 3 (user surface) fires at cycle 2. Step 4 (escalate-or-backlog) fires at cycle 3. Stop.
 > - **Under /goal:** Step 3 user-surface is bypassed. Supplement cycles auto-continue. 10-cycle limit triggers user gate (cost-safety override).
 
@@ -667,6 +691,7 @@ Cascade BLOCKED (phase program hard stop): for consecutive BLOCKED phases in a p
 ### Validate-Contract Required Fields
 
 Every validate-contract written by `vc-validate-agent` MUST include a `generated-by:` field. Valid values:
+
 - `generated-by: outer-pvl` — contract produced during the outer RIPER-5 loop (before inner-loop R+I have run for this phase)
 - `generated-by: inner-pvl: phase-N` — contract produced during the inner-loop PVL pass for phase N
 
@@ -709,6 +734,7 @@ routing to `vc-execute-agent`:
 > "Plan complete. Run VALIDATE before EXECUTE? (recommended) — say ENTER VALIDATE MODE or skip with reason."
 
 This auto-suggestion fires after every new plan file is created. It does not fire when:
+
 - The plan already has a `## Validate Contract` section **AND** no `## Inner Loop Refresh Note` with a date newer than the validate-contract date exists (inner R+I has NOT run since the last contract was written). If a newer `## Inner Loop Refresh Note` exists: auto-suggest VALIDATE regardless of whether a contract already exists.
 - The user has already said "skip VALIDATE" with a stated reason
 - The change is trivially single-file (under 15 lines, no surface changes)
@@ -778,8 +804,8 @@ High-risk classes:
 Controller rules:
 
 1. Note the risk class in the task summary or selected plan context.
-2–4. Full 5-artifact schema and auto-stop rule: invoke `vc-risk-evidence-pack`.
-5. Keep this manual-first. Do not invent a blocking hook or alternate workflow owner.
+   2–4. Full 5-artifact schema and auto-stop rule: invoke `vc-risk-evidence-pack`.
+2. Keep this manual-first. Do not invent a blocking hook or alternate workflow owner.
 
 ## Research First for Service-Shaped Features
 
@@ -799,14 +825,14 @@ Subagents are fire-and-forget: they emit a verdict and terminate. NO subagent ca
 
 On receiving vc-validate-agent's V7 verdict, route mechanically:
 
-| Verdict received | Orchestrator action |
-|---|---|
-| `Gate: PASS` | Verify `grep -c 'Gate: PASS' <plan-file>` ≥ 1 → proceed toward EXECUTE (emit /goal block first). Append final TSV row (`loop_status: HALTED_SUCCESS`). |
+| Verdict received                                                                               | Orchestrator action                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| ---------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Gate: PASS`                                                                                   | Verify `grep -c 'Gate: PASS' <plan-file>` ≥ 1 → proceed toward EXECUTE (emit /goal block first). Append final TSV row (`loop_status: HALTED_SUCCESS`).                                                                                                                                                                                                                                                                                                                                                                           |
 | `Gate: CONDITIONAL`, first pass (no cycle row in `results.tsv` beyond baseline, or no TSV yet) | NOT terminal — never route to EXECUTE. Run bookkeeping Step 0 if needed (create task-folder `results.tsv` with header + baseline). Spawn vc-plan-agent (PVL-supplement mode) passing the SUPPLEMENT REQUEST block. **`PHASE_COMPLETE: VALIDATE` MUST NOT be emitted here — a first-pass `Gate: CONDITIONAL` (or `Gate: BLOCKED`) is never terminal. `PHASE_COMPLETE: VALIDATE` is only valid after `Gate: PASS` or after explicit user/known-gap acceptance of a CONDITIONAL that has completed at least one supplement cycle.** |
-| `SUPPLEMENT_APPLIED: [plan path] — [N] gap(s) addressed` (from vc-plan-agent) | One PVL cycle completes: increment cycle counter; write `{plan-slug}-pvl-iteration-{NNN}_REPORT_{dd-mm-yy}.md`; append TSV row; re-spawn vc-validate-agent from V1 with the updated plan. |
-| `Gate: CONDITIONAL` after N≥1 cycles | Check plateau (3 cycles without gap-count improvement) and cap (10 cycles). Neither hit → run another supplement cycle. Plateau/cap hit → surface to user (non-/goal) or accept remaining gaps as known-gaps (/goal); only then is EXECUTE legal. |
-| `Gate: BLOCKED` | §BLOCKED Escalation Path below — supplement cycles count toward the same 10-cycle cap. |
-| `VC-FEASIBILITY-PROBE-NEEDED` from Layer 2 (during V2 fan-out) | Wait for ALL Layer 2 agents to complete (or emit probe). Then: resolve cost-class gate (see §VC-FEASIBILITY-PROBE-NEEDED Signal Routing step 0). Spawn `vc-debugger` per probe. Await `VC-FEASIBILITY-VERDICT-READY` for each. Batch multiple probes: re-spawn `vc-validate-agent` ONCE from V1 with all `Prior Feasibility:` blocks. **No TSV row written. No PVL cycle counter incremented.** Validate-contract is NOT written during probe halt; "no contract + VC-FEASIBILITY-PROBE-NEEDED signal" IS the routing signal. |
+| `SUPPLEMENT_APPLIED: [plan path] — [N] gap(s) addressed` (from vc-plan-agent)                  | One PVL cycle completes: increment cycle counter; write `{plan-slug}-pvl-iteration-{NNN}_REPORT_{dd-mm-yy}.md`; append TSV row; re-spawn vc-validate-agent from V1 with the updated plan.                                                                                                                                                                                                                                                                                                                                        |
+| `Gate: CONDITIONAL` after N≥1 cycles                                                           | Check plateau (3 cycles without gap-count improvement) and cap (10 cycles). Neither hit → run another supplement cycle. Plateau/cap hit → surface to user (non-/goal) or accept remaining gaps as known-gaps (/goal); only then is EXECUTE legal.                                                                                                                                                                                                                                                                                |
+| `Gate: BLOCKED`                                                                                | §BLOCKED Escalation Path below — supplement cycles count toward the same 10-cycle cap.                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| `VC-FEASIBILITY-PROBE-NEEDED` from Layer 2 (during V2 fan-out)                                 | Wait for ALL Layer 2 agents to complete (or emit probe). Then: resolve cost-class gate (see §VC-FEASIBILITY-PROBE-NEEDED Signal Routing step 0). Spawn `vc-debugger` per probe. Await `VC-FEASIBILITY-VERDICT-READY` for each. Batch multiple probes: re-spawn `vc-validate-agent` ONCE from V1 with all `Prior Feasibility:` blocks. **No TSV row written. No PVL cycle counter incremented.** Validate-contract is NOT written during probe halt; "no contract + VC-FEASIBILITY-PROBE-NEEDED signal" IS the routing signal.    |
 
 **Mechanical gate before spawning vc-execute-agent (always run):** `grep -c 'Gate: PASS' <plan-file>` ≥ 1 OR `wc -l < {task_folder}/results.tsv` ≥ 3 (header + baseline + ≥1 cycle row) OR explicit user acceptance of CONDITIONAL gaps quoted in this session. None hold → do NOT spawn vc-execute-agent.
 
@@ -814,23 +840,23 @@ On receiving vc-validate-agent's V7 verdict, route mechanically:
 
 On receiving `PHASE_COMPLETE: EXECUTE` (under /goal) or DONE/DONE_WITH_CONCERNS (interactive):
 
-| Event | Orchestrator action |
-|---|---|
-| EXECUTE reports done — gates claimed green or not | ALWAYS spawn vc-tester for the EVL confirmation run: re-run the EXACT validate-contract gate commands. Execute-agent's internal iterate-until-green loop NEVER substitutes for this independent confirmation. Run bookkeeping Step 0 (ensure `results.tsv` baseline exists). |
-| vc-tester: all gates pass | Append TSV row (`HALTED_SUCCESS`); continue EVL Steps → EVL HANDOFF SUMMARY → vc-update-process-agent. |
-| vc-tester: ≥1 gate fails | One EVL cycle begins: increment cycle counter; **write `{plan-slug}-evl-iteration-{NNN}_REPORT_{dd-mm-yy}.md` FIRST — a TSV cycle row append is valid ONLY AFTER the matching iteration report file has been written (report first, TSV row second; a TSV row without its report is a bookkeeping violation)**; append TSV row; spawn vc-execute-agent (supplement mode) scoped to exactly the failing gate(s) — parallel fix agents when failing gates touch disjoint file groups; then re-spawn vc-tester to confirm. |
-| 10 cycles reached or plateau | Under /goal: accept as known-gap, record in the phase report's `## Test Infra Gaps Found`, continue. Interactive: surface to user. |
+| Event                                             | Orchestrator action                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| EXECUTE reports done — gates claimed green or not | ALWAYS spawn vc-tester for the EVL confirmation run: re-run the EXACT validate-contract gate commands. Execute-agent's internal iterate-until-green loop NEVER substitutes for this independent confirmation. Run bookkeeping Step 0 (ensure `results.tsv` baseline exists).                                                                                                                                                                                                                                            |
+| vc-tester: all gates pass                         | Append TSV row (`HALTED_SUCCESS`); continue EVL Steps → EVL HANDOFF SUMMARY → vc-update-process-agent.                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| vc-tester: ≥1 gate fails                          | One EVL cycle begins: increment cycle counter; **write `{plan-slug}-evl-iteration-{NNN}_REPORT_{dd-mm-yy}.md` FIRST — a TSV cycle row append is valid ONLY AFTER the matching iteration report file has been written (report first, TSV row second; a TSV row without its report is a bookkeeping violation)**; append TSV row; spawn vc-execute-agent (supplement mode) scoped to exactly the failing gate(s) — parallel fix agents when failing gates touch disjoint file groups; then re-spawn vc-tester to confirm. |
+| 10 cycles reached or plateau                      | Under /goal: accept as known-gap, record in the phase report's `## Test Infra Gaps Found`, continue. Interactive: surface to user.                                                                                                                                                                                                                                                                                                                                                                                      |
 
 **No inline execution (mechanical rule):** under `ENTER EXECUTE MODE` and throughout EVL, the orchestrator NEVER edits source files and NEVER runs validate-contract gate commands in its own shell. The gate run is valid ONLY when performed by a spawned vc-tester agent; the fix is valid ONLY when performed by a spawned vc-execute-agent. This holds regardless of change size — a one-line fix still requires the spawns. The trivial-fix inline path is VOID the moment a plan file with a validate-contract exists: "ENTER EXECUTE MODE for [plan]" ALWAYS means spawn vc-execute-agent with the plan path. An EXECUTE/EVL pass with zero Agent tool spawns is a protocol violation even if every gate ends green and all bookkeeping artifacts are correct — correct artifacts do not retroactively legitimize inline execution.
 
 ### Bookkeeping ownership (per `vc-autoresearch`)
 
-| Item | Owner |
-|---|---|
+| Item                                                                                                                                                     | Owner                                                       |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
 | Task-folder + `results.tsv` init, cycle counter, per-cycle `{NNN}` iteration reports, TSV rows, plateau/cap/regression checks, parallel-fix partitioning | Orchestrator (executing the vc-autoresearch steps directly) |
-| V1–V7 gate sequence, SUPPLEMENT REQUEST format, validate-contract write, known-gap exclusion | vc-validate-agent |
-| Which gate commands run, EVL HANDOFF SUMMARY format | vc-tester |
-| Applying plan supplements / code fixes (scoped, no expansion) | vc-plan-agent / vc-execute-agent in supplement mode |
+| V1–V7 gate sequence, SUPPLEMENT REQUEST format, validate-contract write, known-gap exclusion                                                             | vc-validate-agent                                           |
+| Which gate commands run, EVL HANDOFF SUMMARY format                                                                                                      | vc-tester                                                   |
+| Applying plan supplements / code fixes (scoped, no expansion)                                                                                            | vc-plan-agent / vc-execute-agent in supplement mode         |
 
 ## EXECUTE-VALIDATE-LOOP (EVL)
 
@@ -841,6 +867,7 @@ On receiving `PHASE_COMPLETE: EXECUTE` (under /goal) or DONE/DONE_WITH_CONCERNS 
 Under /goal: canonical detection trigger is the `PHASE_COMPLETE: EXECUTE — ...` signal string emitted by execute-agent. The DONE/DONE_WITH_CONCERNS status code alone is insufficient under /goal because other agents also return DONE — the signal string is unambiguous. Both mechanisms are valid: signal string for /goal autonomous runs; status code for interactive sessions.
 
 **Orchestrator EVL responsibilities (summary):**
+
 1. Run EVL Steps 1–6 in the main thread.
 2. At Step 6: write the EVL HANDOFF SUMMARY yaml block (6 fields: gates_green, known_gaps, follow_up_stubs, context_partial, preliminary_packet_path, closeout_classification).
 3. Route to vc-update-process-agent with the EVL HANDOFF SUMMARY block in the handoff prompt.
@@ -899,7 +926,7 @@ section; the authoritative detail lives here.
 - UI/frontend → surface vc-frontend-design skill + vc-research-agent
 - Refactor/simplify → vc-code-simplifier (pure style) or RESEARCH→PLAN→EXECUTE (behavioral)
 - Missing context → suggest the `vc-generate-context` skill
-- Existing plan file → scan process/general-plans/active/ and process/features/*/active/ (plans inside `{slug}_{date}/` task subfolders), confirm with user, resume from last phase
+- Existing plan file → scan process/general-plans/active/ and process/features/\*/active/ (plans inside `{slug}_{date}/` task subfolders), confirm with user, resume from last phase
 
 **Intent clarification**: Before auto-routing, the orchestrator scores request ambiguity per
 `vc-intent-clarify` (see §Intent Clarification). Clear requests (score 0-1) auto-route silently.
@@ -922,9 +949,9 @@ prompt context. Never silently skip relevant skills.
   **lane-suffix variants**: `autopilot quick: [task]`, `autopilot fast: [task]`, `autopilot full: [task]`)
   → Trigger-anywhere routing: see §Autopilot Trigger Routing.
   → Detection rule: phrase must be standalone or sentence-initial. Phrases embedded in
-    descriptive text ("the autopilot system is broken") do NOT trigger autopilot mode.
-    Lane suffix variants follow the same rule ("just use autopilot fast: approach" does NOT trigger).
-    Matching rule mirrors the Autonomy phrase-matching rule in §Intent Clarification §Autonomy Mode.
+  descriptive text ("the autopilot system is broken") do NOT trigger autopilot mode.
+  Lane suffix variants follow the same rule ("just use autopilot fast: approach" does NOT trigger).
+  Matching rule mirrors the Autonomy phrase-matching rule in §Intent Clarification §Autonomy Mode.
   → Full lane spec: `process/development-protocols/autopilot.md §Lanes`.
 
 - **Feature Request** (keywords: "build", "add", "implement", "create feature")
@@ -939,8 +966,8 @@ prompt context. Never silently skip relevant skills.
 
 - **Quick Fix** (keywords: "quick fix", "hotfix", "small fix", "just patch", or `ENTER QUICK FIX MODE`)
   → Run the QUICK FIX lane (see §QUICK FIX Lane): orchestrator read-only scout → one-line confirm →
-  spawn `vc-quick-fix-agent`. Use for the band *above* trivial (multi-line / known target) but
-  *below* "needs a plan" — bounded, no schema/auth/API/billing/migration surface. Aborts to RESEARCH
+  spawn `vc-quick-fix-agent`. Use for the band _above_ trivial (multi-line / known target) but
+  _below_ "needs a plan" — bounded, no schema/auth/API/billing/migration surface. Aborts to RESEARCH
   if the scope guard trips.
 
 - **Missing Context**
@@ -960,20 +987,21 @@ prompt context. Never silently skip relevant skills.
   → Activate `vc-docs-seeker` skill before routing to `vc-research-agent`
 
 - **Refactor / Simplify** (keywords: "refactor", "clean up", "simplify", "reorganize")
-  - *Pure style/readability* (named file, no behavior change): route directly to `vc-code-simplifier` agent
-  - *Behavioral or architectural refactor*: full RESEARCH → PLAN → EXECUTE, then `vc-code-simplifier` as cleanup
+  - _Pure style/readability_ (named file, no behavior change): route directly to `vc-code-simplifier` agent
+  - _Behavioral or architectural refactor_: full RESEARCH → PLAN → EXECUTE, then `vc-code-simplifier` as cleanup
 
 - **Debug / Root Cause** (keywords: "debug", "why", "root cause", "investigate")
   → `vc-debugger` agent = default owner. Helper skills like `vc-scout`, `vc-sequential-thinking`, and `vc-problem-solving` may be layered in as needed.
 
 **When multiple intents match** (e.g., UI bug with docs question), use this precedence:
-1. Existing plan file in process/general-plans/active/ or process/features/*/active/ → always resume first
+
+1. Existing plan file in process/general-plans/active/ or process/features/\*/active/ → always resume first
 2. Explicit mode command (ENTER X MODE) → obey immediately
 3. Bug/debug → debugging routing before feature routing
 4. Feature request → RIPER-5 flow
 5. UI specialization → surface vc-frontend-design alongside any of the above
 6. Docs question → surface vc-docs-seeker alongside any of the above
-When still ambiguous, ask the user one clarifying question before routing.
+   When still ambiguous, ask the user one clarifying question before routing.
 
 ### 2. Gather Context
 

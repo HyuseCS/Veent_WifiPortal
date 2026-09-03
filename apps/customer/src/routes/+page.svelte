@@ -153,16 +153,17 @@
 					<div class="mb-[18px] overflow-hidden rounded-2xl border border-border lg:mb-5">
 						{#each data.bundles as bundle, i (bundle.id)}
 							<div
-								class="flex items-center justify-between px-[15px] py-3.5 {i < data.bundles.length - 1 ? 'border-b border-border' : ''}"
+								class="flex items-center justify-between px-[15px] py-3.5 {i <
+								data.bundles.length - 1
+									? 'border-b border-border'
+									: ''}"
 							>
 								<div class="flex items-center gap-2.5">
 									<span class="font-mono text-[17px] font-bold text-ink"
 										><span class="font-sans">₱</span>{bundle.fiatCost}</span
 									>
 								</div>
-								<div
-									class="font-mono text-[13px] font-semibold text-muted"
-								>
+								<div class="font-mono text-[13px] font-semibold text-muted">
 									{bundle.creditsProvided} credits
 								</div>
 							</div>

@@ -19,8 +19,12 @@
 		class: klass = '',
 		children,
 		...rest
-	}: { variant?: Variant; loading?: boolean; class?: string; children: Snippet } & HTMLButtonAttributes =
-		$props();
+	}: {
+		variant?: Variant;
+		loading?: boolean;
+		class?: string;
+		children: Snippet;
+	} & HTMLButtonAttributes = $props();
 
 	const variants: Record<Variant, string> = {
 		primary:

@@ -1,6 +1,6 @@
 ---
 name: plan:finance-timestamptz-migration-spec
-description: "Migrate finance/session timestamp columns from bare wall-clock to real timestamptz instants, fixing three same-root-cause date-window bugs in Finance"
+description: 'Migrate finance/session timestamp columns from bare wall-clock to real timestamptz instants, fixing three same-root-cause date-window bugs in Finance'
 date: 23-07-26
 feature: none
 ---
@@ -13,7 +13,7 @@ Right now, when the system records "when did this happen" for money and session 
 top-up, a credit spend, a free-time grant, a payment webhook), it stores a clock reading with
 no timezone attached — and two different parts of the code write that clock reading in two
 different timezones (some in Manila local time, some in UTC) without saying so. The database
-column type can't tell the difference, so a value that *looks* like "2026-07-23 14:00" might
+column type can't tell the difference, so a value that _looks_ like "2026-07-23 14:00" might
 mean 2pm Manila or 2pm UTC (which is 10pm Manila) depending on which code path wrote it. This
 already caused one visible bug (Finance date filters dropping same-day rows) and this session's
 research found two more of the same root cause, one of them live in the just-shipped Unified
@@ -233,7 +233,7 @@ Write path A (.defaultNow())        Write path B (new Date() in JS)
   verify locally — per `process/context/database/all-database.md` Canonical Notes. Do not attempt
   to reconcile the journal drift as part of this work.
 - **`drizzle-kit generate` may not emit a usable `USING` clause for a type-changing `ALTER
-  COLUMN` on a populated table.** This is the first ALTER-on-populated-column type change in this
+COLUMN` on a populated table.** This is the first ALTER-on-populated-column type change in this
   repo (per RESEARCH). PLAN must treat the generated migration file as a draft requiring manual
   verification/editing, not as usable output as-is.
 - **`payment_checkouts` needs a per-column cast, not a table-wide one.** `created_at` is
@@ -263,14 +263,14 @@ None — the five items flagged for this session were resolved during SPEC resea
    Manila-wall write-path group.
 
 2. **View/materialized-view dependency check — RESOLVED.** `grep -rn "CREATE.*VIEW\|MATERIALIZED
-   VIEW" packages/db/drizzle/` returned no matches. No view depends on any in-scope column's type.
+VIEW" packages/db/drizzle/` returned no matches. No view depends on any in-scope column's type.
 
 3. **`expires_at` and `customer_profile.*` column conventions — RESOLVED.**
    `network_sessions.expires_at`, `customer_profile.access_expires_at`, and
    `customer_profile.access_paused_at` are all written exclusively via explicit `new Date()` calls
    in `packages/core/src/services/sessions.ts` (no `.defaultNow()` default on any of these three
    columns in the schema) — confirmed UTC-wall, same group as `network_sessions.{started_at,
-   bound_at, last_seen_at}`. `customer_profile.last_free_session_at` is likewise written via
+bound_at, last_seen_at}`. `customer_profile.last_free_session_at` is likewise written via
    `.set({ lastFreeSessionAt: now })` where `now = new Date()` (`sessions.ts`) — UTC-wall.
 
 4. **Whether `drizzle-kit generate` emits a usable `USING` clause — noted, not resolved (by
@@ -293,7 +293,7 @@ write conventions exist for the same kind of "when did this happen" fact:
 - **UTC-wall writers** (explicit JS `new Date()`, which `postgres.js` binds via
   `toISOString()`): `network_sessions.{started_at, bound_at, last_seen_at, expires_at}`,
   `payment_checkouts.{settled_at, last_polled_at}`, `customer_profile.{last_free_session_at,
-  access_expires_at, access_paused_at}`.
+access_expires_at, access_paused_at}`.
 
 `payment_checkouts` is split WITHIN one table — `created_at` is Manila-wall, `settled_at` and
 `last_polled_at` are UTC-wall — confirming that any migration needs a per-column, not per-table,
@@ -313,7 +313,7 @@ correction.
    (`process/general-plans/completed/unified-transaction-history_21-07-26/`).
 3. **`reconcilePayments.ts` age-boundary math is timezone-naive.** Confirmed:
    `.where(and(lte(paymentCheckouts.createdAt, minAge), gt(paymentCheckouts.createdAt,
-   maxAge)))` and the `lastPolledAt` throttle compare a Manila-wall/UTC-wall column against
+maxAge)))` and the `lastPolledAt` throttle compare a Manila-wall/UTC-wall column against
    JS-built `Date` boundaries with no timezone correction.
 
 **Existing test infrastructure to reuse (not invent).** Two Hybrid/PGlite real-Postgres

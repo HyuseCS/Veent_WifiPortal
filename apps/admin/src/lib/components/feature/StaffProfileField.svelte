@@ -27,7 +27,11 @@
 	<dt class="text-xs font-medium text-muted">{label}</dt>
 	<!-- min-w-0 + break-words so a long email/phone wraps instead of overflowing on narrow
 	     (mobile) widths. -->
-	<dd class="flex min-w-0 items-center gap-1.5 text-sm break-words {mono ? 'font-mono' : ''} {empty ? 'text-muted' : 'text-ink'}">
+	<dd
+		class="flex min-w-0 items-center gap-1.5 text-sm break-words {mono ? 'font-mono' : ''} {empty
+			? 'text-muted'
+			: 'text-ink'}"
+	>
 		{#if Icon}<Icon class="h-3.5 w-3.5 shrink-0" aria-hidden="true" />{/if}
 		{#if children}{@render children()}{:else}{empty ? '—' : value}{/if}
 	</dd>

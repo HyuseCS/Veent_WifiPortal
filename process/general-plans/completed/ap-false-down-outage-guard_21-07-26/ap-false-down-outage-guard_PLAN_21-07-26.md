@@ -1,6 +1,6 @@
 ---
 name: plan:ap-false-down-outage-guard
-description: "RE-SCOPED after VALIDATE BLOCKED (F1). Ship only the sound, no-billing-risk parts of the AP false-DOWN work: a static transaction-tripwire test, an ip-binding-bypass runbook, and two backlog notes (tripwire-implemented + code-safeguard deferral). The behavioral outage.ts guard is DESCOPED — impossible as designed."
+description: 'RE-SCOPED after VALIDATE BLOCKED (F1). Ship only the sound, no-billing-risk parts of the AP false-DOWN work: a static transaction-tripwire test, an ip-binding-bypass runbook, and two backlog notes (tripwire-implemented + code-safeguard deferral). The behavioral outage.ts guard is DESCOPED — impossible as designed.'
 date: 21-07-26
 feature: general-plans
 ---
@@ -35,10 +35,10 @@ discriminator in the current schema**, so the one-line never-up guard is impossi
 
 **DESCOPED (removed from this plan — do NOT re-add as active checklist items):**
 
-| Removed item | Reason (F1) |
-|---|---|
-| `outage.ts` `isNotNull(onlineSince)` guard clause | Dead — would make the down-set always empty and disable outage pausing entirely. |
-| `outage.spec.ts` never-up / went-down unit cases | Nothing behavioral to test — the guard is gone. |
+| Removed item                                         | Reason (F1)                                                                                                   |
+| ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `outage.ts` `isNotNull(onlineSince)` guard clause    | Dead — would make the down-set always empty and disable outage pausing entirely.                              |
+| `outage.spec.ts` never-up / went-down unit cases     | Nothing behavioral to test — the guard is gone.                                                               |
 | `outage.integration.spec.ts` never-up exclusion case | Would seed a production-impossible row state (`online=false` with `online_since` non-null); false confidence. |
 
 The code safeguard is **not abandoned** — it is deferred to a backlog note (checklist item 4) with
@@ -52,12 +52,12 @@ the gate command independently) passes and the runbook doc (AC2, Agent-Probe) ha
 
 ## Touchpoints
 
-| # | File | Change |
-|---|---|---|
-| 1 | New: `packages/core/src/services/networkHealth.transaction-tripwire.spec.ts` | Static source-text regression test — asserts neither admin call site wraps `refreshNetworkHealth` in `db.transaction(`, and asserts each file DOES contain `refreshNetworkHealth(` (non-vacuous positive anchor). No runtime tx-detection. |
-| 2 | `process/general-plans/backlog/ap-name-retry-transaction-tripwire_NOTE_20-07-26.md` | Mark option 2 (static grep/text guard) IMPLEMENTED, with the new spec path. |
-| 3 | New: `docs/mikrotik/ap-liveness-bypass.md` | Runbook: every new AP MAC must be `type=bypassed` in `/ip/hotspot/ip-binding` or its liveness reads DOWN. Now the primary false-DOWN mitigation. |
-| 4 | New: `process/general-plans/backlog/ap-outage-false-down-code-safeguard_NOTE_21-07-26.md` | Deferral note: goal, dead approach + F1 reason, two viable candidates, runbook = shipped mitigation. |
+| #   | File                                                                                      | Change                                                                                                                                                                                                                                     |
+| --- | ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 1   | New: `packages/core/src/services/networkHealth.transaction-tripwire.spec.ts`              | Static source-text regression test — asserts neither admin call site wraps `refreshNetworkHealth` in `db.transaction(`, and asserts each file DOES contain `refreshNetworkHealth(` (non-vacuous positive anchor). No runtime tx-detection. |
+| 2   | `process/general-plans/backlog/ap-name-retry-transaction-tripwire_NOTE_20-07-26.md`       | Mark option 2 (static grep/text guard) IMPLEMENTED, with the new spec path.                                                                                                                                                                |
+| 3   | New: `docs/mikrotik/ap-liveness-bypass.md`                                                | Runbook: every new AP MAC must be `type=bypassed` in `/ip/hotspot/ip-binding` or its liveness reads DOWN. Now the primary false-DOWN mitigation.                                                                                           |
+| 4   | New: `process/general-plans/backlog/ap-outage-false-down-code-safeguard_NOTE_21-07-26.md` | Deferral note: goal, dead approach + F1 reason, two viable candidates, runbook = shipped mitigation.                                                                                                                                       |
 
 **No `packages/core` service code, no schema, no billing/auth/API surface is touched.**
 
@@ -142,15 +142,16 @@ the gate command independently) passes and the runbook doc (AC2, Agent-Probe) ha
 ## Verification Evidence
 
 Acceptance criteria (this plan defines them; no separate SPEC doc):
+
 - **AC1** — a source-text tripwire fails if either `refreshNetworkHealth` call site gains a `db.transaction(` wrapper.
 - **AC2** — operators have a durable runbook step: new AP MAC → `/ip/hotspot/ip-binding` bypass.
 - **AC3** — the dead code approach and its two viable successors are recorded in backlog so the work is not lost and the dead approach is never retried.
 
-| Gate / Scenario | Strategy | Proves SPEC criterion |
-|---|---|---|
-| `bunx vitest run packages/core/src/services/networkHealth.transaction-tripwire.spec.ts` — no `db.transaction(` in either call site AND `refreshNetworkHealth(` present in both (positive anchor) | Fully-Automated (source-text) | AC1 (proven by: tripwire spec, item 1) |
-| Manual review: `docs/mikrotik/ap-liveness-bypass.md` exists, matches runbook convention, cross-links live-verification report | Agent-Probe (prose/accuracy judgment) | AC2 (proven by: runbook, item 3) |
-| Manual review: `ap-outage-false-down-code-safeguard_NOTE_21-07-26.md` records goal + dead approach (F1) + two candidates + runbook mitigation | Agent-Probe (completeness judgment) | AC3 (proven by: backlog note, item 4) |
+| Gate / Scenario                                                                                                                                                                                  | Strategy                              | Proves SPEC criterion                  |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------- | -------------------------------------- |
+| `bunx vitest run packages/core/src/services/networkHealth.transaction-tripwire.spec.ts` — no `db.transaction(` in either call site AND `refreshNetworkHealth(` present in both (positive anchor) | Fully-Automated (source-text)         | AC1 (proven by: tripwire spec, item 1) |
+| Manual review: `docs/mikrotik/ap-liveness-bypass.md` exists, matches runbook convention, cross-links live-verification report                                                                    | Agent-Probe (prose/accuracy judgment) | AC2 (proven by: runbook, item 3)       |
+| Manual review: `ap-outage-false-down-code-safeguard_NOTE_21-07-26.md` records goal + dead approach (F1) + two candidates + runbook mitigation                                                    | Agent-Probe (completeness judgment)   | AC3 (proven by: backlog note, item 4)  |
 
 **Runner convention (repo rule):** always `bunx vitest run <file>`. `bun test <file>` is BANNED — bun's
 native runner silently no-ops fake timers and mis-handles vitest specs (see
@@ -181,11 +182,12 @@ Rationale: 0/7 signals present — 1 code package (`@veent/core`, one new spec, 
 
 Test gates (C3 5-column table — ADDITIVE; the legacy line form below is retained for existing consumers):
 
-| criterion id | behavior | strategy | proving test | gap-resolution |
-|---|---|---|---|---|
-| AC1 | source-text tripwire fails if either `refreshNetworkHealth` call site gains a `db.transaction(` wrapper; each call site is anchored by an asserted `refreshNetworkHealth(` presence (non-vacuous) | Fully-Automated | `bunx vitest run packages/core/src/services/networkHealth.transaction-tripwire.spec.ts` | B — gate added by this plan's checklist item 1 |
+| criterion id | behavior                                                                                                                                                                                          | strategy        | proving test                                                                            | gap-resolution                                 |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------- | --------------------------------------------------------------------------------------- | ---------------------------------------------- |
+| AC1          | source-text tripwire fails if either `refreshNetworkHealth` call site gains a `db.transaction(` wrapper; each call site is anchored by an asserted `refreshNetworkHealth(` presence (non-vacuous) | Fully-Automated | `bunx vitest run packages/core/src/services/networkHealth.transaction-tripwire.spec.ts` | B — gate added by this plan's checklist item 1 |
 
 Failing stub:
+
 ```
 test("neither admin call site wraps refreshNetworkHealth in db.transaction, and both call sites are present", () => {
   throw new Error("NOT IMPLEMENTED — TDD stub: for each of +page.server.ts and refresh/+server.ts assert refreshNetworkHealth( present AND db.transaction( absent")
@@ -200,11 +202,13 @@ gap-resolution legend: A — proven now; B — fixed in this plan (gate added by
 C-4 reconciliation: the `strategy:` column carries ONLY the 3 proving strategies (Fully-Automated / Hybrid / Agent-Probe). Known-Gap is never a strategy here; there are no Known-Gap rows.
 
 Legacy line form (retained so existing validate-contract consumers still parse):
+
 - @veent/core tripwire spec: Fully-automated: `bunx vitest run packages/core/src/services/networkHealth.transaction-tripwire.spec.ts`
 - ap-liveness-bypass runbook: agent-probe: manual review of `docs/mikrotik/ap-liveness-bypass.md`
 - code-safeguard deferral note: agent-probe: manual review of `ap-outage-false-down-code-safeguard_NOTE_21-07-26.md`
 
 Dimension findings:
+
 - Infra fit: PASS — new spec lands in `packages/core/src/services/`, auto-collected by `vitest run` (sibling `.spec.ts` files already run there); `../../../../` from `packages/core/src/services/` correctly resolves to the repo root; both admin call-site paths and the `docs/mikrotik/` dir exist on disk.
 - Test coverage: PASS — tripwire is a deterministic Fully-Automated source-text gate; green baseline verified (0 `db.transaction(`, 1 `refreshNetworkHealth(` per file). The vacuous-assertion concern (C1) was resolved in-plan by requiring the positive `refreshNetworkHealth(` anchor per file, so the "absence" check can never pass on a wrong/empty read.
 - Breaking changes: PASS — no source edits, no schema/API/route/contract changes; new test file + docs/process artifacts only. Outage-sweep behavior is unchanged from today.
@@ -215,6 +219,7 @@ Dimension findings:
 Open gaps: none.
 
 What this coverage does NOT prove:
+
 - The Fully-Automated tripwire proves ONLY the textual absence of a `db.transaction(` wrapper (with an asserted call-site anchor) in the two named files at test time. It does NOT prove the runtime transaction behavior of `refreshNetworkHealth` is correct; does NOT catch a transaction introduced through a helper/indirection whose text is not literally `db.transaction(`; and does NOT cover a future third call site not added to the spec.
 - The AC2 runbook and AC3 deferral note are Agent-Probe (existence + prose/completeness judgment only). They prove nothing at runtime and do not themselves fix the false-DOWN bug in code — the runbook is an operational mitigation, the note is a durable record of the deferred code safeguard.
 

@@ -45,8 +45,8 @@ const url = `${SMSGATE_BASE_URL.replace(/\/+$/, '')}/3rdparty/v1/messages`;
 
 console.log(`→ POST ${url}  recipient=${recipient}`);
 const res = await fetch(url, {
-	method: 'POST',	
-	headers: { 'Content-Type': 'application/json', 'Authorization': authorization },
+	method: 'POST',
+	headers: { 'Content-Type': 'application/json', Authorization: authorization },
 	body: JSON.stringify({
 		textMessage: { text: 'Veent SMS Gate verification probe — please ignore.' },
 		phoneNumbers: [recipient]

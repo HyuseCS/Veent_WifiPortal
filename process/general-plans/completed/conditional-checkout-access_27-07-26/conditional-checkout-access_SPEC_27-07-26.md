@@ -278,7 +278,7 @@ every other unpaid guest.
      before payment resolves.
   2. A catch-all IP-layer allow scoped to the device's source IP
      (`/ip hotspot walled-garden ip add dst-address=0.0.0.0/0 src-address=<device-ip>
-     action=accept`) delivered genuinely full internet to that device (browsing + video streaming
+action=accept`) delivered genuinely full internet to that device (browsing + video streaming
      confirmed).
   3. Removing that rule cleanly killed the device's internet — no leftover/leaked access.
   4. The existing top-placed `dst-host` deny rules for OS connectivity-probe hosts still won over

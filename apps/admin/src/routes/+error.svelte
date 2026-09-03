@@ -77,7 +77,9 @@
 		class="w-full max-w-md rounded-2xl border border-border bg-bg p-8 text-center shadow-sm sm:p-10"
 		in:fade={{ duration: 200 }}
 	>
-		<div class="mx-auto flex h-14 w-14 items-center justify-center rounded-xl bg-brand/10 text-brand">
+		<div
+			class="mx-auto flex h-14 w-14 items-center justify-center rounded-xl bg-brand/10 text-brand"
+		>
 			<Icon class="h-7 w-7" aria-hidden="true" />
 		</div>
 		<p class="mt-5 font-mono text-xs font-semibold tracking-[0.2em] text-muted">ERROR {status}</p>

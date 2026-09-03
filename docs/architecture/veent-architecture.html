@@ -1,493 +1,586 @@
 <title>Veent Portal Architecture</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link
+	rel="stylesheet"
+	href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&family=JetBrains+Mono:wght@400;600&display=swap"
+/>
 
 <style>
-  :root {
-    --ground:   #F2F4F6;
-    --surface:  #FFFFFF;
-    --sunken:   #E7EAEE;
-    --line:     #D3D9E0;
-    --line-2:   #BCC5CF;
-    --ink:      #10151C;
-    --ink-2:    #3D4753;
-    --muted:    #6B7684;
-    --accent:   #B4630F;
-    --accent-w: #F0E2D2;
-    --plate:    #FAF9F7;
-    --plate-ln: #C9C6BF;
-  }
+	:root {
+		--ground: #f2f4f6;
+		--surface: #ffffff;
+		--sunken: #e7eaee;
+		--line: #d3d9e0;
+		--line-2: #bcc5cf;
+		--ink: #10151c;
+		--ink-2: #3d4753;
+		--muted: #6b7684;
+		--accent: #b4630f;
+		--accent-w: #f0e2d2;
+		--plate: #faf9f7;
+		--plate-ln: #c9c6bf;
+	}
 
-  @media (prefers-color-scheme: dark) {
-    :root:not([data-theme="light"]) {
-      --ground:   #0D1218;
-      --surface:  #141B23;
-      --sunken:   #1B242E;
-      --line:     #27323E;
-      --line-2:   #3A4854;
-      --ink:      #E5EAF0;
-      --ink-2:    #B7C1CC;
-      --muted:    #808D9B;
-      --accent:   #E0A055;
-      --accent-w: #33261A;
-      --plate:    #FAF9F7;
-      --plate-ln: #C9C6BF;
-    }
-  }
+	@media (prefers-color-scheme: dark) {
+		:root:not([data-theme='light']) {
+			--ground: #0d1218;
+			--surface: #141b23;
+			--sunken: #1b242e;
+			--line: #27323e;
+			--line-2: #3a4854;
+			--ink: #e5eaf0;
+			--ink-2: #b7c1cc;
+			--muted: #808d9b;
+			--accent: #e0a055;
+			--accent-w: #33261a;
+			--plate: #faf9f7;
+			--plate-ln: #c9c6bf;
+		}
+	}
 
-  :root[data-theme="dark"] {
-    --ground:   #0D1218;
-    --surface:  #141B23;
-    --sunken:   #1B242E;
-    --line:     #27323E;
-    --line-2:   #3A4854;
-    --ink:      #E5EAF0;
-    --ink-2:    #B7C1CC;
-    --muted:    #808D9B;
-    --accent:   #E0A055;
-    --accent-w: #33261A;
-    --plate:    #FAF9F7;
-    --plate-ln: #C9C6BF;
-  }
+	:root[data-theme='dark'] {
+		--ground: #0d1218;
+		--surface: #141b23;
+		--sunken: #1b242e;
+		--line: #27323e;
+		--line-2: #3a4854;
+		--ink: #e5eaf0;
+		--ink-2: #b7c1cc;
+		--muted: #808d9b;
+		--accent: #e0a055;
+		--accent-w: #33261a;
+		--plate: #faf9f7;
+		--plate-ln: #c9c6bf;
+	}
 
-  * { box-sizing: border-box; }
+	* {
+		box-sizing: border-box;
+	}
 
-  body {
-    background: var(--ground);
-    color: var(--ink);
-    font-family: "Source Serif 4", Georgia, "Times New Roman", serif;
-    font-size: 17px;
-    line-height: 1.65;
-    margin: 0;
-    padding: 0 1.25rem 6rem;
-    -webkit-font-smoothing: antialiased;
-  }
+	body {
+		background: var(--ground);
+		color: var(--ink);
+		font-family: 'Source Serif 4', Georgia, 'Times New Roman', serif;
+		font-size: 17px;
+		line-height: 1.65;
+		margin: 0;
+		padding: 0 1.25rem 6rem;
+		-webkit-font-smoothing: antialiased;
+	}
 
-  .wrap {
-    max-width: 74ch;
-    margin: 0 auto;
-    display: flex;
-    flex-direction: column;
-    gap: 2.75rem;
-  }
+	.wrap {
+		max-width: 74ch;
+		margin: 0 auto;
+		display: flex;
+		flex-direction: column;
+		gap: 2.75rem;
+	}
 
-  /* ---------- masthead ---------- */
+	/* ---------- masthead ---------- */
 
-  header.masthead {
-    display: flex;
-    flex-direction: column;
-    gap: 0.9rem;
-    padding: 4rem 0 0;
-  }
+	header.masthead {
+		display: flex;
+		flex-direction: column;
+		gap: 0.9rem;
+		padding: 4rem 0 0;
+	}
 
-  .eyebrow {
-    font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
-    font-size: 0.72rem;
-    font-weight: 600;
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
-    color: var(--accent);
-    margin: 0;
-  }
+	.eyebrow {
+		font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+		font-size: 0.72rem;
+		font-weight: 600;
+		letter-spacing: 0.14em;
+		text-transform: uppercase;
+		color: var(--accent);
+		margin: 0;
+	}
 
-  h1 {
-    font-family: Archivo, "Helvetica Neue", Arial, sans-serif;
-    font-weight: 700;
-    font-size: clamp(2.1rem, 6vw, 3.1rem);
-    line-height: 1.04;
-    letter-spacing: -0.022em;
-    text-wrap: balance;
-    margin: 0;
-  }
+	h1 {
+		font-family: Archivo, 'Helvetica Neue', Arial, sans-serif;
+		font-weight: 700;
+		font-size: clamp(2.1rem, 6vw, 3.1rem);
+		line-height: 1.04;
+		letter-spacing: -0.022em;
+		text-wrap: balance;
+		margin: 0;
+	}
 
-  .standfirst {
-    font-size: 1.12rem;
-    color: var(--ink-2);
-    margin: 0;
-    max-width: 62ch;
-  }
+	.standfirst {
+		font-size: 1.12rem;
+		color: var(--ink-2);
+		margin: 0;
+		max-width: 62ch;
+	}
 
-  .provenance {
-    font-family: "JetBrains Mono", ui-monospace, monospace;
-    font-size: 0.74rem;
-    line-height: 1.7;
-    color: var(--muted);
-    border-top: 1px solid var(--line);
-    padding-top: 0.9rem;
-    margin: 0.5rem 0 0;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.4rem 1.4rem;
-    font-variant-numeric: tabular-nums;
-  }
+	.provenance {
+		font-family: 'JetBrains Mono', ui-monospace, monospace;
+		font-size: 0.74rem;
+		line-height: 1.7;
+		color: var(--muted);
+		border-top: 1px solid var(--line);
+		padding-top: 0.9rem;
+		margin: 0.5rem 0 0;
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.4rem 1.4rem;
+		font-variant-numeric: tabular-nums;
+	}
 
-  .provenance b { color: var(--ink-2); font-weight: 600; }
+	.provenance b {
+		color: var(--ink-2);
+		font-weight: 600;
+	}
 
-  /* ---------- sections ---------- */
+	/* ---------- sections ---------- */
 
-  section { display: flex; flex-direction: column; gap: 1.1rem; }
+	section {
+		display: flex;
+		flex-direction: column;
+		gap: 1.1rem;
+	}
 
-  .kicker {
-    font-family: "JetBrains Mono", ui-monospace, monospace;
-    font-size: 0.7rem;
-    font-weight: 600;
-    letter-spacing: 0.16em;
-    text-transform: uppercase;
-    color: var(--muted);
-    margin: 0;
-    padding-bottom: 0.55rem;
-    border-bottom: 2px solid var(--line-2);
-  }
+	.kicker {
+		font-family: 'JetBrains Mono', ui-monospace, monospace;
+		font-size: 0.7rem;
+		font-weight: 600;
+		letter-spacing: 0.16em;
+		text-transform: uppercase;
+		color: var(--muted);
+		margin: 0;
+		padding-bottom: 0.55rem;
+		border-bottom: 2px solid var(--line-2);
+	}
 
-  h2 {
-    font-family: Archivo, "Helvetica Neue", Arial, sans-serif;
-    font-weight: 600;
-    font-size: 1.62rem;
-    letter-spacing: -0.014em;
-    line-height: 1.2;
-    text-wrap: balance;
-    margin: 0;
-  }
+	h2 {
+		font-family: Archivo, 'Helvetica Neue', Arial, sans-serif;
+		font-weight: 600;
+		font-size: 1.62rem;
+		letter-spacing: -0.014em;
+		line-height: 1.2;
+		text-wrap: balance;
+		margin: 0;
+	}
 
-  p { margin: 0; max-width: 66ch; }
+	p {
+		margin: 0;
+		max-width: 66ch;
+	}
 
-  code {
-    font-family: "JetBrains Mono", ui-monospace, monospace;
-    font-size: 0.86em;
-    background: var(--sunken);
-    border: 1px solid var(--line);
-    border-radius: 3px;
-    padding: 0.08em 0.34em;
-    color: var(--ink-2);
-    word-break: break-word;
-  }
+	code {
+		font-family: 'JetBrains Mono', ui-monospace, monospace;
+		font-size: 0.86em;
+		background: var(--sunken);
+		border: 1px solid var(--line);
+		border-radius: 3px;
+		padding: 0.08em 0.34em;
+		color: var(--ink-2);
+		word-break: break-word;
+	}
 
-  /* ---------- diagram plates ---------- */
+	/* ---------- diagram plates ---------- */
 
-  figure.plate {
-    margin: 0;
-    background: var(--plate);
-    border: 1px solid var(--plate-ln);
-    border-radius: 2px;
-    box-shadow: 0 1px 0 var(--line);
-    display: flex;
-    flex-direction: column;
-  }
+	figure.plate {
+		margin: 0;
+		background: var(--plate);
+		border: 1px solid var(--plate-ln);
+		border-radius: 2px;
+		box-shadow: 0 1px 0 var(--line);
+		display: flex;
+		flex-direction: column;
+	}
 
-  .plate-body {
-    overflow-x: auto;
-    padding: 1.75rem 1.25rem;
-    cursor: zoom-in;
-  }
+	.plate-body {
+		overflow-x: auto;
+		padding: 1.75rem 1.25rem;
+		cursor: zoom-in;
+	}
 
-  .plate-body:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+	.plate-body:focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: -2px;
+	}
 
-  .plate .mermaid { min-width: 560px; }
+	.plate .mermaid {
+		min-width: 560px;
+	}
 
-  /* ---------- lightbox ---------- */
+	/* ---------- lightbox ---------- */
 
-  dialog.lightbox {
-    width: 96vw;
-    height: 94vh;
-    max-width: 96vw;
-    max-height: 94vh;
-    padding: 0;
-    border: 1px solid var(--plate-ln);
-    border-radius: 3px;
-    background: var(--plate);
-    color: #16202B;
-    overflow: hidden;
-  }
+	dialog.lightbox {
+		width: 96vw;
+		height: 94vh;
+		max-width: 96vw;
+		max-height: 94vh;
+		padding: 0;
+		border: 1px solid var(--plate-ln);
+		border-radius: 3px;
+		background: var(--plate);
+		color: #16202b;
+		overflow: hidden;
+	}
 
-  dialog.lightbox::backdrop { background: rgba(8, 12, 17, 0.78); }
+	dialog.lightbox::backdrop {
+		background: rgba(8, 12, 17, 0.78);
+	}
 
-  .lightbox-bar {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 1rem;
-    padding: 0.7rem 1rem;
-    border-bottom: 1px solid var(--plate-ln);
-    background: #F1EFEA;
-    font-family: "JetBrains Mono", ui-monospace, monospace;
-    font-size: 0.72rem;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    color: #5C574E;
-  }
+	.lightbox-bar {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 1rem;
+		padding: 0.7rem 1rem;
+		border-bottom: 1px solid var(--plate-ln);
+		background: #f1efea;
+		font-family: 'JetBrains Mono', ui-monospace, monospace;
+		font-size: 0.72rem;
+		letter-spacing: 0.06em;
+		text-transform: uppercase;
+		color: #5c574e;
+	}
 
-  .lightbox-tools { display: flex; align-items: center; gap: 0.4rem; }
+	.lightbox-tools {
+		display: flex;
+		align-items: center;
+		gap: 0.4rem;
+	}
 
-  .lightbox-bar button {
-    font: inherit;
-    text-transform: none;
-    letter-spacing: 0;
-    color: #2C3742;
-    background: #FFFFFF;
-    border: 1px solid #BDB8AE;
-    border-radius: 2px;
-    padding: 0.28rem 0.62rem;
-    cursor: pointer;
-    line-height: 1.4;
-  }
+	.lightbox-bar button {
+		font: inherit;
+		text-transform: none;
+		letter-spacing: 0;
+		color: #2c3742;
+		background: #ffffff;
+		border: 1px solid #bdb8ae;
+		border-radius: 2px;
+		padding: 0.28rem 0.62rem;
+		cursor: pointer;
+		line-height: 1.4;
+	}
 
-  .lightbox-bar button:hover { background: #F0E2D2; border-color: var(--accent); }
-  .lightbox-bar button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+	.lightbox-bar button:hover {
+		background: #f0e2d2;
+		border-color: var(--accent);
+	}
+	.lightbox-bar button:focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: 1px;
+	}
 
-  .lightbox-stage {
-    height: calc(94vh - 3rem);
-    overflow: auto;
-    padding: 1.5rem;
-    display: grid;
-    place-items: start center;
-  }
+	.lightbox-stage {
+		height: calc(94vh - 3rem);
+		overflow: auto;
+		padding: 1.5rem;
+		display: grid;
+		place-items: start center;
+	}
 
-  .lightbox-stage .mermaid { min-width: 0; }
-  .lightbox-stage svg { height: auto !important; }
+	.lightbox-stage .mermaid {
+		min-width: 0;
+	}
+	.lightbox-stage svg {
+		height: auto !important;
+	}
 
-  figcaption {
-    font-family: "JetBrains Mono", ui-monospace, monospace;
-    font-size: 0.7rem;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: #6E6A62;
-    border-top: 1px solid var(--plate-ln);
-    padding: 0.65rem 1.25rem;
-    display: flex;
-    justify-content: space-between;
-    gap: 1rem;
-    flex-wrap: wrap;
-  }
+	figcaption {
+		font-family: 'JetBrains Mono', ui-monospace, monospace;
+		font-size: 0.7rem;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+		color: #6e6a62;
+		border-top: 1px solid var(--plate-ln);
+		padding: 0.65rem 1.25rem;
+		display: flex;
+		justify-content: space-between;
+		gap: 1rem;
+		flex-wrap: wrap;
+	}
 
-  .zoom-hint { color: #8C7A55; white-space: nowrap; }
+	.zoom-hint {
+		color: #8c7a55;
+		white-space: nowrap;
+	}
 
-  @media (max-width: 640px) {
-    .lightbox-bar { font-size: 0.65rem; padding: 0.6rem 0.7rem; }
-    .lightbox-stage { padding: 0.75rem; }
-  }
+	@media (max-width: 640px) {
+		.lightbox-bar {
+			font-size: 0.65rem;
+			padding: 0.6rem 0.7rem;
+		}
+		.lightbox-stage {
+			padding: 0.75rem;
+		}
+	}
 
-  /* ----------------------------------------------------------------
+	/* ----------------------------------------------------------------
      Mermaid contrast lock.
      The artifact viewer renders Mermaid natively and applies its own
      theme, which can paint light text onto this fixed light plate.
      These rules run after render and win regardless of that theme.
      ---------------------------------------------------------------- */
 
-  .mermaid svg { background: transparent !important; max-width: none !important; }
+	.mermaid svg {
+		background: transparent !important;
+		max-width: none !important;
+	}
 
-  /* node + participant shapes — element-qualified, because Mermaid reuses
+	/* node + participant shapes — element-qualified, because Mermaid reuses
      .actor on both the box and the participant text */
-  .mermaid .node rect,
-  .mermaid .node circle,
-  .mermaid .node ellipse,
-  .mermaid .node polygon,
-  .mermaid .node path,
-  .mermaid .label-container,
-  .mermaid rect.actor,
-  .mermaid .actor-box {
-    fill: #FFFFFF !important;
-    stroke: #7A8794 !important;
-    stroke-width: 1px !important;
-  }
+	.mermaid .node rect,
+	.mermaid .node circle,
+	.mermaid .node ellipse,
+	.mermaid .node polygon,
+	.mermaid .node path,
+	.mermaid .label-container,
+	.mermaid rect.actor,
+	.mermaid .actor-box {
+		fill: #ffffff !important;
+		stroke: #7a8794 !important;
+		stroke-width: 1px !important;
+	}
 
-  .mermaid .cluster rect,
-  .mermaid .cluster polygon {
-    fill: #EFEDE7 !important;
-    stroke: #B9B4AA !important;
-  }
+	.mermaid .cluster rect,
+	.mermaid .cluster polygon {
+		fill: #efede7 !important;
+		stroke: #b9b4aa !important;
+	}
 
-  /* every text surface — html labels and plain svg text alike */
-  .mermaid .nodeLabel,
-  .mermaid .edgeLabel,
-  .mermaid .cluster-label,
-  .mermaid .label,
-  .mermaid span,
-  .mermaid p,
-  .mermaid foreignObject div {
-    color: #16202B !important;
-    background: transparent !important;
-    font-family: "JetBrains Mono", ui-monospace, monospace !important;
-  }
+	/* every text surface — html labels and plain svg text alike */
+	.mermaid .nodeLabel,
+	.mermaid .edgeLabel,
+	.mermaid .cluster-label,
+	.mermaid .label,
+	.mermaid span,
+	.mermaid p,
+	.mermaid foreignObject div {
+		color: #16202b !important;
+		background: transparent !important;
+		font-family: 'JetBrains Mono', ui-monospace, monospace !important;
+	}
 
-  .mermaid text,
-  .mermaid .messageText,
-  .mermaid .labelText,
-  .mermaid .loopText,
-  .mermaid text.actor,
-  .mermaid .actor-top,
-  .mermaid .actor-bottom,
-  .mermaid tspan {
-    fill: #16202B !important;
-    font-family: "JetBrains Mono", ui-monospace, monospace !important;
-  }
+	.mermaid text,
+	.mermaid .messageText,
+	.mermaid .labelText,
+	.mermaid .loopText,
+	.mermaid text.actor,
+	.mermaid .actor-top,
+	.mermaid .actor-bottom,
+	.mermaid tspan {
+		fill: #16202b !important;
+		font-family: 'JetBrains Mono', ui-monospace, monospace !important;
+	}
 
-  /* edge label chips need an opaque backing or lines cut the words */
-  .mermaid .edgeLabel .labelBkg,
-  .mermaid .edgeLabel rect,
-  .mermaid .labelBkg {
-    fill: #FAF9F7 !important;
-    background: #FAF9F7 !important;
-    opacity: 1 !important;
-  }
+	/* edge label chips need an opaque backing or lines cut the words */
+	.mermaid .edgeLabel .labelBkg,
+	.mermaid .edgeLabel rect,
+	.mermaid .labelBkg {
+		fill: #faf9f7 !important;
+		background: #faf9f7 !important;
+		opacity: 1 !important;
+	}
 
-  .mermaid .edgePath .path,
-  .mermaid .flowchart-link,
-  .mermaid line.messageLine0,
-  .mermaid line.messageLine1,
-  .mermaid .actor-line {
-    stroke: #5F6B78 !important;
-  }
+	.mermaid .edgePath .path,
+	.mermaid .flowchart-link,
+	.mermaid line.messageLine0,
+	.mermaid line.messageLine1,
+	.mermaid .actor-line {
+		stroke: #5f6b78 !important;
+	}
 
-  .mermaid marker path,
-  .mermaid .arrowMarkerPath,
-  .mermaid .arrowheadPath {
-    fill: #5F6B78 !important;
-    stroke: #5F6B78 !important;
-  }
+	.mermaid marker path,
+	.mermaid .arrowMarkerPath,
+	.mermaid .arrowheadPath {
+		fill: #5f6b78 !important;
+		stroke: #5f6b78 !important;
+	}
 
-  /* sequence notes keep the accent, with ink that reads on it */
-  .mermaid rect.note { fill: #F0E2D2 !important; stroke: #B4630F !important; }
-  .mermaid .noteText, .mermaid text.noteText { fill: #3A2A16 !important; }
+	/* sequence notes keep the accent, with ink that reads on it */
+	.mermaid rect.note {
+		fill: #f0e2d2 !important;
+		stroke: #b4630f !important;
+	}
+	.mermaid .noteText,
+	.mermaid text.noteText {
+		fill: #3a2a16 !important;
+	}
 
-  /* the step number is white-on-dark: it must not inherit the ink rule */
-  .mermaid text.sequenceNumber { fill: #FFFFFF !important; }
+	/* the step number is white-on-dark: it must not inherit the ink rule */
+	.mermaid text.sequenceNumber {
+		fill: #ffffff !important;
+	}
 
-  /* ---------- seam callout ---------- */
+	/* ---------- seam callout ---------- */
 
-  .seam {
-    background: var(--surface);
-    border: 1px solid var(--line);
-    border-left: 3px solid var(--accent);
-    border-radius: 2px;
-    padding: 1.15rem 1.35rem;
-    display: flex;
-    flex-direction: column;
-    gap: 0.55rem;
-  }
+	.seam {
+		background: var(--surface);
+		border: 1px solid var(--line);
+		border-left: 3px solid var(--accent);
+		border-radius: 2px;
+		padding: 1.15rem 1.35rem;
+		display: flex;
+		flex-direction: column;
+		gap: 0.55rem;
+	}
 
-  .seam-label {
-    font-family: "JetBrains Mono", ui-monospace, monospace;
-    font-size: 0.7rem;
-    font-weight: 600;
-    letter-spacing: 0.13em;
-    text-transform: uppercase;
-    color: var(--accent);
-  }
+	.seam-label {
+		font-family: 'JetBrains Mono', ui-monospace, monospace;
+		font-size: 0.7rem;
+		font-weight: 600;
+		letter-spacing: 0.13em;
+		text-transform: uppercase;
+		color: var(--accent);
+	}
 
-  .seam p { font-size: 1rem; }
+	.seam p {
+		font-size: 1rem;
+	}
 
-  /* ---------- ranked table ---------- */
+	/* ---------- ranked table ---------- */
 
-  .scroller { overflow-x: auto; }
+	.scroller {
+		overflow-x: auto;
+	}
 
-  table {
-    width: 100%;
-    border-collapse: collapse;
-    font-family: "JetBrains Mono", ui-monospace, monospace;
-    font-size: 0.79rem;
-    font-variant-numeric: tabular-nums;
-    min-width: 460px;
-  }
+	table {
+		width: 100%;
+		border-collapse: collapse;
+		font-family: 'JetBrains Mono', ui-monospace, monospace;
+		font-size: 0.79rem;
+		font-variant-numeric: tabular-nums;
+		min-width: 460px;
+	}
 
-  th {
-    text-align: left;
-    font-weight: 600;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    font-size: 0.68rem;
-    color: var(--muted);
-    padding: 0 0.75rem 0.5rem 0;
-    border-bottom: 2px solid var(--line-2);
-    white-space: nowrap;
-  }
+	th {
+		text-align: left;
+		font-weight: 600;
+		letter-spacing: 0.1em;
+		text-transform: uppercase;
+		font-size: 0.68rem;
+		color: var(--muted);
+		padding: 0 0.75rem 0.5rem 0;
+		border-bottom: 2px solid var(--line-2);
+		white-space: nowrap;
+	}
 
-  td {
-    padding: 0.52rem 0.75rem 0.52rem 0;
-    border-bottom: 1px solid var(--line);
-    color: var(--ink-2);
-    vertical-align: baseline;
-  }
+	td {
+		padding: 0.52rem 0.75rem 0.52rem 0;
+		border-bottom: 1px solid var(--line);
+		color: var(--ink-2);
+		vertical-align: baseline;
+	}
 
-  td.sym { color: var(--ink); white-space: nowrap; }
-  td.deg { text-align: right; padding-right: 1.1rem; white-space: nowrap; }
+	td.sym {
+		color: var(--ink);
+		white-space: nowrap;
+	}
+	td.deg {
+		text-align: right;
+		padding-right: 1.1rem;
+		white-space: nowrap;
+	}
 
-  .bar {
-    display: inline-block;
-    height: 7px;
-    background: var(--accent);
-    border-radius: 1px;
-    vertical-align: middle;
-    min-width: 3px;
-  }
+	.bar {
+		display: inline-block;
+		height: 7px;
+		background: var(--accent);
+		border-radius: 1px;
+		vertical-align: middle;
+		min-width: 3px;
+	}
 
-  /* ---------- constraint list ---------- */
+	/* ---------- constraint list ---------- */
 
-  ul.rules { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.85rem; }
+	ul.rules {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		display: flex;
+		flex-direction: column;
+		gap: 0.85rem;
+	}
 
-  ul.rules li {
-    display: grid;
-    grid-template-columns: auto 1fr;
-    gap: 0.85rem;
-    align-items: baseline;
-    padding-bottom: 0.85rem;
-    border-bottom: 1px solid var(--line);
-  }
+	ul.rules li {
+		display: grid;
+		grid-template-columns: auto 1fr;
+		gap: 0.85rem;
+		align-items: baseline;
+		padding-bottom: 0.85rem;
+		border-bottom: 1px solid var(--line);
+	}
 
-  ul.rules li:last-child { border-bottom: 0; padding-bottom: 0; }
+	ul.rules li:last-child {
+		border-bottom: 0;
+		padding-bottom: 0;
+	}
 
-  .tag {
-    font-family: "JetBrains Mono", ui-monospace, monospace;
-    font-size: 0.63rem;
-    font-weight: 600;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    color: var(--accent);
-    background: var(--accent-w);
-    border-radius: 2px;
-    padding: 0.22em 0.5em;
-    white-space: nowrap;
-  }
+	.tag {
+		font-family: 'JetBrains Mono', ui-monospace, monospace;
+		font-size: 0.63rem;
+		font-weight: 600;
+		letter-spacing: 0.1em;
+		text-transform: uppercase;
+		color: var(--accent);
+		background: var(--accent-w);
+		border-radius: 2px;
+		padding: 0.22em 0.5em;
+		white-space: nowrap;
+	}
 
-  footer {
-    font-family: "JetBrains Mono", ui-monospace, monospace;
-    font-size: 0.72rem;
-    color: var(--muted);
-    border-top: 1px solid var(--line);
-    padding-top: 1.1rem;
-    line-height: 1.8;
-  }
+	footer {
+		font-family: 'JetBrains Mono', ui-monospace, monospace;
+		font-size: 0.72rem;
+		color: var(--muted);
+		border-top: 1px solid var(--line);
+		padding-top: 1.1rem;
+		line-height: 1.8;
+	}
 
-  @media (max-width: 640px) {
-    body { font-size: 16px; padding: 0 1rem 4rem; }
-    header.masthead { padding-top: 2.5rem; }
-    ul.rules li { grid-template-columns: 1fr; gap: 0.4rem; }
-    .tag { justify-self: start; }
-  }
+	@media (max-width: 640px) {
+		body {
+			font-size: 16px;
+			padding: 0 1rem 4rem;
+		}
+		header.masthead {
+			padding-top: 2.5rem;
+		}
+		ul.rules li {
+			grid-template-columns: 1fr;
+			gap: 0.4rem;
+		}
+		.tag {
+			justify-self: start;
+		}
+	}
 </style>
 
 <div class="wrap">
+	<header class="masthead">
+		<p class="eyebrow">Veent WiFi Portal — monorepo</p>
+		<h1>Three apps, two packages, one router seam</h1>
+		<p class="standfirst">
+			A captive-portal business: guests buy WiFi time through a MikroTik hotspot, staff run
+			operations through an admin dashboard. Everything that touches the router passes through a
+			single interface.
+		</p>
+		<p class="provenance">
+			<span><b>7,517</b> nodes</span>
+			<span><b>8,068</b> edges</span>
+			<span><b>2,676</b> communities</span>
+			<span>derived from <b>graphify-out/graph.json</b></span>
+		</p>
+	</header>
 
-  <header class="masthead">
-    <p class="eyebrow">Veent WiFi Portal — monorepo</p>
-    <h1>Three apps, two packages, one router seam</h1>
-    <p class="standfirst">A captive-portal business: guests buy WiFi time through a MikroTik hotspot, staff run operations through an admin dashboard. Everything that touches the router passes through a single interface.</p>
-    <p class="provenance">
-      <span><b>7,517</b> nodes</span>
-      <span><b>8,068</b> edges</span>
-      <span><b>2,676</b> communities</span>
-      <span>derived from <b>graphify-out/graph.json</b></span>
-    </p>
-  </header>
+	<section>
+		<p class="kicker">Boundaries</p>
+		<h2>System architecture</h2>
+		<p>
+			Five bounded regions. The customer app is the only one a guest reaches; the admin app is the
+			only one that provisions the router; <code>@veent/db</code> is the sole schema authority for
+			all three apps.
+		</p>
 
-  <section>
-    <p class="kicker">Boundaries</p>
-    <h2>System architecture</h2>
-    <p>Five bounded regions. The customer app is the only one a guest reaches; the admin app is the only one that provisions the router; <code>@veent/db</code> is the sole schema authority for all three apps.</p>
-
-    <figure class="plate">
-      <div class="plate-body">
-<pre class="mermaid">
+		<figure class="plate">
+			<div class="plate-body">
+				<pre class="mermaid">
 %%{init: {'theme':'base','themeVariables':{'primaryColor':'#FFFFFF','primaryTextColor':'#17202B','primaryBorderColor':'#8C97A3','lineColor':'#6E7883','clusterBkg':'#F3F1EC','clusterBorder':'#C0BCB4','fontFamily':'ui-monospace, monospace'}}}%%
 graph TB
     G["Guest device<br/>(captive)"]
@@ -532,24 +625,38 @@ graph TB
     ADM --> DBP
     LOC --> DBP
 </pre>
-      </div>
-      <figcaption><span>Edge counts are node degrees measured in the knowledge graph</span><span class="zoom-hint">Click to zoom</span></figcaption>
-    </figure>
+			</div>
+			<figcaption>
+				<span>Edge counts are node degrees measured in the knowledge graph</span
+				><span class="zoom-hint">Click to zoom</span>
+			</figcaption>
+		</figure>
 
-    <div class="seam">
-      <span class="seam-label">The seam that matters</span>
-      <p>Every router call goes through <code>NetworkController</code> (<code>packages/core/src/integrations/network/types.ts:150</code>). Six core services import it; two factories implement it — <code>createMikrotikController</code> and <code>createStubNetworkController</code>. Swapping to the stub for tests changes one env var, not a single call site.</p>
-    </div>
-  </section>
+		<div class="seam">
+			<span class="seam-label">The seam that matters</span>
+			<p>
+				Every router call goes through
+				<code>NetworkController</code>
+				(<code>packages/core/src/integrations/network/types.ts:150</code>). Six core services import
+				it; two factories implement it — <code>createMikrotikController</code> and
+				<code>createStubNetworkController</code>. Swapping to the stub for tests changes one env
+				var, not a single call site.
+			</p>
+		</div>
+	</section>
 
-  <section>
-    <p class="kicker">Sequence</p>
-    <h2>Exactly-once crediting</h2>
-    <p>The graph surfaced this as a hyperedge: an atomic checkout claim, an idempotency key, and a twin points ledger all participating in one flow. Crediting happens on the webhook alone — the browser return never credits.</p>
+	<section>
+		<p class="kicker">Sequence</p>
+		<h2>Exactly-once crediting</h2>
+		<p>
+			The graph surfaced this as a hyperedge: an atomic checkout claim, an idempotency key, and a
+			twin points ledger all participating in one flow. Crediting happens on the webhook alone — the
+			browser return never credits.
+		</p>
 
-    <figure class="plate">
-      <div class="plate-body">
-<pre class="mermaid">
+		<figure class="plate">
+			<div class="plate-body">
+				<pre class="mermaid">
 %%{init: {'theme':'base','themeVariables':{'primaryColor':'#FFFFFF','primaryTextColor':'#17202B','primaryBorderColor':'#8C97A3','lineColor':'#6E7883','fontFamily':'ui-monospace, monospace','actorBkg':'#FFFFFF','actorBorder':'#8C97A3','actorTextColor':'#17202B','signalColor':'#4A5560','signalTextColor':'#17202B','labelBoxBkg':'#F1EDE6','labelBoxBorderColor':'#C0BCB4','noteBkgColor':'#F0E2D2','noteBorderColor':'#B4630F','noteTextColor':'#3A2A16'}}}%%
 sequenceDiagram
     autonumber
@@ -571,167 +678,258 @@ sequenceDiagram
     G->>C: browser returns to ORIGIN
     C->>S: startPaidAccessAndBindDevice
     S->>R: NetworkController.grant()
-</pre>
-      </div>
-      <figcaption><span>Steps are ordered — the numbering encodes real sequence</span><span class="zoom-hint">Click to zoom</span></figcaption>
-    </figure>
-  </section>
+</pre
+				>
+			</div>
+			<figcaption>
+				<span>Steps are ordered — the numbering encodes real sequence</span
+				><span class="zoom-hint">Click to zoom</span>
+			</figcaption>
+		</figure>
+	</section>
 
-  <section>
-    <p class="kicker">Concentration</p>
-    <h2>Where the graph is dense</h2>
-    <p>Node degree, ranked. These are the files most of the codebase reaches through — the ones where a change ripples furthest.</p>
+	<section>
+		<p class="kicker">Concentration</p>
+		<h2>Where the graph is dense</h2>
+		<p>
+			Node degree, ranked. These are the files most of the codebase reaches through — the ones where
+			a change ripples furthest.
+		</p>
 
-    <div class="scroller">
-      <table>
-        <thead>
-          <tr><th>Symbol</th><th>Package</th><th colspan="2">Degree</th></tr>
-        </thead>
-        <tbody>
-          <tr><td class="sym">queries.ts</td><td>apps/admin</td><td class="deg">88</td><td><span class="bar" style="width:88px"></span></td></tr>
-          <tr><td class="sym">db</td><td>packages/db</td><td class="deg">83</td><td><span class="bar" style="width:83px"></span></td></tr>
-          <tr><td class="sym">issues.ts</td><td>apps/admin</td><td class="deg">71</td><td><span class="bar" style="width:71px"></span></td></tr>
-          <tr><td class="sym">components/ui</td><td>apps/admin</td><td class="deg">66</td><td><span class="bar" style="width:66px"></span></td></tr>
-          <tr><td class="sym">lib/types</td><td>apps/admin</td><td class="deg">51</td><td><span class="bar" style="width:51px"></span></td></tr>
-          <tr><td class="sym">feature/index.ts</td><td>apps/admin</td><td class="deg">43</td><td><span class="bar" style="width:43px"></span></td></tr>
-          <tr><td class="sym">seed-test-data.ts</td><td>apps/admin</td><td class="deg">42</td><td><span class="bar" style="width:42px"></span></td></tr>
-          <tr><td class="sym">server/sentry</td><td>apps/admin</td><td class="deg">35</td><td><span class="bar" style="width:35px"></span></td></tr>
-          <tr><td class="sym">setup-router.ts</td><td>apps/admin</td><td class="deg">33</td><td><span class="bar" style="width:33px"></span></td></tr>
-          <tr><td class="sym">NetworkController</td><td>packages/core</td><td class="deg">33</td><td><span class="bar" style="width:33px"></span></td></tr>
-        </tbody>
-      </table>
-    </div>
-  </section>
+		<div class="scroller">
+			<table>
+				<thead>
+					<tr>
+						<th>Symbol</th>
+						<th>Package</th>
+						<th colspan="2">Degree</th>
+					</tr>
+				</thead>
+				<tbody>
+					<tr>
+						<td class="sym">queries.ts</td>
+						<td>apps/admin</td>
+						<td class="deg">88</td>
+						<td><span class="bar" style="width: 88px"></span></td>
+					</tr>
+					<tr>
+						<td class="sym">db</td>
+						<td>packages/db</td>
+						<td class="deg">83</td>
+						<td><span class="bar" style="width: 83px"></span></td>
+					</tr>
+					<tr>
+						<td class="sym">issues.ts</td>
+						<td>apps/admin</td>
+						<td class="deg">71</td>
+						<td><span class="bar" style="width: 71px"></span></td>
+					</tr>
+					<tr>
+						<td class="sym">components/ui</td>
+						<td>apps/admin</td>
+						<td class="deg">66</td>
+						<td><span class="bar" style="width: 66px"></span></td>
+					</tr>
+					<tr>
+						<td class="sym">lib/types</td>
+						<td>apps/admin</td>
+						<td class="deg">51</td>
+						<td><span class="bar" style="width: 51px"></span></td>
+					</tr>
+					<tr>
+						<td class="sym">feature/index.ts</td>
+						<td>apps/admin</td>
+						<td class="deg">43</td>
+						<td><span class="bar" style="width: 43px"></span></td>
+					</tr>
+					<tr>
+						<td class="sym">seed-test-data.ts</td>
+						<td>apps/admin</td>
+						<td class="deg">42</td>
+						<td><span class="bar" style="width: 42px"></span></td>
+					</tr>
+					<tr>
+						<td class="sym">server/sentry</td>
+						<td>apps/admin</td>
+						<td class="deg">35</td>
+						<td><span class="bar" style="width: 35px"></span></td>
+					</tr>
+					<tr>
+						<td class="sym">setup-router.ts</td>
+						<td>apps/admin</td>
+						<td class="deg">33</td>
+						<td><span class="bar" style="width: 33px"></span></td>
+					</tr>
+					<tr>
+						<td class="sym">NetworkController</td>
+						<td>packages/core</td>
+						<td class="deg">33</td>
+						<td><span class="bar" style="width: 33px"></span></td>
+					</tr>
+				</tbody>
+			</table>
+		</div>
+	</section>
 
-  <section>
-    <p class="kicker">Constraints</p>
-    <h2>Rules the architecture depends on</h2>
+	<section>
+		<p class="kicker">Constraints</p>
+		<h2>Rules the architecture depends on</h2>
 
-    <ul class="rules">
-      <li>
-        <span class="tag">Return URL</span>
-        <span>The post-payment browser return uses <code>event.url.origin</code>, driven by <code>ORIGIN</code> — which in production must be the guest-reachable, walled-gardened LAN address. The guest device is still captive at redirect time. <code>TUNNEL_ORIGIN</code> is for the server-to-server webhook only.</span>
-      </li>
-      <li>
-        <span class="tag">Auth split</span>
-        <span>Two isolated <code>betterAuth()</code> instances — customer (<code>veent-portal</code>) and admin (<code>radius-admin</code>) — each with its own secret and schema builder. They are never cross-wired.</span>
-      </li>
-      <li>
-        <span class="tag">MAC trust</span>
-        <span><code>resolveMacForUser</code> returns <code>{ mac, live }</code>. A fallback-resolved MAC is not a verified binding and must not drive auto-bind or entrench <code>last_known_mac</code>.</span>
-      </li>
-      <li>
-        <span class="tag">AP binding</span>
-        <span><code>resolveNetworkIdForMac</code> resolves the Option-82 circuit-id first, so a session on a shared hotspot bridge binds to the physical AP row rather than the bridge.</span>
-      </li>
-      <li>
-        <span class="tag">Walled garden</span>
-        <span>Three tagged groups — <code>probe</code>, <code>payment</code>, <code>portal</code> — plus a scheduler-maintained <code>gcash-auto</code> IP row. Default <code>setup:router</code> is purely additive; <code>--reconcile</code> prunes only code-owned allow rows.</span>
-      </li>
-      <li>
-        <span class="tag">Cycle</span>
-        <span>One import cycle exists: <code>IssueForm.svelte → sentry/index.ts → SentryKpis.svelte → feature/index.ts → IssueForm.svelte</code>.</span>
-      </li>
-    </ul>
-  </section>
+		<ul class="rules">
+			<li>
+				<span class="tag">Return URL</span>
+				<span
+					>The post-payment browser return uses <code>event.url.origin</code>, driven by
+					<code>ORIGIN</code> — which in production must be the guest-reachable, walled-gardened LAN
+					address. The guest device is still captive at redirect time. <code>TUNNEL_ORIGIN</code> is
+					for the server-to-server webhook only.</span
+				>
+			</li>
+			<li>
+				<span class="tag">Auth split</span>
+				<span
+					>Two isolated <code>betterAuth()</code> instances — customer (<code>veent-portal</code>)
+					and admin (<code>radius-admin</code>) — each with its own secret and schema builder. They
+					are never cross-wired.</span
+				>
+			</li>
+			<li>
+				<span class="tag">MAC trust</span>
+				<span
+					><code>resolveMacForUser</code> returns <code>{ mac, live }</code>. A fallback-resolved
+					MAC is not a verified binding and must not drive auto-bind or entrench
+					<code>last_known_mac</code>.</span
+				>
+			</li>
+			<li>
+				<span class="tag">AP binding</span>
+				<span
+					><code>resolveNetworkIdForMac</code> resolves the Option-82 circuit-id first, so a session
+					on a shared hotspot bridge binds to the physical AP row rather than the bridge.</span
+				>
+			</li>
+			<li>
+				<span class="tag">Walled garden</span>
+				<span
+					>Three tagged groups — <code>probe</code>, <code>payment</code>, <code>portal</code> —
+					plus a scheduler-maintained <code>gcash-auto</code> IP row. Default
+					<code>setup:router</code> is purely additive; <code>--reconcile</code> prunes only
+					code-owned allow rows.</span
+				>
+			</li>
+			<li>
+				<span class="tag">Cycle</span>
+				<span
+					>One import cycle exists:
+					<code
+						>IssueForm.svelte → sentry/index.ts → SentryKpis.svelte → feature/index.ts →
+						IssueForm.svelte</code
+					>.</span
+				>
+			</li>
+		</ul>
+	</section>
 
-  <footer>
-    Stack: SvelteKit 2.65 · Svelte 5 (runes) · Tailwind 4 · Drizzle 0.45 · Postgres · bun workspaces<br>
-    Diagrams and degree counts derived from the graphify knowledge graph, not hand-authored.
-  </footer>
-
+	<footer>
+		Stack: SvelteKit 2.65 · Svelte 5 (runes) · Tailwind 4 · Drizzle 0.45 · Postgres · bun
+		workspaces<br />
+		Diagrams and degree counts derived from the graphify knowledge graph, not hand-authored.
+	</footer>
 </div>
 
 <dialog class="lightbox" aria-label="Expanded diagram">
-  <div class="lightbox-bar">
-    <span class="lightbox-title"></span>
-    <span class="lightbox-tools">
-      <button type="button" data-zoom="out" aria-label="Zoom out">&minus;</button>
-      <span class="lightbox-level">100%</span>
-      <button type="button" data-zoom="in" aria-label="Zoom in">+</button>
-      <button type="button" data-zoom="fit">Fit</button>
-      <button type="button" data-close>Close</button>
-    </span>
-  </div>
-  <div class="lightbox-stage"><div class="mermaid"></div></div>
+	<div class="lightbox-bar">
+		<span class="lightbox-title"></span>
+		<span class="lightbox-tools">
+			<button type="button" data-zoom="out" aria-label="Zoom out">&minus;</button>
+			<span class="lightbox-level">100%</span>
+			<button type="button" data-zoom="in" aria-label="Zoom in">+</button>
+			<button type="button" data-zoom="fit">Fit</button>
+			<button type="button" data-close>Close</button>
+		</span>
+	</div>
+	<div class="lightbox-stage"><div class="mermaid"></div></div>
 </dialog>
 
 <script>
-  // Click a diagram to open it full-screen, the way an image opens in chat.
-  // <dialog> gives the backdrop, Escape, and focus trapping for free.
-  const box    = document.querySelector('dialog.lightbox');
-  const stage  = box.querySelector('.lightbox-stage');
-  const holder = stage.querySelector('.mermaid');
-  const title  = box.querySelector('.lightbox-title');
-  const level  = box.querySelector('.lightbox-level');
+	// Click a diagram to open it full-screen, the way an image opens in chat.
+	// <dialog> gives the backdrop, Escape, and focus trapping for free.
+	const box = document.querySelector('dialog.lightbox');
+	const stage = box.querySelector('.lightbox-stage');
+	const holder = stage.querySelector('.mermaid');
+	const title = box.querySelector('.lightbox-title');
+	const level = box.querySelector('.lightbox-level');
 
-  const STEPS = [0.6, 0.8, 1, 1.3, 1.7, 2.2, 3];
-  let step = 2;
-  let baseWidth = 0;
+	const STEPS = [0.6, 0.8, 1, 1.3, 1.7, 2.2, 3];
+	let step = 2;
+	let baseWidth = 0;
 
-  const apply = () => {
-    const svg = holder.querySelector('svg');
-    if (!svg) return;
-    svg.style.width = (baseWidth * STEPS[step]) + 'px';
-    svg.style.maxWidth = 'none';
-    level.textContent = Math.round(STEPS[step] * 100) + '%';
-  };
+	const apply = () => {
+		const svg = holder.querySelector('svg');
+		if (!svg) return;
+		svg.style.width = baseWidth * STEPS[step] + 'px';
+		svg.style.maxWidth = 'none';
+		level.textContent = Math.round(STEPS[step] * 100) + '%';
+	};
 
-  // Largest step that still fits the stage — nearest would round up and clip
-  // the diagram's right edge. Only valid once the dialog is open, since a
-  // closed <dialog> is display:none and reports zero width.
-  const fit = () => {
-    const target = (stage.clientWidth - 48) / baseWidth;
-    let i = STEPS.length - 1;
-    while (i > 0 && STEPS[i] > target) i--;
-    step = i;
-  };
+	// Largest step that still fits the stage — nearest would round up and clip
+	// the diagram's right edge. Only valid once the dialog is open, since a
+	// closed <dialog> is display:none and reports zero width.
+	const fit = () => {
+		const target = (stage.clientWidth - 48) / baseWidth;
+		let i = STEPS.length - 1;
+		while (i > 0 && STEPS[i] > target) i--;
+		step = i;
+	};
 
-  const open = (plate) => {
-    const svg = plate.querySelector('.mermaid svg');
-    if (!svg) return;
+	const open = (plate) => {
+		const svg = plate.querySelector('.mermaid svg');
+		if (!svg) return;
 
-    holder.replaceChildren(svg.cloneNode(true));
-    title.textContent = plate.closest('figure').querySelector('figcaption span').textContent;
+		holder.replaceChildren(svg.cloneNode(true));
+		title.textContent = plate.closest('figure').querySelector('figcaption span').textContent;
 
-    const copy = holder.querySelector('svg');
-    copy.removeAttribute('height');
-    // Natural width from the viewBox, so zoom levels mean the same thing
-    // regardless of how the diagram was sized inside the page.
-    const vb = (copy.getAttribute('viewBox') || '').split(/[\s,]+/);
-    baseWidth = Number(vb[2]) || copy.getBoundingClientRect().width || 900;
+		const copy = holder.querySelector('svg');
+		copy.removeAttribute('height');
+		// Natural width from the viewBox, so zoom levels mean the same thing
+		// regardless of how the diagram was sized inside the page.
+		const vb = (copy.getAttribute('viewBox') || '').split(/[\s,]+/);
+		baseWidth = Number(vb[2]) || copy.getBoundingClientRect().width || 900;
 
-    box.showModal();
-    fit();
-    apply();
-  };
+		box.showModal();
+		fit();
+		apply();
+	};
 
-  document.querySelectorAll('.plate-body').forEach((plate) => {
-    plate.tabIndex = 0;
-    plate.setAttribute('role', 'button');
-    plate.setAttribute('aria-label', 'Open diagram full screen');
-    plate.addEventListener('click', () => open(plate));
-    plate.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(plate); }
-    });
-  });
+	document.querySelectorAll('.plate-body').forEach((plate) => {
+		plate.tabIndex = 0;
+		plate.setAttribute('role', 'button');
+		plate.setAttribute('aria-label', 'Open diagram full screen');
+		plate.addEventListener('click', () => open(plate));
+		plate.addEventListener('keydown', (e) => {
+			if (e.key === 'Enter' || e.key === ' ') {
+				e.preventDefault();
+				open(plate);
+			}
+		});
+	});
 
-  box.addEventListener('click', (e) => {
-    const action = e.target.closest('[data-zoom], [data-close]');
-    if (!action) {
-      // Clicking the backdrop closes; the dialog fills its own box, so a
-      // click landing on the dialog element itself is outside the content.
-      if (e.target === box) box.close();
-      return;
-    }
-    if (action.hasAttribute('data-close')) return box.close();
+	box.addEventListener('click', (e) => {
+		const action = e.target.closest('[data-zoom], [data-close]');
+		if (!action) {
+			// Clicking the backdrop closes; the dialog fills its own box, so a
+			// click landing on the dialog element itself is outside the content.
+			if (e.target === box) box.close();
+			return;
+		}
+		if (action.hasAttribute('data-close')) return box.close();
 
-    const dir = action.dataset.zoom;
-    if (dir === 'in')  step = Math.min(step + 1, STEPS.length - 1);
-    if (dir === 'out') step = Math.max(step - 1, 0);
-    if (dir === 'fit') fit();
-    apply();
-  });
+		const dir = action.dataset.zoom;
+		if (dir === 'in') step = Math.min(step + 1, STEPS.length - 1);
+		if (dir === 'out') step = Math.max(step - 1, 0);
+		if (dir === 'fit') fit();
+		apply();
+	});
 
-  box.addEventListener('close', () => holder.replaceChildren());
+	box.addEventListener('close', () => holder.replaceChildren());
 </script>

@@ -180,7 +180,7 @@ export async function listUsers(db: DB, now: Date = new Date()): Promise<AdminUs
 			devices,
 			timeLeft: timeLeftMs != null ? formatTimeLeft(timeLeftMs) : null,
 			timeLeftMs,
-			location: online ? ([...(networksByUser.get(r.id) ?? [])].join(', ') || null) : null
+			location: online ? [...(networksByUser.get(r.id) ?? [])].join(', ') || null : null
 		};
 	});
 }
@@ -390,7 +390,9 @@ export async function listNetworkHealth(db: DB, now: Date = new Date()): Promise
 	const counts = await db
 		.select({ networkId: networkSessions.networkId, n: sql<number>`count(*)::int` })
 		.from(networkSessions)
-		.where(and(eq(networkSessions.status, SESSION_STATUS.active), gt(networkSessions.expiresAt, now)))
+		.where(
+			and(eq(networkSessions.status, SESSION_STATUS.active), gt(networkSessions.expiresAt, now))
+		)
 		.groupBy(networkSessions.networkId);
 	const activeByNetwork = new Map<number, number>();
 	for (const c of counts) if (c.networkId != null) activeByNetwork.set(c.networkId, c.n);
@@ -546,7 +548,14 @@ export async function clusterMembers(
 	db: DB,
 	name: string,
 	excludeId: number | null
-): Promise<{ latitude: string | null; longitude: string | null; rangeMeters: number | null; model: string | null }[]> {
+): Promise<
+	{
+		latitude: string | null;
+		longitude: string | null;
+		rangeMeters: number | null;
+		model: string | null;
+	}[]
+> {
 	return db
 		.select({
 			latitude: networkHealth.latitude,
@@ -568,11 +577,7 @@ export async function clusterMembers(
 /** Name (or clear) the overlap cluster: writes the same label to every current member.
  * Clusters have no stable id — the name rides on the member rows (see schema). No-op on
  * an empty id list. */
-export async function setClusterName(
-	db: DB,
-	ids: number[],
-	name: string | null
-): Promise<void> {
+export async function setClusterName(db: DB, ids: number[], name: string | null): Promise<void> {
 	if (ids.length === 0) return;
 	await db.update(networkHealth).set({ clusterName: name }).where(inArray(networkHealth.id, ids));
 }
@@ -783,7 +788,10 @@ export async function listTransactions(
 	]);
 
 	// Durable AP labels resolved once per unique circuit-id on this page (not per row).
-	const circuitLabels = await resolveApCircuitLabels(db, rows.map((r) => r.apCircuitId));
+	const circuitLabels = await resolveApCircuitLabels(
+		db,
+		rows.map((r) => r.apCircuitId)
+	);
 
 	return {
 		total: counted?.n ?? 0,
@@ -996,104 +1004,103 @@ export async function listUnifiedTransactions(
 			_apCircuitId: string | null;
 			_apNameSnapshot: string | null;
 		}
-	> =
-		[
-			...maya.map((r) => ({
-				kind: 'maya-payment' as const,
-				id: r.id,
-				createdAt: '',
-				who: r.buyerName || r.userName || '—',
-				apCircuitLabel: '',
-				amount: peso(Number(r.amount)),
-				detail: r.packageName ?? 'Maya payment',
-				status: r.status,
-				statusTone: statusTone(r.status),
-				receiptNo: r.receiptNo,
-				buyerEmail: r.buyerEmail,
-				fundSourceType: fundSourceLabel(r.fundSourceType),
-				fundSourceMasked: r.fundSourceMasked,
-				packageName: r.packageName,
-				_createdAt: r.createdAt,
-				_apCircuitId: r.apCircuitId,
-				_apNameSnapshot: r.apNameSnapshot
-			})),
-			...topups.map((r) => ({
-				kind: 'credit-topup' as const,
-				id: `credit-${r.id}`,
-				createdAt: '',
-				who: r.who ?? '—',
-				apCircuitLabel: '',
-				amount: peso(Number(r.amount)),
-				detail: 'Credit top-up',
-				status: null,
-				statusTone: null,
-				receiptNo: null,
-				buyerEmail: null,
-				fundSourceType: null,
-				fundSourceMasked: null,
-				packageName: null,
-				_createdAt: r.createdAt,
-				_apCircuitId: r.apCircuitId,
-				_apNameSnapshot: r.apNameSnapshot
-			})),
-			...creditSpends.map((r) => ({
-				kind: 'credit-spend' as const,
-				id: `credit-${r.id}`,
-				createdAt: '',
-				who: r.who ?? '—',
-				apCircuitLabel: '',
-				amount: peso(Math.abs(Number(r.amount))),
-				detail: 'Credit spend',
-				status: null,
-				statusTone: null,
-				receiptNo: null,
-				buyerEmail: null,
-				fundSourceType: null,
-				fundSourceMasked: null,
-				packageName: null,
-				_createdAt: r.createdAt,
-				_apCircuitId: r.apCircuitId,
-				_apNameSnapshot: r.apNameSnapshot
-			})),
-			...pointsSpends.map((r) => ({
-				kind: 'points-spend' as const,
-				id: `points-${r.id}`,
-				createdAt: '',
-				who: r.who ?? '—',
-				apCircuitLabel: '',
-				amount: null,
-				detail: `${Math.abs(r.amount)} points`,
-				status: null,
-				statusTone: null,
-				receiptNo: null,
-				buyerEmail: null,
-				fundSourceType: null,
-				fundSourceMasked: null,
-				packageName: null,
-				_createdAt: r.createdAt,
-				_apCircuitId: r.apCircuitId,
-				_apNameSnapshot: r.apNameSnapshot
-			})),
-			...freeTime.map((r) => ({
-				kind: 'free-time' as const,
-				id: `session-${r.id}`,
-				createdAt: '',
-				who: r.who ?? '—',
-				apCircuitLabel: '',
-				amount: null,
-				detail: 'Free time',
-				status: null,
-				statusTone: null,
-				receiptNo: null,
-				buyerEmail: null,
-				fundSourceType: null,
-				fundSourceMasked: null,
-				packageName: null,
-				_createdAt: r.createdAt,
-				_apCircuitId: r.apCircuitId,
-				_apNameSnapshot: r.apNameSnapshot
-			}))
-		];
+	> = [
+		...maya.map((r) => ({
+			kind: 'maya-payment' as const,
+			id: r.id,
+			createdAt: '',
+			who: r.buyerName || r.userName || '—',
+			apCircuitLabel: '',
+			amount: peso(Number(r.amount)),
+			detail: r.packageName ?? 'Maya payment',
+			status: r.status,
+			statusTone: statusTone(r.status),
+			receiptNo: r.receiptNo,
+			buyerEmail: r.buyerEmail,
+			fundSourceType: fundSourceLabel(r.fundSourceType),
+			fundSourceMasked: r.fundSourceMasked,
+			packageName: r.packageName,
+			_createdAt: r.createdAt,
+			_apCircuitId: r.apCircuitId,
+			_apNameSnapshot: r.apNameSnapshot
+		})),
+		...topups.map((r) => ({
+			kind: 'credit-topup' as const,
+			id: `credit-${r.id}`,
+			createdAt: '',
+			who: r.who ?? '—',
+			apCircuitLabel: '',
+			amount: peso(Number(r.amount)),
+			detail: 'Credit top-up',
+			status: null,
+			statusTone: null,
+			receiptNo: null,
+			buyerEmail: null,
+			fundSourceType: null,
+			fundSourceMasked: null,
+			packageName: null,
+			_createdAt: r.createdAt,
+			_apCircuitId: r.apCircuitId,
+			_apNameSnapshot: r.apNameSnapshot
+		})),
+		...creditSpends.map((r) => ({
+			kind: 'credit-spend' as const,
+			id: `credit-${r.id}`,
+			createdAt: '',
+			who: r.who ?? '—',
+			apCircuitLabel: '',
+			amount: peso(Math.abs(Number(r.amount))),
+			detail: 'Credit spend',
+			status: null,
+			statusTone: null,
+			receiptNo: null,
+			buyerEmail: null,
+			fundSourceType: null,
+			fundSourceMasked: null,
+			packageName: null,
+			_createdAt: r.createdAt,
+			_apCircuitId: r.apCircuitId,
+			_apNameSnapshot: r.apNameSnapshot
+		})),
+		...pointsSpends.map((r) => ({
+			kind: 'points-spend' as const,
+			id: `points-${r.id}`,
+			createdAt: '',
+			who: r.who ?? '—',
+			apCircuitLabel: '',
+			amount: null,
+			detail: `${Math.abs(r.amount)} points`,
+			status: null,
+			statusTone: null,
+			receiptNo: null,
+			buyerEmail: null,
+			fundSourceType: null,
+			fundSourceMasked: null,
+			packageName: null,
+			_createdAt: r.createdAt,
+			_apCircuitId: r.apCircuitId,
+			_apNameSnapshot: r.apNameSnapshot
+		})),
+		...freeTime.map((r) => ({
+			kind: 'free-time' as const,
+			id: `session-${r.id}`,
+			createdAt: '',
+			who: r.who ?? '—',
+			apCircuitLabel: '',
+			amount: null,
+			detail: 'Free time',
+			status: null,
+			statusTone: null,
+			receiptNo: null,
+			buyerEmail: null,
+			fundSourceType: null,
+			fundSourceMasked: null,
+			packageName: null,
+			_createdAt: r.createdAt,
+			_apCircuitId: r.apCircuitId,
+			_apNameSnapshot: r.apNameSnapshot
+		}))
+	];
 
 	combined.sort((a, b) => b._createdAt.getTime() - a._createdAt.getTime());
 	const top = combined.slice(0, pageSize);

@@ -15,7 +15,9 @@ describe('isNetworkHealthStale boundary', () => {
 			false
 		);
 		// Exactly at the ceiling is NOT stale (strict >).
-		expect(isNetworkHealthStale(new Date(now.getTime() - NETWORK_HEALTH_STALE_MS), now)).toBe(false);
+		expect(isNetworkHealthStale(new Date(now.getTime() - NETWORK_HEALTH_STALE_MS), now)).toBe(
+			false
+		);
 	});
 
 	it('is stale one ms past the ceiling', () => {

@@ -8,7 +8,7 @@
 > Mbps in the UI / Kbps in storage. Feasibility investigated 2026-07-01.
 >
 > Scope: admin-configurable aggregate up/down speed cap **per AP/hotspot interface**,
-> enforced on the MikroTik router. This is deliberately *not* per-user or per-plan
+> enforced on the MikroTik router. This is deliberately _not_ per-user or per-plan
 > (see "Why per-hotspot" below).
 >
 > **What shipped vs. this plan:** implemented as written, with one refinement — the caps and
@@ -107,11 +107,11 @@ Behaviour (idempotent, mirroring `provisionWalledGarden`):
 
 - Resolve a **queue target**. Two options — **default to subnet-target** for correct up/down
   semantics, fall back to interface:
-  - *Client subnet/pool* (preferred): resolve the hotspot's client network from
+  - _Client subnet/pool_ (preferred): resolve the hotspot's client network from
     `/ip/hotspot/print` → its `address-pool` / the interface's IP network, and target the
     CIDR (e.g. `10.210.x.0/24`). Then `max-limit=<down>/<up>` reads intuitively as
     download-to-client / upload-from-client.
-  - *Interface* (fallback): `target=<interfaceName>`. Simpler but up/down are **relative to
+  - _Interface_ (fallback): `target=<interfaceName>`. Simpler but up/down are **relative to
     the interface**, i.e. client-download = interface-upload — document this if used.
 - Find our existing queue by comment tag; `set` it if present, `add` if not, `remove` if both
   limits are null.
@@ -161,15 +161,15 @@ suffixes). Convert Kbps → the router's units carefully and unit-test the forma
 
 ## Files to touch
 
-| Area | File |
-| --- | --- |
-| Schema | `packages/db/src/schema/admin.ts` (network_health cols) + new migration in `packages/db/drizzle/` |
-| Controller iface | `packages/core/src/integrations/network/types.ts` (optional `applyInterfaceLimit`) |
-| MikroTik impl | `packages/core/src/integrations/network/mikrotik.ts` (new method + subnet resolver + `max-limit` formatter) |
-| Stub impl | `packages/core/src/integrations/network/stub.ts` (no-op) |
-| Admin server | Networks AP-edit action (`apps/admin/src/routes/(app)/networks/…` + `apps/admin/src/lib/server/network.ts`) |
-| Admin UI | Networks AP editor `.svelte` (two speed fields) |
-| Tests | `max-limit` unit conversion; idempotent add/set/remove logic |
+| Area             | File                                                                                                        |
+| ---------------- | ----------------------------------------------------------------------------------------------------------- |
+| Schema           | `packages/db/src/schema/admin.ts` (network_health cols) + new migration in `packages/db/drizzle/`           |
+| Controller iface | `packages/core/src/integrations/network/types.ts` (optional `applyInterfaceLimit`)                          |
+| MikroTik impl    | `packages/core/src/integrations/network/mikrotik.ts` (new method + subnet resolver + `max-limit` formatter) |
+| Stub impl        | `packages/core/src/integrations/network/stub.ts` (no-op)                                                    |
+| Admin server     | Networks AP-edit action (`apps/admin/src/routes/(app)/networks/…` + `apps/admin/src/lib/server/network.ts`) |
+| Admin UI         | Networks AP editor `.svelte` (two speed fields)                                                             |
+| Tests            | `max-limit` unit conversion; idempotent add/set/remove logic                                                |
 
 ## Explicitly out of scope (v1)
 

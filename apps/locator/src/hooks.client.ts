@@ -17,7 +17,8 @@ if (dsn) {
 		...sentryOptions({
 			dsn,
 			app: 'locator',
-			environment: nonEmptyEnv(env.PUBLIC_SENTRY_ENVIRONMENT) ?? (dev ? 'development' : 'production'),
+			environment:
+				nonEmptyEnv(env.PUBLIC_SENTRY_ENVIRONMENT) ?? (dev ? 'development' : 'production'),
 			release: nonEmptyEnv(env.PUBLIC_SENTRY_RELEASE),
 			tracesSampleRate: dev ? 1.0 : Number.isFinite(rate) ? rate : 0.2
 		}),

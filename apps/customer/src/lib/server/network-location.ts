@@ -315,7 +315,11 @@ async function apRowForCircuitId(
 export async function resolveCheckoutLocation(
 	event: RequestEvent,
 	userId: string
-): Promise<{ networkId: number | null; apCircuitId: string | null; apNameSnapshot: string | null }> {
+): Promise<{
+	networkId: number | null;
+	apCircuitId: string | null;
+	apNameSnapshot: string | null;
+}> {
 	const ctx = getPortalContext(event);
 	const mac = await resolveMac(event);
 
@@ -331,7 +335,11 @@ export async function resolveCheckoutLocation(
 			const ap = await apRowForCircuitId(circuitId);
 			if (ap) {
 				return {
-					networkId: logResolved('device-circuit-id', { mac: maskMac(mac), circuitId }, ap.networkId),
+					networkId: logResolved(
+						'device-circuit-id',
+						{ mac: maskMac(mac), circuitId },
+						ap.networkId
+					),
 					apCircuitId: ap.apCircuitId,
 					apNameSnapshot: ap.apNameSnapshot
 				};

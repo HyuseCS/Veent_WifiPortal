@@ -17,7 +17,12 @@ describe('mapIssue', () => {
 			lastSeen: '2026-07-01T00:00:00Z',
 			status: 'unresolved',
 			permalink: 'https://sentry.io/issues/42/',
-			stats: { '14d': [[1719792000, '3'], [1719878400, 5]] },
+			stats: {
+				'14d': [
+					[1719792000, '3'],
+					[1719878400, 5]
+				]
+			},
 			extra: 'ignored'
 		});
 		expect(issue.count).toBe(1234);
@@ -61,7 +66,17 @@ describe('mapIssue', () => {
 
 describe('mapTrend', () => {
 	it('keeps only the count of each [timestamp, count] bucket, coercing strings', () => {
-		expect(mapTrend({ '24h': [[1, '10'], [2, 20]] }, '24h')).toEqual([10, 20]);
+		expect(
+			mapTrend(
+				{
+					'24h': [
+						[1, '10'],
+						[2, 20]
+					]
+				},
+				'24h'
+			)
+		).toEqual([10, 20]);
 	});
 
 	it('degrades a missing period or ragged payload to [] without throwing', () => {
@@ -98,12 +113,20 @@ describe('mapEventDetail', () => {
 					}
 				}
 			],
-			tags: [{ key: 'environment', value: 'production' }, { key: '', value: 'dropped' }]
+			tags: [
+				{ key: 'environment', value: 'production' },
+				{ key: '', value: 'dropped' }
+			]
 		});
 		expect(detail.type).toBe('TypeError'); // last value, not the cause
 		expect(detail.value).toBe("cannot read 'id' of null");
 		expect(detail.frames).toHaveLength(2);
-		expect(detail.frames[0]).toEqual({ filename: 'lib/db.ts', function: 'query', lineNo: 11, inApp: true });
+		expect(detail.frames[0]).toEqual({
+			filename: 'lib/db.ts',
+			function: 'query',
+			lineNo: 11,
+			inApp: true
+		});
 		expect(detail.frames[1].lineNo).toBeNull();
 		expect(detail.tags).toEqual([{ key: 'environment', value: 'production' }]); // keyless tag dropped
 	});
@@ -118,19 +141,32 @@ describe('mapEventDetail', () => {
 });
 
 describe('validateSentrySnapshot', () => {
-	const ok = { issueId: '42', shortId: 'RADIUS-3F', permalink: 'https://sentry.io/issues/42/', title: 'Boom' };
+	const ok = {
+		issueId: '42',
+		shortId: 'RADIUS-3F',
+		permalink: 'https://sentry.io/issues/42/',
+		title: 'Boom'
+	};
 
 	it('accepts a well-formed snapshot and returns trimmed values', () => {
-		expect(validateSentrySnapshot({ ...ok, title: '  Boom  ', permalink: ' https://sentry.io/issues/42/ ' })).toEqual(ok);
+		expect(
+			validateSentrySnapshot({
+				...ok,
+				title: '  Boom  ',
+				permalink: ' https://sentry.io/issues/42/ '
+			})
+		).toEqual(ok);
 	});
 
 	it('accepts an empty permalink and empty shortId', () => {
-		expect(validateSentrySnapshot({ issueId: '7', shortId: '', permalink: '', title: '' })).toEqual({
-			issueId: '7',
-			shortId: '',
-			permalink: '',
-			title: ''
-		});
+		expect(validateSentrySnapshot({ issueId: '7', shortId: '', permalink: '', title: '' })).toEqual(
+			{
+				issueId: '7',
+				shortId: '',
+				permalink: '',
+				title: ''
+			}
+		);
 	});
 
 	it('rejects a javascript: / non-https permalink (H1 stored-XSS guard)', () => {
@@ -165,7 +201,16 @@ describe('deriveKpis', () => {
 	it('sums 14d sparkline events + users and caps open issues at "25+"', () => {
 		// Each issue contributes 3 events (1+2) over 14d and 2 users → 75 events, 50 users.
 		const issues = Array.from({ length: 25 }, (_, i) =>
-			mapIssue({ id: String(i), userCount: 2, stats: { '14d': [[1, 1], [2, 2]] } })
+			mapIssue({
+				id: String(i),
+				userCount: 2,
+				stats: {
+					'14d': [
+						[1, 1],
+						[2, 2]
+					]
+				}
+			})
 		);
 		const kpis = deriveKpis(issues);
 		expect(kpis.find((k) => k.label === 'Open issues')?.value).toBe('25+');

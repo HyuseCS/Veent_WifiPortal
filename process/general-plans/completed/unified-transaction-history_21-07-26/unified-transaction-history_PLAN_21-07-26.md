@@ -34,10 +34,11 @@ free-time grants, capped at `limit`, no period filter, `GrantAttributionRow[]`) 
 renders them as two disconnected UI blocks (a `<TransactionsTable>` plus a collapsed `<details>`
 grant-attribution table). This plan replaces that split with **one new query function,
 `listUnifiedTransactions`**, that merges Maya payments + standalone credit top-ups + credit spends
-+ points spends + free-time grants into a single superset-row list, applies the period filter
-uniformly, dedupes Maya-mirrored top-ups by the shared payment-id join key, and annotates
-points-earn as a badge on the originating Maya row (never a standalone row). The page collapses to
-one table. CSV export gains a `?scope=unified|maya` toggle (default unchanged).
+
+- points spends + free-time grants into a single superset-row list, applies the period filter
+  uniformly, dedupes Maya-mirrored top-ups by the shared payment-id join key, and annotates
+  points-earn as a badge on the originating Maya row (never a standalone row). The page collapses to
+  one table. CSV export gains a `?scope=unified|maya` toggle (default unchanged).
 
 ## Goals
 
@@ -54,23 +55,23 @@ type, the Finance transactions page + table component, the CSV export scope togg
 
 Out of scope (verbatim from SPEC): KPI/revenue-by-AP/revenue-by-period/payment-method-breakdown
 math; the inherited `?period=` timezone bug; any schema/migration; making AP attribution
-"server-authoritative"; the locator/customer apps; any change to how a purchase/grant is *written*
+"server-authoritative"; the locator/customer apps; any change to how a purchase/grant is _written_
 (`addCreditsTx`, `earnPointsTx`, `reconcilePayments.ts`, free-time grant logic).
 
 ---
 
 ## Touchpoints
 
-| File | Change |
-|---|---|
-| `apps/admin/src/lib/server/queries.ts` | Add `listUnifiedTransactions` (new function, placed after `listRecentGrantAttribution`, ~line 866). Delete `listRecentGrantAttribution` (lines 780-866) — fully superseded, zero other consumers (confirmed by VALIDATE: `grep -rn "import.*queries['\"]"` across `apps/admin/src` shows exactly one non-spec consumer, `+page.server.ts`). Reuse `resolveApCircuitLabels`/`apCircuitLabelOf` (lines 49-67) and `peso` (line 68) AS-IS — these are already generic (take a circuit-id array / a number), no changes needed. Do **NOT** literally call the existing `rangeWhere` (line 572) for the 4 non-Maya source queries — see "Range predicate — do not literally reuse `rangeWhere()`" below (VALIDATE finding, corrected here). Do NOT touch `listTransactions` (lines 711-778) or any KPI/breakdown function (598-708). |
-| `apps/admin/src/lib/types.ts` | Replace `TransactionRow` (lines 239-261) + `GrantAttributionRow` (lines 265-276) with one superset `UnifiedTransactionRow` interface. Keep `ApRevenueSlice`/`Kpi`/`PaymentMethodSlice`/`RevenuePoint` untouched. |
-| `apps/admin/src/routes/(app)/finance/transactions/+page.server.ts` | Replace the `listTransactions` + `listRecentGrantAttribution` dual-load with one `listUnifiedTransactions(db, { from, to, page: 1, pageSize: 50 })` call. |
-| `apps/admin/src/routes/(app)/finance/transactions/+page.svelte` | Remove the `<details>` grant-attribution block; render one `<TransactionsTable>` over the unified rows. |
-| `apps/admin/src/lib/components/feature/TransactionsTable.svelte` | Render the superset row shape: existing Maya columns (status/method/receipt) show `n/a` for non-Maya rows; add a `Kind` column/label; render `pointsEarned` as a small badge in the Amount cell when present. **Null-safety requirement (VALIDATE finding):** the current sort comparators (`amountNum(a.amount)`, `a.fundSourceType.localeCompare(...)`, `toneRank[a.statusTone]`, `a.buyerName.localeCompare(...)`) and the search filter all assume non-null strings — in `UnifiedTransactionRow`, `amount`/`status`/`statusTone`/`fundSourceType` are `null` on non-Maya-money kinds (points-spend, free-time, credit-spend/topup rows have `amount` money-formatted but `status`/`statusTone`/`fundSourceType` null). Every comparator and the search-filter template string MUST null-guard (e.g. `a.amount ? amountNum(a.amount) : 0`, `(a.fundSourceType ?? '').localeCompare(...)`, `a.statusTone ? toneRank[a.statusTone] : -1`) — an unguarded `.localeCompare`/array-index on `null` throws and crashes the Finance page's clickable-header sort, which is browser-visible and would break AC1/AC2 rendering. Also rename `buyerName` references to `who` (the unified row's field name) throughout the component. |
-| `apps/admin/src/routes/(app)/finance/export/+server.ts` | Add `?scope=unified|maya` (default `maya`, validated against the 2-value allowlist — same defensive pattern as `parsePeriod`). `scope=unified` calls `listUnifiedTransactions`; add a `Kind` CSV column; Maya-only columns render `''` for non-Maya rows. |
-| `apps/admin/src/routes/(app)/finance/transactions/+page.svelte` (or a shared Finance header control) | Add a `ui/Select` (or toggle) next to the existing Export link, wired to `?scope=`. |
-| `apps/admin/src/lib/server/queries.spec.ts` | Delete the 2 existing `listRecentGrantAttribution` tests (lines 39-75) — migrate their attribution-label assertions into new `listUnifiedTransactions` tests. Add new tests for AC1–AC5, AC8, and the AC3 negative-control dedupe test. |
+| File                                                                                                 | Change                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `apps/admin/src/lib/server/queries.ts`                                                               | Add `listUnifiedTransactions` (new function, placed after `listRecentGrantAttribution`, ~line 866). Delete `listRecentGrantAttribution` (lines 780-866) — fully superseded, zero other consumers (confirmed by VALIDATE: `grep -rn "import.*queries['\"]"` across `apps/admin/src` shows exactly one non-spec consumer, `+page.server.ts`). Reuse `resolveApCircuitLabels`/`apCircuitLabelOf` (lines 49-67) and `peso` (line 68) AS-IS — these are already generic (take a circuit-id array / a number), no changes needed. Do **NOT** literally call the existing `rangeWhere` (line 572) for the 4 non-Maya source queries — see "Range predicate — do not literally reuse `rangeWhere()`" below (VALIDATE finding, corrected here). Do NOT touch `listTransactions` (lines 711-778) or any KPI/breakdown function (598-708).                                                                                                                                                                                                                                                                                                                                                                                                |
+| `apps/admin/src/lib/types.ts`                                                                        | Replace `TransactionRow` (lines 239-261) + `GrantAttributionRow` (lines 265-276) with one superset `UnifiedTransactionRow` interface. Keep `ApRevenueSlice`/`Kpi`/`PaymentMethodSlice`/`RevenuePoint` untouched.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| `apps/admin/src/routes/(app)/finance/transactions/+page.server.ts`                                   | Replace the `listTransactions` + `listRecentGrantAttribution` dual-load with one `listUnifiedTransactions(db, { from, to, page: 1, pageSize: 50 })` call.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| `apps/admin/src/routes/(app)/finance/transactions/+page.svelte`                                      | Remove the `<details>` grant-attribution block; render one `<TransactionsTable>` over the unified rows.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `apps/admin/src/lib/components/feature/TransactionsTable.svelte`                                     | Render the superset row shape: existing Maya columns (status/method/receipt) show `n/a` for non-Maya rows; add a `Kind` column/label; render `pointsEarned` as a small badge in the Amount cell when present. **Null-safety requirement (VALIDATE finding):** the current sort comparators (`amountNum(a.amount)`, `a.fundSourceType.localeCompare(...)`, `toneRank[a.statusTone]`, `a.buyerName.localeCompare(...)`) and the search filter all assume non-null strings — in `UnifiedTransactionRow`, `amount`/`status`/`statusTone`/`fundSourceType` are `null` on non-Maya-money kinds (points-spend, free-time, credit-spend/topup rows have `amount` money-formatted but `status`/`statusTone`/`fundSourceType` null). Every comparator and the search-filter template string MUST null-guard (e.g. `a.amount ? amountNum(a.amount) : 0`, `(a.fundSourceType ?? '').localeCompare(...)`, `a.statusTone ? toneRank[a.statusTone] : -1`) — an unguarded `.localeCompare`/array-index on `null` throws and crashes the Finance page's clickable-header sort, which is browser-visible and would break AC1/AC2 rendering. Also rename `buyerName` references to `who` (the unified row's field name) throughout the component. |
+| `apps/admin/src/routes/(app)/finance/export/+server.ts`                                              | Add `?scope=unified                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | maya`(default`maya`, validated against the 2-value allowlist — same defensive pattern as `parsePeriod`). `scope=unified`calls`listUnifiedTransactions`; add a `Kind`CSV column; Maya-only columns render`''` for non-Maya rows. |
+| `apps/admin/src/routes/(app)/finance/transactions/+page.svelte` (or a shared Finance header control) | Add a `ui/Select` (or toggle) next to the existing Export link, wired to `?scope=`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `apps/admin/src/lib/server/queries.spec.ts`                                                          | Delete the 2 existing `listRecentGrantAttribution` tests (lines 39-75) — migrate their attribution-label assertions into new `listUnifiedTransactions` tests. Add new tests for AC1–AC5, AC8, and the AC3 negative-control dedupe test.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 
 ## Public Contracts
 
@@ -121,16 +122,16 @@ blank.
 ### Source queries + merge algorithm
 
 Five parallel queries via `Promise.all`, each capped at `pageSize`, newest-first, each applying the
-SAME range-filter *style* (see the range-predicate note directly below — do not literally call
+SAME range-filter _style_ (see the range-predicate note directly below — do not literally call
 `rangeWhere()` outside the Maya query):
 
 1. **Maya payments** — reuse the existing `paymentTransactions` query shape from `listTransactions`
    (status/receipt/buyerEmail/packageName/fundSource included), `WHERE user_id IS NOT NULL AND
-   [range]` (this is the one source that DOES call the existing `rangeWhere()` as-is — it's already
+[range]` (this is the one source that DOES call the existing `rangeWhere()` as-is — it's already
    `paymentTransactions`-shaped), `ORDER BY created_at DESC LIMIT pageSize`.
 2. **Standalone credit top-ups** — `creditLedger WHERE type = LEDGER_TYPE.topup AND [range] AND NOT
-   EXISTS (SELECT 1 FROM payment_transactions pt WHERE pt.id =
-   credit_ledger.external_transaction_id)` — the anti-join is the AC3 dedupe, join key confirmed at
+EXISTS (SELECT 1 FROM payment_transactions pt WHERE pt.id =
+credit_ledger.external_transaction_id)` — the anti-join is the AC3 dedupe, join key confirmed at
    VALIDATE (see "Dedupe verification note" below — this predicate is now CONFIRMED, not just
    flagged). A `topup` row with `external_transaction_id IS NULL` always passes the `NOT EXISTS` (no
    match) → always shown (AC4).
@@ -190,9 +191,11 @@ SAME value: `reconcilePayments.ts:46` inserts `payment_transactions.id = evt.ext
 args.externalTransactionId })` (same `evt.externalTransactionId`, threaded through
 `claimAndCredit`/webhook and reconcile-poll call sites at `:392`/`:472`); `reconcilePayments.ts:304-310`
 calls `earnPointsTx` with the identical value. **The exact anti-join predicate is:**
+
 ```sql
 NOT EXISTS (SELECT 1 FROM payment_transactions pt WHERE pt.id = credit_ledger.external_transaction_id)
 ```
+
 (join on `payment_transactions.id`, never a same-named column — `payment_transactions` has none).
 This is now a confirmed fact, not an open verification item — EXECUTE implements it as specified
 above without re-deriving it, though re-reading `reconcilePayments.ts:290-310` before writing the
@@ -207,7 +210,7 @@ query remains good practice per checklist step 1.
   CSV header gains a leading `Kind` column; Maya-only columns (`Status`, `Fund Source`, `Masked`,
   `Receipt No`, `Email`, `Package`) render `''` for non-Maya rows via `?? ''`.
 - UI: a `ui/Select` (2 options: "Maya payments" / "All activity") next to the existing `<a
-  download>` Export link, updating the link's `?scope=` query param (no new route).
+download>` Export link, updating the link's `?scope=` query param (no new route).
 
 ---
 
@@ -245,21 +248,21 @@ need both an agent browser pass AND a human verification handoff).
    `packages/db/src/schema/customer.ts` credit_ledger/points_ledger/payment_transactions column
    definitions. **Already confirmed at VALIDATE (21-07-26) — see "Dedupe verification note" above.**
    Re-reading is a good sanity check but the predicate is locked: `NOT EXISTS (SELECT 1 FROM
-   payment_transactions pt WHERE pt.id = credit_ledger.external_transaction_id)`.
+payment_transactions pt WHERE pt.id = credit_ledger.external_transaction_id)`.
 2. Add `UnifiedTransactionRow` interface to `apps/admin/src/lib/types.ts`, replacing `TransactionRow`
-   + `GrantAttributionRow`. Update the `import type {...} from '$lib/types'` list in `queries.ts`.
+   - `GrantAttributionRow`. Update the `import type {...} from '$lib/types'` list in `queries.ts`.
 3. Write `listUnifiedTransactions(db, opts)` in `apps/admin/src/lib/server/queries.ts`:
    a. 5 parallel `Promise.all` list queries (Maya payments, standalone topups via anti-join, credit
-      spends, points spends, free-time), each `LIMIT pageSize`. The Maya query applies the existing
-      `rangeWhere(opts)` as-is; the other 4 apply their OWN inline range condition against their own
-      timestamp column (`creditLedger.createdAt`, `pointsLedger.createdAt`, `networkSessions.startedAt`)
-      — do NOT call `rangeWhere()` for these 4 (see "Range predicate" note above).
+   spends, points spends, free-time), each `LIMIT pageSize`. The Maya query applies the existing
+   `rangeWhere(opts)` as-is; the other 4 apply their OWN inline range condition against their own
+   timestamp column (`creditLedger.createdAt`, `pointsLedger.createdAt`, `networkSessions.startedAt`)
+   — do NOT call `rangeWhere()` for these 4 (see "Range predicate" note above).
    b. 5 parallel `count(*)` queries with matching predicates for `total`.
    c. 1 points-earn query building the `Map<id, number>` badge lookup.
    d. Map each source's rows into `UnifiedTransactionRow` (explicit `null` for inapplicable fields).
    e. Merge, sort desc by `createdAt`, slice to `pageSize`, attach `pointsEarned` badges.
    f. Batch-resolve AP labels via existing `resolveApCircuitLabels`/`apCircuitLabelOf` across ALL
-      merged rows' `apCircuitId`s in one call (not per-source) to avoid N+1.
+   merged rows' `apCircuitId`s in one call (not per-source) to avoid N+1.
 4. Delete `listRecentGrantAttribution` (queries.ts:780-866).
 5. Update `apps/admin/src/routes/(app)/finance/transactions/+page.server.ts`: replace the
    `listTransactions` + `listRecentGrantAttribution` dual-load with the single
@@ -271,20 +274,20 @@ need both an agent browser pass AND a human verification handoff).
 7. Update `apps/admin/src/lib/components/feature/TransactionsTable.svelte`:
    a. Accept `UnifiedTransactionRow[]` instead of `TransactionRow[]`.
    b. Add a `Kind` header/column (human label per `kind`, e.g. "Maya payment" / "Credit top-up" /
-      "Credit spend" / "Points spent" / "Free time").
+   "Credit spend" / "Points spent" / "Free time").
    c. Render `status`/`receiptNo`/`fundSourceType`/`buyerEmail`/`packageName` as `n/a` (not blank)
-      when `null`.
+   when `null`.
    d. Render `pointsEarned` as a small badge next to the Amount cell when present (e.g. "+N pts").
    e. Update `filtered`/`sorted` derived logic and the `SortKey` union for the new row shape
-      (drop `apName`-vs-`apCircuitLabel` duplication if applicable — verify against current sort
-      keys at `TransactionsTable.svelte`). **Null-guard every comparator and the search filter** —
-      `amount`/`status`/`statusTone`/`fundSourceType` are `null` on non-Maya/non-money kinds; an
-      unguarded `.localeCompare`/array-index on `null` throws at click-time (see Touchpoints note).
-      Rename `buyerName` field references to `who`.
+   (drop `apName`-vs-`apCircuitLabel` duplication if applicable — verify against current sort
+   keys at `TransactionsTable.svelte`). **Null-guard every comparator and the search filter** —
+   `amount`/`status`/`statusTone`/`fundSourceType` are `null` on non-Maya/non-money kinds; an
+   unguarded `.localeCompare`/array-index on `null` throws at click-time (see Touchpoints note).
+   Rename `buyerName` field references to `who`.
 8. Update `apps/admin/src/routes/(app)/finance/export/+server.ts`:
    a. Read + validate `?scope=` (default `'maya'`).
    b. Branch: `scope === 'unified'` → `listUnifiedTransactions`, new CSV header with leading `Kind`
-      column, `?? ''` for Maya-only fields on non-Maya rows.
+   column, `?? ''` for Maya-only fields on non-Maya rows.
    c. `scope !== 'unified'` → existing `listTransactions` path, byte-for-byte unchanged.
 9. Add the export-scope `ui/Select` control next to the existing Export link (page or shared Finance
    header control — confirm exact location during EXECUTE by re-reading the current Topbar/
@@ -292,7 +295,7 @@ need both an agent browser pass AND a human verification handoff).
 10. Update `apps/admin/src/lib/server/queries.spec.ts`:
     a. Delete the 2 existing `listRecentGrantAttribution` tests.
     b. Add unit tests per the Verification Evidence table below (AC1, AC2, AC3 + negative-control,
-       AC4, AC5, AC8).
+    AC4, AC5, AC8).
 11. Run gates per section (see Verification Evidence) — fix inline before moving to the next
     checklist item, per repo convention.
 12. Agent browser pass on the Finance transactions page (unified list renders, Kind labels visible,
@@ -313,20 +316,20 @@ need both an agent browser pass AND a human verification handoff).
 
 ## Verification Evidence
 
-| Gate / Scenario | Strategy | Proves SPEC criterion |
-|---|---|---|
-| New Vitest: `listUnifiedTransactions` returns all 6 kinds for a seeded fixture (Maya payment, standalone topup, credit spend, points spend, free-time, points-earn badge) — `bunx vitest run src/lib/server/queries.spec.ts` (from `apps/admin/`) | Fully-Automated | AC1 |
-| New Vitest: every merged row has a non-empty, kind-appropriate label — `bunx vitest run src/lib/server/queries.spec.ts` | Fully-Automated | AC2 |
-| New Vitest: agent browser pass confirms the Kind label renders visibly per row on the Finance transactions page | Hybrid | AC2 (UI half) |
-| New Vitest **negative-control**: seed a Maya payment + a mirrored topup row sharing the join key (`credit_ledger.external_transaction_id = payment_transactions.id`) → assert exactly ONE row for that payment; then temporarily break the anti-join condition, confirm the test fails for the expected reason (two rows returned), then restore it — `bunx vitest run src/lib/server/queries.spec.ts` | Fully-Automated | AC3 |
-| New Vitest: topup row with NULL `external_transaction_id` → present, labeled as standalone credit top-up — `bunx vitest run src/lib/server/queries.spec.ts` | Fully-Automated | AC4 |
-| New Vitest: narrow date range excludes out-of-range rows across all 6 kinds (not just Maya) — `bunx vitest run src/lib/server/queries.spec.ts` | Fully-Automated | AC5 |
-| Existing Vitest (re-asserted against unified row shape): AP circuit label resolution across friendly/raw-fallback/Unattributed — `bunx vitest run src/lib/server/queries.spec.ts` | Fully-Automated | AC6 |
-| Existing KPI tests re-run unchanged and green; explicit code review confirms `financeKpis`/`revenueByAp`/`revenueByPeriod`/`paymentMethodBreakdown` were NOT modified — `bunx vitest run src/lib/server/queries.spec.ts` + `git diff` review of those 4 functions | Fully-Automated | AC7 |
-| New Vitest: Maya-specific fields (`status`, `receiptNo`, `buyerEmail`, `fundSourceType`, `packageName`) populated only on `kind: 'maya-payment'` rows, explicitly `null` on all other kinds | Fully-Automated | AC8 |
-| Agent browser pass: CSV export toggle — `scope=maya` byte-identical to pre-change CSV; `scope=unified` includes all kinds with a `Kind` column and `''` for Maya-only fields on non-Maya rows | Hybrid | Locked CSV design decision (INNOVATE) |
-| `bun run check` (svelte-check, from repo root) | Fully-Automated | General type-safety regression gate |
-| `bun run lint` (prettier + eslint) — note: repo-wide lint currently fails on 297 pre-existing drift files (tracked backlog); scope this run to the touched files only if the full command fails on unrelated drift | Fully-Automated (scoped) | General style regression gate |
+| Gate / Scenario                                                                                                                                                                                                                                                                                                                                                                                        | Strategy                 | Proves SPEC criterion                 |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------ | ------------------------------------- |
+| New Vitest: `listUnifiedTransactions` returns all 6 kinds for a seeded fixture (Maya payment, standalone topup, credit spend, points spend, free-time, points-earn badge) — `bunx vitest run src/lib/server/queries.spec.ts` (from `apps/admin/`)                                                                                                                                                      | Fully-Automated          | AC1                                   |
+| New Vitest: every merged row has a non-empty, kind-appropriate label — `bunx vitest run src/lib/server/queries.spec.ts`                                                                                                                                                                                                                                                                                | Fully-Automated          | AC2                                   |
+| New Vitest: agent browser pass confirms the Kind label renders visibly per row on the Finance transactions page                                                                                                                                                                                                                                                                                        | Hybrid                   | AC2 (UI half)                         |
+| New Vitest **negative-control**: seed a Maya payment + a mirrored topup row sharing the join key (`credit_ledger.external_transaction_id = payment_transactions.id`) → assert exactly ONE row for that payment; then temporarily break the anti-join condition, confirm the test fails for the expected reason (two rows returned), then restore it — `bunx vitest run src/lib/server/queries.spec.ts` | Fully-Automated          | AC3                                   |
+| New Vitest: topup row with NULL `external_transaction_id` → present, labeled as standalone credit top-up — `bunx vitest run src/lib/server/queries.spec.ts`                                                                                                                                                                                                                                            | Fully-Automated          | AC4                                   |
+| New Vitest: narrow date range excludes out-of-range rows across all 6 kinds (not just Maya) — `bunx vitest run src/lib/server/queries.spec.ts`                                                                                                                                                                                                                                                         | Fully-Automated          | AC5                                   |
+| Existing Vitest (re-asserted against unified row shape): AP circuit label resolution across friendly/raw-fallback/Unattributed — `bunx vitest run src/lib/server/queries.spec.ts`                                                                                                                                                                                                                      | Fully-Automated          | AC6                                   |
+| Existing KPI tests re-run unchanged and green; explicit code review confirms `financeKpis`/`revenueByAp`/`revenueByPeriod`/`paymentMethodBreakdown` were NOT modified — `bunx vitest run src/lib/server/queries.spec.ts` + `git diff` review of those 4 functions                                                                                                                                      | Fully-Automated          | AC7                                   |
+| New Vitest: Maya-specific fields (`status`, `receiptNo`, `buyerEmail`, `fundSourceType`, `packageName`) populated only on `kind: 'maya-payment'` rows, explicitly `null` on all other kinds                                                                                                                                                                                                            | Fully-Automated          | AC8                                   |
+| Agent browser pass: CSV export toggle — `scope=maya` byte-identical to pre-change CSV; `scope=unified` includes all kinds with a `Kind` column and `''` for Maya-only fields on non-Maya rows                                                                                                                                                                                                          | Hybrid                   | Locked CSV design decision (INNOVATE) |
+| `bun run check` (svelte-check, from repo root)                                                                                                                                                                                                                                                                                                                                                         | Fully-Automated          | General type-safety regression gate   |
+| `bun run lint` (prettier + eslint) — note: repo-wide lint currently fails on 297 pre-existing drift files (tracked backlog); scope this run to the touched files only if the full command fails on unrelated drift                                                                                                                                                                                     | Fully-Automated (scoped) | General style regression gate         |
 
 ## Test Infra Improvement Notes
 
@@ -350,28 +353,30 @@ sub-agent spawn warranted at this score).
 
 Test gates (C3 5-column table):
 
-| criterion id | behavior | strategy | proving test | gap-resolution |
-|---|---|---|---|---|
-| AC1 | `listUnifiedTransactions` returns all 6 activity kinds for a seeded fixture | Fully-Automated | `cd apps/admin && bunx vitest run src/lib/server/queries.spec.ts` (new test) | A |
-| AC2-data | every merged row carries a non-empty, kind-appropriate label | Fully-Automated | `cd apps/admin && bunx vitest run src/lib/server/queries.spec.ts` (new test) | A |
-| AC2-UI | Kind label renders visibly per row on the Finance transactions page | Agent-Probe | agent browser pass on `/finance/transactions` (part of checklist step 12) | A |
-| AC3 | a Maya payment + its mirrored credit-ledger topup render as exactly ONE row (negative-control: break anti-join → 2 rows → restore) | Fully-Automated | `cd apps/admin && bunx vitest run src/lib/server/queries.spec.ts` (new negative-control test) | A |
-| AC4 | a standalone topup (`external_transaction_id IS NULL`) still renders as its own row | Fully-Automated | `cd apps/admin && bunx vitest run src/lib/server/queries.spec.ts` (new test) | A |
-| AC5 | narrow date range excludes out-of-range rows across all 6 kinds, not just Maya | Fully-Automated | `cd apps/admin && bunx vitest run src/lib/server/queries.spec.ts` (new test) | A |
-| AC6 | AP circuit label (friendly/raw-fallback/Unattributed) resolves correctly on the unified row shape | Fully-Automated | `cd apps/admin && bunx vitest run src/lib/server/queries.spec.ts` (migrated/extended existing test) | A |
-| AC7 | `financeKpis`/`revenueByAp`/`revenueByPeriod`/`paymentMethodBreakdown` byte-for-byte unchanged | Fully-Automated | `cd apps/admin && bunx vitest run src/lib/server/queries.spec.ts` (existing KPI tests, unchanged) + `git diff -- apps/admin/src/lib/server/queries.ts` reviewed to confirm zero diff on lines 598-708 | A |
-| AC8 | Maya-only fields (`status`/`receiptNo`/`buyerEmail`/`fundSourceType`/`packageName`) populated only on `kind: 'maya-payment'` rows, explicit `null` elsewhere | Fully-Automated | `cd apps/admin && bunx vitest run src/lib/server/queries.spec.ts` (new test) | A |
-| CSV toggle (INNOVATE decision) | `scope=maya` byte-identical to pre-change CSV; `scope=unified` adds `Kind` column + `''` for Maya-only fields on non-Maya rows | Agent-Probe | agent browser pass on `/finance/export?scope=maya` and `?scope=unified` (checklist step 12) | A |
-| Type safety | no new TypeScript errors across the touched files | Fully-Automated | `bun run check` (repo root) | A |
-| Style | no new lint violations on touched files | Fully-Automated (scoped) | `bun run lint`, scoped to touched files if repo-wide fails on the pre-existing 297-file drift (tracked: `process/features/incident-management/backlog/repo-wide-lint-prettier-drift_NOTE_10-07-26.md`) | D |
+| criterion id                   | behavior                                                                                                                                                     | strategy                 | proving test                                                                                                                                                                                           | gap-resolution |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------- |
+| AC1                            | `listUnifiedTransactions` returns all 6 activity kinds for a seeded fixture                                                                                  | Fully-Automated          | `cd apps/admin && bunx vitest run src/lib/server/queries.spec.ts` (new test)                                                                                                                           | A              |
+| AC2-data                       | every merged row carries a non-empty, kind-appropriate label                                                                                                 | Fully-Automated          | `cd apps/admin && bunx vitest run src/lib/server/queries.spec.ts` (new test)                                                                                                                           | A              |
+| AC2-UI                         | Kind label renders visibly per row on the Finance transactions page                                                                                          | Agent-Probe              | agent browser pass on `/finance/transactions` (part of checklist step 12)                                                                                                                              | A              |
+| AC3                            | a Maya payment + its mirrored credit-ledger topup render as exactly ONE row (negative-control: break anti-join → 2 rows → restore)                           | Fully-Automated          | `cd apps/admin && bunx vitest run src/lib/server/queries.spec.ts` (new negative-control test)                                                                                                          | A              |
+| AC4                            | a standalone topup (`external_transaction_id IS NULL`) still renders as its own row                                                                          | Fully-Automated          | `cd apps/admin && bunx vitest run src/lib/server/queries.spec.ts` (new test)                                                                                                                           | A              |
+| AC5                            | narrow date range excludes out-of-range rows across all 6 kinds, not just Maya                                                                               | Fully-Automated          | `cd apps/admin && bunx vitest run src/lib/server/queries.spec.ts` (new test)                                                                                                                           | A              |
+| AC6                            | AP circuit label (friendly/raw-fallback/Unattributed) resolves correctly on the unified row shape                                                            | Fully-Automated          | `cd apps/admin && bunx vitest run src/lib/server/queries.spec.ts` (migrated/extended existing test)                                                                                                    | A              |
+| AC7                            | `financeKpis`/`revenueByAp`/`revenueByPeriod`/`paymentMethodBreakdown` byte-for-byte unchanged                                                               | Fully-Automated          | `cd apps/admin && bunx vitest run src/lib/server/queries.spec.ts` (existing KPI tests, unchanged) + `git diff -- apps/admin/src/lib/server/queries.ts` reviewed to confirm zero diff on lines 598-708  | A              |
+| AC8                            | Maya-only fields (`status`/`receiptNo`/`buyerEmail`/`fundSourceType`/`packageName`) populated only on `kind: 'maya-payment'` rows, explicit `null` elsewhere | Fully-Automated          | `cd apps/admin && bunx vitest run src/lib/server/queries.spec.ts` (new test)                                                                                                                           | A              |
+| CSV toggle (INNOVATE decision) | `scope=maya` byte-identical to pre-change CSV; `scope=unified` adds `Kind` column + `''` for Maya-only fields on non-Maya rows                               | Agent-Probe              | agent browser pass on `/finance/export?scope=maya` and `?scope=unified` (checklist step 12)                                                                                                            | A              |
+| Type safety                    | no new TypeScript errors across the touched files                                                                                                            | Fully-Automated          | `bun run check` (repo root)                                                                                                                                                                            | A              |
+| Style                          | no new lint violations on touched files                                                                                                                      | Fully-Automated (scoped) | `bun run lint`, scoped to touched files if repo-wide fails on the pre-existing 297-file drift (tracked: `process/features/incident-management/backlog/repo-wide-lint-prettier-drift_NOTE_10-07-26.md`) | D              |
 
 gap-resolution legend:
+
 - A — proven now (gate passes in this cycle)
 - B — fixed in this plan (gate added by this plan's checklist)
 - C — deferred to a named later phase/plan
 - D — backlog test-building stub (named residual; keep-active; continue)
 
 Legacy line form (retained so existing validate-contract consumers still parse):
+
 - AC1–AC8, CSV toggle: `bunx vitest run src/lib/server/queries.spec.ts` (from `apps/admin/`) for all Fully-Automated rows above | Agent browser pass on `/finance/transactions` + `/finance/export` for the two Agent-Probe/Hybrid rows (Kind-label rendering, CSV scope toggle) | `bun run check` + scoped `bun run lint` for general regression gates.
 
 Failing stub (Fully-Automated rows only — copy verbatim into `queries.spec.ts` as the TDD red-first starting point):
@@ -404,6 +409,7 @@ test("should populate Maya-only fields only on maya-payment rows, explicit null 
 ```
 
 Dimension findings:
+
 - Infra fit: PASS — single app (`apps/admin`), no container/infra/runtime/new-dependency/new-route surface; CSV scope is an additive query param on an existing route.
 - Test coverage: PASS — all 8 SPEC ACs map to a runnable gate (7 Fully-Automated + AC2-UI/CSV-toggle as Agent-Probe); negative-control test for AC3 is present and non-vacuous (break → observe expected failure → restore, per `feedback_negative-control-pattern.md`); no developed behavior rests on Known-Gap alone (net-gate vacuous-green check: every row-kind and every UI behavior has at least one Fully-Automated or Agent-Probe gate).
 - Breaking changes: PASS — confirmed via `grep -rn "import.*queries['\"]"` that `listRecentGrantAttribution` has exactly one non-spec consumer (`+page.server.ts`, updated by this plan) and `TransactionRow`/`GrantAttributionRow` have exactly 3 consumers total, all in this plan's touchpoints. CSV `?scope=` param is additive/backward-compatible (default preserves byte-identical old behavior).
@@ -418,6 +424,7 @@ Dimension findings:
 Open gaps: none blocking. Carried-forward known-gaps (accepted, not "NEW PLAN REQUIRED" — see What This Coverage Does NOT Prove below): points-earn row with NULL `external_transaction_id` (confirmed unreachable by the current write path — `earnPointsTx` is only ever invoked from `reconcilePayments.ts:304` inside the same settled-payment transaction with a non-null `externalTransactionId`); the page-1-only pagination limitation; the inherited `?period=` timezone bug (pre-existing, out of scope per SPEC).
 
 What this coverage does NOT prove:
+
 - The AC3/AC4/AC5/AC8 Vitest gates prove the query-layer merge/dedupe/filter logic against seeded fixtures (no real DB) — they do NOT prove the Finance page renders correctly end-to-end in a browser (covered separately by the AC2-UI/CSV-toggle Agent-Probe gates, which in turn do not exercise every row-kind combination, only a representative pass).
 - `bun run check` proves type-safety, not runtime correctness of the merge/sort logic.
 - No test proves behavior under real production data volume/shape (page-1-only limitation is documented, not load-tested).
@@ -435,14 +442,15 @@ SESSION GOAL: Ship the unified admin Finance transaction/activity history (repla
 Charter + umbrella plan: N/A — single SIMPLE plan, no phase program
 Autonomy: standard RIPER-5 gates apply (no standing /goal for this task); EXECUTE requires explicit "ENTER EXECUTE MODE"; EVL confirmation run (vc-tester) is mandatory even if execute-agent reports all gates green
 Hard stop conditions / safety constraints:
+
 - Never touch `financeKpis`, `revenueByAp`, `revenueByPeriod`, `paymentMethodBreakdown`, or `listTransactions` (AC7) — any diff on `queries.ts` lines 598-778 is a plan violation
 - Never write to `payment_transactions`, `credit_ledger`, `points_ledger`, or `network_sessions` — this is a read-only display feature
 - Never call `rangeWhere()` against a non-`paymentTransactions` query — use the per-column inline condition specified in "Range predicate" above
 - The AC3 anti-join predicate is locked: `pt.id = credit_ledger.external_transaction_id` — do not re-derive or substitute a different join key
 - Browser-visible change: code-complete is not "done" — requires an agent browser pass AND a human verification handoff (checklist step 12) before archival
-Next phase: EXECUTE — `process/general-plans/active/unified-transaction-history_21-07-26/unified-transaction-history_PLAN_21-07-26.md`
-Validate contract: inline in plan (`## Validate Contract` section above), Gate: PASS
-Execute start: `cd apps/admin && bunx vitest run src/lib/server/queries.spec.ts` (red-first TDD stubs above) → implement checklist steps 1-10 → `bun run check` → scoped `bun run lint` → agent browser pass (checklist step 12) → human verification handoff | high-risk pack: no (LOW risk, no evidence pack required)
+  Next phase: EXECUTE — `process/general-plans/active/unified-transaction-history_21-07-26/unified-transaction-history_PLAN_21-07-26.md`
+  Validate contract: inline in plan (`## Validate Contract` section above), Gate: PASS
+  Execute start: `cd apps/admin && bunx vitest run src/lib/server/queries.spec.ts` (red-first TDD stubs above) → implement checklist steps 1-10 → `bun run check` → scoped `bun run lint` → agent browser pass (checklist step 12) → human verification handoff | high-risk pack: no (LOW risk, no evidence pack required)
 
 ---
 

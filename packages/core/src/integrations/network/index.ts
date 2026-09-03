@@ -35,9 +35,7 @@ export {
 	type RestrictApiResult
 } from './mikrotik';
 
-export type NetworkConfig =
-	| { controller: 'stub' }
-	| ({ controller: 'mikrotik' } & MikrotikConfig);
+export type NetworkConfig = { controller: 'stub' } | ({ controller: 'mikrotik' } & MikrotikConfig);
 
 /**
  * Selects and builds the configured network controller. The app reads its own
@@ -52,6 +50,8 @@ export function createNetworkController(config: NetworkConfig): NetworkControlle
 			// become a `network.mikrotik.*` span — router round-trip latency is the main network delay.
 			return traceMethods(createMikrotikController(config), 'network.mikrotik', 'router');
 		default:
-			throw new Error(`Unknown network controller: ${(config as { controller: string }).controller}`);
+			throw new Error(
+				`Unknown network controller: ${(config as { controller: string }).controller}`
+			);
 	}
 }

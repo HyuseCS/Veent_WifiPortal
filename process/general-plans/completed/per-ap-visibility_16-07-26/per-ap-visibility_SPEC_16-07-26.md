@@ -1,6 +1,6 @@
 ---
 name: plan:per-ap-visibility-spec
-description: "Per-AP visibility on admin /networks page — Phase A (router-side DHCP Option 82) requirements doc; Phase B (AP controller API) deferred scope"
+description: 'Per-AP visibility on admin /networks page — Phase A (router-side DHCP Option 82) requirements doc; Phase B (AP controller API) deferred scope'
 date: 16-07-26
 feature: general-plans
 ---

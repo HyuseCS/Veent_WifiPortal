@@ -33,11 +33,15 @@
 			y: span === 0 ? H / 2 : PAD + (1 - (val - min) / span) * (H - 2 * PAD)
 		});
 		const pts = v.map(xy);
-		const d = pts.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(' ');
+		const d = pts
+			.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`)
+			.join(' ');
 		return { d, last: pts[pts.length - 1] };
 	});
 
-	const dirLabel = $derived(dir === 'up' ? 'trending up' : dir === 'down' ? 'trending down' : 'steady');
+	const dirLabel = $derived(
+		dir === 'up' ? 'trending up' : dir === 'down' ? 'trending down' : 'steady'
+	);
 	const Arrow = $derived(dir === 'up' ? ArrowUpRight : dir === 'down' ? ArrowDownRight : Minus);
 </script>
 
@@ -55,7 +59,16 @@
 			/>
 			<circle cx={geom.last.x} cy={geom.last.y} r="1.75" fill="currentColor" />
 		{:else}
-			<line x1={PAD} y1={H / 2} x2={W - PAD} y2={H / 2} stroke="currentColor" stroke-width="1.5" stroke-dasharray="2 3" opacity="0.4" />
+			<line
+				x1={PAD}
+				y1={H / 2}
+				x2={W - PAD}
+				y2={H / 2}
+				stroke="currentColor"
+				stroke-width="1.5"
+				stroke-dasharray="2 3"
+				opacity="0.4"
+			/>
 		{/if}
 	</svg>
 	<Arrow class="h-3 w-3 shrink-0" aria-hidden="true" />

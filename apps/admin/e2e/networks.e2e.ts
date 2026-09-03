@@ -12,7 +12,9 @@ test.beforeEach(async ({ page }) => {
 	await expect(page.getByText('OAP3000G-C')).toBeVisible({ timeout: 30_000 });
 });
 
-test('shared-ONU APs collapse into one honest group card listing both members', async ({ page }) => {
+test('shared-ONU APs collapse into one honest group card listing both members', async ({
+	page
+}) => {
 	// Exactly one shared-ONU indicator, and it names both grouped APs.
 	const indicator = page.getByText(/Shared ONU — the router cannot split these 2 APs/i);
 	await expect(indicator).toHaveCount(1);

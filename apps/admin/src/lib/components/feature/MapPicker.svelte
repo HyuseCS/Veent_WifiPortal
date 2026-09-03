@@ -109,4 +109,3 @@
 	bind:this={mapEl}
 	class="{height} w-full overflow-hidden rounded-md border border-border bg-surface"
 ></div>
-

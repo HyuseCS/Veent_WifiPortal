@@ -25,7 +25,9 @@ export const load: PageServerLoad = async (event) => {
 /** Slug for a new model id: lowercase alphanumerics + single hyphens, 2–48 chars. It's the
  * immutable key stored on network_health.model, so it must be URL/identifier-safe. */
 function modelSlug(raw: FormDataEntryValue | null): string | null {
-	const s = String(raw ?? '').trim().toLowerCase();
+	const s = String(raw ?? '')
+		.trim()
+		.toLowerCase();
 	return /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(s) && s.length >= 2 && s.length <= 48 ? s : null;
 }
 
@@ -57,7 +59,11 @@ export const actions: Actions = {
 		// The insert is the uniqueness check (ON CONFLICT DO NOTHING): a duplicate — even one added
 		// concurrently — comes back as "not inserted" here instead of a 500.
 		if (!(await createRouterModel(db, { id, name, rangeMeters }))) {
-			return fail(409, { action: 'addModel', id, error: `A model with id "${id}" already exists.` });
+			return fail(409, {
+				action: 'addModel',
+				id,
+				error: `A model with id "${id}" already exists.`
+			});
 		}
 		return { ok: true, action: 'addModel', id };
 	},
@@ -100,7 +106,11 @@ export const actions: Actions = {
 		// the last two deletes could empty it; owner-only config makes that impossible in practice,
 		// upgrade to a conditional delete if that ever stops holding.
 		if ((await listRouterModels(db)).length <= 1) {
-			return fail(400, { action: 'deleteModel', id, error: 'Keep at least one model in the catalog.' });
+			return fail(400, {
+				action: 'deleteModel',
+				id,
+				error: 'Keep at least one model in the catalog.'
+			});
 		}
 		// The DELETE reports whether the row existed, so a stale id 404s without a second read.
 		if (!(await deleteRouterModel(db, id))) {

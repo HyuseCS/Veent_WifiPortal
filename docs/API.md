@@ -25,22 +25,24 @@ apps/admin   ──┼─→ @veent/core services ─┤
 
 ## Business rules enforced (CLAUDE.md)
 
-| Rule | Where |
-|------|-------|
-| Credits added only on verified webhook, exactly once | `addCredits` idempotent on `external_transaction_id` (unique) |
-| Free Time = 15 min / 12 h cooldown | `getFreeTimeStatus`, `startFreeSession` (atomic claim) |
-| Access granted only after session logged + firewall dropped | `startSession` (DB row first, then `network.grant`) |
-| Body `macAddress` is advisory, not authoritative | `resolveMacForUser` (M-1/L-1) logs + ignores a mismatched body MAC. NB: the captive-portal `?mac=` param is still client-visible by design — see R12 |
-| A revoke never cuts another account still live on the same MAC | `revokeGuestUnlessShared` / `hasLiveAccessForMacExcludingUser` (M-2, fully closes the cross-user DoS) |
-| SSE for connected users, never poll-per-second | `GET /api/connected` (admin), `GET /api/account/stream` (customer) |
-| Payment gateways reachable via Walled Garden whitelist (no payment grace period) | Router-level allowlist of Maya/PayMaya/GCash hosts (+ PayMongo/Xendit), plus per-device checkout hosts opened at checkout time (`setup:router`) |
+| Rule                                                                             | Where                                                                                                                                                |
+| -------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Credits added only on verified webhook, exactly once                             | `addCredits` idempotent on `external_transaction_id` (unique)                                                                                        |
+| Free Time = 15 min / 12 h cooldown                                               | `getFreeTimeStatus`, `startFreeSession` (atomic claim)                                                                                               |
+| Access granted only after session logged + firewall dropped                      | `startSession` (DB row first, then `network.grant`)                                                                                                  |
+| Body `macAddress` is advisory, not authoritative                                 | `resolveMacForUser` (M-1/L-1) logs + ignores a mismatched body MAC. NB: the captive-portal `?mac=` param is still client-visible by design — see R12 |
+| A revoke never cuts another account still live on the same MAC                   | `revokeGuestUnlessShared` / `hasLiveAccessForMacExcludingUser` (M-2, fully closes the cross-user DoS)                                                |
+| SSE for connected users, never poll-per-second                                   | `GET /api/connected` (admin), `GET /api/account/stream` (customer)                                                                                   |
+| Payment gateways reachable via Walled Garden whitelist (no payment grace period) | Router-level allowlist of Maya/PayMaya/GCash hosts (+ PayMongo/Xendit), plus per-device checkout hosts opened at checkout time (`setup:router`)      |
 
 ---
 
 ## Customer endpoints (`apps/customer`)
 
 ### `POST /api/network/grant` — start access (authenticated)
+
 Body `{ macAddress?: string, packageId?: number }`
+
 - The device MAC is resolved **server-side** (`resolveMacForUser`: portal `?mac=` → router IP→MAC →
   browser-scoped `veent_device` hint → durable per-account `last_known_mac` fallback). `macAddress` in
   the body is **advisory only** — if it disagrees
@@ -56,6 +58,7 @@ Body `{ macAddress?: string, packageId?: number }`
 - → `{ ok, mode: 'free'|'tier', accessExpiresAt, balance? }` (`balance` only on the tier path)
 
 ### `POST /api/network/revoke` — expire due access (cron)
+
 Header `x-cron-secret: <CRON_SECRET>` (optionally IP-gated by `CRON_IP_ALLOWLIST`). Expires every
 account whose access window has passed and re-blocks its MAC — **unless another account still holds a
 live window on that same MAC** (shared device / NAT), in which case the DB row is marked expired but
@@ -64,12 +67,14 @@ per-device checkout/admin walled-garden entries and folds in a reconcile pass.
 → `{ ok, outage, revoked, reconciled, sweptCheckoutAccess, sweptAdminAccess }`. Run every minute.
 
 ### `POST /api/payments/reconcile` — credit missed webhooks (cron)
+
 Header `x-cron-secret: <CRON_SECRET>` (same IP-gate). Safety net: polls Maya for every pending
 checkout old enough that its webhook should have arrived and credits any that actually paid —
 idempotent via the `payment_checkouts` claim, so it never double-credits alongside the webhook.
 Run every minute.
 
 ### `POST /api/webhooks/payment` (dev) · `POST /api/webhooks/maya/payment-status` (prod) — gateway → us (the source of truth for credits)
+
 This is the **Maya payload-receiving service**: Maya (Maya Checkout) calls us server-to-server
 whenever a payment changes state, posting the transaction payload rather than relying on the
 customer's browser redirect. **Both paths delegate to one shared handler**
@@ -78,9 +83,9 @@ customer's browser redirect. **Both paths delegate to one shared handler**
 forwards the event to `${TUNNEL_ORIGIN}/api/webhooks/maya/payment-status` to route it back to this
 NAT'd site. The handler re-verifies against Maya regardless of who delivered it.
 
-Flow:
-0. **Per-IP flood cap** (120/min) — every call triggers an outbound re-fetch, so this is
-   guarded first; over budget → `429`.
+Flow: 0. **Per-IP flood cap** (120/min) — every call triggers an outbound re-fetch, so this is
+guarded first; over budget → `429`.
+
 1. Read the **raw** request body (do not parse first).
 2. Verify via `payments.verifyWebhook`. **No HMAC** — Maya Checkout webhooks are unsigned, so
    it takes only the payment id from the (untrusted) body and **re-fetches the authoritative
@@ -99,20 +104,24 @@ PayMaya retries on any non-2xx, so reserve error codes for genuinely unverifiabl
 or malformed payloads.
 
 ### `GET /api/account/stream` — this account's live dashboard slice (SSE, authenticated)
+
 Server-Sent Events of the caller's own balance / free-time / access window / devices. Emits a
 view on connect, then a fresh one on every Postgres trigger for this user (no polling). `?mac=`
 is display-only (flags `thisDevice`). Concurrent streams capped per account (4).
 
 ### `GET /auth/handoff?token=…` — CNA→browser session handoff
+
 Consumes a single-use, short-TTL better-auth one-time token minted in the captive-network-assistant
 webview and mints a real session in the system browser, so the guest skips a second OTP. Per-IP
 rate-limited. Redirects on success.
 
 ### Captive-portal probe endpoints
+
 OS "is there internet?" probes answered so the captive UI behaves: `GET /generate_204`, `/gen_204`,
 `/hotspot-detect.html`, `/ncsi.txt`, `/connecttest.txt`.
 
 ### Form actions
+
 - `dashboard` → `startFreeTime`, `buyTier` (hidden `mac` field from the captive
   redirect `?mac=`).
 - `top-up` → `checkout` (creates a Maya checkout, redirects to the gateway).
@@ -138,13 +147,13 @@ Loaders return the exact shapes in `src/lib/types.ts`, so pages swap
 
 ## Integration seams (what's stubbed)
 
-| Seam | File | To go live |
-|------|------|-----------|
-| **Payments (Maya)** | `packages/core/src/integrations/payments/maya.ts` | **Live** — both `createCheckout` (Maya Checkout API) and `verifyWebhook` (re-fetch, no HMAC) are implemented. Set `MAYA_*` env. |
-| **Network controller** | `packages/core/src/integrations/network/` | MikroTik RouterOS impl is **live** (`mikrotik.ts`, `NETWORK_CONTROLLER=mikrotik`). Other controllers (UniFi/Omada/RADIUS/grant_url) still need an impl behind the same `NetworkController` interface. |
-| **Connected-users feed** | `apps/admin/.../api/connected/+server.ts` | Already push-based (Postgres NOTIFY → SSE). To go truly live, drive the NOTIFY from RADIUS accounting instead of app writes (same SSE wire format). |
-| **Per-user data usage** | `apps/admin/src/lib/server/queries.ts` (`usage: '—'`) | Needs a byte-accounting feed. |
-| **Network health (APs)** | admin `networks` page (still on mocks) | Needs AP/location + health-sample tables (ICMP/SNMP polling) — not yet modeled. |
+| Seam                     | File                                                  | To go live                                                                                                                                                                                            |
+| ------------------------ | ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Payments (Maya)**      | `packages/core/src/integrations/payments/maya.ts`     | **Live** — both `createCheckout` (Maya Checkout API) and `verifyWebhook` (re-fetch, no HMAC) are implemented. Set `MAYA_*` env.                                                                       |
+| **Network controller**   | `packages/core/src/integrations/network/`             | MikroTik RouterOS impl is **live** (`mikrotik.ts`, `NETWORK_CONTROLLER=mikrotik`). Other controllers (UniFi/Omada/RADIUS/grant_url) still need an impl behind the same `NetworkController` interface. |
+| **Connected-users feed** | `apps/admin/.../api/connected/+server.ts`             | Already push-based (Postgres NOTIFY → SSE). To go truly live, drive the NOTIFY from RADIUS accounting instead of app writes (same SSE wire format).                                                   |
+| **Per-user data usage**  | `apps/admin/src/lib/server/queries.ts` (`usage: '—'`) | Needs a byte-accounting feed.                                                                                                                                                                         |
+| **Network health (APs)** | admin `networks` page (still on mocks)                | Needs AP/location + health-sample tables (ICMP/SNMP polling) — not yet modeled.                                                                                                                       |
 
 ## Env vars
 

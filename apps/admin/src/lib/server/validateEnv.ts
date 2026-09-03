@@ -56,7 +56,9 @@ export function validateEnv(): void {
 
 	// Email is degrade-to-stub, so warn (don't fail) when unconfigured in production.
 	if (!dev && (!env.RESEND_API_KEY || !env.EMAIL_FROM)) {
-		log.warn('RESEND_API_KEY / EMAIL_FROM unset — staff invites & wipe codes will not send real email.');
+		log.warn(
+			'RESEND_API_KEY / EMAIL_FROM unset — staff invites & wipe codes will not send real email.'
+		);
 	}
 
 	// Observability degrades to off, so warn (don't fail) when the Sentry DSN is unset in prod.

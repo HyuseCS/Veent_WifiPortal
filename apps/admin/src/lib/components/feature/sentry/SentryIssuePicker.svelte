@@ -144,7 +144,9 @@
 				<td data-label="Events" class="px-4 py-3 font-mono text-ink">
 					{issue.count.toLocaleString('en-US')}
 				</td>
-				<td data-label="Last seen" class="px-4 py-3 font-mono text-muted">{seenAgo(issue.lastSeen)}</td>
+				<td data-label="Last seen" class="px-4 py-3 font-mono text-muted"
+					>{seenAgo(issue.lastSeen)}</td
+				>
 				<td class="tc-full px-4 py-3">
 					<div class="flex justify-end">
 						<button

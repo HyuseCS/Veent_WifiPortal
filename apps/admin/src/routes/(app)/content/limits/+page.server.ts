@@ -20,7 +20,10 @@ export const actions: Actions = {
 		const form = await event.request.formData();
 		const maxDevicesPerAccount = parseIntField(form, 'maxDevicesPerAccount', { min: 1, max: 20 });
 		const freeTimeMinutes = parseIntField(form, 'freeTimeMinutes', { min: 1, max: 1440 });
-		const freeTimeCooldownHours = parseIntField(form, 'freeTimeCooldownHours', { min: 0, max: 168 });
+		const freeTimeCooldownHours = parseIntField(form, 'freeTimeCooldownHours', {
+			min: 0,
+			max: 168
+		});
 		const pointsEarnRate = parseIntField(form, 'pointsEarnRate', { min: 0, max: 100 });
 
 		if (maxDevicesPerAccount === null) {

@@ -43,13 +43,13 @@ often than prod's 5-min cadence (harmless — the sweep is idempotent, windows a
 
 ## Test Gate Outcomes
 
-| Gate | Command | Result |
-|---|---|---|
-| otp.ts persistence + dispatch | `cd apps/customer && bunx vitest run src/lib/server/otp.spec.ts` | **25 passed** |
-| sweep endpoint | `cd apps/customer && bunx vitest run src/routes/api/otp/sweep-delivery/sweep-delivery.spec.ts` | **20 passed** |
-| full customer suite (regression) | `cd apps/customer && bunx vitest run` | **117 passed / 16 files** |
-| typecheck | `cd apps/customer && bun run check` | **0 errors, 0 warnings** (2135 files) |
-| migration apply | `psql "$DATABASE_URL" -f packages/db/drizzle/0048_lying_firedrake.sql` + `\d` | applied, verified |
+| Gate                             | Command                                                                                        | Result                                |
+| -------------------------------- | ---------------------------------------------------------------------------------------------- | ------------------------------------- |
+| otp.ts persistence + dispatch    | `cd apps/customer && bunx vitest run src/lib/server/otp.spec.ts`                               | **25 passed**                         |
+| sweep endpoint                   | `cd apps/customer && bunx vitest run src/routes/api/otp/sweep-delivery/sweep-delivery.spec.ts` | **20 passed**                         |
+| full customer suite (regression) | `cd apps/customer && bunx vitest run`                                                          | **117 passed / 16 files**             |
+| typecheck                        | `cd apps/customer && bun run check`                                                            | **0 errors, 0 warnings** (2135 files) |
+| migration apply                  | `psql "$DATABASE_URL" -f packages/db/drizzle/0048_lying_firedrake.sql` + `\d`                  | applied, verified                     |
 
 Coverage (a)–(f) all present, plus prune-independence, 30-min cutoff, and requireCron guard.
 
@@ -93,6 +93,7 @@ Nothing in scope was skipped.
 ## Test Infra Gaps Found
 
 Carried forward from the contract's "what this does not prove", unchanged by this work:
+
 - Real Cast DLR response-shape stability is unproven (mocked `fetch`).
 - The committed `0048_*.sql` is not proven to replay via `db:migrate` on a clean chain — pre-existing
   repo-wide push-managed-dev-DB limitation.

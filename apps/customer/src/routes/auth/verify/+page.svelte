@@ -71,9 +71,7 @@
 </svelte:head>
 
 <main class="flex min-h-screen flex-col lg:bg-surface">
-	<div
-		class="flex w-full flex-1 flex-col lg:flex-none lg:overflow-hidden"
-	>
+	<div class="flex w-full flex-1 flex-col lg:flex-none lg:overflow-hidden">
 		<div class="flex items-center bg-brand gap-3 px-5 py-3">
 			<a
 				href={resolve('/login')}
@@ -110,7 +108,7 @@
 						oninput={sanitize}
 						type="text"
 						inputmode="numeric"
-						pattern="\d{'{'}{LENGTH}{'}'}"
+						pattern="\d{'{'}{LENGTH}}"
 						maxlength={LENGTH}
 						required
 						autofocus
@@ -145,9 +143,7 @@
 						></span>
 						<span class="sr-only">Verifying…</span>
 					</span>
-					<span class="inline-flex items-center gap-2 group-data-[pending]:hidden">
-						Verify
-					</span>
+					<span class="inline-flex items-center gap-2 group-data-[pending]:hidden"> Verify </span>
 				</button>
 			</form>
 

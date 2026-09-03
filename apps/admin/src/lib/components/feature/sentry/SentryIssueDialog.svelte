@@ -134,10 +134,23 @@
 						</div>
 
 						<div class="grid gap-3 sm:grid-cols-2">
-							<Select id="issue-priority" label="Priority" options={priorityOptions} bind:value={trackPriority} />
+							<Select
+								id="issue-priority"
+								label="Priority"
+								options={priorityOptions}
+								bind:value={trackPriority}
+							/>
 							<div class="space-y-1.5">
-								<label for="track-due" class="block text-xs font-medium text-ink">Due date (optional)</label>
-								<input id="track-due" name="issue-dueDate" type="date" bind:value={trackDue} class={inputClass} />
+								<label for="track-due" class="block text-xs font-medium text-ink"
+									>Due date (optional)</label
+								>
+								<input
+									id="track-due"
+									name="issue-dueDate"
+									type="date"
+									bind:value={trackDue}
+									class={inputClass}
+								/>
 							</div>
 						</div>
 
@@ -148,7 +161,9 @@
 							{:else}
 								<div class="max-h-32 space-y-1 overflow-y-auto rounded-lg border border-border p-2">
 									{#each assignableStaff as s (s.id)}
-										<label class="flex min-h-9 items-center gap-2 rounded-md px-2 py-1 hover:bg-surface">
+										<label
+											class="flex min-h-9 items-center gap-2 rounded-md px-2 py-1 hover:bg-surface"
+										>
 											<input
 												type="checkbox"
 												name="assigneeId"
@@ -173,7 +188,9 @@
 					<!-- The Sentry issue being tracked — nested inside the incident container as context. -->
 					<div class="space-y-4 rounded-lg border border-border p-3">
 						<div class="flex items-start justify-between gap-2">
-							<h3 class="text-[11px] font-semibold tracking-wider text-muted uppercase">Sentry issue</h3>
+							<h3 class="text-[11px] font-semibold tracking-wider text-muted uppercase">
+								Sentry issue
+							</h3>
 							{#if issue.permalink}
 								<!-- absolute external Sentry URL — resolve() (internal paths) doesn't apply. -->
 								<!-- eslint-disable svelte/no-navigation-without-resolve -->
@@ -200,7 +217,9 @@
 				</div>
 
 				<div class="mt-4 flex justify-end gap-2 border-t border-border pt-4">
-					<Button type="button" variant="secondary" onclick={() => (tracking = false)}>Cancel</Button>
+					<Button type="button" variant="secondary" onclick={() => (tracking = false)}
+						>Cancel</Button
+					>
 					<Button type="submit" loading={trackSubmitting}>Create incident</Button>
 				</div>
 			</form>
@@ -217,7 +236,15 @@
 				>
 					<ClipboardPlus class="h-4 w-4" aria-hidden="true" /> Track as incident
 				</button>
-				<form method="post" action="?/resolve" use:enhance={() => async ({ result, update }) => { if (result.type === 'success') open = false; await update(); }}>
+				<form
+					method="post"
+					action="?/resolve"
+					use:enhance={() =>
+						async ({ result, update }) => {
+							if (result.type === 'success') open = false;
+							await update();
+						}}
+				>
 					<input type="hidden" name="id" value={issue.id} />
 					<button
 						type="submit"
@@ -230,7 +257,15 @@
 				     isn't 'unresolved' is a dismissed issue → offer Restore. Sentry reports ignored as
 				     'ignored' or (older) 'muted'; keying off 'unresolved' covers both. -->
 				{#if issue.status === 'unresolved'}
-					<form method="post" action="?/ignore" use:enhance={() => async ({ result, update }) => { if (result.type === 'success') open = false; await update(); }}>
+					<form
+						method="post"
+						action="?/ignore"
+						use:enhance={() =>
+							async ({ result, update }) => {
+								if (result.type === 'success') open = false;
+								await update();
+							}}
+					>
 						<input type="hidden" name="id" value={issue.id} />
 						<button
 							type="submit"
@@ -240,7 +275,15 @@
 						</button>
 					</form>
 				{:else}
-					<form method="post" action="?/restore" use:enhance={() => async ({ result, update }) => { if (result.type === 'success') open = false; await update(); }}>
+					<form
+						method="post"
+						action="?/restore"
+						use:enhance={() =>
+							async ({ result, update }) => {
+								if (result.type === 'success') open = false;
+								await update();
+							}}
+					>
 						<input type="hidden" name="id" value={issue.id} />
 						<button
 							type="submit"

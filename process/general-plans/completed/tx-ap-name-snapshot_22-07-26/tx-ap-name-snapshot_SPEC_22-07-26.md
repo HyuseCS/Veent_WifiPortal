@@ -18,7 +18,7 @@ records keep the name that was true when the money moved or the grant happened, 
 what the AP is called later. This EXTENDS the per-record AP attribution that the prior
 `purchase-ap-attribution` feature added (durable circuit-id on each record) to all five kinds
 of transaction the admin Finance page shows — Maya payments, credit top-ups, credit spends,
-points spends, and free-time grants — by additionally freezing each one's AP *name* at write
+points spends, and free-time grants — by additionally freezing each one's AP _name_ at write
 time; per-record AP attribution was not already present on all five before that prior feature.
 
 ## User Stories / Jobs To Be Done

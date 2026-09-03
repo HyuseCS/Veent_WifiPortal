@@ -100,18 +100,15 @@ export async function recordPaymentTransaction(
 	// protects Finance reporting from a paid txn flipping to "failed".)
 	const noDowngrade = sql`NOT (${paymentTransactions.status} = ${STATUS_DB.paid} AND ${row.status} <> ${STATUS_DB.paid})`;
 	try {
-		await db
-			.insert(paymentTransactions)
-			.values(row)
-			.onConflictDoUpdate({
-				target: paymentTransactions.id,
-				// Keep the latest detail when Maya resends or a later status transition (e.g.
-				// PENDING→SUCCESS) enriches a row a reconcile pass recorded first. networkId and
-				// the userId/packageId attribution stay INSERT-only (fixed at first record); the
-				// gateway-supplied detail is what a transition can legitimately backfill.
-				set: detail,
-				setWhere: noDowngrade
-			});
+		await db.insert(paymentTransactions).values(row).onConflictDoUpdate({
+			target: paymentTransactions.id,
+			// Keep the latest detail when Maya resends or a later status transition (e.g.
+			// PENDING→SUCCESS) enriches a row a reconcile pass recorded first. networkId and
+			// the userId/packageId attribution stay INSERT-only (fixed at first record); the
+			// gateway-supplied detail is what a transition can legitimately backfill.
+			set: detail,
+			setWhere: noDowngrade
+		});
 	} catch (e) {
 		// 23505 = unique_violation: the same payment arrived under a DIFFERENT id and tripped the
 		// reference_no index (the id-conflict clause above only catches same-id resends). Collapse
@@ -237,7 +234,11 @@ export async function creditCheckoutIfUnsettled(
 		// event carries the same gateway-verified proof as pending→settled and must still credit.
 		const [claimed] = await tx
 			.update(paymentCheckouts)
-			.set({ status: 'settled', settledAt: new Date(), externalTransactionId: args.externalTransactionId })
+			.set({
+				status: 'settled',
+				settledAt: new Date(),
+				externalTransactionId: args.externalTransactionId
+			})
 			.where(and(match, inArray(paymentCheckouts.status, ['pending', 'expired'])))
 			.returning({ id: paymentCheckouts.id, amount: paymentCheckouts.amount });
 
@@ -336,7 +337,8 @@ function resolvePaymentStatus(
 	checkoutId: string,
 	referenceId: string | null | undefined
 ): Promise<PaymentEvent | null> {
-	if (payments.getPaymentByReference && referenceId) return payments.getPaymentByReference(referenceId);
+	if (payments.getPaymentByReference && referenceId)
+		return payments.getPaymentByReference(referenceId);
 	if (payments.getCheckoutStatus) return payments.getCheckoutStatus(checkoutId);
 	return Promise.resolve(null);
 }
@@ -352,7 +354,8 @@ export async function reconcilePendingPayments(
 	payments: PaymentProvider,
 	opts: { minAgeMs?: number; maxAgeMs?: number } = {}
 ): Promise<{ checked: number; credited: number }> {
-	if (!payments.getPaymentByReference && !payments.getCheckoutStatus) return { checked: 0, credited: 0 };
+	if (!payments.getPaymentByReference && !payments.getCheckoutStatus)
+		return { checked: 0, credited: 0 };
 	const now = Date.now();
 	const minAge = new Date(now - (opts.minAgeMs ?? 90_000)); // webhook head start
 	const maxAge = new Date(now - (opts.maxAgeMs ?? 24 * 60 * 60 * 1000)); // stop after a day
@@ -445,7 +448,10 @@ export async function reconcileCheckout(
 			and(
 				eq(paymentCheckouts.referenceId, referenceId),
 				eq(paymentCheckouts.status, 'pending'),
-				or(isNull(paymentCheckouts.lastPolledAt), lte(paymentCheckouts.lastPolledAt, throttleBefore))
+				or(
+					isNull(paymentCheckouts.lastPolledAt),
+					lte(paymentCheckouts.lastPolledAt, throttleBefore)
+				)
 			)
 		)
 		.returning({
@@ -483,7 +489,8 @@ export async function reconcileCheckout(
 			});
 			return { credited: r.credited };
 		}
-		if (evt && (evt.status === 'failed' || evt.status === 'cancelled')) await markUnpaid(db, claimed.id, 'failed');
+		if (evt && (evt.status === 'failed' || evt.status === 'cancelled'))
+			await markUnpaid(db, claimed.id, 'failed');
 		else if (evt?.status === 'expired') await markUnpaid(db, claimed.id, 'expired');
 	} catch (err) {
 		// transient — the cron/webhook will still catch it. Capture so a persistent Maya-verify

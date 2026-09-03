@@ -1,6 +1,6 @@
 ---
 name: note:test-env-integration-coverage-gap
-description: "MOVED — superseded by customer-locator-e2e-harness-integration-gaps_NOTE_20-07-26.md in process/general-plans/backlog/. Original Maya/admin concern investigated and closed; real gap found in apps/customer instead."
+description: 'MOVED — superseded by customer-locator-e2e-harness-integration-gaps_NOTE_20-07-26.md in process/general-plans/backlog/. Original Maya/admin concern investigated and closed; real gap found in apps/customer instead.'
 date: 20-07-26
 metadata:
   node_type: memory

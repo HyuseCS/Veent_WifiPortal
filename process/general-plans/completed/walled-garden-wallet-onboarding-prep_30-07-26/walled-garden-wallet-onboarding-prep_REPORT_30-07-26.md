@@ -7,6 +7,7 @@ plan: process/general-plans/active/walled-garden-wallet-onboarding-prep_30-07-26
 ---
 
 ### What Was Done
+
 - `apps/admin/scripts/walled-garden-config.ts`: `PAYMENT_HOSTS` regrouped into 3 labeled blocks
   (Maya/PayMaya, GCash+Alipay+Mynt/G-Xchange, Google APIs) and trimmed by exactly 6 hosts:
   `pay.google.com`, `payments.google.com`, `accounts.google.com`, `accounts.google.com.ph`
@@ -23,6 +24,7 @@ plan: process/general-plans/active/walled-garden-wallet-onboarding-prep_30-07-26
   No candidate host added to `PAYMENT_HOSTS`.
 
 ### What Was Skipped/Deferred
+
 - **All NINE candidate domains (GoTyme, SeaBank, GrabPay, ShopeePay, Coins.ph, BDO, BPI, Landbank,
   Security Bank) remain UNVERIFIED** — none were live-verified against a real wallet/bank flow or
   driven through the recon protocol on staging this session. This was deliberately out of scope
@@ -34,22 +36,26 @@ plan: process/general-plans/active/walled-garden-wallet-onboarding-prep_30-07-26
 
 ### Test Gate Outcomes
 
-| Gate | Command | Result |
-|---|---|---|
-| Collision guard | `bunx vitest run apps/admin/scripts/setup-router.spec.ts` | PASS (1/1, re-run independently in UPDATE PROCESS) |
-| TS check | `bun run --filter radius-admin check` | PASS (0 errors, 0 warnings, 2316 files) |
+| Gate                    | Command                                                                                                                                                                                       | Result                                                                                                                                                                 |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Collision guard         | `bunx vitest run apps/admin/scripts/setup-router.spec.ts`                                                                                                                                     | PASS (1/1, re-run independently in UPDATE PROCESS)                                                                                                                     |
+| TS check                | `bun run --filter radius-admin check`                                                                                                                                                         | PASS (0 errors, 0 warnings, 2316 files)                                                                                                                                |
 | Deliberate-removal diff | Sorted set-diff of `PAYMENT_HOSTS` host strings, post-edit vs HEAD (intended: `diff <(git show HEAD:apps/admin/scripts/walled-garden-config.ts) <edited>` on the extracted+sorted host lines) | PASS — post set = HEAD set MINUS exactly the 6 removed hosts, with NO additions; corroborated by grep (0 matches for the 6 removed hosts, `*.googleapis.com` retained) |
 
 ### Plan Deviations
+
 None. Diff matches the plan's Execute-agent instructions (E1–E5) exactly.
 
 ### Test Infra Gaps Found
+
 None.
 
 ### SPEC Achievement
+
 No `*_SPEC_*.md` exists for this plan (SIMPLE plan, no SPEC phase — trivial/mechanical scope per
 CLAUDE.md RIPER-5 Phase Table skip condition). Verification Evidence table in the plan (4 rows) is
 the closest analog; all 4 rows are met:
+
 1. Collision guard green — met (Fully-Automated, re-confirmed).
 2. Sorted host set = HEAD minus exactly 6 — met (Fully-Automated, re-confirmed via grep).
 3. TS check clean — met (Fully-Automated, re-confirmed).
@@ -57,6 +63,7 @@ the closest analog; all 4 rows are met:
    confirmed by reading `git diff --cached docs/mikrotik/walled-garden.md`).
 
 ### Closeout Packet
+
 1. Selected plan path: `process/general-plans/completed/walled-garden-wallet-onboarding-prep_30-07-26/walled-garden-wallet-onboarding-prep_PLAN_30-07-26.md` (archived)
 2. Closeout classification: **Ready for UPDATE PROCESS archival**
 3. What was finished: see "What Was Done" above.
@@ -65,10 +72,10 @@ the closest analog; all 4 rows are met:
    (Agent-Probe tier, as declared in the plan) | Unverified: the 9 candidate wallet/bank domains
    in the new doc table — none live-verified against a real wallet/bank flow or staging recon
    (deferred, out of scope; see "What Was Skipped/Deferred").
-4b. Validate-contract: present, inline in plan, `Gate: PASS`, `generated-by: outer-pvl`, dated
+   4b. Validate-contract: present, inline in plan, `Gate: PASS`, `generated-by: outer-pvl`, dated
    2026-07-30.
 5. Cleanup done: this report written, plan archived to `process/general-plans/completed/`, context
-   + memory updated in this same UPDATE PROCESS pass | Still needed: none.
+   - memory updated in this same UPDATE PROCESS pass | Still needed: none.
 6. Next valid state: archived (plan now under `process/general-plans/completed/`); user makes the
    SEPARATE code commit (staged files untouched by this agent) followed by the process commit.
 7. Commit checkpoint: **Process commit belongs after UPDATE PROCESS** — the 2 staged code files
@@ -87,14 +94,18 @@ Recommend UPDATE PROCESS -- significant changes detected.
 ### Forward Preview
 
 #### Test Infra Found
+
 None new.
 
 #### Blast Radius Changes
+
 None vs plan — exactly the 2 declared files (`walled-garden-config.ts`, `walled-garden.md`).
 
 #### Commands to Stay Green
+
 - `bunx vitest run apps/admin/scripts/setup-router.spec.ts`
 - `bun run --filter radius-admin check`
 
 #### Dependency Changes
+
 None.
