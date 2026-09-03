@@ -1,6 +1,6 @@
 ---
 name: plan:repo-wide-lint-prettier-drift
-description: "Repo-wide bun run lint fails at root due to .prettierrc tailwindStylesheet path drift — pre-existing, not caused by IMS audit remediation"
+description: 'Repo-wide bun run lint fails at root due to .prettierrc tailwindStylesheet path drift — pre-existing, not caused by IMS audit remediation'
 date: 10-07-26
 feature: incident-management
 ---
@@ -8,6 +8,22 @@ feature: incident-management
 **Tracked as GH #98 — https://github.com/HyuseCS/Veent_WifiPortal/issues/98**
 
 # Backlog: repo-wide `bun run lint` prettier-config path drift
+
+**Status: SWEEP EXECUTED (03-09-26, uncommitted on `chore/repo-wide-lint-98`).**
+Decision made by the user: **Option 1 — one-time `prettier --write .` sweep** (Option 2
+per-app fan-out rejected). 308 files reformatted; `prettier --check .` is green.
+Pre-sweep `.prettierignore` fix: `/drizzle/` → `drizzle/` (root-anchored line missed the
+53 generated `packages/db/drizzle/meta/*.json` snapshots) + excluded generated
+`process/context/generated-skills-catalog.json`. Full record:
+`../active/repo-wide-lint-prettier-drift_03-09-26/` (PLAN + REPORT).
+
+**Residual (still blocks a fully green root `bun run lint`):** `eslint .` now runs for
+the first time and reports **25 pre-existing errors** (19 × svelte/no-navigation-without-resolve,
+3 × svelte/no-unused-props, 2 × no-unused-vars, 1 × svelte/no-at-html-tags on
+`admin/(app)/profile/+page.svelte:262`). Fixing them is a separate task — list in the REPORT.
+The tailwind sort-order ceiling below still stands (needs Option 2 if it ever matters).
+
+--- (superseded status below, kept for history) ---
 
 **Status: PARTIALLY CLOSED (20-07-26).** The original root cause (a broken `tailwindStylesheet`
 path that crashed prettier with ENOENT) is fixed. Remaining scope is narrower — see below. Do NOT
