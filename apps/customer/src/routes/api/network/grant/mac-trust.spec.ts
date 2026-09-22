@@ -10,7 +10,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 vi.mock('$lib/server/db', () => ({ db: {} }));
 vi.mock('$lib/server/network', () => ({ network: {} }));
-vi.mock('$lib/server/rateLimit', () => ({ rateLimit: vi.fn().mockResolvedValue({ allowed: true }) }));
+vi.mock('$lib/server/rateLimit', () => ({
+	rateLimit: vi.fn().mockResolvedValue({ allowed: true })
+}));
 vi.mock('$lib/server/network-location', () => ({
 	// The authoritative identity — the endpoint must bind THIS, and hand it the posted MAC to vet.
 	resolveMacTrusted: vi.fn().mockResolvedValue('AA:BB:CC:DD:EE:01')
@@ -24,7 +26,9 @@ vi.mock('@veent/core', async (importOriginal) => {
 	return {
 		...actual,
 		getAccount: vi.fn().mockResolvedValue({ blocked: false }),
-		startFreeAccessAndBindDevice: vi.fn().mockResolvedValue({ ok: true, accessExpiresAt: new Date() })
+		startFreeAccessAndBindDevice: vi
+			.fn()
+			.mockResolvedValue({ ok: true, accessExpiresAt: new Date() })
 	};
 });
 

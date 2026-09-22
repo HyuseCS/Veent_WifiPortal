@@ -57,7 +57,9 @@ const spec = {
 				responses: {
 					'200': {
 						description: 'Granted',
-						content: { 'application/json': { schema: { $ref: '#/components/schemas/GrantResult' } } }
+						content: {
+							'application/json': { schema: { $ref: '#/components/schemas/GrantResult' } }
+						}
 					},
 					'400': { description: 'macAddress missing' },
 					'401': { description: 'Not authenticated' },

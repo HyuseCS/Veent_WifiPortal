@@ -1,6 +1,6 @@
 ---
 name: plan:sentry-permalink-host-pinning
-description: "H1 hardening — pin the configured Sentry org host in permalink validation (beyond the https:// gate)"
+description: 'H1 hardening — pin the configured Sentry org host in permalink validation (beyond the https:// gate)'
 date: 10-07-26
 feature: incident-management
 ---

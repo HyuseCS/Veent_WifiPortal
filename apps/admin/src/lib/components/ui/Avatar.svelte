@@ -27,7 +27,11 @@
 </script>
 
 {#if src}
-	<img {src} alt={alt ?? `${name ?? 'Profile'} avatar`} class="shrink-0 rounded-full object-cover {klass}" />
+	<img
+		{src}
+		alt={alt ?? `${name ?? 'Profile'} avatar`}
+		class="shrink-0 rounded-full object-cover {klass}"
+	/>
 {:else}
 	<div
 		class="flex shrink-0 items-center justify-center rounded-full bg-cta font-semibold text-white {klass}"

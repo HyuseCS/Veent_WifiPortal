@@ -1,13 +1,13 @@
 ---
 name: protocol:context-maintenance
-description: "How process/context/ is organized, when to create or split groups, and how durable knowledge differs from feature plans."
+description: 'How process/context/ is organized, when to create or split groups, and how durable knowledge differs from feature plans.'
 date: 09-06-26
 metadata:
   node_type: memory
   type: protocol
   read_order: 6
   required: false
-  read_when: "maintaining context docs, creating/splitting context groups, or keeping all-context.md accurate"
+  read_when: 'maintaining context docs, creating/splitting context groups, or keeping all-context.md accurate'
 ---
 
 # Context Maintenance

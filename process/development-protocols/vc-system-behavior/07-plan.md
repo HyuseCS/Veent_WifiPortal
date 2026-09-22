@@ -1,13 +1,13 @@
 ---
 name: protocol:vc-system-behavior-07-plan
-description: "PLAN phase reference: plan artifact requirements, test coverage, and phase-program handling."
+description: 'PLAN phase reference: plan artifact requirements, test coverage, and phase-program handling.'
 date: 09-06-26
 metadata:
   node_type: memory
   type: protocol
   read_order: 1
   required: false
-  read_when: "running or auditing the PLAN phase"
+  read_when: 'running or auditing the PLAN phase'
 ---
 
 # PLAN Phase
@@ -17,6 +17,7 @@ metadata:
 The PLAN phase turns the requirements and the chosen "how" into a written plan artifact. No code is written here. The output is a single `*_PLAN_*.md` file.
 
 **PLAN has two input paths:**
+
 - **INNOVATE ran:** PLAN consumes the **Decision Summary** from INNOVATE (the chosen approach) on top of the locked SPEC.
 - **INNOVATE was skipped** (mechanical "how" — one obvious path, no design choice): PLAN consumes the **locked SPEC directly**; there is no Decision Summary.
 
@@ -107,11 +108,11 @@ When TIER_ASSIGNMENTS_BLOCKED fires, the plan-agent reports BLOCKED and routes b
 
 The first three tiers are the THREE active testing strategies (Fully-Automated / Hybrid / Agent-Probe). Known-Gap is NOT a strategy — it is the residual bucket for items that are genuinely untestable under all three strategies.
 
-| Tier | What it means | Format required |
-|---|---|---|
-| Fully-Automated (AUTOMATED) | Runs in CI without human input; includes E2E/integration gates | Exact shell command with file path and runner |
-| Hybrid (HYBRID) | Automated command + a required manual check | Command + description of the manual check |
-| Agent-Probe (AGENT-PROBE) | A spawned agent observes behavior; no automated assertion | Probe scenario + expected signal |
+| Tier                                 | What it means                                                   | Format required                                |
+| ------------------------------------ | --------------------------------------------------------------- | ---------------------------------------------- |
+| Fully-Automated (AUTOMATED)          | Runs in CI without human input; includes E2E/integration gates  | Exact shell command with file path and runner  |
+| Hybrid (HYBRID)                      | Automated command + a required manual check                     | Command + description of the manual check      |
+| Agent-Probe (AGENT-PROBE)            | A spawned agent observes behavior; no automated assertion       | Probe scenario + expected signal               |
 | Known-Gap (residual, not a strategy) | No test exists or is feasible under any of the three strategies | Reason + what infra change would close the gap |
 
 "Exact commands" means the full shell command with path and flags. Not "run tests."
@@ -127,10 +128,10 @@ Part C: for every agent-probe or known-gap tier, describe what test infra change
 
 Part D: `## Verification Evidence` must include representative test scenarios, not just commands. Readers should understand what is being proved. The section is a table where each test gate row carries, at minimum:
 
-| Column | Meaning |
-|---|---|
-| Gate / scenario | The test command (exact) plus the representative scenario it proves |
-| Strategy | One of `automated` / `hybrid` / `agent-probe` (or `known-gap` for residual items) |
+| Column                | Meaning                                                                           |
+| --------------------- | --------------------------------------------------------------------------------- |
+| Gate / scenario       | The test command (exact) plus the representative scenario it proves               |
+| Strategy              | One of `automated` / `hybrid` / `agent-probe` (or `known-gap` for residual items) |
 | Proves SPEC criterion | The SPEC acceptance-criterion id this gate proves (requirement→test traceability) |
 
 Every gate MUST reference the SPEC acceptance-criterion id it proves, closing requirement→test traceability from the plan side. A gate with no linked criterion id is a plan quality failure.
@@ -140,6 +141,7 @@ Every gate MUST reference the SPEC acceptance-criterion id it proves, closing re
 Run this BEFORE writing any file. It emits a kickoff recommendation. The kickoff recommendation is surfaced at the entry Combined Clarification Gate (or auto-proceeds under /goal) — it is not a separate mid-phase user pause.
 
 Templates used:
+
 - `vc-generate-phase-program/templates/umbrella-plan-template.md`
 - `vc-generate-phase-program/templates/phase-stub-template.md`
 - `vc-generate-phase-program/references/program-goal-charter-template.md`
@@ -186,11 +188,11 @@ Self-check before handoff. Catches gaps before vc-validate-agent runs the full s
 
 Three shapes are available. Pick based on these signals:
 
-| Shape | When to use | Key signals |
-|---|---|---|
-| SIMPLE | 1 file area, fits in 1 session, no real design choices | 8-15 steps, no cross-package blast radius |
-| COMPLEX | Multiple sections, 1 session, scope is known | Sequential steps, design choices required |
-| PHASE PROGRAM | 3+ independent phases, multi-session, /goal execution | Each phase can re-run alone; a program-level charter adds value |
+| Shape         | When to use                                            | Key signals                                                     |
+| ------------- | ------------------------------------------------------ | --------------------------------------------------------------- |
+| SIMPLE        | 1 file area, fits in 1 session, no real design choices | 8-15 steps, no cross-package blast radius                       |
+| COMPLEX       | Multiple sections, 1 session, scope is known           | Sequential steps, design choices required                       |
+| PHASE PROGRAM | 3+ independent phases, multi-session, /goal execution  | Each phase can re-run alone; a program-level charter adds value |
 
 Auto-detect using Large Program Detection signals. Do not ask the user unless signals are unclear. If asking, provide brief definitions for each option.
 
@@ -232,7 +234,7 @@ Ordering rule: phases with sequential dependencies run first, in dependency orde
    - **Advance** to VALIDATE/PVL — when the plan artifact is written and `validate-plan-artifact.mjs` passes.
    - **Re-run PLAN (loop back)** — when `validate-plan-artifact.mjs` fails, the test-tier matrix has gaps, or `## Test Infra Improvement Notes` is incomplete. Name the specific gaps + questions feeding the next entry gate. Bounded by the vc-autoresearch 10-cycle cap.
 3. **Recommended strategy** for PVL — full 4-option suite with 7-signal score + cost, one marked recommended, as selectable choices.
-4. **Optional deep work** (P11 vc-validate-findings self-check) offered as a *choice*, not a pause.
+4. **Optional deep work** (P11 vc-validate-findings self-check) offered as a _choice_, not a pause.
 
 Under `/goal` this gate auto-proceeds on the recommended option (re-PLAN bounded by the active-loop cap).
 
@@ -241,6 +243,7 @@ Under `/goal` this gate auto-proceeds on the recommended option (re-PLAN bounded
 ## Orchestrator Behavior
 
 Before spawning the plan agent:
+
 - Confirm the locked SPEC file path is passed (mandatory for non-trivial work). If INNOVATE ran, also confirm the Decision Summary exists; if INNOVATE was skipped, the SPEC stands in for it.
 - Pass the strategy recommendation.
 - Check for existing plans (no duplicates).
@@ -252,6 +255,7 @@ Overlap definition: a plan "overlaps" if it has the same `feature` frontmatter f
 Stale overlap: plans older than 90 days with status CONDITIONAL or BLOCKED and no checklist updates since creation are stale. Under /goal, stale overlap always means "create new plan" without asking.
 
 After the plan is written:
+
 - Review the artifact at the stated path.
 - Confirm exactly ONE plan file is selected.
 - Present the Phase-End Recommendation Gate (recommend PVL).

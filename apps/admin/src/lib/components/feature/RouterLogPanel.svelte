@@ -46,9 +46,7 @@
 	});
 </script>
 
-<aside
-	class="flex h-full flex-col overflow-hidden rounded-xl border border-border bg-bg shadow-sm"
->
+<aside class="flex h-full flex-col overflow-hidden rounded-xl border border-border bg-bg shadow-sm">
 	<header class="flex shrink-0 items-center justify-between gap-2 px-5 pt-4 pb-3">
 		<h2 class="text-base font-semibold text-ink">Router Log</h2>
 		<span
@@ -56,9 +54,7 @@
 				? 'bg-online/15 text-online'
 				: 'bg-blocked/15 text-blocked'}"
 		>
-			<span
-				class="h-1.5 w-1.5 rounded-full {live ? 'bg-online' : 'bg-blocked'}"
-				aria-hidden="true"
+			<span class="h-1.5 w-1.5 rounded-full {live ? 'bg-online' : 'bg-blocked'}" aria-hidden="true"
 			></span>
 			{live ? 'Streaming' : 'Offline'}
 		</span>
@@ -76,7 +72,9 @@
 				{#each entries as e, i (i)}
 					<div class="flex gap-2.5">
 						<span class="shrink-0" style="color: #5f6c92;">{e.time}</span>
-						<span class="shrink-0 font-semibold" style="color: {topicColor(e.topics)}">{e.topics}</span>
+						<span class="shrink-0 font-semibold" style="color: {topicColor(e.topics)}"
+							>{e.topics}</span
+						>
 						<span class="break-all">{e.message}</span>
 					</div>
 				{/each}

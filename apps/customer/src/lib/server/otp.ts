@@ -229,14 +229,19 @@ async function sendViaCast(phone: string, code: string): Promise<void> {
 			signal: AbortSignal.timeout(10_000)
 		});
 	} catch (err) {
-		throw new Error(`Cast SMS send failed: ${err instanceof Error ? err.message : String(err)}`, { cause: err });
+		throw new Error(`Cast SMS send failed: ${err instanceof Error ? err.message : String(err)}`, {
+			cause: err
+		});
 	}
 
 	// A non-2xx OR a body without `success: true` means the code never went out. Surface the stable
 	// machine-readable error_code when the gateway supplies one.
-	const body = (await res.json().catch(() => null)) as
-		| { success?: boolean; error?: string; error_code?: string; message_id?: string }
-		| null;
+	const body = (await res.json().catch(() => null)) as {
+		success?: boolean;
+		error?: string;
+		error_code?: string;
+		message_id?: string;
+	} | null;
 	if (!res.ok || !body?.success) {
 		throw new Error(
 			`Cast SMS rejected (${res.status})${body?.error_code ? ` [${body.error_code}]` : ''}: ${body?.error ?? 'no success flag'}`
@@ -299,7 +304,9 @@ async function sendViaITexMo(phone: string, code: string): Promise<void> {
 			signal: AbortSignal.timeout(10_000)
 		});
 	} catch (err) {
-		throw new Error(`iTexMo SMS send failed: ${err instanceof Error ? err.message : String(err)}`, { cause: err });
+		throw new Error(`iTexMo SMS send failed: ${err instanceof Error ? err.message : String(err)}`, {
+			cause: err
+		});
 	}
 
 	// Transport-level failure.
@@ -309,9 +316,11 @@ async function sendViaITexMo(phone: string, code: string): Promise<void> {
 	}
 	// API-level result: { Error, Accepted, Failed, ReferenceId, Message? }. Treat a gateway error OR
 	// a recipient that wasn't accepted as a failure — a 200 with Accepted: 0 means nothing went out.
-	const body = (await res.json().catch(() => null)) as
-		| { Error?: boolean; Accepted?: number; Message?: string }
-		| null;
+	const body = (await res.json().catch(() => null)) as {
+		Error?: boolean;
+		Accepted?: number;
+		Message?: string;
+	} | null;
 	if (!body || body.Error || (body.Accepted ?? 0) < 1) {
 		throw new Error(`iTexMo SMS rejected: ${body?.Message ?? 'no recipient accepted'}`);
 	}
@@ -352,7 +361,9 @@ async function sendViaUniSMS(phone: string, code: string): Promise<void> {
 			signal: AbortSignal.timeout(10_000)
 		});
 	} catch (err) {
-		throw new Error(`UniSMS SMS send failed: ${err instanceof Error ? err.message : String(err)}`, { cause: err});
+		throw new Error(`UniSMS SMS send failed: ${err instanceof Error ? err.message : String(err)}`, {
+			cause: err
+		});
 	}
 
 	// 201 Created on success (body echoes the queued message). A non-2xx OR a message that came back
@@ -361,9 +372,9 @@ async function sendViaUniSMS(phone: string, code: string): Promise<void> {
 		const detail = await res.text().catch(() => '');
 		throw new Error(`UniSMS SMS send failed (${res.status}): ${detail}`);
 	}
-	const body = (await res.json().catch(() => null)) as
-		| { message?: { status?: string; fail_reason?: string | null } }
-		| null;
+	const body = (await res.json().catch(() => null)) as {
+		message?: { status?: string; fail_reason?: string | null };
+	} | null;
 	if (!body?.message || body.message.status === 'failed') {
 		throw new Error(`UniSMS SMS rejected: ${body?.message?.fail_reason ?? 'no message returned'}`);
 	}
@@ -413,7 +424,9 @@ async function sendViaSMSGate(phone: string, code: string): Promise<void> {
 			signal: AbortSignal.timeout(10_000)
 		});
 	} catch (err) {
-		throw new Error(`SMS Gate send failed: ${err instanceof Error ? err.message : String(err)}`, { cause: err });
+		throw new Error(`SMS Gate send failed: ${err instanceof Error ? err.message : String(err)}`, {
+			cause: err
+		});
 	}
 
 	// 202 Accepted on success (the message is queued for the phone). A non-2xx OR a message that came

@@ -277,15 +277,16 @@
 						</div>
 
 						<div class="space-y-1.5">
-							<label for="issue-description" class="block text-sm font-medium text-ink">Description</label>
+							<label for="issue-description" class="block text-sm font-medium text-ink"
+								>Description</label
+							>
 							<textarea
 								id="issue-description"
 								name="issue-description"
 								rows="5"
 								bind:value={description}
 								class={inputClass}
-								placeholder="What's wrong? Steps, symptoms, context…"
-							></textarea>
+								placeholder="What's wrong? Steps, symptoms, context…"></textarea>
 						</div>
 					{/if}
 				</div>
@@ -293,10 +294,17 @@
 				<!-- Right column: the incident metadata (assignment, priority, timing). -->
 				<div class="space-y-4">
 					<div class="grid gap-4 sm:grid-cols-2">
-						<Select id="issue-priority" label="Priority" options={priorityOptions} bind:value={priority} />
+						<Select
+							id="issue-priority"
+							label="Priority"
+							options={priorityOptions}
+							bind:value={priority}
+						/>
 						{#if isSentry}
 							<div class="space-y-1.5">
-								<label for="issue-dueDate" class="block text-sm font-medium text-ink">Due date</label>
+								<label for="issue-dueDate" class="block text-sm font-medium text-ink"
+									>Due date</label
+								>
 								<input
 									id="issue-dueDate"
 									name="issue-dueDate"
@@ -307,13 +315,20 @@
 								/>
 							</div>
 						{:else}
-							<Select id="issue-networkId" label="Access point" options={apOptions} bind:value={networkId} />
+							<Select
+								id="issue-networkId"
+								label="Access point"
+								options={apOptions}
+								bind:value={networkId}
+							/>
 						{/if}
 					</div>
 
 					{#if !isSentry}
 						<div class="space-y-1.5">
-							<label for="issue-dueDate" class="block text-sm font-medium text-ink">Due date (optional)</label>
+							<label for="issue-dueDate" class="block text-sm font-medium text-ink"
+								>Due date (optional)</label
+							>
 							<input
 								id="issue-dueDate"
 								name="issue-dueDate"
@@ -333,7 +348,9 @@
 							{:else}
 								<div class="max-h-44 space-y-1 overflow-y-auto rounded-lg border border-border p-2">
 									{#each staff as s (s.id)}
-										<label class="flex min-h-11 items-center gap-2 rounded-md px-2 py-1.5 hover:bg-surface">
+										<label
+											class="flex min-h-11 items-center gap-2 rounded-md px-2 py-1.5 hover:bg-surface"
+										>
 											<input
 												type="checkbox"
 												name="assigneeId"

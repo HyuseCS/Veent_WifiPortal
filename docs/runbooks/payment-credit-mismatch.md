@@ -15,7 +15,7 @@ To stop an infinite retry loop, the checkout is marked **`settled`** but **not c
 has paid and received nothing. This is a fail-closed money-integrity stop, **not** an attack. It requires
 manual remediation; there is no automatic refund.
 
-(Contrast: a *non-finite / unparseable* gateway amount is left `pending` and auto-retried — that path does
+(Contrast: a _non-finite / unparseable_ gateway amount is left `pending` and auto-retried — that path does
 not alert here.)
 
 ## Investigate

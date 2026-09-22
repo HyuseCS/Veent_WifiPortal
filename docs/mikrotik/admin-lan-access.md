@@ -8,7 +8,7 @@ externally.
 
 The admin dashboard (`apps/admin`) is a separate SvelteKit app. A device joined
 to the guest WiFi sits behind the hotspot's default deny-all firewall, so by
-default it can't reach the admin app *or* the internet until credits/Free Time
+default it can't reach the admin app _or_ the internet until credits/Free Time
 are spent. We want operators to:
 
 1. Open the admin dashboard from **any device on the WiFi**, before authenticating.
@@ -75,10 +75,10 @@ engages against a real MikroTik.
 
 ## Components
 
-| Concern | Where |
-|---------|-------|
-| MAC-from-IP lookup, tagged grant | `packages/core/src/integrations/network/mikrotik.ts` |
-| Walled-garden provisioning | `provisionWalledGarden()` — same file |
-| Admin grant/revoke/resolve service | `packages/core/src/services/adminAccess.ts` |
-| Grant on sign-in | `apps/admin/src/routes/login/+page.server.ts` |
-| Router setup CLI | `apps/admin/scripts/setup-router.ts` (`bun run setup:router`) |
+| Concern                            | Where                                                         |
+| ---------------------------------- | ------------------------------------------------------------- |
+| MAC-from-IP lookup, tagged grant   | `packages/core/src/integrations/network/mikrotik.ts`          |
+| Walled-garden provisioning         | `provisionWalledGarden()` — same file                         |
+| Admin grant/revoke/resolve service | `packages/core/src/services/adminAccess.ts`                   |
+| Grant on sign-in                   | `apps/admin/src/routes/login/+page.server.ts`                 |
+| Router setup CLI                   | `apps/admin/scripts/setup-router.ts` (`bun run setup:router`) |

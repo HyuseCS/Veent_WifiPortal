@@ -24,9 +24,7 @@
 
 	// `form` is a union across all the actions; only the profile/email failures echo `values`.
 	// Read it through a loose view so the input value-echoes typecheck without narrowing each use.
-	const vals = $derived(
-		(form as { values?: Record<string, string> } | null)?.values
-	);
+	const vals = $derived((form as { values?: Record<string, string> } | null)?.values);
 
 	// Progressive disclosure: the authenticator-code field only appears once the user has actually
 	// started the change (typed a new email / a password), so the form isn't cluttered at rest.
@@ -51,7 +49,8 @@
 	<div class="rounded-lg border border-highlight/30 bg-highlight/5 p-4">
 		<p class="mb-2 text-sm font-semibold text-ink">Save these backup codes</p>
 		<p class="mb-3 text-xs text-muted">
-			Each works once if you lose your authenticator. They're shown only now — store them somewhere safe.
+			Each works once if you lose your authenticator. They're shown only now — store them somewhere
+			safe.
 		</p>
 		<ul class="grid grid-cols-2 gap-x-6 gap-y-1 font-mono text-sm text-ink sm:grid-cols-2">
 			{#each codes as code (code)}
@@ -64,7 +63,9 @@
 <div class="mx-auto max-w-2xl space-y-6 pb-10">
 	<header>
 		<h1 class="text-xl font-semibold text-ink">Profile settings</h1>
-		<p class="mt-1 text-sm text-muted">Manage your photo, details, sign-in and two-factor security.</p>
+		<p class="mt-1 text-sm text-muted">
+			Manage your photo, details, sign-in and two-factor security.
+		</p>
 	</header>
 
 	<!-- Profile photo -->
@@ -84,7 +85,12 @@
 				<Button type="submit" form="avatar-save" loading={busy === 'avatar'}>Save photo</Button>
 				{#if data.profile.image}
 					<!-- Own (associated) form so its submit + spinner are independent of Save. -->
-					<Button variant="danger" type="submit" form="avatar-remove" loading={busy === 'avatar-remove'}>
+					<Button
+						variant="danger"
+						type="submit"
+						form="avatar-remove"
+						loading={busy === 'avatar-remove'}
+					>
 						Remove
 					</Button>
 				{/if}
@@ -104,7 +110,12 @@
 	<!-- Name + contact info -->
 	<Card>
 		<SectionHeading title="Your details" />
-		<form method="post" action="?/saveProfile" use:enhance={submit('profile')} class="mt-4 space-y-4">
+		<form
+			method="post"
+			action="?/saveProfile"
+			use:enhance={submit('profile')}
+			class="mt-4 space-y-4"
+		>
 			<Field
 				id="name"
 				label="Display name"
@@ -118,7 +129,7 @@
 				label="Job title"
 				placeholder="e.g. Network Lead"
 				autocomplete="organization-title"
-				value={vals?.jobTitle ?? (data.profile.jobTitle ?? '')}
+				value={vals?.jobTitle ?? data.profile.jobTitle ?? ''}
 			/>
 			<Field
 				id="phone"
@@ -127,7 +138,7 @@
 				inputmode="tel"
 				autocomplete="tel"
 				placeholder="e.g. +63 917 123 4567"
-				value={vals?.phone ?? (data.profile.phone ?? '')}
+				value={vals?.phone ?? data.profile.phone ?? ''}
 			/>
 			<Field
 				id="contactEmail"
@@ -136,7 +147,7 @@
 				type="email"
 				autocomplete="email"
 				placeholder="A reach-me address (separate from sign-in)"
-				value={vals?.contactEmail ?? (data.profile.contactEmail ?? '')}
+				value={vals?.contactEmail ?? data.profile.contactEmail ?? ''}
 			/>
 			{@render feedback('profile', 'Details saved.')}
 			<Button type="submit" loading={busy === 'profile'}>Save details</Button>
@@ -181,10 +192,38 @@
 	<!-- Password -->
 	<Card>
 		<SectionHeading title="Password" />
-		<form method="post" action="?/changePassword" use:enhance={submit('password')} class="mt-4 space-y-4">
-			<Field id="currentPassword" label="Current password" type="password" autocomplete="current-password" required oninput={(e) => (pwCurrent = val(e))} />
-			<Field id="newPassword" label="New password" type="password" autocomplete="new-password" required minlength={8} oninput={(e) => (pwNew = val(e))} />
-			<Field id="confirmPassword" label="Confirm new password" type="password" autocomplete="new-password" required minlength={8} oninput={(e) => (pwConfirm = val(e))} />
+		<form
+			method="post"
+			action="?/changePassword"
+			use:enhance={submit('password')}
+			class="mt-4 space-y-4"
+		>
+			<Field
+				id="currentPassword"
+				label="Current password"
+				type="password"
+				autocomplete="current-password"
+				required
+				oninput={(e) => (pwCurrent = val(e))}
+			/>
+			<Field
+				id="newPassword"
+				label="New password"
+				type="password"
+				autocomplete="new-password"
+				required
+				minlength={8}
+				oninput={(e) => (pwNew = val(e))}
+			/>
+			<Field
+				id="confirmPassword"
+				label="Confirm new password"
+				type="password"
+				autocomplete="new-password"
+				required
+				minlength={8}
+				oninput={(e) => (pwConfirm = val(e))}
+			/>
 			{#if pwStarted}
 				<Field
 					id="password-code"
@@ -207,13 +246,16 @@
 	<Card>
 		<SectionHeading title="Two-factor authentication" />
 		<p class="mt-1 text-sm text-muted">
-			Two-factor is required for all staff. Re-enroll to move to a new authenticator, or refresh your backup codes.
+			Two-factor is required for all staff. Re-enroll to move to a new authenticator, or refresh
+			your backup codes.
 		</p>
 
 		{#if twofaConfirm}
 			<!-- Rotation in progress: scan the new secret and confirm a code to finish. -->
 			<div class="mt-4 space-y-4">
-				<p class="text-sm text-ink">Scan this with your authenticator app, then enter a code to finish.</p>
+				<p class="text-sm text-ink">
+					Scan this with your authenticator app, then enter a code to finish.
+				</p>
 				<div class="flex flex-wrap items-start gap-5">
 					<div class="w-40 shrink-0 rounded-lg border border-border bg-white p-2">
 						<!-- Server-rendered SVG (uqr) — safe to inline. -->
@@ -221,13 +263,20 @@
 					</div>
 					<div class="min-w-0 flex-1 space-y-2">
 						<p class="text-xs text-muted">Can't scan? Enter this key manually:</p>
-						<code class="block break-all rounded bg-surface px-3 py-2 font-mono text-xs text-ink">{form?.secret}</code>
+						<code class="block break-all rounded bg-surface px-3 py-2 font-mono text-xs text-ink"
+							>{form?.secret}</code
+						>
 					</div>
 				</div>
 				{#if form?.backupCodes?.length}
 					{@render backupCodes(form.backupCodes)}
 				{/if}
-				<form method="post" action="?/reenroll2faConfirm" use:enhance={submit('twofa')} class="space-y-4">
+				<form
+					method="post"
+					action="?/reenroll2faConfirm"
+					use:enhance={submit('twofa')}
+					class="space-y-4"
+				>
 					<input type="hidden" name="secret" value={form?.secret ?? ''} />
 					<input type="hidden" name="backupCodes" value={(form?.backupCodes ?? []).join('\n')} />
 					<Field
@@ -242,7 +291,9 @@
 						class="font-mono tracking-widest"
 					/>
 					{#if form?.action === 'twofa' && form?.error}
-						<p class="rounded-lg bg-blocked/10 px-4 py-3 text-sm text-blocked" role="alert">{form.error}</p>
+						<p class="rounded-lg bg-blocked/10 px-4 py-3 text-sm text-blocked" role="alert">
+							{form.error}
+						</p>
 					{/if}
 					<Button type="submit" loading={busy === 'twofa'}>Finish re-enrollment</Button>
 				</form>
@@ -250,29 +301,61 @@
 		{:else}
 			<div class="mt-4 grid gap-6 sm:grid-cols-2">
 				<!-- Re-enroll -->
-				<form method="post" action="?/reenroll2faStart" use:enhance={submit('twofa')} class="space-y-3">
+				<form
+					method="post"
+					action="?/reenroll2faStart"
+					use:enhance={submit('twofa')}
+					class="space-y-3"
+				>
 					<p class="text-sm font-medium text-ink">Re-enroll authenticator</p>
-					<Field id="reenroll-password" name="password" label="Confirm password" type="password" autocomplete="current-password" required />
-					<Button variant="secondary" type="submit" loading={busy === 'twofa'}>Start re-enrollment</Button>
+					<Field
+						id="reenroll-password"
+						name="password"
+						label="Confirm password"
+						type="password"
+						autocomplete="current-password"
+						required
+					/>
+					<Button variant="secondary" type="submit" loading={busy === 'twofa'}
+						>Start re-enrollment</Button
+					>
 				</form>
 
 				<!-- Regenerate backup codes -->
-				<form method="post" action="?/regenBackupCodes" use:enhance={submit('backup')} class="space-y-3">
+				<form
+					method="post"
+					action="?/regenBackupCodes"
+					use:enhance={submit('backup')}
+					class="space-y-3"
+				>
 					<p class="text-sm font-medium text-ink">Backup codes</p>
-					<Field id="backup-password" name="password" label="Confirm password" type="password" autocomplete="current-password" required />
-					<Button variant="secondary" type="submit" loading={busy === 'backup'}>Regenerate codes</Button>
+					<Field
+						id="backup-password"
+						name="password"
+						label="Confirm password"
+						type="password"
+						autocomplete="current-password"
+						required
+					/>
+					<Button variant="secondary" type="submit" loading={busy === 'backup'}
+						>Regenerate codes</Button
+					>
 				</form>
 			</div>
 
 			{#if form?.action === 'twofa' && form?.error}
-				<p class="mt-4 rounded-lg bg-blocked/10 px-4 py-3 text-sm text-blocked" role="alert">{form.error}</p>
+				<p class="mt-4 rounded-lg bg-blocked/10 px-4 py-3 text-sm text-blocked" role="alert">
+					{form.error}
+				</p>
 			{:else if form?.action === 'twofa' && form?.reenrolled && form?.ok}
 				<p class="mt-4 rounded-lg bg-online/10 px-4 py-3 text-sm text-online" role="status">
 					Authenticator re-enrolled.
 				</p>
 			{/if}
 			{#if form?.action === 'backup' && form?.error}
-				<p class="mt-4 rounded-lg bg-blocked/10 px-4 py-3 text-sm text-blocked" role="alert">{form.error}</p>
+				<p class="mt-4 rounded-lg bg-blocked/10 px-4 py-3 text-sm text-blocked" role="alert">
+					{form.error}
+				</p>
 			{:else if form?.action === 'backup' && form?.ok && form?.backupCodes?.length}
 				<div class="mt-4">{@render backupCodes(form.backupCodes)}</div>
 			{/if}

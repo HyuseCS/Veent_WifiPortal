@@ -87,5 +87,10 @@ export const POST: RequestHandler = async (event) => {
 		error(503, 'Could not open access — your credits were not charged. Please try again.');
 	}
 	if (!result.ok) error(402, 'Insufficient credit balance');
-	return json({ ok: true, mode: 'tier', accessExpiresAt: result.accessExpiresAt, balance: result.balance });
+	return json({
+		ok: true,
+		mode: 'tier',
+		accessExpiresAt: result.accessExpiresAt,
+		balance: result.balance
+	});
 };

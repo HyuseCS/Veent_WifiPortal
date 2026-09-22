@@ -1,6 +1,6 @@
 ---
 name: plan:sentry-issueid-provenance
-description: "M4d — verify sentryIssueId against the Sentry API before persisting a Tracked-from-Sentry incident"
+description: 'M4d — verify sentryIssueId against the Sentry API before persisting a Tracked-from-Sentry incident'
 date: 20-07-26
 feature: incident-management
 ---
@@ -36,7 +36,7 @@ live, authenticated calls to the production Sentry org (`radiusveent-0f`) — pr
 introduced by this plan, but only surfaced because M4d made that code path fail loudly (see the
 EXECUTE report's "BLOCKING FINDING" and "Standalone hygiene finding" sections for the full
 evidence). Every mention below of "Sentry is unconfigured in the e2e env" / "the unconfigured
-escape hatch" describes the plan's *design intent* (still correct and still what was built), not an
+escape hatch" describes the plan's _design intent_ (still correct and still what was built), not an
 accident of the original environment.
 
 **The premise is true now, but only because of an approved out-of-checklist fix, not because it was
@@ -91,9 +91,9 @@ existing e2e harness working.
 
 ```ts
 export function fetchLatestEventRaw(id: string): Promise<unknown> {
-  return cached(`event:${id}`, () =>
-    sentryGet(`/organizations/${org()}/issues/${encodeURIComponent(id)}/events/latest/`, {})
-  );
+	return cached(`event:${id}`, () =>
+		sentryGet(`/organizations/${org()}/issues/${encodeURIComponent(id)}/events/latest/`, {})
+	);
 }
 ```
 
@@ -168,12 +168,12 @@ leaking whether an id exists in a different org).
 
 ## Touchpoints
 
-| File | Change |
-|---|---|
-| `apps/admin/src/routes/(app)/sentry/+page.server.ts` | Add provenance check inside `track:` action, after `validateSentrySnapshot()`, before `createIssueFromSentry(...)`. Import `fetchLatestEventRaw` from `$lib/server/sentry`. |
-| `apps/admin/src/lib/server/sentry/index.ts` (or wherever the barrel re-exports live — confirm exact path during EXECUTE; `page.server.ts:9` already imports `isSentryConfigured` etc. from `$lib/server/sentry`) | Add `fetchLatestEventRaw` to the barrel export if not already exported there (client.ts already exports it directly; confirm barrel re-export exists before EXECUTE — read the barrel file first). |
-| `apps/admin/src/routes/(app)/sentry/track-provenance.test.ts` (NEW; the plan originally proposed `+page.server.test.ts` — renamed during EXECUTE because SvelteKit reserves the `+` filename prefix) | Unit tests for the new provenance branch — see Verification Evidence. |
-| `apps/admin/src/lib/server/sentry/client.test.ts` (EXTEND) | Add `fetch` mock coverage for `fetchLatestEventRaw` if the unit tests are more naturally placed here instead of/alongside the page.server test — decide during EXECUTE based on which file can most cleanly mock `fetch` vs mock the client module. Both options are acceptable; prefer whichever avoids re-mocking `$app/*`/SvelteKit internals unnecessarily. |
+| File                                                                                                                                                                                                             | Change                                                                                                                                                                                                                                                                                                                                                          |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `apps/admin/src/routes/(app)/sentry/+page.server.ts`                                                                                                                                                             | Add provenance check inside `track:` action, after `validateSentrySnapshot()`, before `createIssueFromSentry(...)`. Import `fetchLatestEventRaw` from `$lib/server/sentry`.                                                                                                                                                                                     |
+| `apps/admin/src/lib/server/sentry/index.ts` (or wherever the barrel re-exports live — confirm exact path during EXECUTE; `page.server.ts:9` already imports `isSentryConfigured` etc. from `$lib/server/sentry`) | Add `fetchLatestEventRaw` to the barrel export if not already exported there (client.ts already exports it directly; confirm barrel re-export exists before EXECUTE — read the barrel file first).                                                                                                                                                              |
+| `apps/admin/src/routes/(app)/sentry/track-provenance.test.ts` (NEW; the plan originally proposed `+page.server.test.ts` — renamed during EXECUTE because SvelteKit reserves the `+` filename prefix)             | Unit tests for the new provenance branch — see Verification Evidence.                                                                                                                                                                                                                                                                                           |
+| `apps/admin/src/lib/server/sentry/client.test.ts` (EXTEND)                                                                                                                                                       | Add `fetch` mock coverage for `fetchLatestEventRaw` if the unit tests are more naturally placed here instead of/alongside the page.server test — decide during EXECUTE based on which file can most cleanly mock `fetch` vs mock the client module. Both options are acceptable; prefer whichever avoids re-mocking `$app/*`/SvelteKit internals unnecessarily. |
 
 No other files are touched. No schema, no migration, no new env var.
 
@@ -215,19 +215,22 @@ No other files are touched. No schema, no migration, no new env var.
 2. In `apps/admin/src/routes/(app)/sentry/+page.server.ts`:
    a. Add `fetchLatestEventRaw` to the existing `$lib/server/sentry` import on line 9.
    b. Inside `track:` action, immediately after the `snapshot` destructure (~line 101) and before
-      the `title` validation (~line 103), insert the provenance gate:
-      ```ts
-      if (isSentryConfigured()) {
-        try {
-          await fetchLatestEventRaw(sentryIssueId);
-        } catch (err) {
-          log.error('track provenance check failed', err);
-          return fail(502, { action: 'track', error: 'Could not verify this Sentry issue. Try again.' });
-        }
-      }
-      ```
+   the `title` validation (~line 103), insert the provenance gate:
+   ```ts
+   if (isSentryConfigured()) {
+   	try {
+   		await fetchLatestEventRaw(sentryIssueId);
+   	} catch (err) {
+   		log.error('track provenance check failed', err);
+   		return fail(502, {
+   			action: 'track',
+   			error: 'Could not verify this Sentry issue. Try again.'
+   		});
+   	}
+   }
+   ```
    c. Confirm `isSentryConfigured` is already imported (it is, line 9) — no new import needed for
-      that symbol.
+   that symbol.
 3. Write unit tests (new file `apps/admin/src/routes/(app)/sentry/track-provenance.test.ts` OR extend
    `client.test.ts`, per the Touchpoints decision) covering the 5 scenarios in Verification
    Evidence below. Build a `fetch` mock helper if one does not already exist for this module — check
@@ -258,28 +261,28 @@ No other files are touched. No schema, no migration, no new env var.
 
 ## Verification Evidence
 
-| Gate / Scenario | Strategy | Proves SPEC criterion |
-|---|---|---|
-| Lookup rejects a nonexistent id (`fetchLatestEventRaw` mock rejects with a 404-shaped error) → `?/track` returns `fail(502, ...)`, `createIssueFromSentry` never called | Fully-Automated (`bunx vitest run`, mocked `fetch`) | Goal 1 |
-| Lookup rejects an org-mismatch id (mock rejects, simulating a real id in a different Sentry org) → `?/track` returns `fail(502, ...)`, nothing persisted | Fully-Automated (`bunx vitest run`, mocked `fetch`) | Goal 1 |
-| Lookup times out / 5xx / network error while Sentry IS configured → `?/track` fails closed (`fail(502, ...)`), nothing persisted | Fully-Automated (`bunx vitest run`, mocked `fetch` rejecting/throwing) | Goal 2 |
-| Sentry NOT configured (`isSentryConfigured()` mocked `false`) → provenance check skipped, `?/track` proceeds to existing behavior unchanged | Fully-Automated (`bunx vitest run`, mocked `isSentryConfigured`) | Goal 3 |
-| Happy path: lookup resolves successfully → `?/track` proceeds to `createIssueFromSentry` as before, incident created | Fully-Automated (`bunx vitest run`, mocked `fetch` resolving) | Goal 4 |
-| `apps/admin/e2e/incident-sentry.e2e.ts` remains green, unmodified, against unconfigured-Sentry throwaway env | Hybrid (`bun run test:e2e` — throwaway DB + real Chromium, precondition: Sentry env vars unset) | Goal 3 (regression proof) |
-| Full admin unit suite has no regression (`client.test.ts`, `map.test.ts`, etc.) | Fully-Automated (`bunx vitest run` full admin suite) | Goals 1-4 (no side-effect regression) |
-| Typecheck passes with new import/branch | Fully-Automated (`bun run check`) | Implementation correctness (non-functional) |
-| Live-Sentry happy-path + rejection-path smoke, if sandbox available | Agent-Probe (manual, conditional on live `SENTRY_AUTH_TOKEN` sandbox access) | Goal 1 + Goal 4 (real-world confidence, not required for gate PASS) |
+| Gate / Scenario                                                                                                                                                         | Strategy                                                                                        | Proves SPEC criterion                                               |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| Lookup rejects a nonexistent id (`fetchLatestEventRaw` mock rejects with a 404-shaped error) → `?/track` returns `fail(502, ...)`, `createIssueFromSentry` never called | Fully-Automated (`bunx vitest run`, mocked `fetch`)                                             | Goal 1                                                              |
+| Lookup rejects an org-mismatch id (mock rejects, simulating a real id in a different Sentry org) → `?/track` returns `fail(502, ...)`, nothing persisted                | Fully-Automated (`bunx vitest run`, mocked `fetch`)                                             | Goal 1                                                              |
+| Lookup times out / 5xx / network error while Sentry IS configured → `?/track` fails closed (`fail(502, ...)`), nothing persisted                                        | Fully-Automated (`bunx vitest run`, mocked `fetch` rejecting/throwing)                          | Goal 2                                                              |
+| Sentry NOT configured (`isSentryConfigured()` mocked `false`) → provenance check skipped, `?/track` proceeds to existing behavior unchanged                             | Fully-Automated (`bunx vitest run`, mocked `isSentryConfigured`)                                | Goal 3                                                              |
+| Happy path: lookup resolves successfully → `?/track` proceeds to `createIssueFromSentry` as before, incident created                                                    | Fully-Automated (`bunx vitest run`, mocked `fetch` resolving)                                   | Goal 4                                                              |
+| `apps/admin/e2e/incident-sentry.e2e.ts` remains green, unmodified, against unconfigured-Sentry throwaway env                                                            | Hybrid (`bun run test:e2e` — throwaway DB + real Chromium, precondition: Sentry env vars unset) | Goal 3 (regression proof)                                           |
+| Full admin unit suite has no regression (`client.test.ts`, `map.test.ts`, etc.)                                                                                         | Fully-Automated (`bunx vitest run` full admin suite)                                            | Goals 1-4 (no side-effect regression)                               |
+| Typecheck passes with new import/branch                                                                                                                                 | Fully-Automated (`bun run check`)                                                               | Implementation correctness (non-functional)                         |
+| Live-Sentry happy-path + rejection-path smoke, if sandbox available                                                                                                     | Agent-Probe (manual, conditional on live `SENTRY_AUTH_TOKEN` sandbox access)                    | Goal 1 + Goal 4 (real-world confidence, not required for gate PASS) |
 
 **High-risk class table (trust-boundary/provenance surface):**
 
-| Area | High-risk class | Minimum tier | Gap rationale if known-gap accepted |
-|---|---|---|---|
+| Area                                        | High-risk class                       | Minimum tier                                                                                                 | Gap rationale if known-gap accepted                                                                                                                                                                                                                                                                            |
+| ------------------------------------------- | ------------------------------------- | ------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Sentry issueId provenance gate in `?/track` | trust-boundary / provenance-integrity | Fully-Automated only (7 unit tests in `track-provenance.test.ts` mock the `$lib/server/sentry` facade) — met | Configured-Sentry provenance behavior (G1/G1b/G2/G4) is NOT covered by e2e: `incident-sentry.e2e.ts` runs with Sentry UNCONFIGURED, so it only exercises the `isSentryConfigured() === false` escape hatch (G3), not the provenance check itself. The "Hybrid" label previously used here overstated coverage. |
 
 ## Missing Test Areas
 
-| Area | Why untestable in this plan | Resolution chosen |
-|---|---|---|
+| Area                                                                                                        | Why untestable in this plan                                                                                 | Resolution chosen                                                                                                                                                                                                                                       |
+| ----------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Live Sentry API behavior (real 404 shape, real org-mismatch 404 shape) beyond the mocked-`fetch` unit tests | Requires a live `SENTRY_AUTH_TOKEN` + real org access; not guaranteed available in every dev/CI environment | Agent-Probe (checklist step 8), conditional; falls back to known-gap if no sandbox — the mocked unit tests already cover the code path faithfully since `fetchLatestEventRaw` throws identically for 404 and org-mismatch (both are non-2xx → `fail()`) |
 
 ## Test Infra Improvement Notes
@@ -301,7 +304,7 @@ shape in the future; defer that extraction until it's actually needed twice)
 - **Integration note:** the `cached()` read cache means a retried `?/track` submission for the same
   id within 60s of a successful lookup won't re-hit Sentry — fine, since the goal is confirming
   existence/ownership, which doesn't change within that window; a retried submission after a
-  *failed* lookup re-hits Sentry after only 10s (FAIL_TTL), which is appropriate for retry UX.
+  _failed_ lookup re-hits Sentry after only 10s (FAIL_TTL), which is appropriate for retry UX.
 - **Risk (VALIDATE finding, accepted as known-gap — see validate-contract Execute-Agent
   Instruction E2):** `fetchLatestEventRaw` proves "issue has ≥1 retrievable event," not pure
   existence — a real in-org issue with zero retrievable events (e.g. event data purged by a GDPR
@@ -311,7 +314,6 @@ shape in the future; defer that extraction until it's actually needed twice)
   browser tab open past that window could. Failure mode is availability (blocks a legitimate
   track), not a security regression, and is already named generally in this plan's Blast Radius
   "Behavioral risk" row.
-
 
 ## Acceptance Criteria
 
@@ -348,19 +350,20 @@ fan-out — one sequential `vc-execute-agent` pass covers the full checklist.
 
 Test gates (C3 5-column table):
 
-| criterion id | behavior | strategy | proving test | gap-resolution |
-|---|---|---|---|---|
-| G1 | Reject a nonexistent `sentryIssueId` (404-shaped rejection) — nothing persisted | Fully-Automated | `cd apps/admin && bunx vitest run 'src/routes/(app)/sentry/track-provenance.test.ts'` — scenario: mocked lookup rejects 404 | A |
-| G1b | Reject an org-mismatch id (404-shaped rejection) — nothing persisted | Fully-Automated | same file — org-mismatch scenario | A |
-| G2 | Fail closed on lookup timeout / 5xx / network error while Sentry IS configured — nothing persisted | Fully-Automated | same file — network-error scenario | A |
-| G3 | Sentry NOT configured → provenance check skipped, `?/track` proceeds unchanged | Fully-Automated | same file — `isSentryConfigured()` mocked `false` scenario | A |
-| G3-e2e | `incident-sentry.e2e.ts` remains green, unmodified (live regression proof of G3) | Hybrid | `cd apps/admin && bun run test:e2e -- incident-sentry` — precondition: throwaway `radius_admin_test` DB seeded (`bun run test:seed`), Sentry env vars unset | A |
-| G4 | Happy path: resolvable id → `?/track` proceeds to `createIssueFromSentry`, incident created, no behavior change | Fully-Automated | same file — mocked lookup resolves scenario | A |
-| REG | No regression in the full admin unit suite (`client.test.ts` cache behavior, `map.test.ts`, etc.) | Fully-Automated | `cd apps/admin && bunx vitest run` | A |
-| TYPE | No type errors introduced by the new import/branch | Fully-Automated | `cd apps/admin && bun run check` | A |
-| LIVE | Live-Sentry happy-path + rejection-path smoke against a real org (optional, best-effort) | Agent-Probe | Manual — conditional on live `SENTRY_AUTH_TOKEN` sandbox access; if unavailable, falls back to the Missing Test Areas known-gap row (mocked unit tests already cover the code path, since `fetchLatestEventRaw` throws identically for 404 and org-mismatch) | D |
+| criterion id | behavior                                                                                                        | strategy        | proving test                                                                                                                                                                                                                                                 | gap-resolution |
+| ------------ | --------------------------------------------------------------------------------------------------------------- | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------- |
+| G1           | Reject a nonexistent `sentryIssueId` (404-shaped rejection) — nothing persisted                                 | Fully-Automated | `cd apps/admin && bunx vitest run 'src/routes/(app)/sentry/track-provenance.test.ts'` — scenario: mocked lookup rejects 404                                                                                                                                  | A              |
+| G1b          | Reject an org-mismatch id (404-shaped rejection) — nothing persisted                                            | Fully-Automated | same file — org-mismatch scenario                                                                                                                                                                                                                            | A              |
+| G2           | Fail closed on lookup timeout / 5xx / network error while Sentry IS configured — nothing persisted              | Fully-Automated | same file — network-error scenario                                                                                                                                                                                                                           | A              |
+| G3           | Sentry NOT configured → provenance check skipped, `?/track` proceeds unchanged                                  | Fully-Automated | same file — `isSentryConfigured()` mocked `false` scenario                                                                                                                                                                                                   | A              |
+| G3-e2e       | `incident-sentry.e2e.ts` remains green, unmodified (live regression proof of G3)                                | Hybrid          | `cd apps/admin && bun run test:e2e -- incident-sentry` — precondition: throwaway `radius_admin_test` DB seeded (`bun run test:seed`), Sentry env vars unset                                                                                                  | A              |
+| G4           | Happy path: resolvable id → `?/track` proceeds to `createIssueFromSentry`, incident created, no behavior change | Fully-Automated | same file — mocked lookup resolves scenario                                                                                                                                                                                                                  | A              |
+| REG          | No regression in the full admin unit suite (`client.test.ts` cache behavior, `map.test.ts`, etc.)               | Fully-Automated | `cd apps/admin && bunx vitest run`                                                                                                                                                                                                                           | A              |
+| TYPE         | No type errors introduced by the new import/branch                                                              | Fully-Automated | `cd apps/admin && bun run check`                                                                                                                                                                                                                             | A              |
+| LIVE         | Live-Sentry happy-path + rejection-path smoke against a real org (optional, best-effort)                        | Agent-Probe     | Manual — conditional on live `SENTRY_AUTH_TOKEN` sandbox access; if unavailable, falls back to the Missing Test Areas known-gap row (mocked unit tests already cover the code path, since `fetchLatestEventRaw` throws identically for 404 and org-mismatch) | D              |
 
 gap-resolution legend:
+
 - A — proven now (gate passes in this cycle)
 - B — fixed in this plan (gate added by this plan's checklist)
 - C — deferred to a named later phase/plan
@@ -370,6 +373,7 @@ C-4 reconciliation: the `strategy:` column above carries ONLY the 3 proving stra
 (Fully-Automated / Hybrid / Agent-Probe). No row uses Known-Gap as a strategy.
 
 Legacy line form (retained so existing validate-contract consumers still parse):
+
 - Provenance rejection (nonexistent / org-mismatch / lookup-error) + happy path + unconfigured-skip: Fully-automated: `cd apps/admin && bunx vitest run 'src/routes/(app)/sentry/track-provenance.test.ts'` | Hybrid: `cd apps/admin && bun run test:e2e -- incident-sentry` (precondition: throwaway `radius_admin_test` DB seeded, Sentry env vars unset) | Agent-probe: live-Sentry happy/rejection smoke, conditional on a live `SENTRY_AUTH_TOKEN` sandbox | Regression: `cd apps/admin && bunx vitest run` (full suite) + `cd apps/admin && bun run check` (typecheck)
 
 **Failing stubs (Fully-Automated new-scenario rows — G1, G1b, G2, G3, G4; REG/TYPE are
@@ -394,6 +398,7 @@ test("should create the incident on a resolvable sentryIssueId (happy path uncha
 ```
 
 Dimension findings:
+
 - Infra fit: PASS — server-only `+page.server.ts` action inside the existing `$lib/server/sentry`
   facade pattern; no new port, container, deploy, or runtime surface; reuses the existing 8s
   timeout + read cache.
@@ -425,6 +430,7 @@ Dimension findings:
   fail-closed design.
 
 Open gaps:
+
 - Test-harness cost for the 5 new unit scenarios is higher than the plan's checklist implies
   (first `$env/dynamic/private` mock + first `+page.server.ts` action test in the repo) — resolved
   via Execute-Agent Instruction E1, not a plan rewrite.
@@ -433,6 +439,7 @@ Open gaps:
   Blast Radius section.
 
 What this coverage does NOT prove:
+
 - G1/G1b/G2/G3/G4 (mocked-`fetch` unit tests) do NOT prove the real Sentry API actually returns a
   404-shaped response for a fabricated/org-mismatch id, or that its 5xx/timeout shape matches the
   mock — that gap is covered only by the optional LIVE agent-probe (checklist step 8), which is
@@ -440,7 +447,7 @@ What this coverage does NOT prove:
 - G3-e2e (the Playwright regression run) proves the unconfigured-Sentry code path is unaffected;
   it does NOT exercise the new provenance branch at all (Sentry is unconfigured in that env by
   design), so it provides zero evidence for G1/G1b/G2/G4.
-- REG (full admin unit suite) proves no *existing* test regressed; it does not independently
+- REG (full admin unit suite) proves no _existing_ test regressed; it does not independently
   re-verify the new branch beyond what G1/G1b/G2/G3/G4 already assert.
 - TYPE (typecheck) proves the new code compiles under `svelte-check`; it proves nothing about
   runtime behavior.
@@ -458,10 +465,10 @@ per Execute-Agent Instruction E2.
 
 **Execute-Agent Instructions:**
 
-| # | Instruction | Trigger condition |
-|---|---|---|
-| E1 | When writing the new unit tests (Implementation Checklist step 3), mock the `$lib/server/sentry` facade module directly (`vi.mock('$lib/server/sentry', ...)`) inside the new `apps/admin/src/routes/(app)/sentry/track-provenance.test.ts` — do NOT extend `client.test.ts` with raw `fetch` + `$env/dynamic/private` mocking. This sidesteps needing to mock `$env/dynamic/private` (no existing repo precedent) and is the simpler of the two Touchpoints-listed options. Budget this as writing a new, first-of-its-kind test file (mocking `db`, `rateLimit`, `listStaff`, `createIssueFromSentry`/`isIssuePriority`, `notifyAssignees`, `validateSentrySnapshot`, `parseDueDate`, plus the sentry facade), not a one-line extension. | Implementation Checklist step 3 |
-| E2 | Add a one-line code comment at the provenance-check call site (inside the `if (isSentryConfigured())` block added in checklist step 2b) noting: "fetchLatestEventRaw proves the issue has ≥1 retrievable event, not pure existence — a real issue with zero retrievable events would false-reject; accepted as a narrow, availability-only known-gap (VALIDATE 20-07-26)." No code-behavior change required. | Implementation Checklist step 2b |
+| #   | Instruction                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | Trigger condition                |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------- |
+| E1  | When writing the new unit tests (Implementation Checklist step 3), mock the `$lib/server/sentry` facade module directly (`vi.mock('$lib/server/sentry', ...)`) inside the new `apps/admin/src/routes/(app)/sentry/track-provenance.test.ts` — do NOT extend `client.test.ts` with raw `fetch` + `$env/dynamic/private` mocking. This sidesteps needing to mock `$env/dynamic/private` (no existing repo precedent) and is the simpler of the two Touchpoints-listed options. Budget this as writing a new, first-of-its-kind test file (mocking `db`, `rateLimit`, `listStaff`, `createIssueFromSentry`/`isIssuePriority`, `notifyAssignees`, `validateSentrySnapshot`, `parseDueDate`, plus the sentry facade), not a one-line extension. | Implementation Checklist step 3  |
+| E2  | Add a one-line code comment at the provenance-check call site (inside the `if (isSentryConfigured())` block added in checklist step 2b) noting: "fetchLatestEventRaw proves the issue has ≥1 retrievable event, not pure existence — a real issue with zero retrievable events would false-reject; accepted as a narrow, availability-only known-gap (VALIDATE 20-07-26)." No code-behavior change required.                                                                                                                                                                                                                                                                                                                               | Implementation Checklist step 2b |
 
 ## Autonomous Goal Block
 

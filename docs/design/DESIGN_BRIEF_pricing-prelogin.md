@@ -1,6 +1,7 @@
 # Design Brief: Parafiber WiFi — Customer Captive Portal Refresh
 
 ## What I'm building
+
 Parafiber WiFi is a **WiFi captive portal** for guests on a public/venue network in the
 Philippines. A guest connects to the WiFi, lands on this portal in their phone's
 captive browser, and uses it to get online — either via a free time allowance or
@@ -12,6 +13,7 @@ high-fidelity mockups for every screen listed below, plus brief notes on
 hierarchy, key states, and rationale.
 
 ## The core change driving this refresh
+
 **Pricing must be visible BEFORE login.** Today a guest can't see what anything
 costs until they've authenticated. I want the public landing page (`/`) to
 present the full pricing scheme up front, so guests understand the offer before
@@ -20,6 +22,7 @@ purchase or tier-selection from the logged-out state; every pricing CTA points
 to a single login/connect action.
 
 ## Who's using it & the context (this shapes everything)
+
 - **Device:** almost always a phone, in a captive-portal mini-browser. Small
   viewport, one thumb, possibly impatient, possibly on a slow first connection.
 - **Mindset:** "I just want to get online." Friction is the enemy.
@@ -27,6 +30,7 @@ to a single login/connect action.
   Large tap targets (min 44px height). No hover-dependent interactions.
 
 ## The #1 job of the new landing page
+
 **Get the guest to log in / connect, using the free time offer as the hook.**
 Free Time is the bait: lead with "get 15 minutes free, right now," make logging
 in feel like the obvious next tap. The paid pricing is shown as supporting
@@ -34,6 +38,7 @@ context — "and here's what more time costs" — so expectations are set, but t
 primary conversion is the login/connect action. Login is phone-number + SMS OTP.
 
 ## Brand & design system — TREAT AS HARD CONSTRAINTS
+
 Do not invent a new visual identity. Refine layout, hierarchy, and components
 within this system:
 
@@ -61,6 +66,7 @@ within this system:
 - Respect `prefers-reduced-motion`; keep motion subtle and purposeful.
 
 ## The pricing model (use these REAL numbers in the mockups)
+
 - **Free Time:** 15 minutes of access, once per 12-hour cooldown window. This is
   the hook.
 - **Credit bundles** (buy credits with money, in PHP ₱):
@@ -84,7 +90,9 @@ within this system:
 ## Screens to design
 
 ### 1. Landing `/` (logged-out) — the priority screen
+
 Public, no auth. Must:
+
 - Lead with the **Free Time hook** and a prominent **login/connect** CTA (blue).
 - Present the **full pricing scheme** (Free Time, bundles, tiers) as view-only
   context — clear, scannable, with the ₱100 bundle flagged as best value.
@@ -95,14 +103,18 @@ Public, no auth. Must:
   {name}, you're good to go" state with a link to the dashboard.
 
 ### 2. Login / Register
+
 Phone-number entry → SMS OTP. Design:
+
 - Phone number input (PH format) for login.
 - Register variant: name + phone number.
 - **OTP verification** screen: enter the code from SMS, with resend affordance.
 - Keep it to the absolute minimum taps. This is the conversion moment.
 
 ### 3. Dashboard `/dashboard` (the hub, logged-in)
+
 The main authenticated screen. Shows:
+
 - **Balance header:** greeting + current credit balance (balance is data —
   consider a mono treatment for numeric values).
 - **Free Time section:** if eligible → "Start 15-min Free Access" button; if
@@ -112,6 +124,7 @@ The main authenticated screen. Shows:
 - Links to **Top up credits** and **Sign out**.
 
 ### 4. Top-up `/top-up` (storefront, logged-in)
+
 - Current balance, prominent.
 - The **credit bundles** as a selectable list (radio-style), defaulting to best
   value, with the best-value badge.
@@ -120,12 +133,15 @@ The main authenticated screen. Shows:
 - Trust footer: "Secured by Maya · credits are added after payment."
 
 ### 5. Top-up processing `/top-up/processing` (waiting room)
+
 After returning from the payment gateway. A calm "confirming your payment…"
 waiting state that resolves to success (credits added, push back to dashboard).
 Design the **pending**, **success**, and **failed/timeout** states.
 
 ## Key states to cover across screens
+
 For each screen, show the important states, not just the happy path:
+
 - Free Time **eligible** vs **on cooldown** (with next-eligible time).
 - **Insufficient credits** when trying to buy a tier.
 - Payment **pending / success / failed**.
@@ -133,6 +149,7 @@ For each screen, show the important states, not just the happy path:
 - Empty/error states where relevant.
 
 ## What to deliver
+
 1. High-fidelity mockups of each screen above (and the called-out variants/states).
 2. The **logged-out landing page** as the hero deliverable — get this one right.
 3. Brief annotations per screen: what's primary, what the key states are, and
@@ -141,6 +158,7 @@ For each screen, show the important states, not just the happy path:
    balance display, primary CTA button, OTP input).
 
 ## Hard constraints recap
+
 Mobile-first single column · max ~28rem width · 44px min tap targets · Plus
 Jakarta Sans · navy brand / blue CTA / the tokens above · pricing on
 landing is view-only and routes to login · Free Time is the conversion hook ·

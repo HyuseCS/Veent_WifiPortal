@@ -113,7 +113,9 @@
 					<div>
 						<dt class="text-xs font-medium text-muted">Assignees</dt>
 						<dd class="mt-0.5 text-ink">
-							{issue.assignees.length ? issue.assignees.map((a) => a.name).join(', ') : 'Unassigned'}
+							{issue.assignees.length
+								? issue.assignees.map((a) => a.name).join(', ')
+								: 'Unassigned'}
 						</dd>
 					</div>
 					<div>
@@ -238,8 +240,7 @@
 						bind:value={body}
 						maxlength={2000}
 						placeholder="Add an update, a finding, or a question…"
-						class={inputClass}
-					></textarea>
+						class={inputClass}></textarea>
 					{#if error}
 						<p class="text-sm text-blocked" role="alert">{error}</p>
 					{/if}

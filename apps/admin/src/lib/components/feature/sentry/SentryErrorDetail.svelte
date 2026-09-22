@@ -61,7 +61,9 @@
 		Loading latest event…
 	</div>
 {:else if failed}
-	<div class="flex items-center gap-2 rounded-lg border border-border bg-surface p-4 text-sm text-muted">
+	<div
+		class="flex items-center gap-2 rounded-lg border border-border bg-surface p-4 text-sm text-muted"
+	>
 		<TriangleAlert class="h-4 w-4 shrink-0" aria-hidden="true" />
 		Couldn't load the event detail. The summary is still current.
 	</div>
@@ -71,8 +73,12 @@
 		<h3 class="text-[11px] font-semibold tracking-wider text-muted uppercase">Exception</h3>
 		<div class="mt-1 rounded-lg border border-border bg-surface p-3">
 			{#if detail.type}<div class="font-mono text-sm font-medium text-ink">{detail.type}</div>{/if}
-			{#if detail.value}<div class="mt-0.5 font-mono text-xs break-words text-muted">{detail.value}</div>{/if}
-			{#if !detail.type && !detail.value}<div class="text-sm text-muted">No exception recorded on this event.</div>{/if}
+			{#if detail.value}<div class="mt-0.5 font-mono text-xs break-words text-muted">
+					{detail.value}
+				</div>{/if}
+			{#if !detail.type && !detail.value}<div class="text-sm text-muted">
+					No exception recorded on this event.
+				</div>{/if}
 		</div>
 	</section>
 
@@ -84,12 +90,23 @@
 			</h3>
 			<ol class="mt-1 divide-y divide-border overflow-hidden rounded-lg border border-border">
 				{#each frames as frame, i (i)}
-					<li class="flex items-baseline gap-2 px-3 py-2 text-xs {frame.inApp ? 'bg-surface' : 'bg-bg opacity-70'}">
+					<li
+						class="flex items-baseline gap-2 px-3 py-2 text-xs {frame.inApp
+							? 'bg-surface'
+							: 'bg-bg opacity-70'}"
+					>
 						<span class="min-w-0 flex-1 font-mono break-all text-ink">
-							{frame.filename || '<unknown>'}{#if frame.lineNo != null}<span class="text-muted">:{frame.lineNo}</span>{/if}
+							{frame.filename || '<unknown>'}{#if frame.lineNo != null}<span class="text-muted"
+									>:{frame.lineNo}</span
+								>{/if}
 						</span>
-						{#if frame.function}<span class="shrink-0 font-mono text-muted">in {frame.function}</span>{/if}
-						{#if frame.inApp}<span class="shrink-0 rounded bg-brand/10 px-1.5 py-0.5 text-[10px] font-medium text-brand">app</span>{/if}
+						{#if frame.function}<span class="shrink-0 font-mono text-muted"
+								>in {frame.function}</span
+							>{/if}
+						{#if frame.inApp}<span
+								class="shrink-0 rounded bg-brand/10 px-1.5 py-0.5 text-[10px] font-medium text-brand"
+								>app</span
+							>{/if}
 					</li>
 				{/each}
 			</ol>
@@ -107,7 +124,9 @@
 			<h3 class="text-[11px] font-semibold tracking-wider text-muted uppercase">Tags</h3>
 			<div class="mt-1 flex flex-wrap gap-1.5">
 				{#each detail.tags as tag (tag.key)}
-					<span class="rounded border border-border bg-surface px-2 py-0.5 font-mono text-[11px] text-muted">
+					<span
+						class="rounded border border-border bg-surface px-2 py-0.5 font-mono text-[11px] text-muted"
+					>
 						{tag.key}: <span class="text-ink">{tag.value}</span>
 					</span>
 				{/each}
@@ -119,6 +138,8 @@
 <!-- Counts are from the already-loaded summary, so they show even if the event fetch fails. -->
 <div class="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted">
 	<span>Events <span class="font-mono text-ink">{issue.count.toLocaleString('en-US')}</span></span>
-	<span>Users <span class="font-mono text-ink">{issue.userCount.toLocaleString('en-US')}</span></span>
+	<span
+		>Users <span class="font-mono text-ink">{issue.userCount.toLocaleString('en-US')}</span></span
+	>
 	<span>Last seen <span class="text-ink">{seenAgo(issue.lastSeen)}</span></span>
 </div>

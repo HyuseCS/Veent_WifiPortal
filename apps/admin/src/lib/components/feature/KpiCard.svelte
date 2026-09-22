@@ -110,7 +110,10 @@
 		{/if}
 		{#if progress !== undefined}
 			<div class="h-1.5 overflow-hidden rounded-full bg-surface" aria-hidden="true">
-				<div class="h-full rounded-full bg-brand transition-[width] duration-300" style="width: {progressPct}%"></div>
+				<div
+					class="h-full rounded-full bg-brand transition-[width] duration-300"
+					style="width: {progressPct}%"
+				></div>
 			</div>
 		{/if}
 	</div>

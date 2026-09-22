@@ -2,7 +2,7 @@
 
 Shared reference for **both** deploy paths (see [`README.md`](README.md)). The apps report handled
 failures and cron check-ins to **Sentry**; the alerting on top is what makes a dead scheduler or a
-charged-but-uncredited buyer *visible*. Two independent pieces:
+charged-but-uncredited buyer _visible_. Two independent pieces:
 
 - **Build-time source maps** (optional) — makes client stack traces readable. See below.
 - **Runtime capture + alerts** — the DSN wiring and go-live alert rules.

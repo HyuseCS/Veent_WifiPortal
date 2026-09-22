@@ -17,8 +17,7 @@
 		form?: { error?: string; action?: string } | null;
 	} = $props();
 
-	const verb = (a: OwnerChangeRequest['action']) =>
-		a === 'demote' ? 'Demote to admin' : 'Remove';
+	const verb = (a: OwnerChangeRequest['action']) => (a === 'demote' ? 'Demote to admin' : 'Remove');
 
 	// Can this owner still cast an approval on a given request?
 	const canApprove = (r: OwnerChangeRequest) =>
@@ -47,7 +46,9 @@
 
 		<ul class="space-y-2">
 			{#each requests as r (r.id)}
-				<li class="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-bg px-4 py-3">
+				<li
+					class="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-bg px-4 py-3"
+				>
 					<div class="space-y-0.5">
 						<p class="text-sm text-ink">
 							<strong>{verb(r.action)}</strong>
@@ -73,7 +74,9 @@
 							<form
 								method="post"
 								action="?/cancelOwnerChange"
-								use:enhance={() => async ({ update }) => update({ reset: false })}
+								use:enhance={() =>
+									async ({ update }) =>
+										update({ reset: false })}
 							>
 								<input type="hidden" name="requestId" value={r.id} />
 								<Button type="submit" variant="secondary">Cancel</Button>

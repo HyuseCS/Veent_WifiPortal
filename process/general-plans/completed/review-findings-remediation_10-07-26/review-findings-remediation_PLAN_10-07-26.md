@@ -1,9 +1,9 @@
 ---
 name: plan:review-findings-remediation
-description: "Close 19 verified code-review findings across apps/admin code, .gitignore, context docs, and protocol docs — surgical fixes only"
+description: 'Close 19 verified code-review findings across apps/admin code, .gitignore, context docs, and protocol docs — surgical fixes only'
 date: 10-07-26
 feature: general
-phase: "PLAN"
+phase: 'PLAN'
 ---
 
 # Review Findings Remediation — Code-Review Findings Sweep (19 claims)
@@ -19,12 +19,12 @@ nitpick). Each was verified against **current** code at line level in RESEARCH. 
 invalid or already-addressed and are explicitly OUT OF SCOPE for this plan — EXECUTE must
 never touch them:**
 
-| # | Claim | Why skipped |
-|---|---|---|
-| 3 | NotificationModal stale-request guard | Already implemented via `AbortController` + `AbortError` ignore + `!controller.signal.aborted` gate. No live bug. |
-| 7 | login.html hardcoded `172.17.0.187` | Intentional dev template; `bun run setup:prod` already rewrites host:port for `deploy/login.html`. Outside `/admin` scope. |
-| 8 / 10 | `*.md.seed` keywords → YAML list | Every real `all-{group}.md` uses scalar `keywords: a, b, c`; a list would diverge from the working discovery-validator convention. |
-| 19 | RESEARCH doc PR #74 → #75 | #74 is correct (`ccb2e02` "Merge pull request #74"). No #75 exists. |
+| #      | Claim                                 | Why skipped                                                                                                                        |
+| ------ | ------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| 3      | NotificationModal stale-request guard | Already implemented via `AbortController` + `AbortError` ignore + `!controller.signal.aborted` gate. No live bug.                  |
+| 7      | login.html hardcoded `172.17.0.187`   | Intentional dev template; `bun run setup:prod` already rewrites host:port for `deploy/login.html`. Outside `/admin` scope.         |
+| 8 / 10 | `*.md.seed` keywords → YAML list      | Every real `all-{group}.md` uses scalar `keywords: a, b, c`; a list would diverge from the working discovery-validator convention. |
+| 19     | RESEARCH doc PR #74 → #75             | #74 is correct (`ccb2e02` "Merge pull request #74"). No #75 exists.                                                                |
 
 19 findings are valid and are remediated here, grouped A–E. Most are doc-accuracy fixes;
 four are small `apps/admin` code fixes, all on paths with existing test coverage. No new
@@ -55,28 +55,28 @@ Admin e2e suite has **10 specs total, 4 of which are IMS** (`incident-detail`,
 
 ## Touchpoints
 
-| File | Fixes |
-|---|---|
-| `apps/admin/src/lib/server/formValidation.ts` | A1 |
-| `apps/admin/src/lib/server/formValidation.test.ts` | A1 (new test case) |
-| `apps/admin/src/lib/server/issues.ts` | A2 |
-| `apps/admin/src/routes/(app)/+layout.server.ts` | A3 |
-| `apps/admin/e2e/incident-detail.e2e.ts` | A4 |
-| `.gitignore` | B1 |
-| `process/context/all-context.md` | C1, E4 |
-| `process/context/database/all-database.md` | C2 |
-| `process/context/tests/all-tests.md` | C3 |
-| `process/features/incident-management/_GUIDE.md` | C4 |
-| `process/development-protocols/vc-autoresearch-spec.md` | D1, E5 |
-| `process/development-protocols/orchestration.md` | D2 |
-| `process/development-protocols/vc-system-behavior/04-research.md` | D3 |
-| `process/development-protocols/vc-system-behavior/08-validate.md` | D4 |
-| `process/development-protocols/vc-system-behavior/09-execute.md` | D4 |
-| `process/development-protocols/all-development-protocols.md` | D1 (secondary reference — see VALIDATE addendum below) |
-| `process/features/admin-staff-governance/_GUIDE.md` | E1 |
-| `process/general-plans/active/_GUIDE.md` | E2 |
-| `process/_seeds/general-plans/active/_GUIDE.md` | E3 |
-| `process/development-protocols/vc-system-behavior/05-spec.md` | E6 |
+| File                                                              | Fixes                                                  |
+| ----------------------------------------------------------------- | ------------------------------------------------------ |
+| `apps/admin/src/lib/server/formValidation.ts`                     | A1                                                     |
+| `apps/admin/src/lib/server/formValidation.test.ts`                | A1 (new test case)                                     |
+| `apps/admin/src/lib/server/issues.ts`                             | A2                                                     |
+| `apps/admin/src/routes/(app)/+layout.server.ts`                   | A3                                                     |
+| `apps/admin/e2e/incident-detail.e2e.ts`                           | A4                                                     |
+| `.gitignore`                                                      | B1                                                     |
+| `process/context/all-context.md`                                  | C1, E4                                                 |
+| `process/context/database/all-database.md`                        | C2                                                     |
+| `process/context/tests/all-tests.md`                              | C3                                                     |
+| `process/features/incident-management/_GUIDE.md`                  | C4                                                     |
+| `process/development-protocols/vc-autoresearch-spec.md`           | D1, E5                                                 |
+| `process/development-protocols/orchestration.md`                  | D2                                                     |
+| `process/development-protocols/vc-system-behavior/04-research.md` | D3                                                     |
+| `process/development-protocols/vc-system-behavior/08-validate.md` | D4                                                     |
+| `process/development-protocols/vc-system-behavior/09-execute.md`  | D4                                                     |
+| `process/development-protocols/all-development-protocols.md`      | D1 (secondary reference — see VALIDATE addendum below) |
+| `process/features/admin-staff-governance/_GUIDE.md`               | E1                                                     |
+| `process/general-plans/active/_GUIDE.md`                          | E2                                                     |
+| `process/_seeds/general-plans/active/_GUIDE.md`                   | E3                                                     |
+| `process/development-protocols/vc-system-behavior/05-spec.md`     | E6                                                     |
 
 19 fixes across 20 files (C1 and E4 both touch `all-context.md`; D1 touches 2 files —
 see VALIDATE addendum). No new/untracked files expected.
@@ -128,7 +128,7 @@ second edit.**
 ### Group A — `apps/admin` code fixes (4)
 
 - [x] **A1** — `apps/admin/src/lib/server/formValidation.ts` `parseDueDate` (~L42–53):
-  reject impossible calendar dates.
+      reject impossible calendar dates.
   - Require `/^\d{4}-\d{2}-\d{2}$/` on `trimmed`; on mismatch return
     `{ error: 'Invalid due date.' }`.
   - Parse the three integer components (`y`, `mo`, `d`), build
@@ -143,7 +143,7 @@ second edit.**
     Must not break the existing suite.
 
 - [x] **A2** — `apps/admin/src/lib/server/issues.ts` `setIssueStatus` pre-update select
-  (~L643–648): add row lock.
+      (~L643–648): add row lock.
   - Add `.for('update')` to the `before` read so two concurrent same-status
     resolution-note edits serialize before the compare/emit:
     `.where(eq(adminIssue.id, id)).for('update').limit(1)`.
@@ -153,14 +153,14 @@ second edit.**
     unit-testable here); existing `issues.test.ts` must stay green as regression proof.
 
 - [x] **A3** — `apps/admin/src/routes/(app)/+layout.server.ts` (~L31–35): isolate the
-  notification-list read.
+      notification-list read.
   - Change `onIssues ? listNotifications(db, event.locals.user.id) : Promise.resolve([])`
     to `onIssues ? listNotifications(db, event.locals.user.id).catch(() => []) : Promise.resolve([])`.
   - `role` and `unreadCount` promises in the same `Promise.all` are untouched and must
     keep propagating failures as today.
 
 - [x] **A4** — `apps/admin/e2e/incident-detail.e2e.ts` `loginNonManager` (~L55–71): close
-  browser on failure.
+      browser on failure.
   - Wrap the goto/fill/click auth sequence (everything after `browser.newPage(...)`) in
     `try { ...; return page } catch (e) { await browser.close(); throw e }`.
   - Success path (returns the open `page`, caller owns teardown) is unchanged.
@@ -168,46 +168,46 @@ second edit.**
 ### Group B — config (1)
 
 - [x] **B1** — `.gitignore` L55: `.vibecode-backup*/` → `.vibecode-backup*` (drop
-  trailing `/`) so backup files and dirs are both ignored. Optionally delete the now-fully-
-  subsumed L49 `.vibecode-backup` entry (not required — verify it doesn't break anything
-  else first; if unsure, leave L49 in place).
+      trailing `/`) so backup files and dirs are both ignored. Optionally delete the now-fully-
+      subsumed L49 `.vibecode-backup` entry (not required — verify it doesn't break anything
+      else first; if unsure, leave L49 in place).
 
 ### Group C — context-doc accuracy (4)
 
 - [x] **C1** — `process/context/all-context.md` L184 (repository structure tree): change
-  `drizzle/ ← 46 migrations` → `drizzle/ ← 47 migrations` (re-verify count live at EXECUTE
-  time; grep the file for any other stale "46" migration references before finishing).
+      `drizzle/ ← 46 migrations` → `drizzle/ ← 47 migrations` (re-verify count live at EXECUTE
+      time; grep the file for any other stale "46" migration references before finishing).
 
 - [x] **C2** — `process/context/database/all-database.md` L154–155: change
-  `46, 0000–0045` → `47, 0000–0046 as of 2026-07-10`; mention `0046_oval_lorna_dane.sql`
-  by name.
+      `46, 0000–0045` → `47, 0000–0046 as of 2026-07-10`; mention `0046_oval_lorna_dane.sql`
+      by name.
 
 - [x] **C3** — `process/context/tests/all-tests.md` L177: change
-  `3/10 IMS e2e specs` → `3/10 admin E2E specs` (the 10 is the admin suite total; only 4
-  specs are IMS). Leave the rest of the line unchanged.
+      `3/10 IMS e2e specs` → `3/10 admin E2E specs` (the 10 is the admin suite total; only 4
+      specs are IMS). Leave the rest of the line unchanged.
 
 - [x] **C4** — `process/features/incident-management/_GUIDE.md` L23: prefix the four spec
-  names with `apps/admin/e2e/` (`incident-detail`, `incident-notifications`,
-  `incident-sentry`, `incident-timeline`).
+      names with `apps/admin/e2e/` (`incident-detail`, `incident-notifications`,
+      `incident-sentry`, `incident-timeline`).
 
 ### Group D — protocol-doc fixes (4)
 
 - [x] **D1** — `process/development-protocols/vc-autoresearch-spec.md` frontmatter:
-  change `read_order: 7` → `read_order: 8` (fixes collision with
-  `communication-standards.md`, also `7`). Resulting order:
-  communication-standards=7, vc-autoresearch-spec=8, autopilot=9 (already correct).
-  **Also update the secondary mention at
-  `process/development-protocols/all-development-protocols.md:51`** — change
-  `` `vc-autoresearch-spec.md` (optional deep reference; `read_order: 7`, `required: false`) ``
-  to `` `vc-autoresearch-spec.md` (optional deep reference; `read_order: 8`, `required: false`) ``
-  in the same pass, so this fix doesn't reintroduce the drift it's closing. (Added at
-  VALIDATE — see VALIDATE addendum in Touchpoints.)
+      change `read_order: 7` → `read_order: 8` (fixes collision with
+      `communication-standards.md`, also `7`). Resulting order:
+      communication-standards=7, vc-autoresearch-spec=8, autopilot=9 (already correct).
+      **Also update the secondary mention at
+      `process/development-protocols/all-development-protocols.md:51`** — change
+      `` `vc-autoresearch-spec.md` (optional deep reference; `read_order: 7`, `required: false`) ``
+      to `` `vc-autoresearch-spec.md` (optional deep reference; `read_order: 8`, `required: false`) ``
+      in the same pass, so this fix doesn't reintroduce the drift it's closing. (Added at
+      VALIDATE — see VALIDATE addendum in Touchpoints.)
 
 - [x] **D2** — `process/development-protocols/orchestration.md` §VALIDATE Gate §Skip
-  conditions (~L602–612): restructure the "skipped when **ALL** of the following are
-  true" numbered list (which currently mixes a brand-new-trivial-change path, items 1–3,
-  with an existing-PASS-contract path, item 4, that cannot co-exist with the others) into
-  **two alternative branches**:
+      conditions (~L602–612): restructure the "skipped when **ALL** of the following are
+      true" numbered list (which currently mixes a brand-new-trivial-change path, items 1–3,
+      with an existing-PASS-contract path, item 4, that cannot co-exist with the others) into
+      **two alternative branches**:
   - **Branch (a) — new trivial change**: single-file edit under 15 lines, no schema/
     auth/API/billing surface; no new dependencies/agents/runtime surfaces; user
     explicitly skips with a stated reason.
@@ -221,13 +221,13 @@ second edit.**
     `orchestration.md` only — do not touch any other file's copy of this rule.
 
 - [x] **D3** — `process/development-protocols/vc-system-behavior/04-research.md` L27:
-  add `sort` to the Bash command whitelist (it is used by the required session-start
-  commands at ~L52/53/60/65 — `find ... | sort`).
+      add `sort` to the Bash command whitelist (it is used by the required session-start
+      commands at ~L52/53/60/65 — `find ... | sort`).
 
 - [x] **D4** — `process/development-protocols/vc-system-behavior/08-validate.md`
-  L123–127 and `09-execute.md` L226: replace stale `pnpm` commands with the real `bun`
-  equivalents, keeping the pre-V1 baseline gate itself intact (doc-only, no gate
-  removed):
+      L123–127 and `09-execute.md` L226: replace stale `pnpm` commands with the real `bun`
+      equivalents, keeping the pre-V1 baseline gate itself intact (doc-only, no gate
+      removed):
   - `pnpm typecheck` → `bun run check`
   - `pnpm test:local` → the scoped `bun test` invocation (use the exact script name(s)
     from `process/context/tests/all-tests.md` as the source of truth — do not invent a
@@ -240,26 +240,26 @@ second edit.**
 ### Group E — markdown fence language, MD040 (6)
 
 - [x] **E1** — `process/features/admin-staff-governance/_GUIDE.md` L55: add ` ```text `
-  to the opening fence.
+      to the opening fence.
 - [x] **E2** — `process/general-plans/active/_GUIDE.md` L9: add ` ```text ` to the
-  opening fence.
+      opening fence.
 - [x] **E3** — `process/_seeds/general-plans/active/_GUIDE.md` L9: add ` ```text ` to
-  the opening fence.
+      the opening fence.
 - [x] **E4** — `process/context/all-context.md` L41 **and** L176 (both repository
-  structure trees): add ` ```text ` to each opening fence.
+      structure trees): add ` ```text ` to each opening fence.
 - [x] **E5** — `process/development-protocols/vc-autoresearch-spec.md`: add a language
-  to 4 opening fences — `text` (ASCII loop diagram + termination list), `markdown`
-  (gap-entry format block), `tsv` (TSV log format block). Confirm exact count/locations
-  by grepping the file for bare ` ``` ` at EXECUTE time (draft counted 4; re-verify).
-  **Confirmed at VALIDATE**: exactly 4 opening bare fences at L38 (text — loop diagram),
-  L156 (text — termination-priority list), L268 (markdown — gap entry format), L289
-  (tsv — TSV log format); closing fences at L63, L164, L275, L296 stay bare. (A 5th bare
-  fence at L255 is a closing fence only — its opener elsewhere is already tagged; leave
-  it alone.)
+      to 4 opening fences — `text` (ASCII loop diagram + termination list), `markdown`
+      (gap-entry format block), `tsv` (TSV log format block). Confirm exact count/locations
+      by grepping the file for bare ` ``` ` at EXECUTE time (draft counted 4; re-verify).
+      **Confirmed at VALIDATE**: exactly 4 opening bare fences at L38 (text — loop diagram),
+      L156 (text — termination-priority list), L268 (markdown — gap entry format), L289
+      (tsv — TSV log format); closing fences at L63, L164, L275, L296 stay bare. (A 5th bare
+      fence at L255 is a closing fence only — its opener elsewhere is already tagged; leave
+      it alone.)
 - [x] **E6** — `process/development-protocols/vc-system-behavior/05-spec.md`: add
-  ` ```text ` to 3 unlabeled opening fences at L31, L43, L124.
-  Rule for all of Group E: only OPENING fences get a language tag; closing fences (bare
-  ` ``` `) are left unchanged.
+      ` ```text ` to 3 unlabeled opening fences at L31, L43, L124.
+      Rule for all of Group E: only OPENING fences get a language tag; closing fences (bare
+      ` ``` `) are left unchanged.
 
 ## Acceptance Criteria
 
@@ -275,6 +275,7 @@ second edit.**
 ## Phase Completion Rules
 
 This is a SIMPLE single-pass plan (no phase split). It is considered complete when:
+
 1. All 19 checklist items are checked off.
 2. All Verification Evidence gates below are green (or explicitly accepted as CONDITIONAL known-gaps for the 2 Agent-Probe / 1 Hybrid rows).
 3. `git diff` scoped to exactly the 20 touched files listed in Touchpoints — no unrelated file changes.
@@ -282,19 +283,19 @@ This is a SIMPLE single-pass plan (no phase split). It is considered complete wh
 
 ## Verification Evidence
 
-| Gate / Scenario | Strategy | Proves SPEC criterion |
-|---|---|---|
-| `cd apps/admin && bunx vitest run src/lib/server/formValidation.test.ts` | Fully-Automated | A1: `2026-02-31` rejected, valid dates still parse |
-| `cd apps/admin && bunx vitest run src/lib/server/issues.test.ts` | Fully-Automated | A2: `setIssueStatus` outcomes unchanged for single-caller path |
-| Root `bun run check` | Fully-Automated | A1/A2/A3/A4 typecheck clean across all 3 apps + packages |
-| `node .claude/skills/vc-audit-context/scripts/validate-context-discovery.mjs` | Fully-Automated | C1–C4, D1 frontmatter/routing stay valid (D1 read_order de-dupe specifically) |
-| `node .claude/skills/vc-audit-vc/scripts/validate-protocol-wiring.mjs` | Fully-Automated | D2/D3/D4 protocol doc edits keep wiring/discovery intact |
-| Manual: on an `(app)` page with `/issues*` route, force a `listNotifications` throw → page still renders, bell shows empty list | Agent-Probe | A3: notification-list isolation degrades gracefully; `role`/`unreadCount` still propagate |
-| Manual: run non-manager e2e login helper against a forced-failure auth step, confirm no orphaned browser process | Agent-Probe | A4: browser closed on login failure |
-| `grep -rn "46 migrations\|0000–0045\|3/10 IMS" process/context/` returns no matches post-edit | Fully-Automated | C1/C2/C3 stale counts fully replaced |
-| Re-run `git diff .gitignore` shows only the L55 glob change (and optional L49 removal) | Fully-Automated | B1 scoped correctly |
-| markdownlint / MD040 check on the 6 files in Group E (if a lint script exists in this repo — otherwise visual diff review) | Hybrid | E1–E6 fence language added, closing fences untouched |
-| `grep -n "read_order: 7" process/development-protocols/all-development-protocols.md` returns no matches post-edit | Fully-Automated | D1 secondary reference updated (VALIDATE addendum) |
+| Gate / Scenario                                                                                                                 | Strategy        | Proves SPEC criterion                                                                     |
+| ------------------------------------------------------------------------------------------------------------------------------- | --------------- | ----------------------------------------------------------------------------------------- |
+| `cd apps/admin && bunx vitest run src/lib/server/formValidation.test.ts`                                                        | Fully-Automated | A1: `2026-02-31` rejected, valid dates still parse                                        |
+| `cd apps/admin && bunx vitest run src/lib/server/issues.test.ts`                                                                | Fully-Automated | A2: `setIssueStatus` outcomes unchanged for single-caller path                            |
+| Root `bun run check`                                                                                                            | Fully-Automated | A1/A2/A3/A4 typecheck clean across all 3 apps + packages                                  |
+| `node .claude/skills/vc-audit-context/scripts/validate-context-discovery.mjs`                                                   | Fully-Automated | C1–C4, D1 frontmatter/routing stay valid (D1 read_order de-dupe specifically)             |
+| `node .claude/skills/vc-audit-vc/scripts/validate-protocol-wiring.mjs`                                                          | Fully-Automated | D2/D3/D4 protocol doc edits keep wiring/discovery intact                                  |
+| Manual: on an `(app)` page with `/issues*` route, force a `listNotifications` throw → page still renders, bell shows empty list | Agent-Probe     | A3: notification-list isolation degrades gracefully; `role`/`unreadCount` still propagate |
+| Manual: run non-manager e2e login helper against a forced-failure auth step, confirm no orphaned browser process                | Agent-Probe     | A4: browser closed on login failure                                                       |
+| `grep -rn "46 migrations\|0000–0045\|3/10 IMS" process/context/` returns no matches post-edit                                   | Fully-Automated | C1/C2/C3 stale counts fully replaced                                                      |
+| Re-run `git diff .gitignore` shows only the L55 glob change (and optional L49 removal)                                          | Fully-Automated | B1 scoped correctly                                                                       |
+| markdownlint / MD040 check on the 6 files in Group E (if a lint script exists in this repo — otherwise visual diff review)      | Hybrid          | E1–E6 fence language added, closing fences untouched                                      |
+| `grep -n "read_order: 7" process/development-protocols/all-development-protocols.md` returns no matches post-edit               | Fully-Automated | D1 secondary reference updated (VALIDATE addendum)                                        |
 
 ## Test Infra Improvement Notes
 
@@ -320,32 +321,35 @@ spawned in parallel, per the threshold table's "do not mention fan-out" rule for
 
 Test gates (C3 5-column table):
 
-| criterion id | behavior | strategy | proving test | gap-resolution |
-|---|---|---|---|---|
-| A1 | `parseDueDate` rejects impossible calendar dates (`2026-02-31`), still accepts valid `yyyy-mm-dd` | Fully-Automated | `cd apps/admin && bunx vitest run src/lib/server/formValidation.test.ts` (new case added by this plan) | B |
-| A2 | `setIssueStatus` outcomes byte-identical for the single-caller path after adding `.for('update')` | Fully-Automated | `cd apps/admin && bunx vitest run src/lib/server/issues.test.ts` (pre-existing suite as regression proof) | A |
-| A3 | `listNotifications` failure isolated (page still renders, bell empty); `role`/`unreadCount` failures still propagate | Agent-Probe | Manual: force a `listNotifications` throw on an `/issues*` page, confirm page renders and other two promises still fail loudly | B |
-| A4 | `loginNonManager` closes the browser on an auth-step failure, no orphaned process | Agent-Probe | Manual: force the auth sequence to fail, confirm `browser.close()` ran and no leaked Chromium process | B |
-| B1 | `.gitignore` L55 glob widened to match files + dirs | Fully-Automated | `git diff .gitignore` shows only the L55 change (+ optional L49 removal) | A |
-| C1-C4 | Migration count / spec-name doc strings match live repo state (47 migrations, `0000`-`0046`, 10 admin specs / 4 IMS) | Fully-Automated | `grep -rn "46 migrations\|0000–0045\|3/10 IMS" process/context/` → no matches | B |
-| D1-D4 | Protocol-doc frontmatter/skip-conditions/whitelist/command references match live behavior and each other (incl. the VALIDATE-added secondary D1 reference) | Fully-Automated | `node .claude/skills/vc-audit-context/scripts/validate-context-discovery.mjs`; `node .claude/skills/vc-audit-vc/scripts/validate-protocol-wiring.mjs`; `grep -n "read_order: 7" process/development-protocols/all-development-protocols.md` → no matches | B |
-| E1-E6 | All 14 confirmed opening bare fences (E1=1, E2=1, E3=1, E4=2, E5=4, E6=3) get a language tag; closing fences stay bare | Hybrid | Visual diff review of the 6 files (no markdownlint script exists in this repo — confirmed at VALIDATE) | A |
-| All 19 items | Root typecheck stays clean after all edits | Fully-Automated | `bun run check` (root) | A |
+| criterion id | behavior                                                                                                                                                   | strategy        | proving test                                                                                                                                                                                                                                             | gap-resolution |
+| ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------- |
+| A1           | `parseDueDate` rejects impossible calendar dates (`2026-02-31`), still accepts valid `yyyy-mm-dd`                                                          | Fully-Automated | `cd apps/admin && bunx vitest run src/lib/server/formValidation.test.ts` (new case added by this plan)                                                                                                                                                   | B              |
+| A2           | `setIssueStatus` outcomes byte-identical for the single-caller path after adding `.for('update')`                                                          | Fully-Automated | `cd apps/admin && bunx vitest run src/lib/server/issues.test.ts` (pre-existing suite as regression proof)                                                                                                                                                | A              |
+| A3           | `listNotifications` failure isolated (page still renders, bell empty); `role`/`unreadCount` failures still propagate                                       | Agent-Probe     | Manual: force a `listNotifications` throw on an `/issues*` page, confirm page renders and other two promises still fail loudly                                                                                                                           | B              |
+| A4           | `loginNonManager` closes the browser on an auth-step failure, no orphaned process                                                                          | Agent-Probe     | Manual: force the auth sequence to fail, confirm `browser.close()` ran and no leaked Chromium process                                                                                                                                                    | B              |
+| B1           | `.gitignore` L55 glob widened to match files + dirs                                                                                                        | Fully-Automated | `git diff .gitignore` shows only the L55 change (+ optional L49 removal)                                                                                                                                                                                 | A              |
+| C1-C4        | Migration count / spec-name doc strings match live repo state (47 migrations, `0000`-`0046`, 10 admin specs / 4 IMS)                                       | Fully-Automated | `grep -rn "46 migrations\|0000–0045\|3/10 IMS" process/context/` → no matches                                                                                                                                                                            | B              |
+| D1-D4        | Protocol-doc frontmatter/skip-conditions/whitelist/command references match live behavior and each other (incl. the VALIDATE-added secondary D1 reference) | Fully-Automated | `node .claude/skills/vc-audit-context/scripts/validate-context-discovery.mjs`; `node .claude/skills/vc-audit-vc/scripts/validate-protocol-wiring.mjs`; `grep -n "read_order: 7" process/development-protocols/all-development-protocols.md` → no matches | B              |
+| E1-E6        | All 14 confirmed opening bare fences (E1=1, E2=1, E3=1, E4=2, E5=4, E6=3) get a language tag; closing fences stay bare                                     | Hybrid          | Visual diff review of the 6 files (no markdownlint script exists in this repo — confirmed at VALIDATE)                                                                                                                                                   | A              |
+| All 19 items | Root typecheck stays clean after all edits                                                                                                                 | Fully-Automated | `bun run check` (root)                                                                                                                                                                                                                                   | A              |
 
 gap-resolution legend:
+
 - A — proven now (gate passes in this cycle, using a pre-existing or currently-runnable check)
 - B — fixed in this plan (gate/edit is added by this plan's own checklist, will exist post-EXECUTE)
 - C — deferred to a named later phase/plan
 - D — backlog test-building stub (named residual; keep-active; continue)
 
 Legacy line form (retained so existing validate-contract consumers still parse):
+
 - apps/admin (A1-A4): Fully-automated: `bunx vitest run src/lib/server/{formValidation,issues}.test.ts` | Agent-probe: manual A3 error-isolation check + A4 browser-cleanup check
 - .gitignore (B1): Fully-automated: `git diff .gitignore` inspection
-- process/context/** (C1-C4): Fully-automated: `grep -rn "46 migrations|0000–0045|3/10 IMS" process/context/`
-- process/development-protocols/** (D1-D4): Fully-automated: `validate-context-discovery.mjs` + `validate-protocol-wiring.mjs` + `grep -n "read_order: 7" all-development-protocols.md`
+- process/context/\*\* (C1-C4): Fully-automated: `grep -rn "46 migrations|0000–0045|3/10 IMS" process/context/`
+- process/development-protocols/\*\* (D1-D4): Fully-automated: `validate-context-discovery.mjs` + `validate-protocol-wiring.mjs` + `grep -n "read_order: 7" all-development-protocols.md`
 - markdown fences (E1-E6): Hybrid: visual diff review (no markdownlint script exists in this repo)
 
 Dimension findings:
+
 - Infra fit: PASS — no container/worker/proxy/runtime surface touched; all 19 edit-target file paths and line numbers confirmed to exist and match the plan's before-state description via direct source read.
 - Test coverage: PASS — every developed behavior (A1-A4) has at least one Fully-Automated or Agent-Probe gate; none rest on Known-Gap alone (net-gate vacuous-green ban satisfied). A1/A2 are Fully-Automated via real, confirmed `bun test` commands; A3/A4 are legitimate Agent-Probe (no load-function/e2e-helper unit-test pattern exists in this repo per `all-tests.md`); Group E's Hybrid gate correctly degrades to visual diff since no markdownlint script exists (confirmed).
 - Breaking changes: PASS — A1 narrows (bug fix, no caller relies on malformed-date acceptance; confirmed live that `2026-02-31` currently silently normalizes to `2026-03-03`, so this is a real bug). A2 no signature/shape change. A3 no return-shape change (matches the existing non-`/issues` branch's `Promise.resolve([])` pattern). A4 no signature/success-path change. B1 widens `.gitignore` (no runtime impact). C/D/E are docs-only.
@@ -359,10 +363,11 @@ Dimension findings:
 Open gaps: none — the one CONCERN found (D1 secondary reference) was resolved in-plan (see Plan Update P1 below), not deferred.
 
 What this coverage does NOT prove:
-- `bunx vitest run formValidation.test.ts` / `issues.test.ts` prove the specific asserted cases only — they do not prove absence of *other* undiscovered date-parsing or status-transition edge cases outside what the plan's new test case and existing suite already assert.
+
+- `bunx vitest run formValidation.test.ts` / `issues.test.ts` prove the specific asserted cases only — they do not prove absence of _other_ undiscovered date-parsing or status-transition edge cases outside what the plan's new test case and existing suite already assert.
 - `bun run check` proves TypeScript type-soundness only — it does not prove runtime behavior of A1-A4 beyond what the two `bun test` gates above assert, and does not exercise the doc-only changes at all.
-- `validate-context-discovery.mjs` / `validate-protocol-wiring.mjs` prove frontmatter/routing/wiring structure stays valid — they do not prove the *prose content* of C1-C4/D1-D4 is accurate; that accuracy was confirmed manually during this VALIDATE pass via direct line-level reads, not by an automated content-diff gate.
-- The `grep -rn "46 migrations|..."` stale-string checks prove those specific 3 strings are gone — they do not prove no *other* stale count/reference exists anywhere in `process/`; scope is deliberately limited to `process/context/` per the plan's own Acceptance Criteria.
+- `validate-context-discovery.mjs` / `validate-protocol-wiring.mjs` prove frontmatter/routing/wiring structure stays valid — they do not prove the _prose content_ of C1-C4/D1-D4 is accurate; that accuracy was confirmed manually during this VALIDATE pass via direct line-level reads, not by an automated content-diff gate.
+- The `grep -rn "46 migrations|..."` stale-string checks prove those specific 3 strings are gone — they do not prove no _other_ stale count/reference exists anywhere in `process/`; scope is deliberately limited to `process/context/` per the plan's own Acceptance Criteria.
 - The Agent-Probe rows (A3, A4) prove the specific manual scenario described was judged correct by the person/agent running it at EXECUTE/EVL time — they do not constitute a repeatable, CI-enforceable regression gate; a future regression in this area would not be caught automatically.
 - The Hybrid visual-diff row (E1-E6) proves a human/agent visually confirmed the fence tags at EXECUTE time — it does not constitute an automated markdownlint gate (none exists in this repo), so a future re-introduction of an untagged fence in these files would not be caught automatically.
 
@@ -376,9 +381,9 @@ re-run confirmed both pass (12/12 and 16/16). Verdict unchanged (Gate: PASS).
 
 ### Proposed Plan Updates (P1 — applied)
 
-| # | What changes | Where in plan | Why |
-|---|---|---|---|
-| P1 | Added a second edit to D1 (update `all-development-protocols.md:51` `read_order: 7` → `8`); added a new Touchpoints row for that file; added a new Verification Evidence + Test Gates row (`grep -n "read_order: 7" all-development-protocols.md` → no matches); bumped file/edit counts (19→20 files, 19→20 discrete edits) | Touchpoints, Blast Radius, Group D checklist (D1), Acceptance Criteria, Verification Evidence | Layer 2 review of D1 found that fixing `vc-autoresearch-spec.md`'s `read_order` in isolation leaves a stale duplicate mention in the protocol router file, reintroducing the exact class of doc-drift this plan exists to close. Applied directly rather than left as an open CONCERN since the fix is a one-line addition fully within D1's existing scope. |
+| #   | What changes                                                                                                                                                                                                                                                                                                                 | Where in plan                                                                                 | Why                                                                                                                                                                                                                                                                                                                                                          |
+| --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| P1  | Added a second edit to D1 (update `all-development-protocols.md:51` `read_order: 7` → `8`); added a new Touchpoints row for that file; added a new Verification Evidence + Test Gates row (`grep -n "read_order: 7" all-development-protocols.md` → no matches); bumped file/edit counts (19→20 files, 19→20 discrete edits) | Touchpoints, Blast Radius, Group D checklist (D1), Acceptance Criteria, Verification Evidence | Layer 2 review of D1 found that fixing `vc-autoresearch-spec.md`'s `read_order` in isolation leaves a stale duplicate mention in the protocol router file, reintroducing the exact class of doc-drift this plan exists to close. Applied directly rather than left as an open CONCERN since the fix is a one-line addition fully within D1's existing scope. |
 
 No Execute-Agent Instructions or Backlog Artifacts were needed — the single finding was resolved as a Plan Update.
 
@@ -388,15 +393,16 @@ SESSION GOAL: Close 19 verified code-review findings (4 apps/admin code fixes + 
 Charter + umbrella plan: N/A — single plan (no phase program, no umbrella plan exists on disk for this work).
 Autonomy: standard RIPER-5 autonomy rules — VALIDATE gate is PASS, EXECUTE requires explicit "ENTER EXECUTE MODE"; no standing /goal has been declared for this session.
 Hard stop conditions / safety constraints:
+
 - Do not touch findings #3, #7, #8/10, #19 (verified invalid/already-addressed) — any edit to those areas is out of scope.
 - A1's strict-parse guard must still accept every valid `yyyy-mm-dd` date; only impossible calendar dates get newly rejected.
 - A2's `.for('update')` addition must not change single-caller output — `issues.test.ts` must stay green as the regression proof.
 - A3's `.catch(() => [])` must be scoped to `listNotifications` only — `role` and `unreadCount` must keep propagating failures.
 - Every verbatim signal string touched by D2/D4 (`Gate: PASS`, `V1 AUTO-PROCEED: ...`, etc.) must be byte-identical after the edit — reword only the surrounding prose.
 - `git diff` at completion must be scoped to exactly the 19 Touchpoints files — no unrelated changes.
-Next phase: None — plan COMPLETE and archived to `process/general-plans/completed/review-findings-remediation_10-07-26/review-findings-remediation_PLAN_10-07-26.md`; see the closeout REPORT in the same folder.
-Validate contract: inline in plan (see `## Validate Contract` section above)
-Execute start: Fully-automated commands: `cd apps/admin && bunx vitest run src/lib/server/formValidation.test.ts`, `cd apps/admin && bunx vitest run src/lib/server/issues.test.ts`, root `bun run check`, `node .claude/skills/vc-audit-context/scripts/validate-context-discovery.mjs`, `node .claude/skills/vc-audit-vc/scripts/validate-protocol-wiring.mjs` | Agent-probe: A3 notification-isolation check, A4 browser-cleanup check, Group E visual fence-diff review | high-risk pack: no (no high-risk class present)
+  Next phase: None — plan COMPLETE and archived to `process/general-plans/completed/review-findings-remediation_10-07-26/review-findings-remediation_PLAN_10-07-26.md`; see the closeout REPORT in the same folder.
+  Validate contract: inline in plan (see `## Validate Contract` section above)
+  Execute start: Fully-automated commands: `cd apps/admin && bunx vitest run src/lib/server/formValidation.test.ts`, `cd apps/admin && bunx vitest run src/lib/server/issues.test.ts`, root `bun run check`, `node .claude/skills/vc-audit-context/scripts/validate-context-discovery.mjs`, `node .claude/skills/vc-audit-vc/scripts/validate-protocol-wiring.mjs` | Agent-probe: A3 notification-isolation check, A4 browser-cleanup check, Group E visual fence-diff review | high-risk pack: no (no high-risk class present)
 
 ## Resume and Execution Handoff
 

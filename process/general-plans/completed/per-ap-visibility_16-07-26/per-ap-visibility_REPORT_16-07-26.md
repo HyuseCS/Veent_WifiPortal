@@ -53,8 +53,9 @@ null throughput as `—` (the single E2 null-safety seam — all readers already
 number). `/networks` collapses circuit-id groups into one card (lowest-id representative + combined
 users), KPI throughput/latency now sum over interface rows only (`attributionSource === null`,
 Regression #3); counts/users stay per-row. `NetworkHealthCard` gains a `group` prop (shared-ONU badge
-+ per-member up/down), a `—` traffic tooltip, and an AP-row config hint (Reader Audit #7). Seed
-fixtures added (A/B shared group, C solo, D offline). New e2e `networks.e2e.ts` (4/4 green).
+
+- per-member up/down), a `—` traffic tooltip, and an AP-row config hint (Reader Audit #7). Seed
+  fixtures added (A/B shared group, C solo, D offline). New e2e `networks.e2e.ts` (4/4 green).
 
 **Section 5 — per-AP traffic:** delta math `computeTrafficRateMbps` (first-sample null, negative
 clamp, elapsed≤0 null) + full byte-sum wiring in the AP refresh, gated on counter availability →
@@ -78,18 +79,18 @@ honest `—` when absent. Proven offline by G15. The live presence probe (G14) i
 
 ## Test Gate Outcomes
 
-| Gate | Strategy | Result |
-|---|---|---|
-| G1–G10, G12, G15 | Fully-Automated | GREEN — `networkHealth.integration.spec.ts` (13 tests) |
-| G13 | Fully-Automated | GREEN — `outage.integration.spec.ts` (6 tests) |
-| G17 | Fully-Automated | GREEN — `mikrotik.spec.ts` (5 tests) |
-| Migration 0047 | Fully-Automated | GREEN — PGlite `migrate()` over `packages/db/drizzle` inside the suites |
-| G11 | Hybrid (e2e) | GREEN — `networks.e2e.ts` 4/4 (Postgres + Chromium precondition met) |
-| `bun run check` | Fully-Automated | GREEN — 3 apps, 0 errors / 0 warnings |
-| `bun run test` | Fully-Automated | GREEN — locator 6 / customer 79 / admin 140 / core 43 |
-| scoped eslint (my files) | Fully-Automated | GREEN — 0 new errors from this change |
-| G14 | Agent-Probe | INCONCLUSIVE — router unreachable → degradation shipped + backlog |
-| G16 | Agent-Probe | DEFERRED (post-deploy) |
+| Gate                     | Strategy        | Result                                                                  |
+| ------------------------ | --------------- | ----------------------------------------------------------------------- |
+| G1–G10, G12, G15         | Fully-Automated | GREEN — `networkHealth.integration.spec.ts` (13 tests)                  |
+| G13                      | Fully-Automated | GREEN — `outage.integration.spec.ts` (6 tests)                          |
+| G17                      | Fully-Automated | GREEN — `mikrotik.spec.ts` (5 tests)                                    |
+| Migration 0047           | Fully-Automated | GREEN — PGlite `migrate()` over `packages/db/drizzle` inside the suites |
+| G11                      | Hybrid (e2e)    | GREEN — `networks.e2e.ts` 4/4 (Postgres + Chromium precondition met)    |
+| `bun run check`          | Fully-Automated | GREEN — 3 apps, 0 errors / 0 warnings                                   |
+| `bun run test`           | Fully-Automated | GREEN — locator 6 / customer 79 / admin 140 / core 43                   |
+| scoped eslint (my files) | Fully-Automated | GREEN — 0 new errors from this change                                   |
+| G14                      | Agent-Probe     | INCONCLUSIVE — router unreachable → degradation shipped + backlog       |
+| G16                      | Agent-Probe     | DEFERRED (post-deploy)                                                  |
 
 ## Plan Deviations
 

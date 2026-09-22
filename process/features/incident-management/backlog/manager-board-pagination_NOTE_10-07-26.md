@@ -1,9 +1,11 @@
 ---
 name: plan:manager-board-pagination
-description: "L3 Option 1 (row pagination) — Option 2 (event-history-on-expand) shipped 22-07-26, see completed/manager-board-lazy-events_22-07-26/"
+description: 'L3 Option 1 (row pagination) — Option 2 (event-history-on-expand) shipped 22-07-26, see completed/manager-board-lazy-events_22-07-26/'
 date: 10-07-26
 feature: incident-management
 ---
+
+**Tracked as GH #99 — https://github.com/HyuseCS/Veent_WifiPortal/issues/99**
 
 # Backlog: Manager-board pagination (L3 Option 1)
 

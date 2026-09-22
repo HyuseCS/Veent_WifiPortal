@@ -30,7 +30,6 @@ process/features/{feature-name}/
 
 All artifacts (plans, specs, reports, references) colocate inside each `{slug}_{date}/` task folder. Do NOT create `reports/` or `references/` sibling dirs.
 
-
 ## Lifecycle
 
 1. Create the folder when the feature qualifies (see above)

@@ -61,10 +61,7 @@
 </svelte:head>
 
 <main class="flex min-h-screen flex-col items-center justify-center bg-surface px-6 py-12">
-	<div
-		class="flex w-full max-w-sm flex-col items-center text-center"
-		in:fade={{ duration: 200 }}
-	>
+	<div class="flex w-full max-w-sm flex-col items-center text-center" in:fade={{ duration: 200 }}>
 		<p class="font-mono text-[64px] leading-none font-bold tracking-tight text-brand">
 			{status}
 		</p>

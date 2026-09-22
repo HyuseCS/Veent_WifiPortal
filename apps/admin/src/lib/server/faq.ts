@@ -48,10 +48,7 @@ export async function updateFaq(db: DB, id: number, input: FaqInput): Promise<vo
 }
 
 export async function setFaqPublished(db: DB, id: number, isPublished: boolean): Promise<void> {
-	await db
-		.update(faqs)
-		.set({ isPublished, updatedAt: new Date() })
-		.where(eq(faqs.id, id));
+	await db.update(faqs).set({ isPublished, updatedAt: new Date() }).where(eq(faqs.id, id));
 }
 
 export async function deleteFaq(db: DB, id: number): Promise<void> {

@@ -22,7 +22,11 @@ const project = () => env.SENTRY_PROJECT_ID;
 const apiBase = () => (env.SENTRY_API_BASE || DEFAULT_API_BASE).replace(/\/+$/, '');
 
 /** The private env vars that must ALL be set for the /sentry dashboard to reach Sentry. */
-export const SENTRY_CREDENTIAL_KEYS = ['SENTRY_AUTH_TOKEN', 'SENTRY_ORG_SLUG', 'SENTRY_PROJECT_ID'] as const;
+export const SENTRY_CREDENTIAL_KEYS = [
+	'SENTRY_AUTH_TOKEN',
+	'SENTRY_ORG_SLUG',
+	'SENTRY_PROJECT_ID'
+] as const;
 
 /** All three server credentials present → the dashboard can call Sentry. */
 export function isSentryConfigured(): boolean {

@@ -99,22 +99,22 @@ This is a SIMPLE (non-phased) plan — there is a single completion state, not p
 
 ## Decision Log
 
-| Decision | Why | Rejected |
-|---|---|---|
-| Reuse `loginNonManager` pattern as-is (no new fixture) | Disproven today: the backlog note's "≈60s timeout" was actually caused by a storageState leak (missing empty `storageState` override), not slowness. Once that leak is fixed the same helper measures ~4.0s. | A banked non-manager storageState fixture — optimizes a cost (slow re-enrollment) that doesn't exist; added complexity for zero benefit. |
-| Query notification items by `getByRole('button', { name: /TITLE/ })` scoped to exclude the "mark as read" sibling, not `menuitem` | Matches current DOM: `NotificationBell.svelte:135-200` — `role="region"` wrapping `<ul><li><button>`, no `role="menu"`/`menuitem` since the L6a a11y change. | Keeping `menuitem` queries — they never match, hard-fail every run. |
-| Assert `page.locator('dialog[open]')` visibility instead of a URL change after notification click | Click now opens `NotificationModal.svelte` in a native `<dialog>` (`selected = n; modalOpen = true`) — does not navigate. | Asserting `toHaveURL(/\/issues\/\d+$/)` — the app no longer does this on click. |
-| Pass `{ maxRedirects: 0 }` to both `context.request.get()` calls in finance-export and assert `302` + `location` header | The real gate is `hooks.server.ts:80-90` `handleBetterAuth`, which 302s BEFORE the route handler's own 401/403 checks run. Playwright follows redirects by default, silently converting the true 302 into a followed 200 with login/enroll HTML — masking what the test claims to prove. | Leaving `expect(status).toBe(401/403)` — asserts a status the app never actually returns at this layer; not a real auth-leak, just an assertion that tests the wrong hop. |
-| New spec drives the tile through the UI (click → fill → submit `?/selfReport`), then asserts via direct DB queries (`admin_issue_assignee`, `admin_issue_event`) | Matches the existing spec pattern (`incident-notifications.e2e.ts`'s `withSql`/`userIdByEmail` helpers) — DB assertions are the established way this suite proves server-side invariants that aren't visible in the DOM. | Asserting only DOM state (e.g. "incident appears in Open pool") — insufficient to prove the assignee list is actually empty in the DB; a UI-only assertion could pass even if the tamper-defense regressed to leaking one assignee that happens to not render. |
-| Do NOT delete `finance/export/+server.ts:17-18`'s own 401/403 checks | Defense-in-depth, not dead code — if the layout hook is ever bypassed or restructured, these are the second line of defense. | Removing "unreachable" code — out of scope; these lines are not touched by this plan at all. |
+| Decision                                                                                                                                                         | Why                                                                                                                                                                                                                                                                                      | Rejected                                                                                                                                                                                                                                                       |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Reuse `loginNonManager` pattern as-is (no new fixture)                                                                                                           | Disproven today: the backlog note's "≈60s timeout" was actually caused by a storageState leak (missing empty `storageState` override), not slowness. Once that leak is fixed the same helper measures ~4.0s.                                                                             | A banked non-manager storageState fixture — optimizes a cost (slow re-enrollment) that doesn't exist; added complexity for zero benefit.                                                                                                                       |
+| Query notification items by `getByRole('button', { name: /TITLE/ })` scoped to exclude the "mark as read" sibling, not `menuitem`                                | Matches current DOM: `NotificationBell.svelte:135-200` — `role="region"` wrapping `<ul><li><button>`, no `role="menu"`/`menuitem` since the L6a a11y change.                                                                                                                             | Keeping `menuitem` queries — they never match, hard-fail every run.                                                                                                                                                                                            |
+| Assert `page.locator('dialog[open]')` visibility instead of a URL change after notification click                                                                | Click now opens `NotificationModal.svelte` in a native `<dialog>` (`selected = n; modalOpen = true`) — does not navigate.                                                                                                                                                                | Asserting `toHaveURL(/\/issues\/\d+$/)` — the app no longer does this on click.                                                                                                                                                                                |
+| Pass `{ maxRedirects: 0 }` to both `context.request.get()` calls in finance-export and assert `302` + `location` header                                          | The real gate is `hooks.server.ts:80-90` `handleBetterAuth`, which 302s BEFORE the route handler's own 401/403 checks run. Playwright follows redirects by default, silently converting the true 302 into a followed 200 with login/enroll HTML — masking what the test claims to prove. | Leaving `expect(status).toBe(401/403)` — asserts a status the app never actually returns at this layer; not a real auth-leak, just an assertion that tests the wrong hop.                                                                                      |
+| New spec drives the tile through the UI (click → fill → submit `?/selfReport`), then asserts via direct DB queries (`admin_issue_assignee`, `admin_issue_event`) | Matches the existing spec pattern (`incident-notifications.e2e.ts`'s `withSql`/`userIdByEmail` helpers) — DB assertions are the established way this suite proves server-side invariants that aren't visible in the DOM.                                                                 | Asserting only DOM state (e.g. "incident appears in Open pool") — insufficient to prove the assignee list is actually empty in the DB; a UI-only assertion could pass even if the tamper-defense regressed to leaking one assignee that happens to not render. |
+| Do NOT delete `finance/export/+server.ts:17-18`'s own 401/403 checks                                                                                             | Defense-in-depth, not dead code — if the layout hook is ever bypassed or restructured, these are the second line of defense.                                                                                                                                                             | Removing "unreachable" code — out of scope; these lines are not touched by this plan at all.                                                                                                                                                                   |
 
 ## Touchpoints
 
-| File | Change | Lines (current) |
-|---|---|---|
-| `apps/admin/e2e/incident-notifications.e2e.ts` | Rewrite ARIA queries + click-assertion in test 1; verify test 2 still green after the fix (no direct edit expected, see Piece 1 detail) | `:80`, `:84`, `:85`, `:88` (test 1); `:113` (test 2, read-only verification) |
-| `apps/admin/e2e/finance-export.e2e.ts` | Add `{ maxRedirects: 0 }`, change status + add `location` header assertions | `:28-29`, `:40-41` |
-| `apps/admin/e2e/incident-self-report.e2e.ts` (NEW FILE) | New spec, ~4 tests per Piece 3 priority list | n/a — new file |
+| File                                                    | Change                                                                                                                                  | Lines (current)                                                              |
+| ------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| `apps/admin/e2e/incident-notifications.e2e.ts`          | Rewrite ARIA queries + click-assertion in test 1; verify test 2 still green after the fix (no direct edit expected, see Piece 1 detail) | `:80`, `:84`, `:85`, `:88` (test 1); `:113` (test 2, read-only verification) |
+| `apps/admin/e2e/finance-export.e2e.ts`                  | Add `{ maxRedirects: 0 }`, change status + add `location` header assertions                                                             | `:28-29`, `:40-41`                                                           |
+| `apps/admin/e2e/incident-self-report.e2e.ts` (NEW FILE) | New spec, ~4 tests per Piece 3 priority list                                                                                            | n/a — new file                                                               |
 
 No other files are modified. `apps/admin/src/**`, `packages/**`, `apps/customer/**`,
 `apps/locator/**` are entirely out of blast radius.
@@ -123,6 +123,7 @@ No other files are modified. `apps/admin/src/**`, `packages/**`, `apps/customer/
 
 None. This plan touches only test files (`apps/admin/e2e/*.e2e.ts`). No public API, schema, or
 runtime behavior changes. The "contract" being verified is the EXISTING behavior of:
+
 - `hooks.server.ts:80-90` `handleBetterAuth` redirect gate (read-only verification, not changed)
 - `+page.server.ts:174-186` `selfReport` action, specifically the `parsed.input.assigneeIds = []`
   forced-overwrite at `:184` (read-only verification, not changed)
@@ -147,9 +148,11 @@ source change — these specs OBSERVE those surfaces, they do not modify them).
 
 1.1. In test `'assignee is notified of others' activity; own action is silent; mark-all-read
 clears it'` (`:50-93`), replace the `:80` query:
+
 ```
 await expect(page.getByRole('menuitem', { name: new RegExp(TITLE) })).toBeVisible();
 ```
+
 with a button-role query scoped to exclude the "Mark this notification as read" sibling button
 (that button's accessible name is a fixed string `'Mark this notification as read'`, distinct
 from `TITLE`, so a `getByRole('button', { name: new RegExp(TITLE) })` query is already
@@ -158,10 +161,12 @@ renders the title inside a nested element such that the outer `<li>` also matche
 `.locator('li').filter({ hasText: TITLE })` scoping instead).
 
 1.2. Replace the `:84-85` click-and-navigate block:
+
 ```
 await page.getByRole('menuitem', { name: new RegExp(TITLE) }).click();
 await expect(page).toHaveURL(/\/issues\/\d+$/);
 ```
+
 with: click the item button, then assert `page.locator('dialog[open]')` becomes visible, then
 assert the modal's `<h2>` contains `TITLE` (per `NotificationModal.svelte:99-101`). Do NOT assert
 a URL change — the app does not navigate on this click.
@@ -207,16 +212,20 @@ Instructions E1 for the required mitigation.
 ### Piece 2 — `finance-export.e2e.ts` (fix redirect-following)
 
 2.1. At `:28-29` (anonymous request), change:
+
 ```
 const unauthed = await context.request.get(EXPORT_PATH);
 expect(unauthed.status()).toBe(401);
 ```
+
 to:
+
 ```
 const unauthed = await context.request.get(EXPORT_PATH, { maxRedirects: 0 });
 expect(unauthed.status()).toBe(302);
 expect(unauthed.headers()['location']).toBe('/login');
 ```
+
 Confirm the exact redirect target string by reading `hooks.server.ts:80-90` during EXECUTE (the
 plan states `/login` per RESEARCH; verify the literal path/query before hardcoding the string —
 some SvelteKit redirect() calls append a `?redirectTo=` query param, which would make an exact
@@ -229,10 +238,12 @@ no `?redirectTo=` query param. The exact `.toBe('/login')` / `.toBe('/enroll-2fa
 plan already prefers is safe as written — no further hedging needed.
 
 2.2. At `:40-41` (authenticated-but-unenrolled request), change:
+
 ```
 const gated = await context.request.get(EXPORT_PATH);
 expect(gated.status()).toBe(403);
 ```
+
 to the same `{ maxRedirects: 0 }` + `302` + location-header pattern, expecting `/enroll-2fa` (or
 `.toMatch(/^\/enroll-2fa/)` per the same brittleness caveat).
 
@@ -264,34 +275,35 @@ enroll it and could break that spec if file execution order ever changes. `cleo@
 seeded, active, admin role, and confirmed untouched by every other spec in the suite.
 
 3.3. Test — **forced-unassigned security property (highest priority, write first):**
-   - Log in as a non-manager (`cleo@veent.test`, per 3.2 — per the `STAFF_PASSWORD` fixture used
-     elsewhere in the suite).
-   - Navigate to `/issues`, click the "Report an issue" tile (`MyIssuesList.svelte:165-173`).
-   - **Sole create action (closes Gap 3 / E3):** do NOT also fill-and-submit the honest UI form
-     for this test — `canAssign={false}` means no UI-driven POST can ever include an `assigneeId`
-     field, so an honest submission adds no proof value, burns a second incident and a second
-     `admin_issue_selfreport` rate-limit slot, and muddies which incident id 3.4's audit-trail
-     assertions should target. The RAW TAMPER POST below is the ONLY create action for this test.
-   - **Tamper POST (closes Gap 2 / E2):** issue a raw `page.request.post()` (or
-     `context.request.post()`) directly against the `?/selfReport` form action with an
-     `assigneeId` field manually appended to the FormData, bypassing the UI entirely — this is the
-     only way to prove `+page.server.ts:184`'s `parsed.input.assigneeIds = []` override actually
-     fires against a hostile client, not just an honest one. The request MUST explicitly pass
-     `headers: { origin: TEST_ORIGIN }` (import `TEST_ORIGIN` from `./config`) — SvelteKit's CSRF
-     guard 403s any form-content-type POST with a missing/mismatched `Origin` header, and
-     Playwright's raw `request.post()` does not auto-attach one the way a real form submit does.
-   - **Mandatory pre-assertion (closes Gap 2 / E2):** before asserting anything about the assignee
-     list, assert the tamper POST's response is NOT a CSRF rejection — e.g. assert the response
-     status is not `403`, or (if the body is inspectable) that it does not contain the CSRF
-     "Cross-site POST form submissions are forbidden" text. If this assertion is skipped, a
-     regression that reintroduces a missing Origin header would still show "zero assignee rows"
-     for the wrong reason (request never reached the action) and the test would be silently
-     worthless. Only after confirming the request reached the `selfReport` action should the
-     following assertions run.
-   - Assert: `SELECT * FROM admin_issue_assignee WHERE issue_id = [id]` returns ZERO rows.
-   - Assert: the incident is NOT visible in that user's "My Issues" list, but IS visible in the
-     manager's/owner's shared Open pool view (confirms it landed unassigned, not silently
-     assigned to the attempted target).
+
+- Log in as a non-manager (`cleo@veent.test`, per 3.2 — per the `STAFF_PASSWORD` fixture used
+  elsewhere in the suite).
+- Navigate to `/issues`, click the "Report an issue" tile (`MyIssuesList.svelte:165-173`).
+- **Sole create action (closes Gap 3 / E3):** do NOT also fill-and-submit the honest UI form
+  for this test — `canAssign={false}` means no UI-driven POST can ever include an `assigneeId`
+  field, so an honest submission adds no proof value, burns a second incident and a second
+  `admin_issue_selfreport` rate-limit slot, and muddies which incident id 3.4's audit-trail
+  assertions should target. The RAW TAMPER POST below is the ONLY create action for this test.
+- **Tamper POST (closes Gap 2 / E2):** issue a raw `page.request.post()` (or
+  `context.request.post()`) directly against the `?/selfReport` form action with an
+  `assigneeId` field manually appended to the FormData, bypassing the UI entirely — this is the
+  only way to prove `+page.server.ts:184`'s `parsed.input.assigneeIds = []` override actually
+  fires against a hostile client, not just an honest one. The request MUST explicitly pass
+  `headers: { origin: TEST_ORIGIN }` (import `TEST_ORIGIN` from `./config`) — SvelteKit's CSRF
+  guard 403s any form-content-type POST with a missing/mismatched `Origin` header, and
+  Playwright's raw `request.post()` does not auto-attach one the way a real form submit does.
+- **Mandatory pre-assertion (closes Gap 2 / E2):** before asserting anything about the assignee
+  list, assert the tamper POST's response is NOT a CSRF rejection — e.g. assert the response
+  status is not `403`, or (if the body is inspectable) that it does not contain the CSRF
+  "Cross-site POST form submissions are forbidden" text. If this assertion is skipped, a
+  regression that reintroduces a missing Origin header would still show "zero assignee rows"
+  for the wrong reason (request never reached the action) and the test would be silently
+  worthless. Only after confirming the request reached the `selfReport` action should the
+  following assertions run.
+- Assert: `SELECT * FROM admin_issue_assignee WHERE issue_id = [id]` returns ZERO rows.
+- Assert: the incident is NOT visible in that user's "My Issues" list, but IS visible in the
+  manager's/owner's shared Open pool view (confirms it landed unassigned, not silently
+  assigned to the attempted target).
 
 **Validate note (E2, E3 — see Validate Contract, load-bearing):** two concrete gaps found during
 VALIDATE that put this test's proof value at risk — see Execute-Agent Instructions E2 (CSRF
@@ -334,16 +346,16 @@ new self-report spec's created incidents don't perturb notification-count assert
 
 ## Verification Evidence
 
-| Gate / Scenario | Strategy | Proves SPEC criterion |
-|---|---|---|
-| `incident-notifications.e2e.ts` test 1 green (modal opens, no menuitem queries) | Hybrid (requires built `apps/admin` preview + throwaway `radius_admin_test` DB) | All 3 specs pass green against the throwaway DB |
-| `incident-notifications.e2e.ts` test 2 green WITHOUT modifying its `:113` assertion | Hybrid | Confirms cross-test leak from test 1 is the sole cause; assertion itself was never wrong |
-| `finance-export.e2e.ts` both tests green with `302` + `location` assertions | Hybrid | Proves the actual `handleBetterAuth` redirect gate, not a status the app can't return here |
-| `incident-self-report.e2e.ts` — forced-unassigned tamper test | Hybrid | Self-report forced-unassigned security property is now under regression protection |
-| `incident-self-report.e2e.ts` — audit trail (exactly 1 `created` event, correct `actor_id`) | Hybrid | Standard audit-trail pattern (per `all-context.md`) holds for the self-report path specifically |
-| `incident-self-report.e2e.ts` — `canAssign={false}` DOM contract | Hybrid | UI hides assignment from non-managers, consistent with the server-side guarantee |
-| `incident-self-report.e2e.ts` — validation failure path | Hybrid | `parseIssueInput` validation applies identically on the self-report path |
-| Full suite run (`bun run test:e2e`) after all 3 pieces, no new failures beyond pre-existing gaps | Hybrid | No regression introduced into the shared, non-isolated test DB across all specs |
+| Gate / Scenario                                                                                  | Strategy                                                                        | Proves SPEC criterion                                                                           |
+| ------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `incident-notifications.e2e.ts` test 1 green (modal opens, no menuitem queries)                  | Hybrid (requires built `apps/admin` preview + throwaway `radius_admin_test` DB) | All 3 specs pass green against the throwaway DB                                                 |
+| `incident-notifications.e2e.ts` test 2 green WITHOUT modifying its `:113` assertion              | Hybrid                                                                          | Confirms cross-test leak from test 1 is the sole cause; assertion itself was never wrong        |
+| `finance-export.e2e.ts` both tests green with `302` + `location` assertions                      | Hybrid                                                                          | Proves the actual `handleBetterAuth` redirect gate, not a status the app can't return here      |
+| `incident-self-report.e2e.ts` — forced-unassigned tamper test                                    | Hybrid                                                                          | Self-report forced-unassigned security property is now under regression protection              |
+| `incident-self-report.e2e.ts` — audit trail (exactly 1 `created` event, correct `actor_id`)      | Hybrid                                                                          | Standard audit-trail pattern (per `all-context.md`) holds for the self-report path specifically |
+| `incident-self-report.e2e.ts` — `canAssign={false}` DOM contract                                 | Hybrid                                                                          | UI hides assignment from non-managers, consistent with the server-side guarantee                |
+| `incident-self-report.e2e.ts` — validation failure path                                          | Hybrid                                                                          | `parseIssueInput` validation applies identically on the self-report path                        |
+| Full suite run (`bun run test:e2e`) after all 3 pieces, no new failures beyond pre-existing gaps | Hybrid                                                                          | No regression introduced into the shared, non-isolated test DB across all specs                 |
 
 All rows are Hybrid — every gate requires the built `apps/admin` preview server plus the
 throwaway `radius_admin_test` Postgres DB (via `global-setup.ts`), which is not guaranteed
@@ -369,14 +381,14 @@ test("self-report POST tamper attempt with assigneeId is force-cleared server-si
 - **`TEST_DATABASE_URL` MUST resolve to `radius_admin_test`, never the dev DB.** `global-setup.ts`
   runs a **`DROP SCHEMA`** against whatever it's pointed at. Confirm the env var before any local
   run: `apps/admin/e2e/config.ts:11` defaults it to `postgres://root:root@localhost:5432/
-  radius_admin_test` — do not override this default when running these gates.
+radius_admin_test` — do not override this default when running these gates.
 - Suite is `workers: 1, fullyParallel: false` — the 3 pieces above must be run together
   (`bun run test:e2e` for the full file set, or explicitly naming all 3 files) to catch
   cross-test state leakage; running any single file in isolation is insufficient final proof.
 - `playwright.config.ts:17` merges `storageState: OWNER_STORAGE_STATE` into EVERY context by
   default, including `browser.newContext()` calls inside a test body. Piece 3's `loginNonManager`
   reuse and any raw tamper-POST in 3.3 MUST explicitly pass empty `storageState: { cookies: [],
-  origins: [] }` (imperative `newContext({...})` form) or `test.use({...})` (declarative form) —
+origins: [] }` (imperative `newContext({...})` form) or `test.use({...})` (declarative form) —
   never rely on the default, or the "non-manager" session will silently be the banked owner.
 
 ## Test Infra Improvement Notes
@@ -395,10 +407,10 @@ ims-e2e-spec-modernization_20-07-26/ims-e2e-spec-modernization_PLAN_20-07-26.md`
    `process/context/tests/all-tests.md`, `process/context/planning/all-planning.md`,
    `process/development-protocols/{orchestration,implementation-standards,plan-lifecycle}.md`;
    plus direct reads of `apps/admin/e2e/{incident-notifications,finance-export,
-   incident-detail}.e2e.ts`, `apps/admin/e2e/{config,global-setup}.ts`,
+incident-detail}.e2e.ts`, `apps/admin/e2e/{config,global-setup}.ts`,
    `apps/admin/playwright.config.ts`,
    `apps/admin/src/lib/components/feature/{NotificationBell,NotificationModal,MyIssuesList,
-   IssueForm}.svelte`, `apps/admin/src/lib/components/ui/BaseDialog.svelte`,
+IssueForm}.svelte`, `apps/admin/src/lib/components/ui/BaseDialog.svelte`,
    `apps/admin/src/routes/(app)/issues/+page.server.ts`,
    `apps/admin/src/routes/(app)/finance/export/+server.ts`, `apps/admin/src/hooks.server.ts`,
    `apps/admin/src/lib/server/issues.ts`, `apps/admin/scripts/seed-test-data.ts`; plus a direct
@@ -427,19 +439,20 @@ check). A single sequential deep-read pass (this session) was sufficient — par
 
 Test gates (C3 5-column table — ADDITIVE; existing consumers still parse the legacy line form below it):
 
-| criterion id | behavior | strategy | proving test | gap-resolution |
-|---|---|---|---|---|
-| AC1 | `incident-notifications.e2e.ts` test 1 passes with button/dialog-role queries, no `menuitem` refs remain | Hybrid | `bun run test:e2e -- incident-notifications` (requires built preview + throwaway DB) | B |
-| AC2 | `incident-notifications.e2e.ts` test 2 passes unmodified (`:113` "2 unread" assertion untouched) | Hybrid | same run as AC1 | B |
-| AC3 | `finance-export.e2e.ts` both tests pass with `302` + `location` header assertions, no stale `401`/`403` assertions remain | Hybrid | `bun run test:e2e -- finance-export` | B |
-| AC4a | `incident-self-report.e2e.ts` — forced-unassigned tamper POST discarded server-side (zero `admin_issue_assignee` rows, lands in shared Open pool), with the CSRF-Origin pre-assertion (item 3.3) proving the request actually reached `selfReport` | Hybrid | `bun run test:e2e -- incident-self-report` | B — E2 (Origin header + not-a-403 pre-assertion) and E3 (sole raw-POST create action) are now checklist body (3.3), not merely execute-agent instructions |
-| AC4b | `incident-self-report.e2e.ts` — audit trail: exactly 1 `created` event, correct `actor_id`, zero `assigned` events | Hybrid | same run as AC4a | B |
-| AC4c | `incident-self-report.e2e.ts` — `canAssign={false}` hides the "Assign to" fieldset in the DOM | Hybrid | same run as AC4a | B |
-| AC4d | `incident-self-report.e2e.ts` — validation failure path (`fail(400, ...)` on empty title) | Hybrid | same run as AC4a | B |
-| AC5 | Zero changes to any file under `apps/admin/src/**` | Fully-Automated | `git diff --stat apps/admin/src/ \| wc -l` (expect `0`) — run at EXECUTE close, before EVL | A — mechanically checkable now, no precondition |
-| AC6 | Full `bun run test:e2e` (all specs) shows no new failures beyond pre-existing known gaps | Hybrid | `bun run test:e2e` (full suite, from `apps/admin/`) | B |
+| criterion id | behavior                                                                                                                                                                                                                                           | strategy        | proving test                                                                               | gap-resolution                                                                                                                                            |
+| ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------- | ------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| AC1          | `incident-notifications.e2e.ts` test 1 passes with button/dialog-role queries, no `menuitem` refs remain                                                                                                                                           | Hybrid          | `bun run test:e2e -- incident-notifications` (requires built preview + throwaway DB)       | B                                                                                                                                                         |
+| AC2          | `incident-notifications.e2e.ts` test 2 passes unmodified (`:113` "2 unread" assertion untouched)                                                                                                                                                   | Hybrid          | same run as AC1                                                                            | B                                                                                                                                                         |
+| AC3          | `finance-export.e2e.ts` both tests pass with `302` + `location` header assertions, no stale `401`/`403` assertions remain                                                                                                                          | Hybrid          | `bun run test:e2e -- finance-export`                                                       | B                                                                                                                                                         |
+| AC4a         | `incident-self-report.e2e.ts` — forced-unassigned tamper POST discarded server-side (zero `admin_issue_assignee` rows, lands in shared Open pool), with the CSRF-Origin pre-assertion (item 3.3) proving the request actually reached `selfReport` | Hybrid          | `bun run test:e2e -- incident-self-report`                                                 | B — E2 (Origin header + not-a-403 pre-assertion) and E3 (sole raw-POST create action) are now checklist body (3.3), not merely execute-agent instructions |
+| AC4b         | `incident-self-report.e2e.ts` — audit trail: exactly 1 `created` event, correct `actor_id`, zero `assigned` events                                                                                                                                 | Hybrid          | same run as AC4a                                                                           | B                                                                                                                                                         |
+| AC4c         | `incident-self-report.e2e.ts` — `canAssign={false}` hides the "Assign to" fieldset in the DOM                                                                                                                                                      | Hybrid          | same run as AC4a                                                                           | B                                                                                                                                                         |
+| AC4d         | `incident-self-report.e2e.ts` — validation failure path (`fail(400, ...)` on empty title)                                                                                                                                                          | Hybrid          | same run as AC4a                                                                           | B                                                                                                                                                         |
+| AC5          | Zero changes to any file under `apps/admin/src/**`                                                                                                                                                                                                 | Fully-Automated | `git diff --stat apps/admin/src/ \| wc -l` (expect `0`) — run at EXECUTE close, before EVL | A — mechanically checkable now, no precondition                                                                                                           |
+| AC6          | Full `bun run test:e2e` (all specs) shows no new failures beyond pre-existing known gaps                                                                                                                                                           | Hybrid          | `bun run test:e2e` (full suite, from `apps/admin/`)                                        | B                                                                                                                                                         |
 
 gap-resolution legend:
+
 - A — proven now (gate passes in this cycle)
 - B — fixed in this plan (gate added by this plan's checklist)
 - C — deferred to a named later phase/plan
@@ -448,6 +461,7 @@ gap-resolution legend:
 C-4 reconciliation: the `strategy:` column carries ONLY the 3 proving strategies (Fully-Automated / Hybrid / Agent-Probe). Known-Gap is NEVER a `strategy:` value — it is a named residual row carried via gap-resolution D, never a strategy that proves a behavior. (No Known-Gap rows in this plan — every criterion has a live gate.)
 
 Legacy line form (retained so existing validate-contract consumers still parse):
+
 - `apps/admin/e2e/incident-notifications.e2e.ts`: Hybrid: `bun run test:e2e -- incident-notifications` (requires built preview + throwaway `radius_admin_test` DB)
 - `apps/admin/e2e/finance-export.e2e.ts`: Hybrid: `bun run test:e2e -- finance-export`
 - `apps/admin/e2e/incident-self-report.e2e.ts` (new): Hybrid: `bun run test:e2e -- incident-self-report`
@@ -455,6 +469,7 @@ Legacy line form (retained so existing validate-contract consumers still parse):
 - Full suite: Hybrid: `bun run test:e2e` (all 11 specs, from `apps/admin/`)
 
 **AC5 — Failing stub (Fully-Automated row):**
+
 ```
 Failing stub:
 test("should confirm zero changes under apps/admin/src/** after EXECUTE", () => {
@@ -463,6 +478,7 @@ test("should confirm zero changes under apps/admin/src/** after EXECUTE", () => 
 ```
 
 Dimension findings:
+
 - Infra fit: PASS — existing Playwright/vitest harness reused as-is, no new dependencies, no new runtime surfaces. No open concerns.
 - Test coverage: PASS — tier assignment correct (all Hybrid, matching the e2e harness's real precondition). The plan's single highest-value gate (AC4a, the tamper-defense test) had two implementation gaps (E2, E3) in the cycle-0 baseline; both are now mandatory checklist body in item 3.3 (see Section C re-check below), closing the "pass/fail for the wrong reason" risk.
 - Breaking changes: PASS — confirmed test-file-only, unchanged from cycle 0. Direct reads of every file the plan claims is "read-only verification" confirm none require a source change.
@@ -471,20 +487,20 @@ Dimension findings:
 Layer 1 dimensions:
 
 | Layer 1 dimensions | Status |
-|---|---|
-| Infra fit | PASS |
-| Test coverage | PASS |
-| Breaking changes | PASS |
-| Security surface | PASS |
+| ------------------ | ------ |
+| Infra fit          | PASS   |
+| Test coverage      | PASS   |
+| Breaking changes   | PASS   |
+| Security surface   | PASS   |
 
 Layer 2 sections:
 
-| Layer 2 sections | Status |
-|---|---|
-| Section A — Piece 1 (`incident-notifications.e2e.ts` fix) | PASS |
-| Section B — Piece 2 (`finance-export.e2e.ts` fix) | PASS |
-| Section C — Piece 3 (`incident-self-report.e2e.ts`, new) | PASS |
-| Section D — Cross-cutting (3.7 hygiene, 3.8 full-suite check) | PASS |
+| Layer 2 sections                                              | Status |
+| ------------------------------------------------------------- | ------ |
+| Section A — Piece 1 (`incident-notifications.e2e.ts` fix)     | PASS   |
+| Section B — Piece 2 (`finance-export.e2e.ts` fix)             | PASS   |
+| Section C — Piece 3 (`incident-self-report.e2e.ts`, new)      | PASS   |
+| Section D — Cross-cutting (3.7 hygiene, 3.8 full-suite check) | PASS   |
 
 **Totals: 0 FAILs / 0 CONCERNs / 8 PASSes (4 dimensions + 4 sections)**
 
@@ -493,7 +509,7 @@ Layer 2 sections:
 ### Section A — Piece 1 re-check (cycle-0 Gap 1 / C1)
 
 - Mechanical feasibility: unchanged from cycle 0 — confirmed. `getByRole('button', { name: new
-  RegExp(TITLE) })` is unambiguous against `NotificationBell.svelte`; the modal-close control
+RegExp(TITLE) })` is unambiguous against `NotificationBell.svelte`; the modal-close control
   exists both natively (`<dialog>` Escape) and via the explicit `IconButton label="Close"` at
   `NotificationModal.svelte:109`.
 - Gap 1 / C1 closure verified: item **1.5a** now mandates wrapping the entire 1.1-1.5
@@ -541,7 +557,7 @@ Layer 2 sections:
   mechanics: `csrf_check_origin` is on by default (`apps/admin/vite.config.ts` sets no
   `kit.csrf.trustedOrigins`), the guard runs whenever `!DEV` (true for the built-preview harness
   this suite requires), and `forbidden = is_form_content_type(request) && [POST/PUT/PATCH/
-  DELETE] && request_origin !== url.origin && (!request_origin || not in trustedOrigins)` — a
+DELETE] && request_origin !== url.origin && (!request_origin || not in trustedOrigins)` — a
   missing `Origin` header trips `!request_origin` and 403s before the handler runs, exactly as
   the checklist describes. The ordering requirement is the load-bearing part: without it, a CSRF
   403 (zero rows because the action never ran) and a correct discard (zero rows because the
@@ -587,14 +603,15 @@ Layer 2 sections:
 All four (E1-E4) are now checklist body (items 1.5a, 3.2, 3.3) rather than standalone
 execute-agent instructions — retained here only as a cross-reference, not as outstanding work:
 
-| # | Instruction | Now lives at | Status |
-|---|---|---|---|
-| E1 | try/finally (or equivalent) around 1.1-1.5's "Mark all read" cleanup | Checklist 1.5a | Applied |
-| E2 | `headers: { origin: TEST_ORIGIN }` + not-a-403 pre-assertion, ordered before discard assertions | Checklist 3.3 | Applied |
-| E3 | Raw tamper POST is the sole create action for 3.3 | Checklist 3.3 | Applied |
-| E4 | `cleo@veent.test` instead of `bea@veent.test` | Checklist 3.2/3.3 | Applied |
+| #   | Instruction                                                                                     | Now lives at      | Status  |
+| --- | ----------------------------------------------------------------------------------------------- | ----------------- | ------- |
+| E1  | try/finally (or equivalent) around 1.1-1.5's "Mark all read" cleanup                            | Checklist 1.5a    | Applied |
+| E2  | `headers: { origin: TEST_ORIGIN }` + not-a-403 pre-assertion, ordered before discard assertions | Checklist 3.3     | Applied |
+| E3  | Raw tamper POST is the sole create action for 3.3                                               | Checklist 3.3     | Applied |
+| E4  | `cleo@veent.test` instead of `bea@veent.test`                                                   | Checklist 3.2/3.3 | Applied |
 
 What this coverage does NOT prove:
+
 - AC1/AC2 (Hybrid, `bun run test:e2e -- incident-notifications`): does not prove the notification
   feed's read-model correctness under concurrent writers (two staff acting on the same incident
   simultaneously) — only the single-actor sequence this suite already exercises.
@@ -607,16 +624,16 @@ What this coverage does NOT prove:
   same-origin-headed request; it does not independently re-verify that SvelteKit's CSRF guard
   itself is correctly configured (framework-level behavior, out of this plan's scope, confirmed
   by direct source read during VALIDATE, not by a new test).
-- AC5 (Fully-Automated, `git diff --stat`): proves no *file content* changed under
-  `apps/admin/src/**`; does not prove no *new file* was added there (a `wc -l` on `git diff
-  --stat` output would still show `0` for an added-then-untracked file — the AC5 failing stub
+- AC5 (Fully-Automated, `git diff --stat`): proves no _file content_ changed under
+  `apps/admin/src/**`; does not prove no _new file_ was added there (a `wc -l` on `git diff
+--stat` output would still show `0` for an added-then-untracked file — the AC5 failing stub
   above recommends EXECUTE also run `git status --porcelain apps/admin/src/` before closing).
-- AC6 (Hybrid, full suite): proves no *new* failure relative to the pre-existing 3-spec known-flaky
+- AC6 (Hybrid, full suite): proves no _new_ failure relative to the pre-existing 3-spec known-flaky
   baseline documented in `all-tests.md` §Known Gaps; does not re-verify those pre-existing gaps
   are still exactly the same 3 specs (that comparison is a manual read of the run output, not
   automated by this gate).
-(No remaining "required until" caveat — C2/C3 are now closed in the checklist body, not
-deferred to a future implementation step.)
+  (No remaining "required until" caveat — C2/C3 are now closed in the checklist body, not
+  deferred to a future implementation step.)
 
 Open gaps: none. All 3 cycle-0 CONCERNs (C1, C2, C3) and the 1 non-blocking recommendation (C5/
 E4) are closed in the checklist body and independently re-verified this cycle against live

@@ -108,25 +108,33 @@
 			>
 				{#if active}
 					<!-- Hovered slice takes over the hole as the tooltip. -->
-					<span class="font-mono {compact ? 'text-sm' : 'text-base'} font-bold tracking-tight text-ink"
+					<span
+						class="font-mono {compact ? 'text-sm' : 'text-base'} font-bold tracking-tight text-ink"
 						>{peso(active.amount)}</span
 					>
-					<span class="mt-1 flex items-center gap-1 {compact ? 'text-[9px]' : 'text-[10px]'} font-semibold text-muted">
-						<span class="inline-block h-2 w-2 shrink-0 rounded-full" style="background: {active.color}"></span>
+					<span
+						class="mt-1 flex items-center gap-1 {compact
+							? 'text-[9px]'
+							: 'text-[10px]'} font-semibold text-muted"
+					>
+						<span
+							class="inline-block h-2 w-2 shrink-0 rounded-full"
+							style="background: {active.color}"
+						></span>
 						<span class="max-w-[9ch] truncate text-ink">{active.label}</span>
 						<span>· {active.pct}%</span>
 					</span>
 				{:else}
 					<span
-						class="font-mono {compact
-							? 'text-sm'
-							: 'text-lg'} font-bold tracking-tight text-ink">{centerValue}</span
+						class="font-mono {compact ? 'text-sm' : 'text-lg'} font-bold tracking-tight text-ink"
+						>{centerValue}</span
 					>
 					{#if centerLabel}
 						<span
 							class="mt-1 {compact
 								? 'text-[9px]'
-								: 'text-[10px]'} font-semibold tracking-wide text-muted uppercase">{centerLabel}</span
+								: 'text-[10px]'} font-semibold tracking-wide text-muted uppercase"
+							>{centerLabel}</span
 						>
 					{/if}
 				{/if}

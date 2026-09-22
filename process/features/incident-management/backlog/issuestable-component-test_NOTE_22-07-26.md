@@ -1,6 +1,6 @@
 ---
 name: note:issuestable-component-test
-description: "Add IssuesTable.svelte.test.ts once the admin browser-Vitest project gets its first spec — covers AC3 (no-refetch on re-expand) and AC4 (graceful fetch-failure), which currently have no automated coverage."
+description: 'Add IssuesTable.svelte.test.ts once the admin browser-Vitest project gets its first spec — covers AC3 (no-refetch on re-expand) and AC4 (graceful fetch-failure), which currently have no automated coverage.'
 date: 22-07-26
 feature: incident-management
 ---

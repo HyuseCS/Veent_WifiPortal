@@ -22,12 +22,19 @@ if (!url) {
 const db = createDb(url);
 
 const active = await db
-	.select({ id: networkSessions.id, mac: networkSessions.macAddress, startedAt: networkSessions.startedAt })
+	.select({
+		id: networkSessions.id,
+		mac: networkSessions.macAddress,
+		startedAt: networkSessions.startedAt
+	})
 	.from(networkSessions)
 	.where(eq(networkSessions.status, SESSION_STATUS.active));
 
 console.log(`Active sessions: ${active.length}`);
-for (const s of active) console.log(`  id=${s.id} mac=${s.mac ?? '(null)'} started=${s.startedAt?.toISOString?.() ?? s.startedAt}`);
+for (const s of active)
+	console.log(
+		`  id=${s.id} mac=${s.mac ?? '(null)'} started=${s.startedAt?.toISOString?.() ?? s.startedAt}`
+	);
 
 const targets = all ? active : active.filter((s) => !s.mac || !MAC_RE.test(s.mac));
 if (targets.length === 0) {
@@ -35,7 +42,9 @@ if (targets.length === 0) {
 	process.exit(0);
 }
 
-console.log(`\nExpiring ${targets.length} session(s)${all ? ' (--all)' : ' with bogus/missing MAC'}…`);
+console.log(
+	`\nExpiring ${targets.length} session(s)${all ? ' (--all)' : ' with bogus/missing MAC'}…`
+);
 for (const s of targets) {
 	await db
 		.update(networkSessions)

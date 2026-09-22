@@ -49,7 +49,11 @@
 						class="flex w-full items-center justify-between gap-3 p-[18px] text-left transition-colors hover:cursor-pointer hover:bg-cta-tint lg:p-6 motion-safe:transition-[background-color,transform] motion-safe:active:scale-[0.99]"
 					>
 						<h2 id="faq-q-{item.id}" class="text-[15px] font-bold text-ink">{item.q}</h2>
-						<span class="faq-chevron shrink-0 text-muted" class:open={open[item.id]} aria-hidden="true">
+						<span
+							class="faq-chevron shrink-0 text-muted"
+							class:open={open[item.id]}
+							aria-hidden="true"
+						>
 							<Icon name="chevron-right" size={18} />
 						</span>
 					</button>

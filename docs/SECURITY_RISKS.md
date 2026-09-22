@@ -245,7 +245,7 @@ shared-segment sniff/MITM exposure.
 
 **Reminder:** the cert was created with `days-valid=3650` — it will expire in ~10
 years; no rotation needed soon, but note it exists. Pin `10.210.0.9` (the app host) to a static
-DHCP lease so the *Available From* restriction can't break on a lease change.
+DHCP lease so the _Available From_ restriction can't break on a lease change.
 
 **Diagnosed 2026-06-25 — "api-ssl hangs" was the Available From restriction, not a
 code/cert bug.** When the apps' host drifts off `10.0.0.147` (DHCP lease change),

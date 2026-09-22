@@ -150,7 +150,10 @@ export const actions: Actions = {
 	 *  `display_name` override — the sweep-managed `name` is left alone so the label survives every
 	 *  router refresh. Blank clears the override (revert to the router-derived name). */
 	setApName: async (event) => {
-		const denied = await requireManager(event.locals.user?.id, 'You do not have permission to rename access points.');
+		const denied = await requireManager(
+			event.locals.user?.id,
+			'You do not have permission to rename access points.'
+		);
 		if (denied) return denied;
 
 		const form = await event.request.formData();
@@ -162,7 +165,11 @@ export const actions: Actions = {
 
 		const name = String(form.get('displayName') ?? '').trim();
 		if (name.length > 120) {
-			return fail(400, { action: 'setApName', id, error: 'Name is too long (max 120 characters).' });
+			return fail(400, {
+				action: 'setApName',
+				id,
+				error: 'Name is too long (max 120 characters).'
+			});
 		}
 		await setApDisplayName(db, id, name || null);
 		return { ok: true, action: 'setApName', id };

@@ -1,6 +1,6 @@
 ---
 name: note:ap-name-retry-transaction-tripwire
-description: "No automated guard prevents a future caller from wrapping refreshNetworkHealth in db.transaction, which would invalidate the E3 standalone-statement retry design for the AP name-collision fix. JSDoc-only tripwire today."
+description: 'No automated guard prevents a future caller from wrapping refreshNetworkHealth in db.transaction, which would invalidate the E3 standalone-statement retry design for the AP name-collision fix. JSDoc-only tripwire today.'
 date: 20-07-26
 metadata:
   node_type: memory
@@ -34,6 +34,7 @@ silently-in-effect (wrong error propagation, not a crash) the moment someone inn
 ## What to do
 
 One of:
+
 1. Add a runtime guard: if `db` passed into `refreshNetworkHealth`/`refreshAccessPoints` is
    already inside a transaction context, throw or warn (requires a way to detect "currently in a
    tx" with the current drizzle+postgres.js setup — worth a short feasibility check first).

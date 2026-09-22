@@ -37,10 +37,7 @@ export function createResendProvider(config: ResendConfig): EmailProvider {
 
 			let timer: ReturnType<typeof setTimeout> | undefined;
 			const timeout = new Promise<never>((_, reject) => {
-				timer = setTimeout(
-					() => reject(new Error('resend: send timed out')),
-					SEND_TIMEOUT_MS
-				);
+				timer = setTimeout(() => reject(new Error('resend: send timed out')), SEND_TIMEOUT_MS);
 			});
 
 			let result: Awaited<typeof sent>;

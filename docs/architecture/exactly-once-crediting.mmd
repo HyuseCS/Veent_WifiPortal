@@ -1,0 +1,21 @@
+%%{init: {'theme':'base','themeVariables':{'primaryColor':'#FFFFFF','primaryTextColor':'#17202B','primaryBorderColor':'#8C97A3','lineColor':'#6E7883','fontFamily':'ui-monospace, monospace','actorBkg':'#FFFFFF','actorBorder':'#8C97A3','actorTextColor':'#17202B','signalColor':'#4A5560','signalTextColor':'#17202B','labelBoxBkg':'#F1EDE6','labelBoxBorderColor':'#C0BCB4','noteBkgColor':'#F0E2D2','noteBorderColor':'#B4630F','noteTextColor':'#3A2A16'}}}%%
+sequenceDiagram
+    autonumber
+    participant G as Guest
+    participant C as apps/customer
+    participant M as Maya
+    participant S as @veent/core
+    participant R as MikroTik
+
+    G->>C: buy tier (top-up action)
+    C->>M: create checkout
+    M-->>G: hosted payment page
+    M->>C: webhook to handlePaymentWebhook
+    C->>S: creditCheckoutIfUnsettled
+    Note over S: atomic claim - one settle per checkout
+    S->>S: addCreditsTx + earnPointsTx
+    C->>S: recordPaymentTransaction
+    Note over S: externalTransactionId is the idempotency key
+    G->>C: browser returns to ORIGIN
+    C->>S: startPaidAccessAndBindDevice
+    S->>R: NetworkController.grant()

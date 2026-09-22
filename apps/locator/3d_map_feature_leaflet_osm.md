@@ -147,19 +147,19 @@ Example response shape:
 
 ```json
 {
-  "center": {
-    "lat": 14.5995,
-    "lng": 120.9842
-  },
-  "radiusMeters": 300,
-  "buildings": {
-    "type": "FeatureCollection",
-    "features": []
-  },
-  "metadata": {
-    "source": "OpenStreetMap",
-    "generatedAt": "2026-06-19T00:00:00Z"
-  }
+	"center": {
+		"lat": 14.5995,
+		"lng": 120.9842
+	},
+	"radiusMeters": 300,
+	"buildings": {
+		"type": "FeatureCollection",
+		"features": []
+	},
+	"metadata": {
+		"source": "OpenStreetMap",
+		"generatedAt": "2026-06-19T00:00:00Z"
+	}
 }
 ```
 

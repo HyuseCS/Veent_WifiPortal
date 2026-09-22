@@ -276,7 +276,10 @@ export class NetworkMapController {
 	// Scale the focused pin up (.sel) and restore all others — no marker re-creation.
 	applyFocus(focusedApId: string | null) {
 		for (const [apId, marker] of this.markerById) {
-			marker.getElement()?.querySelector('.vpin')?.classList.toggle('sel', apId === focusedApId);
+			marker
+				.getElement()
+				?.querySelector('.vpin')
+				?.classList.toggle('sel', apId === focusedApId);
 		}
 	}
 

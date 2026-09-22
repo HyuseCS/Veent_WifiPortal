@@ -2,7 +2,7 @@
 
 **Date:** 2026-07-02
 **Scope:** `origin/main...HEAD` — 134 files, ~11,000 insertions (Sentry observability integration for admin + customer + locator, plus merged `dev/customer` work and load-test tooling).
-**Method:** security review (finder agent + independent adversarial verifier) and a multi-agent code review (45 agents; every candidate finding independently verified against the actual code). Every finding was then re-checked against `origin/main` to separate *introduced by this branch* from *pre-existing*. No changes were made as part of this audit.
+**Method:** security review (finder agent + independent adversarial verifier) and a multi-agent code review (45 agents; every candidate finding independently verified against the actual code). Every finding was then re-checked against `origin/main` to separate _introduced by this branch_ from _pre-existing_. No changes were made as part of this audit.
 
 ## Verdict
 
@@ -16,9 +16,9 @@ The branch-introduced code is in good shape: no exploitable vulnerability (no au
 
 `packages/core/src/observability.ts:81-108` · **Severity: Medium (security)** · verified true-positive, confidence 8/10
 
-- `scrubEvent` visits `request`, `user`, `message`, `breadcrumbs`, `exception`, `extra`, `contexts` — but not `event.spans` or `event.transaction`. `beforeSendTransaction` routes through the same function (`observability.ts:190`), so transaction events — whose payload *is* the span array — go out unredacted.
+- `scrubEvent` visits `request`, `user`, `message`, `breadcrumbs`, `exception`, `extra`, `contexts` — but not `event.spans` or `event.transaction`. `beforeSendTransaction` routes through the same function (`observability.ts:190`), so transaction events — whose payload _is_ the span array — go out unredacted.
 - The leak is concretely reachable: tracing is on (1.0 dev / 0.2 prod, `browserTracingIntegration` in `apps/customer/src/hooks.client.ts:16-25`), the customer app threads the device MAC through query strings everywhere (`/login?mac=`, `/top-up?mac=`, Maya success/cancel URLs in `top-up/+page.server.ts:120-121`, `goto('/dashboard'+portalQuery)` in `top-up/processing/+page.svelte:24`), and the installed `@sentry/core@10.62.0` fetch instrumentation sets `http.url`/`http.query` span attributes with the **full query string** on SvelteKit's `__data.json` fetches. Every sampled client navigation in the login → dashboard → top-up loop ships the MAC.
-- **Aggravator:** the app percent-encodes the MAC (`AA%3ABB%3A…`), which `MAC_RE` (`observability.ts:31`) doesn't match — so the encoded form would slip through even in the fields that *are* scrubbed.
+- **Aggravator:** the app percent-encodes the MAC (`AA%3ABB%3A…`), which `MAC_RE` (`observability.ts:31`) doesn't match — so the encoded form would slip through even in the fields that _are_ scrubbed.
 - **Fix:** scrub `event.spans` (the existing recursive `scrub`/`maskString` handles them once visited), mask `event.transaction`, and handle percent-encoded PII (decode-then-match or add encoded-form patterns). Add a test asserting a MAC in a span's data is masked — current tests (`observability.test.ts`) cover message/extra/request/user only.
 
 ### A2. `PHONE_RE` over-masks long numeric runs in Sentry events
@@ -41,10 +41,10 @@ The handler does `event.locals.user!.id` and nothing else. Its own comment claim
 
 ### B2. Three silent-payment-loss paths in the payment pipeline
 
-*(This branch only added Sentry captures to these files — the logic pre-dates it.)*
+_(This branch only added Sentry captures to these files — the logic pre-dates it.)_
 
-- **Blind-expire locks out late credits** — `packages/core/src/services/reconcilePayments.ts:288-291`: the reconcile cron flips aged `pending` checkouts to `expired` without asking the gateway. When a delayed *paid* webhook later arrives, `creditCheckoutIfUnsettled` sees status ≠ pending, returns `credited:false`, and the webhook acks **200** (logged as "idempotent replay") — Maya stops retrying. Buyer charged, credits never granted, nothing alerts.
-- **Unattributed paid events acked 200** — `apps/customer/src/routes/api/webhooks/payment/+server.ts:146`: a verified paid event whose package/checkout/user row is gone (admin deletes package or wipes customers mid-flight) is recorded-not-credited and acked 200 with only a `console.warn`. Directly relevant to this branch: this money-path warn is *not* routed through `captureHandled`, unlike the six paths commit `f9e8bef` covered — worth adding while in here.
+- **Blind-expire locks out late credits** — `packages/core/src/services/reconcilePayments.ts:288-291`: the reconcile cron flips aged `pending` checkouts to `expired` without asking the gateway. When a delayed _paid_ webhook later arrives, `creditCheckoutIfUnsettled` sees status ≠ pending, returns `credited:false`, and the webhook acks **200** (logged as "idempotent replay") — Maya stops retrying. Buyer charged, credits never granted, nothing alerts.
+- **Unattributed paid events acked 200** — `apps/customer/src/routes/api/webhooks/payment/+server.ts:146`: a verified paid event whose package/checkout/user row is gone (admin deletes package or wipes customers mid-flight) is recorded-not-credited and acked 200 with only a `console.warn`. Directly relevant to this branch: this money-path warn is _not_ routed through `captureHandled`, unlike the six paths commit `f9e8bef` covered — worth adding while in here.
 - **Dead 23505 collapse → webhook 500 retry loop** — `reconcilePayments.ts:98`: the unique-violation check reads `.code` on the raw error, but drizzle-orm 0.45.x wraps driver errors in `DrizzleQueryError` (SQLSTATE lives on `.cause.code`), so the intended collapse-onto-existing-row never runs and the second insert path throws. On the webhook route that's a 500 → indefinite gateway retries. The unit test masks it by rejecting with a bare `{code: '23505'}` instead of the wrapped shape.
 
 ### B3. Network/session lifecycle defects

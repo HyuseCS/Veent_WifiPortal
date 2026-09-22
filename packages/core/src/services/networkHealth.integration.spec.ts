@@ -114,8 +114,20 @@ describe('per-AP visibility refresh (real Postgres)', () => {
 
 	it('G1b: recognizes an AP by hostname signature even with a foreign OUI', async () => {
 		const aps = recognizeAccessPoints([
-			{ mac: 'AA:BB:CC:00:11:22', address: '10.0.0.9', hostname: 'OAP3000G-X', agentCircuitId: 'C9', status: 'bound' },
-			{ mac: 'DE:AD:BE:EF:00:00', address: '10.0.0.8', hostname: 'some-phone', agentCircuitId: null, status: 'bound' }
+			{
+				mac: 'AA:BB:CC:00:11:22',
+				address: '10.0.0.9',
+				hostname: 'OAP3000G-X',
+				agentCircuitId: 'C9',
+				status: 'bound'
+			},
+			{
+				mac: 'DE:AD:BE:EF:00:00',
+				address: '10.0.0.8',
+				hostname: 'some-phone',
+				agentCircuitId: null,
+				status: 'bound'
+			}
 		]);
 		expect(aps).toHaveLength(1);
 		expect(aps[0].mac).toBe('AA:BB:CC:00:11:22');
@@ -124,8 +136,18 @@ describe('per-AP visibility refresh (real Postgres)', () => {
 	it('G2: two AP fixtures, one ping-alive one not, differ in online', async () => {
 		const net = fake({
 			leases: [
-				apLease({ mac: 'E4:67:1E:00:00:01', address: '10.0.0.11', hostname: 'OAP3000G-A', agentCircuitId: 'CA' }),
-				apLease({ mac: 'E4:67:1E:00:00:02', address: '10.0.0.12', hostname: 'OAP3000G-B', agentCircuitId: 'CB' })
+				apLease({
+					mac: 'E4:67:1E:00:00:01',
+					address: '10.0.0.11',
+					hostname: 'OAP3000G-A',
+					agentCircuitId: 'CA'
+				}),
+				apLease({
+					mac: 'E4:67:1E:00:00:02',
+					address: '10.0.0.12',
+					hostname: 'OAP3000G-B',
+					agentCircuitId: 'CB'
+				})
 			],
 			ping: { '10.0.0.11': 3, '10.0.0.12': null }
 		});
@@ -142,12 +164,40 @@ describe('per-AP visibility refresh (real Postgres)', () => {
 	it('G3: devices attributed to AP-1 do not count toward AP-2', async () => {
 		const net = fake({
 			leases: [
-				apLease({ mac: 'E4:67:1E:00:00:01', address: '10.0.0.11', hostname: 'OAP3000G-A', agentCircuitId: 'CA' }),
-				apLease({ mac: 'E4:67:1E:00:00:02', address: '10.0.0.12', hostname: 'OAP3000G-B', agentCircuitId: 'CB' }),
+				apLease({
+					mac: 'E4:67:1E:00:00:01',
+					address: '10.0.0.11',
+					hostname: 'OAP3000G-A',
+					agentCircuitId: 'CA'
+				}),
+				apLease({
+					mac: 'E4:67:1E:00:00:02',
+					address: '10.0.0.12',
+					hostname: 'OAP3000G-B',
+					agentCircuitId: 'CB'
+				}),
 				// two guests on CA, one on CB
-				{ mac: 'AA:00:00:00:00:01', address: '10.0.1.1', hostname: null, agentCircuitId: 'CA', status: 'bound' },
-				{ mac: 'AA:00:00:00:00:02', address: '10.0.1.2', hostname: null, agentCircuitId: 'CA', status: 'bound' },
-				{ mac: 'BB:00:00:00:00:01', address: '10.0.2.1', hostname: null, agentCircuitId: 'CB', status: 'bound' }
+				{
+					mac: 'AA:00:00:00:00:01',
+					address: '10.0.1.1',
+					hostname: null,
+					agentCircuitId: 'CA',
+					status: 'bound'
+				},
+				{
+					mac: 'AA:00:00:00:00:02',
+					address: '10.0.1.2',
+					hostname: null,
+					agentCircuitId: 'CA',
+					status: 'bound'
+				},
+				{
+					mac: 'BB:00:00:00:00:01',
+					address: '10.0.2.1',
+					hostname: null,
+					agentCircuitId: 'CB',
+					status: 'bound'
+				}
 			],
 			active: [
 				{ mac: 'AA:00:00:00:00:01', address: '10.0.1.1', bytesIn: null, bytesOut: null },
@@ -170,8 +220,18 @@ describe('per-AP visibility refresh (real Postgres)', () => {
 	it('G4: identical circuit-id fixtures form one AP group', async () => {
 		const net = fake({
 			leases: [
-				apLease({ mac: 'E4:67:1E:00:00:0A', address: '10.0.0.21', hostname: 'OAP3000G-P', agentCircuitId: 'SHARED' }),
-				apLease({ mac: 'E4:67:1E:00:00:0B', address: '10.0.0.22', hostname: 'OAP3000G-Q', agentCircuitId: 'SHARED' })
+				apLease({
+					mac: 'E4:67:1E:00:00:0A',
+					address: '10.0.0.21',
+					hostname: 'OAP3000G-P',
+					agentCircuitId: 'SHARED'
+				}),
+				apLease({
+					mac: 'E4:67:1E:00:00:0B',
+					address: '10.0.0.22',
+					hostname: 'OAP3000G-Q',
+					agentCircuitId: 'SHARED'
+				})
 			],
 			ping: { '10.0.0.21': 2, '10.0.0.22': 2 }
 		});
@@ -191,7 +251,13 @@ describe('per-AP visibility refresh (real Postgres)', () => {
 			fake({
 				leases: [
 					apLease({ mac: 'E4:67:1E:00:00:31', address: '10.0.0.31', agentCircuitId: 'C1' }),
-					{ mac: guestMac, address: '10.0.9.9', hostname: null, agentCircuitId: 'C1', status: 'bound' }
+					{
+						mac: guestMac,
+						address: '10.0.9.9',
+						hostname: null,
+						agentCircuitId: 'C1',
+						status: 'bound'
+					}
 				],
 				active: [{ mac: guestMac, address: '10.0.9.9', bytesIn: null, bytesOut: null }],
 				ping: { '10.0.0.31': 2 }
@@ -203,7 +269,13 @@ describe('per-AP visibility refresh (real Postgres)', () => {
 			fake({
 				leases: [
 					apLease({ mac: 'E4:67:1E:00:00:31', address: '10.0.0.31', agentCircuitId: 'C1' }),
-					{ mac: guestMac, address: '10.0.9.9', hostname: null, agentCircuitId: null, status: 'bound' }
+					{
+						mac: guestMac,
+						address: '10.0.9.9',
+						hostname: null,
+						agentCircuitId: null,
+						status: 'bound'
+					}
 				],
 				active: [{ mac: guestMac, address: '10.0.9.9', bytesIn: null, bytesOut: null }],
 				ping: { '10.0.0.31': 2 }
@@ -222,7 +294,13 @@ describe('per-AP visibility refresh (real Postgres)', () => {
 		const net = fake({
 			leases: [
 				apLease({ mac: 'E4:67:1E:00:00:41', address: '10.0.0.41', agentCircuitId: 'C1' }),
-				{ mac: 'AA:00:00:00:00:41', address: '10.0.4.1', hostname: null, agentCircuitId: null, status: 'bound' }
+				{
+					mac: 'AA:00:00:00:00:41',
+					address: '10.0.4.1',
+					hostname: null,
+					agentCircuitId: null,
+					status: 'bound'
+				}
 			],
 			active: [{ mac: 'AA:00:00:00:00:41', address: '10.0.4.1', bytesIn: null, bytesOut: null }],
 			ping: { '10.0.0.41': 2 }
@@ -236,8 +314,20 @@ describe('per-AP visibility refresh (real Postgres)', () => {
 
 	it('G7: AP lease IP change updates the same MAC-keyed row', async () => {
 		const mac = 'E4:67:1E:00:00:51';
-		await refreshNetworkHealth(db, fake({ leases: [apLease({ mac, address: '10.0.0.51', agentCircuitId: 'C1' })], ping: { '10.0.0.51': 2 } }));
-		await refreshNetworkHealth(db, fake({ leases: [apLease({ mac, address: '10.0.0.77', agentCircuitId: 'C1' })], ping: { '10.0.0.77': 5 } }));
+		await refreshNetworkHealth(
+			db,
+			fake({
+				leases: [apLease({ mac, address: '10.0.0.51', agentCircuitId: 'C1' })],
+				ping: { '10.0.0.51': 2 }
+			})
+		);
+		await refreshNetworkHealth(
+			db,
+			fake({
+				leases: [apLease({ mac, address: '10.0.0.77', agentCircuitId: 'C1' })],
+				ping: { '10.0.0.77': 5 }
+			})
+		);
 		const rows = await apRows();
 		expect(rows).toHaveLength(1);
 		expect(rows[0].latencyMs).toBe(5); // updated in place
@@ -245,20 +335,32 @@ describe('per-AP visibility refresh (real Postgres)', () => {
 
 	it('G8: absent AP keeps lastSampleAt; pinned/skipped-scan rows survive prune', async () => {
 		const mac = 'E4:67:1E:00:00:61';
-		await refreshNetworkHealth(db, fake({ leases: [apLease({ mac, address: '10.0.0.61', agentCircuitId: 'C1' })], ping: { '10.0.0.61': 2 } }));
+		await refreshNetworkHealth(
+			db,
+			fake({
+				leases: [apLease({ mac, address: '10.0.0.61', agentCircuitId: 'C1' })],
+				ping: { '10.0.0.61': 2 }
+			})
+		);
 		const before = (await apRows())[0];
 		// Case 1: AP scan SKIPPED (controller has no listDhcpLeases) but interface sample present → the
 		// mac-restricted prune must NOT wipe the AP row.
 		await refreshNetworkHealth(
 			db,
-			fake({ omitLeases: true, samples: [{ name: 'vlan70 hotspot', online: true, users: 0, throughputMbps: 3 }] })
+			fake({
+				omitLeases: true,
+				samples: [{ name: 'vlan70 hotspot', online: true, users: 0, throughputMbps: 3 }]
+			})
 		);
 		let rows = await apRows();
 		const kept = rows.find((r) => r.mac === mac)!;
 		expect(kept).toBeTruthy();
 		expect(kept.lastSampleAt.getTime()).toBe(before.lastSampleAt.getTime()); // untouched
 		// Case 2: pinned AP (latitude set) survives even when the AP scan runs and no longer reports it.
-		await db.update(networkHealth).set({ latitude: '14.5', longitude: '121.0' }).where(eq(networkHealth.mac, mac));
+		await db
+			.update(networkHealth)
+			.set({ latitude: '14.5', longitude: '121.0' })
+			.where(eq(networkHealth.mac, mac));
 		await refreshNetworkHealth(db, fake({ leases: [] })); // scan ran, AP gone
 		rows = await apRows();
 		expect(rows.find((r) => r.mac === mac)).toBeTruthy();
@@ -268,9 +370,25 @@ describe('per-AP visibility refresh (real Postgres)', () => {
 		const guestMac = 'AA:00:00:00:00:99';
 		const net = fake({
 			leases: [
-				apLease({ mac: 'E4:67:1E:00:00:71', address: '10.0.0.71', hostname: 'OAP3000G-P', agentCircuitId: 'GRP' }),
-				apLease({ mac: 'E4:67:1E:00:00:72', address: '10.0.0.72', hostname: 'OAP3000G-Q', agentCircuitId: 'GRP' }),
-				{ mac: guestMac, address: '10.0.9.1', hostname: null, agentCircuitId: 'GRP', status: 'bound' }
+				apLease({
+					mac: 'E4:67:1E:00:00:71',
+					address: '10.0.0.71',
+					hostname: 'OAP3000G-P',
+					agentCircuitId: 'GRP'
+				}),
+				apLease({
+					mac: 'E4:67:1E:00:00:72',
+					address: '10.0.0.72',
+					hostname: 'OAP3000G-Q',
+					agentCircuitId: 'GRP'
+				}),
+				{
+					mac: guestMac,
+					address: '10.0.9.1',
+					hostname: null,
+					agentCircuitId: 'GRP',
+					status: 'bound'
+				}
 			],
 			active: [{ mac: guestMac, address: '10.0.9.1', bytesIn: null, bytesOut: null }],
 			ping: { '10.0.0.71': 2, '10.0.0.72': 2 }
@@ -284,7 +402,10 @@ describe('per-AP visibility refresh (real Postgres)', () => {
 	it('G10: cache-miss falls back to router path; stub refresh leaves seeds untouched', async () => {
 		// Seed an interface row (as a real seeded/interface row: mac NULL).
 		await db.insert(networkHealth).values({ name: 'vlan70 hotspot' });
-		const [iface] = await db.select().from(networkHealth).where(eq(networkHealth.name, 'vlan70 hotspot'));
+		const [iface] = await db
+			.select()
+			.from(networkHealth)
+			.where(eq(networkHealth.name, 'vlan70 hotspot'));
 		// Unknown MAC → no cache → router resolveApForMac returns the interface name.
 		const net = fake({ resolveApForMac: async () => 'vlan70 hotspot' });
 		expect(await resolveNetworkIdForMac(db, net, 'FF:FF:FF:00:00:01')).toBe(iface.id);
@@ -297,10 +418,16 @@ describe('per-AP visibility refresh (real Postgres)', () => {
 
 	it('G12: interface-name resolution for customer attribution unchanged', async () => {
 		await db.insert(networkHealth).values({ name: 'vlan70 hotspot' });
-		const [iface] = await db.select().from(networkHealth).where(eq(networkHealth.name, 'vlan70 hotspot'));
+		const [iface] = await db
+			.select()
+			.from(networkHealth)
+			.where(eq(networkHealth.name, 'vlan70 hotspot'));
 		expect(await resolveNetworkIdByApName(db, 'vlan70 hotspot')).toBe(iface.id);
 		// interfaceName binding wins over name.
-		await db.update(networkHealth).set({ interfaceName: 'ether5' }).where(eq(networkHealth.id, iface.id));
+		await db
+			.update(networkHealth)
+			.set({ interfaceName: 'ether5' })
+			.where(eq(networkHealth.id, iface.id));
 		expect(await resolveNetworkIdByApName(db, 'ether5')).toBe(iface.id);
 	});
 
@@ -318,7 +445,10 @@ describe('per-AP visibility refresh (real Postgres)', () => {
 		await refreshNetworkHealth(
 			db,
 			fake({
-				leases: [apLease({ mac, address: '10.0.0.81', agentCircuitId: 'C1' }), { mac: guest, address: '10.0.8.1', hostname: null, agentCircuitId: 'C1', status: 'bound' }],
+				leases: [
+					apLease({ mac, address: '10.0.0.81', agentCircuitId: 'C1' }),
+					{ mac: guest, address: '10.0.8.1', hostname: null, agentCircuitId: 'C1', status: 'bound' }
+				],
 				active: [{ mac: guest, address: '10.0.8.1', bytesIn: null, bytesOut: null }],
 				ping: { '10.0.0.81': 2 }
 			})
@@ -330,7 +460,10 @@ describe('per-AP visibility refresh (real Postgres)', () => {
 		// Counters present across two refreshes → throughput computed from the delta.
 		const withBytes = (bytes: number) =>
 			fake({
-				leases: [apLease({ mac, address: '10.0.0.81', agentCircuitId: 'C1' }), { mac: guest, address: '10.0.8.1', hostname: null, agentCircuitId: 'C1', status: 'bound' }],
+				leases: [
+					apLease({ mac, address: '10.0.0.81', agentCircuitId: 'C1' }),
+					{ mac: guest, address: '10.0.8.1', hostname: null, agentCircuitId: 'C1', status: 'bound' }
+				],
 				active: [{ mac: guest, address: '10.0.8.1', bytesIn: bytes, bytesOut: 0 }],
 				ping: { '10.0.0.81': 2 }
 			});
@@ -338,7 +471,10 @@ describe('per-AP visibility refresh (real Postgres)', () => {
 		row = (await apRows()).find((r) => r.mac === mac)!;
 		expect(row.trafficBytes).toBe(0);
 		// Backdate lastSampleAt by 60s so the next refresh has a measurable elapsed window.
-		await db.update(networkHealth).set({ lastSampleAt: new Date(Date.now() - 60_000) }).where(eq(networkHealth.mac, mac));
+		await db
+			.update(networkHealth)
+			.set({ lastSampleAt: new Date(Date.now() - 60_000) })
+			.where(eq(networkHealth.mac, mac));
 		await refreshNetworkHealth(db, withBytes(7_500_000));
 		row = (await apRows()).find((r) => r.mac === mac)!;
 		expect(row.trafficBytes).toBe(7_500_000);
@@ -366,7 +502,10 @@ describe('AP name-collision once-retry (real Postgres)', () => {
 	}
 
 	const newApNet = (hostname: string) =>
-		fake({ leases: [apLease({ mac: NEW_MAC, address: '10.0.0.99', hostname })], ping: { '10.0.0.99': 3 } });
+		fake({
+			leases: [apLease({ mac: NEW_MAC, address: '10.0.0.99', hostname })],
+			ping: { '10.0.0.99': 3 }
+		});
 
 	const apVals = (name: string) => ({ name, mac: NEW_MAC, online: true, lastSampleAt: new Date() });
 
@@ -443,7 +582,9 @@ describe('resolveNetworkIdForMac circuit-id-first fallback (real Postgres)', () 
 	 * circuit-id (name === the resolveApForMac return string so resolveCircuitIdForMac's byName tier
 	 * resolves it), and a HIGHER-id shared-bridge interface row with apCircuitId = NULL. Returns both
 	 * ids. Inserted AP-first so it deterministically wins the ORDER BY id LIMIT 1. */
-	async function seedAmbiguousBridge(apCircuitId: string | null): Promise<{ apId: number; bridgeId: number }> {
+	async function seedAmbiguousBridge(
+		apCircuitId: string | null
+	): Promise<{ apId: number; bridgeId: number }> {
 		const [ap] = await db
 			.insert(networkHealth)
 			.values({ name: BRIDGE_IFACE, apCircuitId })
@@ -503,9 +644,12 @@ describe('resolveNetworkIdForMac circuit-id-first fallback (real Postgres)', () 
 		const resolved = await resolveNetworkIdForMac(db, net, TEST_MAC);
 		expect(resolved).toBe(apId);
 		await db.insert(customerUser).values({ id: 'u-d', name: 'u-d', email: 'u-d@t.local' });
-		await db
-			.insert(networkSessions)
-			.values({ userId: 'u-d', macAddress: TEST_MAC, networkId: resolved, status: SESSION_STATUS.active });
+		await db.insert(networkSessions).values({
+			userId: 'u-d',
+			macAddress: TEST_MAC,
+			networkId: resolved,
+			status: SESSION_STATUS.active
+		});
 		// Behavioral: replicate outage.ts:113 pause selection `eq(networkSessions.networkId, ap.id)`.
 		const pauseSel = (netId: number) =>
 			db

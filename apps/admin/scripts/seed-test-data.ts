@@ -114,7 +114,13 @@ const SEED_PACKAGES = [
 	{ name: 'Free Time', type: 'free', durationMinutes: 15, creditCost: 0, isActive: true },
 	{ name: '₱20 — 50 Credits', type: 'bundle', fiatCost: 20, creditsProvided: 50, isActive: true },
 	{ name: '₱50 — 150 Credits', type: 'bundle', fiatCost: 50, creditsProvided: 150, isActive: true },
-	{ name: '₱100 — 350 Credits', type: 'bundle', fiatCost: 100, creditsProvided: 350, isActive: true },
+	{
+		name: '₱100 — 350 Credits',
+		type: 'bundle',
+		fiatCost: 100,
+		creditsProvided: 350,
+		isActive: true
+	},
 	{ name: '1 Hour', type: 'tier', creditCost: 20, durationMinutes: 60, isActive: true },
 	{ name: '3 Hours', type: 'tier', creditCost: 50, durationMinutes: 180, isActive: true },
 	{ name: '1 Day', type: 'tier', creditCost: 150, durationMinutes: 1440, isActive: true }
@@ -126,29 +132,167 @@ const SEED_APS = [
 	// Ground Floor + Floor 2 sit ~28 m apart (well within the 500 m default range), so their
 	// domes overlap → one cluster. Naming both seeds a real multi-member named cluster, which the
 	// map's cluster-assignment dropdown lists and reach-gates against.
-	{ name: 'AP — Ground Floor', online: true, uptimePct: '99.80', latencyMs: 12, users: 38, throughputMbps: 84, latitude: '14.554700', longitude: '121.024500', address: 'Ground Floor, Main Bldg', interfaceName: 'ether2-ground', clusterName: 'Main Building' },
-	{ name: 'AP — Floor 2', online: true, uptimePct: '99.50', latencyMs: 15, users: 27, throughputMbps: 61, latitude: '14.554900', longitude: '121.024700', address: '2nd Floor', interfaceName: 'wlan2-floor2', clusterName: 'Main Building' },
-	{ name: 'AP — Cafe Patio', online: true, uptimePct: '97.10', latencyMs: 48, users: 12, throughputMbps: 22, latitude: '14.555200', longitude: '121.025100', address: 'Cafe Patio', interfaceName: 'wlan3-patio' }, // degraded (latency>=40)
-	{ name: 'AP — Rooftop Deck', online: true, uptimePct: '99.90', latencyMs: 9, users: 4, throughputMbps: 95, latitude: null, longitude: null, address: null, interfaceName: 'wlan4-roof' }, // unmapped
-	{ name: 'AP — Parking Lobby', online: false, uptimePct: '0.00', latencyMs: null, users: 0, throughputMbps: 0, latitude: '14.554300', longitude: '121.024200', address: 'Basement Parking', interfaceName: 'ether5-parking' }, // offline
-	{ name: 'AP — Annex Hall', online: true, uptimePct: '98.40', latencyMs: 22, users: 9, throughputMbps: 47, latitude: '14.555500', longitude: '121.025400', address: 'Annex Hall', interfaceName: 'wlan6-annex' },
+	{
+		name: 'AP — Ground Floor',
+		online: true,
+		uptimePct: '99.80',
+		latencyMs: 12,
+		users: 38,
+		throughputMbps: 84,
+		latitude: '14.554700',
+		longitude: '121.024500',
+		address: 'Ground Floor, Main Bldg',
+		interfaceName: 'ether2-ground',
+		clusterName: 'Main Building'
+	},
+	{
+		name: 'AP — Floor 2',
+		online: true,
+		uptimePct: '99.50',
+		latencyMs: 15,
+		users: 27,
+		throughputMbps: 61,
+		latitude: '14.554900',
+		longitude: '121.024700',
+		address: '2nd Floor',
+		interfaceName: 'wlan2-floor2',
+		clusterName: 'Main Building'
+	},
+	{
+		name: 'AP — Cafe Patio',
+		online: true,
+		uptimePct: '97.10',
+		latencyMs: 48,
+		users: 12,
+		throughputMbps: 22,
+		latitude: '14.555200',
+		longitude: '121.025100',
+		address: 'Cafe Patio',
+		interfaceName: 'wlan3-patio'
+	}, // degraded (latency>=40)
+	{
+		name: 'AP — Rooftop Deck',
+		online: true,
+		uptimePct: '99.90',
+		latencyMs: 9,
+		users: 4,
+		throughputMbps: 95,
+		latitude: null,
+		longitude: null,
+		address: null,
+		interfaceName: 'wlan4-roof'
+	}, // unmapped
+	{
+		name: 'AP — Parking Lobby',
+		online: false,
+		uptimePct: '0.00',
+		latencyMs: null,
+		users: 0,
+		throughputMbps: 0,
+		latitude: '14.554300',
+		longitude: '121.024200',
+		address: 'Basement Parking',
+		interfaceName: 'ether5-parking'
+	}, // offline
+	{
+		name: 'AP — Annex Hall',
+		online: true,
+		uptimePct: '98.40',
+		latencyMs: 22,
+		users: 9,
+		throughputMbps: 47,
+		latitude: '14.555500',
+		longitude: '121.025400',
+		address: 'Annex Hall',
+		interfaceName: 'wlan6-annex'
+	},
 	// Phase A per-AP visibility fixtures (auto-discovered AP rows: mac + apCircuitId +
 	// attributionSource='circuit-id'). OAP3000G-A/B share one circuit-id → they render as a single
 	// shared-ONU GROUP card. OAP3000G-C is a solo AP (distinct circuit-id). OAP3000G-D is offline
 	// (throughputMbps null → the card shows "—" for traffic).
-	{ name: 'OAP3000G-A', online: true, uptimePct: '100.00', latencyMs: 3, users: 5, throughputMbps: 12, mac: 'E4:67:1E:AA:00:01', apCircuitId: 'OLT-9:0/1/0/4:16.3.70', attributionSource: 'circuit-id' },
-	{ name: 'OAP3000G-B', online: true, uptimePct: '100.00', latencyMs: 4, users: 3, throughputMbps: 8, mac: 'E4:67:1E:AA:00:02', apCircuitId: 'OLT-9:0/1/0/4:16.3.70', attributionSource: 'circuit-id' },
-	{ name: 'OAP3000G-C', online: true, uptimePct: '100.00', latencyMs: 5, users: 7, throughputMbps: 19, mac: 'E4:67:1E:AA:00:03', apCircuitId: 'OLT-9:0/1/0/5:16.3.71', attributionSource: 'circuit-id' },
-	{ name: 'OAP3000G-D', online: false, uptimePct: '0.00', latencyMs: null, users: 0, throughputMbps: null, mac: 'E4:67:1E:AA:00:04', apCircuitId: 'OLT-9:0/1/0/6:16.3.72', attributionSource: 'circuit-id' }
+	{
+		name: 'OAP3000G-A',
+		online: true,
+		uptimePct: '100.00',
+		latencyMs: 3,
+		users: 5,
+		throughputMbps: 12,
+		mac: 'E4:67:1E:AA:00:01',
+		apCircuitId: 'OLT-9:0/1/0/4:16.3.70',
+		attributionSource: 'circuit-id'
+	},
+	{
+		name: 'OAP3000G-B',
+		online: true,
+		uptimePct: '100.00',
+		latencyMs: 4,
+		users: 3,
+		throughputMbps: 8,
+		mac: 'E4:67:1E:AA:00:02',
+		apCircuitId: 'OLT-9:0/1/0/4:16.3.70',
+		attributionSource: 'circuit-id'
+	},
+	{
+		name: 'OAP3000G-C',
+		online: true,
+		uptimePct: '100.00',
+		latencyMs: 5,
+		users: 7,
+		throughputMbps: 19,
+		mac: 'E4:67:1E:AA:00:03',
+		apCircuitId: 'OLT-9:0/1/0/5:16.3.71',
+		attributionSource: 'circuit-id'
+	},
+	{
+		name: 'OAP3000G-D',
+		online: false,
+		uptimePct: '0.00',
+		latencyMs: null,
+		users: 0,
+		throughputMbps: null,
+		mac: 'E4:67:1E:AA:00:04',
+		apCircuitId: 'OLT-9:0/1/0/6:16.3.72',
+		attributionSource: 'circuit-id'
+	}
 ] satisfies (typeof networkHealth.$inferInsert)[];
 
 const STAFF = [
-	{ name: 'Olivia Owner', email: 'owner@veent.test', role: STAFF_ROLE.owner, status: STAFF_STATUS.active },
-	{ name: 'Adrian Admin', email: 'adrian@veent.test', role: STAFF_ROLE.admin, status: STAFF_STATUS.active },
-	{ name: 'Bea Admin', email: 'bea@veent.test', role: STAFF_ROLE.admin, status: STAFF_STATUS.active },
-	{ name: 'Cleo Admin', email: 'cleo@veent.test', role: STAFF_ROLE.admin, status: STAFF_STATUS.active },
-	{ name: 'Pia Pending', email: 'pia@veent.test', role: STAFF_ROLE.admin, status: STAFF_STATUS.pending },
-	{ name: 'Dane Disabled', email: 'dane@veent.test', role: STAFF_ROLE.admin, status: STAFF_STATUS.disabled }
+	{
+		name: 'Olivia Owner',
+		email: 'owner@veent.test',
+		role: STAFF_ROLE.owner,
+		status: STAFF_STATUS.active
+	},
+	{
+		name: 'Adrian Admin',
+		email: 'adrian@veent.test',
+		role: STAFF_ROLE.admin,
+		status: STAFF_STATUS.active
+	},
+	{
+		name: 'Bea Admin',
+		email: 'bea@veent.test',
+		role: STAFF_ROLE.admin,
+		status: STAFF_STATUS.active
+	},
+	{
+		name: 'Cleo Admin',
+		email: 'cleo@veent.test',
+		role: STAFF_ROLE.admin,
+		status: STAFF_STATUS.active
+	},
+	{
+		name: 'Pia Pending',
+		email: 'pia@veent.test',
+		role: STAFF_ROLE.admin,
+		status: STAFF_STATUS.pending
+	},
+	{
+		name: 'Dane Disabled',
+		email: 'dane@veent.test',
+		role: STAFF_ROLE.admin,
+		status: STAFF_STATUS.disabled
+	}
 ] as const;
 
 // ───────────────────────────── main ─────────────────────────────
@@ -228,7 +372,8 @@ async function main() {
 		{
 			row: {
 				title: `${ap0.name} access point offline`,
-				description: 'No uplink since this morning; guests in the area cannot connect. Needs an on-site check.',
+				description:
+					'No uplink since this morning; guests in the area cannot connect. Needs an on-site check.',
 				status: ISSUE_STATUS.open,
 				priority: ISSUE_PRIORITY.high,
 				networkId: ap0.id,
@@ -241,7 +386,8 @@ async function main() {
 		{
 			row: {
 				title: 'Slow speeds reported near the lobby',
-				description: 'Multiple guests report < 2 Mbps during peak hours. Investigate channel congestion vs backhaul.',
+				description:
+					'Multiple guests report < 2 Mbps during peak hours. Investigate channel congestion vs backhaul.',
 				status: ISSUE_STATUS.inProgress,
 				priority: ISSUE_PRIORITY.medium,
 				networkId: ap1.id,
@@ -283,10 +429,16 @@ async function main() {
 		// Mirror the app's createIssue timeline so seeded incidents aren't blank in the history/feed:
 		// a `created` event, then one `assigned` per assignee. ponytail: literal event types (match the
 		// admin_issue_event CHECK) — importing ISSUE_EVENT from app $lib into this script isn't worth it.
-		await db.insert(adminIssueEvent).values({ issueId: inserted.id, actorId: ownerId, type: 'created' });
+		await db
+			.insert(adminIssueEvent)
+			.values({ issueId: inserted.id, actorId: ownerId, type: 'created' });
 		if (assignees.length > 0) {
 			await db.insert(adminIssueAssignee).values(
-				assignees.map((adminUserId) => ({ issueId: inserted.id, adminUserId, assignedBy: ownerId }))
+				assignees.map((adminUserId) => ({
+					issueId: inserted.id,
+					adminUserId,
+					assignedBy: ownerId
+				}))
 			);
 			await db.insert(adminIssueEvent).values(
 				assignees.map((adminUserId) => ({
@@ -362,7 +514,8 @@ async function main() {
 		const success = status === PAYMENT_STATUS.success;
 		// Skew a third of payments into the last 7 days so the Dashboard's 7-day
 		// revenue chart and the Finance "7d" view both have data.
-		const createdAt = rand() < 0.33 ? minutesAgo(randInt(0, 7 * 24 * 60)) : daysAgoRandom(PAYMENT_WINDOW_DAYS);
+		const createdAt =
+			rand() < 0.33 ? minutesAgo(randInt(0, 7 * 24 * 60)) : daysAgoRandom(PAYMENT_WINDOW_DAYS);
 		const txId = `tx_${i.toString().padStart(5, '0')}_${Math.floor(rand() * 1e6).toString(36)}`;
 
 		await db.insert(paymentTransactions).values({
@@ -523,15 +676,23 @@ async function main() {
 	`);
 	const driftRows = drift as unknown as unknown[];
 	if (driftRows.length > 0) {
-		throw new Error(`Self-check FAILED: ${driftRows.length} customer balance(s) don't match their ledger.`);
+		throw new Error(
+			`Self-check FAILED: ${driftRows.length} customer balance(s) don't match their ledger.`
+		);
 	}
 
 	// ───────────────────────────── report ─────────────────────────────
 	console.log('\n✓ Seed complete. Self-check passed (balances == ledger).\n');
 	console.log(`  Staff:        ${STAFF.length} (1 owner, ${STAFF.length - 1} admins)`);
-	console.log(`  Customers:    ${CUSTOMER_COUNT} (3 blocked, 4 low-balance, ${activeCount} online)`);
-	console.log(`  APs:          ${apRows.length} (${onlineAps.length} online, 1 degraded, 1 offline, 1 unmapped)`);
-	console.log(`  Payments:     ${PAYMENT_COUNT} (${successCount} settled) over ${PAYMENT_WINDOW_DAYS}d`);
+	console.log(
+		`  Customers:    ${CUSTOMER_COUNT} (3 blocked, 4 low-balance, ${activeCount} online)`
+	);
+	console.log(
+		`  APs:          ${apRows.length} (${onlineAps.length} online, 1 degraded, 1 offline, 1 unmapped)`
+	);
+	console.log(
+		`  Payments:     ${PAYMENT_COUNT} (${successCount} settled) over ${PAYMENT_WINDOW_DAYS}d`
+	);
 	console.log(`  Sessions:     ${activeCount} active, ${freeCount} free-time grants, + history`);
 	console.log('\n  Login (any staff): password = ' + STAFF_PASSWORD);
 	console.log('    owner@veent.test    → owner, active   (full access incl. Staff + wipe)');

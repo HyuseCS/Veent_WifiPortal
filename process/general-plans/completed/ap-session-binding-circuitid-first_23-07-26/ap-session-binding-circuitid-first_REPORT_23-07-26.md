@@ -42,6 +42,7 @@ Did NOT edit `sessions.ts`, `outage.ts`, `queries.ts`, or any schema (scope-lock
 - `bun run check` → **0 errors** (veent-locator, veent-customer, radius-admin all exit 0).
 
 ### Case-design notes (E1 / E2 honored)
+
 - **E1 / case (b):** genuine cache MISS (no `network_client_attribution` row for the test MAC); shared-bridge
   row `interface_name = 'bridge1_WiFi_Project'`, `apCircuitId = NULL`, distinct `name`; physical AP row
   seeded FIRST (deterministic lower id) with `name = 'bridge1_WiFi_Project'` (so `resolveCircuitIdForMac`'s
@@ -87,20 +88,24 @@ negative control the plan mandates, not a scope deviation.)
 ## Forward Preview
 
 ### Test Infra Found
+
 Existing `fake()`-controller PGlite suite (`networkHealth.integration.spec.ts`) with injectable
 `resolveApForMac`; real migrations via `drizzle-orm/pglite/migrator`. Reused directly for cases (a)-(d).
 
 ### Blast Radius Changes
+
 `packages/core/src/services/networkHealth.ts` (1 new private helper + fallback-tier rewrite of one
 exported function) and its integration spec. No schema, no new write path. Downstream read consumers
 (`sessions.ts`, `outage.ts`, `apps/admin/queries.ts`) benefit automatically, unmodified.
 
 ### Commands to Stay Green
+
 - `cd packages/core && bunx vitest run src/services/networkHealth.integration.spec.ts`
 - `cd packages/core && bunx tsc -p tsconfig.json --noEmit`
 - `bun run check`
 
 ### Dependency Changes
+
 None. Consumes the already-present `resolveCircuitIdForMac` export (`networkHealth.ts:608`) created by
 `purchase-ap-attribution_21-07-26`. `multi-router-support_13-07-26` had NOT re-shaped the
 `resolveNetworkIdForMac` / `resolveCircuitIdForMac` signatures at HEAD (E3 re-read confirmed) — no rebase needed.

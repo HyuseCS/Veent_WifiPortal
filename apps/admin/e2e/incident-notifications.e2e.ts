@@ -132,7 +132,9 @@ test('assignee is notified of others’ activity; own action is silent; mark-all
 	}
 });
 
-test('mark a single notification done, and browse read + unread in the history', async ({ page }) => {
+test('mark a single notification done, and browse read + unread in the history', async ({
+	page
+}) => {
 	const ownerId = (await userIdByEmail(OWNER_EMAIL))!;
 	const adrianId = (await userIdByEmail(ADRIAN_EMAIL))!;
 	const TITLE2 = `Notif entry ${Date.now()}`;

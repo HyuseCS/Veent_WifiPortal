@@ -47,20 +47,20 @@
 
 	// Error from the last action, shown against the form it came from (add vs a specific row).
 	const errFor = (action: string, id?: string) =>
-		form?.error && form.action === action && (id === undefined || form.id === id)
-			? form.error
-			: '';
+		form?.error && form.action === action && (id === undefined || form.id === id) ? form.error : '';
 
 	// On success: close the open form and reload (fresh catalog + usage counts). On failure:
 	// keep the form open and surface the server error via `form` without clearing inputs.
-	const onResult: SubmitFunction = () => async ({ result, update }) => {
-		if (result.type === 'success') {
-			closeAll();
-			await update();
-		} else {
-			await update({ reset: false });
-		}
-	};
+	const onResult: SubmitFunction =
+		() =>
+		async ({ result, update }) => {
+			if (result.type === 'success') {
+				closeAll();
+				await update();
+			} else {
+				await update({ reset: false });
+			}
+		};
 
 	const inputClass =
 		'min-h-11 w-full rounded-lg border border-border bg-bg px-3 py-2 text-sm text-ink transition-[border-color,box-shadow] duration-150 hover:border-brand/40 focus:border-brand focus:ring-2 focus:ring-brand/20 focus:outline-none';
@@ -71,8 +71,8 @@
 		<div>
 			<h2 class="text-base font-semibold text-ink">Router Models</h2>
 			<p class="mt-0.5 text-xs text-muted">
-				Advertised coverage range per AP model. Editing a range re-sizes every AP on that model
-				that has no manual override.
+				Advertised coverage range per AP model. Editing a range re-sizes every AP on that model that
+				has no manual override.
 			</p>
 		</div>
 		<Button variant="secondary" onclick={openAdd} disabled={adding}>

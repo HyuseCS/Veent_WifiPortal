@@ -1,5 +1,87 @@
 # veent-wifiportal - All Context
 
+Last updated: 2026-09-22 (GoTyme walled-garden recon in-flight, NOT complete — first of the 9
+queued wallet/bank recon cycles; see `docs/mikrotik/walled-garden.md` candidate table. EXECUTE
+paused at HARD PAUSE #1, blocked on staging router/Winbox access to produce a live DNS-cache
+capture. Plan: `process/general-plans/active/gotyme-walled-garden-recon_22-09-26/
+gotyme-walled-garden-recon_PLAN_22-09-26.md`; standalone resume doc:
+`gotyme-walled-garden-recon_HANDOFF_22-09-26.md` in the same task folder. This supersedes the
+30-07-26 "`process/general-plans/active/` is now empty of plan folders" framing below —
+`active/` currently holds this one in-progress plan.)
+
+Last updated: 2026-07-30 (plan-inventory + backlog reconciliation, session 2 — user-confirmed
+30-07-26 on staging: (a) deploy-VM portal reachability fixed, `10.210.54.133` now allowed in the
+`veent-admin:portal` walled-garden tag via `PORTAL_LAN_IPS`; (b) the trimmed `PAYMENT_HOSTS` set
+(Google Pay / PayMongo / Xendit rows pruned) pushed to the router via `setup:router --reconcile`;
+(c) `setup:router --wipe-only --dry-run` verified a true no-op on real RouterOS — closes
+`walled-garden-wipe_30-07-26`'s last residual, flipped PLANNED→VERIFIED. `multi-router-support_
+13-07-26` archived to `completed/` as deferred/revisitable (blocked on Fatap AP-API credentials,
+GH #100) — `process/general-plans/active/` is now empty of plan folders. Project backlog is now
+also tracked as GitHub issues #96-102 (`priority-1/2/3` + `revisitable` labels) on
+`HyuseCS/Veent_WifiPortal`; the `process/**/backlog/*_NOTE_*.md` files remain the detailed source
+of truth, GH is the lightweight tracker/index.)
+
+Last updated: 2026-07-30 (walled-garden-wipe closed and archived to
+`process/general-plans/completed/` — `setup:router` gains scripted `--wipe [--dry-run]` /
+`--wipe-only [--dry-run]` hard-reset flags, backed by a new `wipeWalledGarden()` in
+`packages/core/src/integrations/network/mikrotik.ts` that clears every static row from both
+walled-garden menus while skipping dynamic auto-shadow rows; replaces the manual Winbox
+`remove [find]` steps in `docs/mikrotik/walled-garden.md`. Add-only — provision/reconcile/scheduler
+untouched. Shipped as commit `53a223b`. EVL green (21/21 unit + admin typecheck 0 errors); the
+staging `--wipe-only --dry-run` real-RouterOS probe remains an outstanding manual-verification
+item, so the plan closed as code-complete rather than fully VERIFIED.)
+
+Last updated: 2026-07-30 (plan-inventory reconciliation — 6 resolved general-plans archived to
+`process/general-plans/completed/`: `finance-timestamptz-migration_23-07-26` (prod apply now DONE,
+user-confirmed 30-07-26 — see the corrected 2026-07-23 entry below), `purchase-ap-attribution_21-07-26`
+(shipped `0d13023`), `test-mode-prod-optin_27-07-26` (shipped `9dc2ed1`), `tx-ap-name-snapshot_22-07-26`
+(shipped `6a167cf` + migration `0051`), `otp-test-mode-toast_27-07-26` (shipped `be527f1` +
+`8531041`/`9dc2ed1` prod-boot gate — stale "Ready for VALIDATE" status line corrected), and
+`conditional-checkout-access_27-07-26` (closed NOT-PLANNED — invalidated on live hardware, no code
+shipped, see `project_conditional-checkout-access-invalidated` memory). `process/general-plans/active/`
+now holds only `multi-router-support_13-07-26` (Fatap Phase B, creds pending — stalled); the
+`otp-test-mode-toast` plan is done, not active.)
+
+Last updated: 2026-07-30 (walled-garden-wallet-onboarding-prep closed and archived to
+`process/general-plans/completed/` — behavior-neutral prep work on top of the walled-garden-canonical
+rebuild: `PAYMENT_HOSTS` (`apps/admin/scripts/walled-garden-config.ts`) regrouped into 3 labeled
+blocks (Maya/PayMaya, GCash+Alipay+Mynt/G-Xchange, Google APIs) AND deliberately trimmed by 6 hosts —
+the 4 Google-Pay-flow hosts (`pay.google.com`, `payments.google.com`, `accounts.google.com`,
+`accounts.google.com.ph` — abandoned, Android WebView `OR_BIBED_15` blocks Google Pay captive
+regardless of whitelisting) plus `*.paymongo.com`/`*.xendit.co` (proven dead — grep-confirmed no
+integration code, only stale config/seed-comment references; live GCash checkout goes through Maya's
+hosted checkout, not PayMongo). `*.googleapis.com` retained (98-hit live checkout dependency, NOT
+Google Pay). Final live payment surface = **GCash + Maya only**. `docs/mikrotik/walled-garden.md`
+gained two new sections: a "How to add a wallet/bank (₱0 recon protocol)" procedure (DNS-cache-flush
+→ drive the flow on a captive device → `dns cache print` → classify direct-resolve vs CNAME-to-CDN →
+add → retest; two hard rules — `*.domain` never matches its bare parent, never add broad CDN
+allowlists) and a curated "Candidate wallets/banks (UNVERIFIED — recon required)" table (GoTyme,
+SeaBank, GrabPay, ShopeePay, Coins.ph + BDO/BPI/Landbank/Security Bank, banks flagged with a
+cert-pin/captive-detection caveat) — NONE of these 9 candidates are whitelisted in code; the table is
+a future-work tracker only. All 3 gates (collision guard, TS check, deliberate-removal diff)
+independently re-run green in UPDATE PROCESS.)
+
+Last updated: 2026-07-30 (walled-garden-canonical + the remainder of payment-walled-garden-v6
+closed and archived to `process/general-plans/completed/` — the staging router's walled garden is
+now fully code-owned and hard-reset-rebuilt from scratch. New canonical model: `setup:router`
+provisions 3 sequential tagged groups — `veent-admin:probe` (captive-probe denies), `veent-admin:payment`
+(payment-gateway allow hosts, incl. bare `alipay.com` added this session), `veent-admin:portal`
+(admin/portal origin allows) — plus the untouched `gcash-auto` scheduler-maintained IP row.
+`reconcileWalledGarden()` now matches the whole `veent-admin:` family by prefix (not exact-equality),
+though every real call site still passes its own specific sub-tag so each of the 3 reconcile calls
+stays scoped to its own group in practice. `setup:router --reconcile [--dry-run]` is an opt-in prune
+that removes ONLY code-owned rows (tag-matched AND `action=allow`-scoped — it never touches
+`PROBE_DENIES` deny rows, the `gcash-auto` row, or any un-tagged manual row) absent from the current
+desired set; default (no-flag) `setup:router` stays purely additive. GCash's root cause (found
+29-07-26) was a CNAME-to-Akamai indirection that v6 `dst-host` matching cannot follow — the fix is a
+live `/system scheduler` item (`gcash-resolve`, codified this session as `provisionGcashResolveScheduler()`)
+that `:resolve`s the hostname every 5 minutes and upserts the `gcash-auto` walled-garden-ip row; this
+REPLACED the originally-designed whole-network DoH/DoT block, which was proven unnecessary and never
+shipped. `docs/mikrotik/walled-garden.md` is now the canonical, currently-true reference for the
+whole walled-garden model — read it first for any walled-garden work, including the both-menu
+hard-reset runbook. Live-verified on staging: `--reconcile --dry-run` → real run removed exactly the
+3 drifted rows; scheduler run-count still incrementing; all safety invariants held.)
+
 Last updated: 2026-07-23 (maya-return-url-revert + maya-live-return-url closed and archived to
 `process/general-plans/completed/` — a live Maya (sandbox→live) testing session surfaced two
 UNRELATED root causes behind what first looked like one browser-return bug: (1) MikroTik
@@ -52,17 +134,18 @@ Known-gap, honestly unresolved: the specific fallback→unverified-banner→reco
 be live-reproduced this session (requires forcing live IP→MAC resolution to fail) — proven by code +
 unit tests only. See the Gotchas section MAC-trust residual bullet for the durable technical note.)
 
-Last updated: 2026-07-23 (finance-timestamptz-migration DEV-SIDE COMPLETE, PROD APPLY PENDING —
-migration `0052_pink_maginty.sql` converts 13 finance/session columns (`credit_ledger.created_at`,
-`points_ledger.created_at`, `payment_transactions.created_at`, `payment_checkouts.{created_at,
-settled_at,last_polled_at}`, `network_sessions.{started_at,bound_at,last_seen_at,expires_at}`,
+Last updated: 2026-07-23, corrected 2026-07-30 (finance-timestamptz-migration — ✅ VERIFIED, PROD
+APPLIED — migration `0052_pink_maginty.sql` converts 13 finance/session columns
+(`credit_ledger.created_at`, `points_ledger.created_at`, `payment_transactions.created_at`,
+`payment_checkouts.{created_at, settled_at,last_polled_at}`,
+`network_sessions.{started_at,bound_at,last_seen_at,expires_at}`,
 `customer_profile.{last_free_session_at,access_expires_at,access_paused_at}`) from bare `timestamp`
 to `timestamptz`, with `apps/admin/src/lib/server/period.ts` rewritten to real Manila-day→UTC-instant
-math in the same change-set; migration count is now 53 (`0000`–`0052`), see `database/all-database.md`
-Canonical Notes for the full write-path/root-cause detail. EVL green (391 tests, 0 failures) and user
-browser-confirmed dev display. Plan STAYS in `process/general-plans/active/finance-timestamptz-
-migration_23-07-26/` — NOT archived, NOT VERIFIED — prod TZ preflight, the 6-step prod apply
-sequence, `vc-risk-evidence-pack`, and human prod verification are all still outstanding.)
+math in the same change-set; migration count is 53 (`0000`–`0052`), see `database/all-database.md`
+Canonical Notes for the full write-path/root-cause detail. EVL green (391 tests, 0 failures) and
+dev-browser-confirmed on 23-07-26; the prod-apply runbook (TZ preflight, 6-step safety sequence,
+human prod verification) is now complete and prod Finance was user-confirmed correct 30-07-26. Plan
+archived to `process/general-plans/completed/finance-timestamptz-migration_23-07-26/`.)
 
 Last updated: 2026-07-22 (manager-board-lazy-events closed and archived to
 `process/features/incident-management/completed/manager-board-lazy-events_22-07-26/` — admin's
@@ -96,13 +179,13 @@ Start here before loading deeper context files.
 captive portal (phone-OTP login, Maya payments), staff run operations through an admin dashboard,
 and a public locator map shows hotspot sites. Monorepo with 3 SvelteKit apps + 2 shared packages:
 
-| Package | Path | Purpose |
-|---|---|---|
-| veent-customer | `apps/customer/` | MikroTik captive WiFi portal — guest phone-OTP login, top-ups (Maya payments), free/paid time grants, SMS OTP delivery |
-| radius-admin | `apps/admin/` | Staff dashboard — network/AP management, finance, incident management (issues), staff/2FA, Sentry-embedded observability |
-| veent-locator | `apps/locator/` | Read-only public map (Leaflet) of hotspot locations — no auth, minimal app |
-| @veent/core | `packages/core/` | Shared business services + integration providers (network/payments/email), Sentry observability helpers, business-rule constants |
-| @veent/db | `packages/db/` | Sole Drizzle/Postgres schema source — single migration authority for all three apps' tables |
+| Package        | Path             | Purpose                                                                                                                          |
+| -------------- | ---------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| veent-customer | `apps/customer/` | MikroTik captive WiFi portal — guest phone-OTP login, top-ups (Maya payments), free/paid time grants, SMS OTP delivery           |
+| radius-admin   | `apps/admin/`    | Staff dashboard — network/AP management, finance, incident management (issues), staff/2FA, Sentry-embedded observability         |
+| veent-locator  | `apps/locator/`  | Read-only public map (Leaflet) of hotspot locations — no auth, minimal app                                                       |
+| @veent/core    | `packages/core/` | Shared business services + integration providers (network/payments/email), Sentry observability helpers, business-rule constants |
+| @veent/db      | `packages/db/`   | Sole Drizzle/Postgres schema source — single migration authority for all three apps' tables                                      |
 
 **Scope note (CLAUDE.md ~/.claude):** agent work on this project is scoped to `/admin` and its
 dependencies/connected resources unless explicitly prompted otherwise.
@@ -171,37 +254,39 @@ For most substantial tasks:
      `--check-routing` fails lint if this block drifts from the frontmatter on disk. -->
 
 <!-- GENERATED:routing -->
-| File | Read when |
-|---|---|
-| `process/context/all-context.md` | any substantial planning, research, review, or implementation task |
-| `process/context/auth/all-auth.md` | Two isolated better-auth instances (admin TOTP 2FA + customer phone-OTP), the auth-guard pattern, and schema codegen — the auth group entrypoint/router |
-| `process/context/database/all-database.md` | Drizzle/Postgres schema, migrations, client setup, and shared cross-app tables — the database group entrypoint/router |
-| `process/context/planning/all-planning.md` | Plan-shape calibration, planning conventions, and implementation-plan examples — the planning group entrypoint/router |
-| `process/context/tests/all-tests.md` | Test runners, exact commands, the admin e2e throwaway-DB harness quirks, and known coverage gaps — the tests group entrypoint/router |
-| `process/context/uxui/all-uxui.md` | Admin's ui/ design-system primitives, Tailwind 4 tokens, and Svelte 5 runes conventions — the uxui group entrypoint/router |
+
+| File                                       | Read when                                                                                                                                               |
+| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `process/context/all-context.md`           | any substantial planning, research, review, or implementation task                                                                                      |
+| `process/context/auth/all-auth.md`         | Two isolated better-auth instances (admin TOTP 2FA + customer phone-OTP), the auth-guard pattern, and schema codegen — the auth group entrypoint/router |
+| `process/context/database/all-database.md` | Drizzle/Postgres schema, migrations, client setup, and shared cross-app tables — the database group entrypoint/router                                   |
+| `process/context/planning/all-planning.md` | Plan-shape calibration, planning conventions, and implementation-plan examples — the planning group entrypoint/router                                   |
+| `process/context/tests/all-tests.md`       | Test runners, exact commands, the admin e2e throwaway-DB harness quirks, and known coverage gaps — the tests group entrypoint/router                    |
+| `process/context/uxui/all-uxui.md`         | Admin's ui/ design-system primitives, Tailwind 4 tokens, and Svelte 5 runes conventions — the uxui group entrypoint/router                              |
 
 ## Current Context Groups
 
-| Group | Entry point | Scope |
-|---|---|---|
-| `auth/` | `process/context/auth/all-auth.md` | Two isolated better-auth instances (admin TOTP 2FA + customer phone-OTP), the auth-guard pattern, and schema codegen — the auth group entrypoint/router |
-| `database/` | `process/context/database/all-database.md` | Drizzle/Postgres schema, migrations, client setup, and shared cross-app tables — the database group entrypoint/router |
-| `planning/` | `process/context/planning/all-planning.md` | Plan-shape calibration, planning conventions, and implementation-plan examples — the planning group entrypoint/router |
-| `tests/` | `process/context/tests/all-tests.md` | Test runners, exact commands, the admin e2e throwaway-DB harness quirks, and known coverage gaps — the tests group entrypoint/router |
-| `uxui/` | `process/context/uxui/all-uxui.md` | Admin's ui/ design-system primitives, Tailwind 4 tokens, and Svelte 5 runes conventions — the uxui group entrypoint/router |
+| Group       | Entry point                                | Scope                                                                                                                                                   |
+| ----------- | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `auth/`     | `process/context/auth/all-auth.md`         | Two isolated better-auth instances (admin TOTP 2FA + customer phone-OTP), the auth-guard pattern, and schema codegen — the auth group entrypoint/router |
+| `database/` | `process/context/database/all-database.md` | Drizzle/Postgres schema, migrations, client setup, and shared cross-app tables — the database group entrypoint/router                                   |
+| `planning/` | `process/context/planning/all-planning.md` | Plan-shape calibration, planning conventions, and implementation-plan examples — the planning group entrypoint/router                                   |
+| `tests/`    | `process/context/tests/all-tests.md`       | Test runners, exact commands, the admin e2e throwaway-DB harness quirks, and known coverage gaps — the tests group entrypoint/router                    |
+| `uxui/`     | `process/context/uxui/all-uxui.md`         | Admin's ui/ design-system primitives, Tailwind 4 tokens, and Svelte 5 runes conventions — the uxui group entrypoint/router                              |
+
 <!-- /GENERATED:routing -->
 
 ## Task Routing Table
 
-| If the task involves... | Load first | Then load |
-|---|---|---|
-| architecture or stack questions | this file | Repository Structure / Technology Stack sections below |
-| DB/schema/migration work | `all-context.md`, `database/all-database.md` | schema files under `packages/db/src/schema/` |
-| auth/2FA/session work | `all-context.md`, `auth/all-auth.md` | `apps/{admin,customer}/src/lib/server/auth.ts` |
-| UI/component/styling work | `all-context.md`, `uxui/all-uxui.md` | `apps/admin/src/lib/components/ui/` |
-| test-running or test-writing | `all-context.md`, `tests/all-tests.md` | the specific test/e2e file |
-| creating or reviewing a plan | `all-context.md`, `planning/all-planning.md` | the relevant PRD example plus active plan |
-| incident-management or staff-governance feature work | `all-context.md` | `process/features/incident-management/` or `process/features/admin-staff-governance/` (see Feature Folders below) |
+| If the task involves...                              | Load first                                   | Then load                                                                                                         |
+| ---------------------------------------------------- | -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| architecture or stack questions                      | this file                                    | Repository Structure / Technology Stack sections below                                                            |
+| DB/schema/migration work                             | `all-context.md`, `database/all-database.md` | schema files under `packages/db/src/schema/`                                                                      |
+| auth/2FA/session work                                | `all-context.md`, `auth/all-auth.md`         | `apps/{admin,customer}/src/lib/server/auth.ts`                                                                    |
+| UI/component/styling work                            | `all-context.md`, `uxui/all-uxui.md`         | `apps/admin/src/lib/components/ui/`                                                                               |
+| test-running or test-writing                         | `all-context.md`, `tests/all-tests.md`       | the specific test/e2e file                                                                                        |
+| creating or reviewing a plan                         | `all-context.md`, `planning/all-planning.md` | the relevant PRD example plus active plan                                                                         |
+| incident-management or staff-governance feature work | `all-context.md`                             | `process/features/incident-management/` or `process/features/admin-staff-governance/` (see Feature Folders below) |
 
 ## Context Group Lifecycle
 
@@ -266,6 +351,7 @@ veent_wifiportal/
 ```
 
 Notes:
+
 - No `apps/cron` package. Cron = (a) HTTP endpoints hit by an EXTERNAL scheduler in prod
   (`apps/customer/src/routes/api/network/revoke`, `apps/customer/src/routes/api/payments/reconcile`,
   `apps/customer/src/routes/api/otp/sweep-delivery`, `apps/admin/src/routes/api/network/health/refresh`),
@@ -306,7 +392,7 @@ Exact resolved versions from `bun.lock`:
   `apps/admin` test-only devDependency 21-07-26 for the unified-transaction-history AC3 anti-join
   negative-control test)
 - **Lint/format:** `eslint` ^10.4.1 (flat config) + `eslint-plugin-svelte` ^3.19.0; `prettier` ^3.8.3
-  + svelte + tailwindcss plugins
+  - svelte + tailwindcss plugins
 - **Package manager:** bun (workspaces: `apps/*`, `packages/*`)
 
 ## Key Patterns and Conventions
@@ -339,9 +425,10 @@ handling.
 
 **Rate limiting:** `packages/core/src/services/rateLimit.ts` → `consumeRateLimit(db, {key, max,
 windowMs})`, a Postgres sliding-window implementation that is race-safe (`INSERT ... ON CONFLICT`
-+ `SELECT FOR UPDATE` in a transaction). Per-app thin wrappers:
-`apps/admin/src/lib/server/{rateLimit,emailRateLimit}.ts`,
-`apps/customer/src/lib/server/{rateLimit,otpRateLimit}.ts`.
+
+- `SELECT FOR UPDATE` in a transaction). Per-app thin wrappers:
+  `apps/admin/src/lib/server/{rateLimit,emailRateLimit}.ts`,
+  `apps/customer/src/lib/server/{rateLimit,otpRateLimit}.ts`.
 
 **`@veent/core` integration factories:** `integrations/{network,payments,email}` each export a
 real provider (mikrotik/maya/resend) plus a `stub.ts` fallback, selected by env. `observability.ts`
@@ -393,6 +480,7 @@ each domain has too few durable docs to warrant its own group, but is important 
 easy to find).
 
 ### MikroTik / RouterOS
+
 - `node-routeros` dependency (`packages/core`)
 - `docs/mikrotik/*.md` (7 files) — RouterOS templating/config reference, including
   `ap-liveness-bypass.md` (added 21-07-26) — every new physical AP MAC must be
@@ -400,6 +488,83 @@ easy to find).
   the router's ICMP to it and the admin dashboard reads a healthy AP as permanently DOWN
   (false-DOWN → risks freezing paid guests via outage auto-pausing). This is currently THE
   primary mitigation for that bug.
+- **`docs/mikrotik/walled-garden.md` is the canonical, currently-true walled-garden reference**
+  (rewritten 30-07-26) — read it FIRST for any walled-garden work. It documents the exact live tag
+  model, the both-menu hard-reset runbook, and the `gcash-resolve` scheduler mechanism.
+- **Walled-garden tag model (canonical, 30-07-26):** `setup:router` (`apps/admin/scripts/setup-router.ts`)
+  provisions the walled garden as 3 sequential tagged groups via `provisionWalledGarden()`
+  (`packages/core/src/integrations/network/mikrotik.ts`) — `veent-admin:probe` (`PROBE_DENIES`, the
+  captive-probe flap-fix deny rows, always provisioned FIRST so denies land above the allows on a
+  fresh/wiped garden), `veent-admin:payment` (`PAYMENT_HOSTS` — payment-gateway allow hosts, incl.
+  bare `alipay.com` added 30-07-26 alongside the existing `*.alipay.com` wildcard, which does not
+  match its own bare parent), `veent-admin:portal` (admin/portal origin allow hosts/IPs, derived
+  from `ADMIN_WG_HOSTS`/`ADMIN_WG_IPS`/`ORIGIN`). The separate `gcash-auto`-tagged walled-garden-ip
+  row (scheduler-maintained, see below) is a DIFFERENT tag family and is never touched by any of the
+  3 provisioning/reconcile calls.
+- **`reconcileWalledGarden()` family-prefix match (30-07-26):** the tag-match check widened from
+  exact-equality to a `veent-admin:` family-prefix match (`commentMatchesTag`-style, reusing the
+  existing `ADMIN_BYPASS_TAG` colon-suffix convention) — a bare `veent-admin`-tag call would manage
+  the whole family, though in practice every real call site (`setup-router.ts`'s 3 reconcile calls)
+  passes its own specific sub-tag, so each stays scoped to its own group. Removal is ALSO
+  action-scoped (`action=allow` rows only, host-layer) — `PROBE_DENIES` deny rows sharing the same
+  tag family are never inspected or removed, preventing a `--reconcile` run from silently re-opening
+  a captive-probe host.
+- **`setup:router --reconcile [--dry-run]` (opt-in prune, added 30-07-26 — revises the prior
+  additive-only D-PRUNE decision):** default (no-flag) `setup:router` stays byte-for-byte additive,
+  unchanged. `--reconcile` removes ONLY rows carrying the code's own tag that are absent from the
+  current run's desired set — hard non-targets, by construction of the tag+action scoping: any
+  un-tagged/manually-added operator row, the `gcash-auto` row, and any `action=deny` row.
+  `--reconcile --dry-run` previews without removing. Live-verified 30-07-26:
+  `--reconcile --dry-run` → real run removed exactly 3 drifted rows on staging; all safety
+  invariants held.
+- **`setup:router --wipe [--dry-run]` / `--wipe-only [--dry-run]` (scripted hard reset, added
+  30-07-26, `walled-garden-wipe`):** `wipeWalledGarden(config, {dryRun})`
+  (`packages/core/src/integrations/network/mikrotik.ts`) clears every STATIC row from BOTH
+  walled-garden menus (`/ip/hotspot/walled-garden` host + `/ip/hotspot/walled-garden/ip`),
+  unconditionally — not tag-scoped like `--reconcile` — while skipping `dynamic==='true'`
+  auto-shadow rows (unremovable) and honoring a real `--dry-run` no-op; returns `{host, ip}`
+  removed counts. `--wipe` wipes then falls through to the normal 3-group provisioning rebuild;
+  `--wipe-only` wipes and exits before provisioning (takes precedence over `--wipe`/`--reconcile`).
+  This REPLACES the manual Winbox/console `remove [find]` hard-reset steps in
+  `docs/mikrotik/walled-garden.md` §Hard reset with a single command. Does NOT touch the
+  `gcash-resolve` scheduler (the scheduler re-adds the `gcash-auto` ip row within 5 min of a wipe).
+  EVL green (21/21 unit incl. dynamic-row negative control + dry-run no-op assertions, admin
+  typecheck 0 errors). The staging `--wipe-only --dry-run` probe against real RouterOS has since
+  been run and confirmed a true no-op (user-confirmed 30-07-26) — plan flipped to VERIFIED, no
+  open residual; see `process/general-plans/completed/walled-garden-wipe_30-07-26/`.
+- **Operational walled-garden closeout (user-confirmed 30-07-26, staging):** (a) deploy-VM portal
+  reachability confirmed working — `10.210.54.133` (staging/deploy VM) is allowed pre-auth via
+  `PORTAL_LAN_IPS` (`apps/admin/scripts/walled-garden-config.ts`), which feeds the
+  `veent-admin:portal` tag group; (b) the trimmed `PAYMENT_HOSTS` set (Google Pay / PayMongo /
+  Xendit rows pruned per `payment-walled-garden-v6`) has been pushed to the router via
+  `setup:router --reconcile`; (c) `--wipe-only --dry-run` verified a true no-op (see bullet above).
+  This closes the last operational follow-ups from the walled-garden-canonical + wipe work — no
+  known-gaps remain on the walled-garden surface as of this date.
+- **GCash root cause + fix (found + fixed live 29-07-26, codified 30-07-26):** GCash's payment host
+  (`payments.gcash.com`) CNAMEs to an Akamai edge — v6 `dst-host` walled-garden matching cannot
+  follow a CNAME chain, so hostname rules for the `gcash.com` family always show 0 hits regardless of
+  plain vs. encrypted DNS. The fix is `provisionGcashResolveScheduler()` — an idempotent
+  `/system scheduler` item (`name=gcash-resolve`, 5-min interval) that `:resolve`s the hostname and
+  upserts the `gcash-auto` walled-garden-ip row. This REPLACED the originally-designed whole-network
+  DoT/DoH firewall block (`provisionDnsEnforcement()`), which live diagnosis proved unnecessary —
+  it was never built/shipped; see `process/general-plans/completed/payment-walled-garden-v6_29-07-26/`
+  for the full diagnostic trail. Rule of thumb for any future CDN-fronted payment host: a host that
+  CNAMEs to a CDN needs a `:resolve` scheduler; a host that resolves directly to the provider's own
+  IP needs only an ordinary `PAYMENT_HOSTS`/`dst-host` entry.
+- **`PAYMENT_HOSTS` trimmed to the live payment surface (30-07-26,
+  `walled-garden-wallet-onboarding-prep`):** `apps/admin/scripts/walled-garden-config.ts`'s
+  `PAYMENT_HOSTS` is now grouped into 3 labeled blocks (Maya/PayMaya, GCash+Alipay+Mynt/G-Xchange,
+  Google APIs) and no longer includes Google Pay hosts (`pay.google.com`, `payments.google.com`,
+  `accounts.google.com`, `accounts.google.com.ph` — dropped: Android WebView `OR_BIBED_15` blocks
+  Google Pay captive, unfixable by whitelisting) or `*.paymongo.com`/`*.xendit.co` (dropped: no
+  integration code references them; live GCash checkout is via Maya's hosted checkout).
+  `*.googleapis.com` is kept (98-hit checkout dependency, unrelated to Google Pay). **Final live
+  payment methods = GCash + Maya only.** `docs/mikrotik/walled-garden.md` now also carries a "How
+  to add a wallet/bank (₱0 recon protocol)" section (DNS-cache-flush → drive the flow on a captive
+  device → classify direct-resolve vs CNAME-to-CDN → add → retest) and a curated
+  "Candidate wallets/banks (UNVERIFIED — recon required)" table (GoTyme, SeaBank, GrabPay,
+  ShopeePay, Coins.ph, BDO, BPI, Landbank, Security Bank) — read this before onboarding any new
+  wallet/bank; none of the 9 candidates are whitelisted in code yet.
 - `packages/core` probe/setup scripts
 - `apps/admin/scripts/setup-router.ts`
 - `apps/admin/src/routes/api/network/`
@@ -416,6 +581,7 @@ easy to find).
   deferred, runbook is the shipped mitigation.
 
 ### Maya payments
+
 - `packages/core/src/integrations/payments/maya.ts` — hand-rolled HTTP client, no SDK
 - `apps/customer/src/lib/server/payments.ts` + `paymentWebhook.ts`
 - `apps/customer/src/routes/api/webhooks/maya/payment-status`, `api/payments/reconcile`
@@ -431,15 +597,20 @@ easy to find).
   `ERR_CONNECTION_CLOSED`. `TUNNEL_ORIGIN` (`webhookOrigin`) is for the server→server webhook
   `originUrl` ONLY — do not reuse it for the browser return URLs. See
   `process/general-plans/completed/maya-return-url-revert_23-07-26/` for the incident this codifies.
-- **GCash/e-wallet checkout needs IP-based walled-garden allows:** MikroTik `dst-host` (hostname)
-  walled-garden rules do NOT reliably match GCash's HTTPS traffic (`payments.gcash.com` and its
-  Alipay-powered cashier's `*.alipay.com`/`*.alipayobjects.com`/`*.alicdn.com`) — confirmed live via
-  `hits=0` on the hostname rules. Mitigation shipped is a TEMPORARY manual router-side IP allow
-  (`/ip hotspot walled-garden ip add dst-address=<resolved IP>`), NOT productionized. Follow-up:
-  `process/general-plans/backlog/gcash-walled-garden-ip-productionize_NOTE_23-07-26.md` — add
-  IP-based allows for `PAYMENT_HOSTS` in `apps/admin/scripts/setup-router.ts`.
+- **GCash/e-wallet checkout is handled by the `gcash-resolve` scheduler (SHIPPED):** MikroTik
+  `dst-host` (hostname) walled-garden rules do NOT match GCash's HTTPS traffic — root cause (found +
+  fixed live 29-07-26, codified 30-07-26) is that `payments.gcash.com` CNAMEs to an Akamai edge and
+  v6 `dst-host` matching cannot follow a CNAME chain (hostname rules always show `hits=0`). The
+  single operational mitigation is `provisionGcashResolveScheduler()`
+  (`packages/core/src/integrations/network/mikrotik.ts`) — an idempotent `/system scheduler` item
+  (`name=gcash-resolve`, 5-min interval) that `:resolve`s the hostname and upserts the `gcash-auto`
+  walled-garden-ip row. This REPLACES the earlier temporary manual router-side IP allow, and the old
+  `gcash-walled-garden-ip-productionize` backlog note is SUPERSEDED. See the MikroTik / RouterOS
+  section above (GCash root cause + fix) and
+  `process/general-plans/completed/payment-walled-garden-v6_29-07-26/` for the full diagnostic trail.
 
 ### Sentry observability
+
 - `@sentry/sveltekit` in all 3 apps; `@sentry/core` in `packages/core`
 - `apps/admin/src/lib/server/sentry/`
 - Admin routes: `(app)/issues/**`, `(app)/sentry/**`
@@ -452,6 +623,7 @@ easy to find).
   is noise reduction, not silence; `scrubEvent` still runs on every branch.
 
 ### SMS / OTP delivery observability
+
 - `customer_otp_delivery_log` (`packages/db/src/schema/customer.ts`, migration `0048`) — append-only
   OTP send-attempt log, no unique constraint; every provider writes a row on synchronous gateway
   accept (`apps/customer/src/lib/server/otp.ts`, `logDeliveryAttempt`, insert **must** be awaited
@@ -462,13 +634,14 @@ easy to find).
   `itexmo`/`unisms`/`smsgate` rows are written (satisfy the `provider` discriminator) but never
   swept — unobservable by design, not a gap in this implementation. Alerts (`captureHandled`,
   constant-message Sentry fingerprint) fire only on `dlr_status === 'REJECTD'` / `status ===
-  'undelivered'` within a 30-min window; unresolved rows age out to `unknown` with no alert. Rows
+'undelivered'` within a 30-min window; unresolved rows age out to `unknown` with no alert. Rows
   are pruned unconditionally after 48h every sweep run, regardless of sweep-loop outcome.
 - See `process/general-plans/completed/otp-delivery-observability_20-07-26/` for the full plan;
   Cast DLR response-shape stability past the one observed `REJECTD` shape remains unproven (blocked
   on Cast activating a real sender ID for live traffic).
 
 ### Resend email
+
 - `resend` dependency in `packages/core`
 - `apps/admin/src/lib/server/emails/`
 - Stub fallback: when `RESEND_API_KEY` is blank, the email provider factory falls back to a stub
@@ -484,6 +657,7 @@ easy to find).
 **Env var groups (names only, never values):**
 
 `apps/customer/.env.example` (28 vars):
+
 - Core: `DATABASE_URL`, `ORIGIN`, `TUNNEL_ORIGIN`
 - Auth: `BETTER_AUTH_SECRET`
 - Network: `NETWORK_CONTROLLER`, `MIKROTIK_HOST`/`USER`/`PASSWORD`/`PORT`/`TLS`/`TLS_INSECURE`/`HOTSPOT_USER`/`HOTSPOT_PASSWORD`
@@ -492,6 +666,7 @@ easy to find).
 - SMS: `SMS_PROVIDER`, `ITEXMO_API_CODE`/`EMAIL`/`PASSWORD`/`SENDER_ID`, `UNISMS_SECRET_KEY`/`SENDER_ID`, `SMSGATE_BASE_URL`/`USERNAME`/`PASSWORD`
 
 `apps/admin/.env.example` (31 vars):
+
 - Core: `DATABASE_URL`, `ORIGIN`
 - Auth: `BETTER_AUTH_SECRET`
 - Network: `NETWORK_CONTROLLER`, `MIKROTIK_*` (same trio as customer, plus more), `HEALTH_EXCLUDE_INTERFACES`
@@ -546,7 +721,7 @@ Approved feature folders under `process/features/`:
   risk-evidence-pack treatment. Key locations: `apps/admin/src/routes/(app)/staff`,
   `routes/{activate,enroll-2fa,login,login/2fa,forgot-password,reset-password,logout}`,
   `lib/server/{auth.ts,auth-guard.ts,twoFactor.ts,step-up.ts,owner-change.ts,wipe-verification.ts,
-  postLogin.ts,adminBypass.ts,adminAccess.spec.ts}`,
+postLogin.ts,adminBypass.ts,adminAccess.spec.ts}`,
   `packages/core/src/services/{staff.ts,adminAccess.ts}`,
   `packages/db/src/schema/{admin.ts,admin-two-factor.ts,admin-owner-change.ts,auth-admin.ts}`.
 

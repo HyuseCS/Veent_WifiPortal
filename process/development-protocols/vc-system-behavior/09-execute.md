@@ -1,13 +1,13 @@
 ---
 name: protocol:vc-system-behavior-09-execute
-description: "EXECUTE phase reference: implementation rules, deviation handling, EVL, and inner-loop execution."
+description: 'EXECUTE phase reference: implementation rules, deviation handling, EVL, and inner-loop execution.'
 date: 09-06-26
 metadata:
   node_type: memory
   type: protocol
   read_order: 1
   required: false
-  read_when: "running or auditing the EXECUTE phase"
+  read_when: 'running or auditing the EXECUTE phase'
 ---
 
 # EXECUTE Phase
@@ -184,6 +184,7 @@ The EVL run-mode (auto-run vs step-by-step) is NOT a separate pause. It is folde
 **Under /goal:** Always auto-run. No user prompt.
 
 **Outside /goal:** The exit gate surfaces this choice once (sticky for the full EVL):
+
 > "Ready to start EVL. How do you want to run it?
 > (a) Auto-run — run gate commands → if failing: execute-agent fixes → re-run gates → repeat until all green or 10-cycle cap.
 > (b) Step-by-step — present failing gates → you confirm → execute-agent applies fix → re-run gates → present results → confirm → loop or move forward.
@@ -313,7 +314,7 @@ The one exit pause for EXECUTE, presented after EVL closeout (EVL Step 5 classif
    - **Re-run EXECUTE (loop back)** — when classification = "Keep in active/ — needs further testing"; name the specific gaps + gate failures that feed the next entry. Bounded by the EVL 10-cycle cap.
    - **Loop back to PLAN** — when classification = "Needs PLAN/UPDATE PROCESS reconciliation" (scope/contract drift beyond the failing gate).
 3. **Recommended strategy** for the next phase (UPDATE PROCESS) — 4-option suite where it materially differs from sequential.
-4. **Optional deep work** (extra regression sweep, code-review pass, simplifier pass) offered as *choices*, not a pause.
+4. **Optional deep work** (extra regression sweep, code-review pass, simplifier pass) offered as _choices_, not a pause.
 
 Under `/goal` this gate auto-proceeds on the recommended option — including a re-EXECUTE loop, bounded by the 10-cycle cap. The interactive-only stops (per-stage pre-research approval, high-risk finalize / hard-stop-class deviation) do not fire under `/goal` — they backlog + continue instead.
 
@@ -332,14 +333,14 @@ Before reporting any exit code, execute-agent must:
 
 ## Specialist Agents (Spawned by Execute-Agent)
 
-| Agent | When to spawn |
-|---|---|
-| vc-tester | After each implementation sub-step |
-| vc-debugger | Bug encountered during implementation |
-| vc-code-reviewer | Before marking phase complete |
-| vc-code-simplifier | After reviewer passes (optional) |
-| vc-ui-ux-designer | UI/UX implementation tasks |
-| vc-git-manager | Git operations |
+| Agent              | When to spawn                         |
+| ------------------ | ------------------------------------- |
+| vc-tester          | After each implementation sub-step    |
+| vc-debugger        | Bug encountered during implementation |
+| vc-code-reviewer   | Before marking phase complete         |
+| vc-code-simplifier | After reviewer passes (optional)      |
+| vc-ui-ux-designer  | UI/UX implementation tasks            |
+| vc-git-manager     | Git operations                        |
 
 **Write tests on demand rule:** When vc-tester or vc-code-reviewer recommends new tests and the recommendation is within the blast radius of the current plan, execute-agent must write those tests before marking the section complete. Do not defer test-writing to a follow-up stub when the tests are directly verifiable within the current scope.
 
@@ -401,6 +402,7 @@ After execute-agent reports any exit code, the orchestrator runs a process compl
 5. For phase programs: umbrella `## Current Execution State` reflects this phase's status
 
    Required format:
+
    ```
    ## Current Execution State
    Last updated: [YYYY-MM-DD]

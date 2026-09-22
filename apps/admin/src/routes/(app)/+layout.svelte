@@ -44,9 +44,8 @@
 	};
 	const subtitle = $derived(
 		subtitles[
-			Object.keys(subtitles).find(
-				(href) => navPath === href || navPath.startsWith(href + '/')
-			) ?? ''
+			Object.keys(subtitles).find((href) => navPath === href || navPath.startsWith(href + '/')) ??
+				''
 		]
 	);
 	const onFinance = $derived(navPath.startsWith('/finance'));
@@ -88,9 +87,9 @@
 		<Topbar {title} {subtitle}>
 			{#snippet actions()}
 				{#if onFinance}<FinanceHeaderControls />{/if}
-			{#if onNetworks}<NetworkHeaderControls />{/if}
-			{#if onSentryIssues}<SentryHeaderControls />{/if}
-			{#if onIssues}<NotificationBell />{/if}
+				{#if onNetworks}<NetworkHeaderControls />{/if}
+				{#if onSentryIssues}<SentryHeaderControls />{/if}
+				{#if onIssues}<NotificationBell />{/if}
 			{/snippet}
 		</Topbar>
 		<main class={mainClass} aria-busy={routeLoading || undefined}>

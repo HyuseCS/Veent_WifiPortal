@@ -23,19 +23,19 @@ A multi-agent audit was run per security dimension (authn-authz, payments, grant
 
 ### Severity tally (using corrected severities)
 
-| Severity | Count |
-|----------|-------|
-| Critical | 0 |
-| High | 1 |
-| Medium | 4 |
-| Low | 9 |
-| Info | 4 |
+| Severity                            | Count  |
+| ----------------------------------- | ------ |
+| Critical                            | 0      |
+| High                                | 1      |
+| Medium                              | 4      |
+| Low                                 | 9      |
+| Info                                | 4      |
 | **Total confirmed / needs-context** | **18** |
-| Refuted (appendix) | 1 |
+| Refuted (appendix)                  | 1      |
 
-*(One finding is a `needs-context` verdict at Info severity; it is counted in the Info row above and detailed in its own section.)*
+_(One finding is a `needs-context` verdict at Info severity; it is counted in the Info row above and detailed in its own section.)_
 
-> **Follow-up pass (2026-07-07).** A second read-only pass extended coverage to vectors the first pass did not reach: OTP *verification* brute-force, payment-webhook authenticity, OTP randomness, SQL injection, RouterOS command injection / SSRF, money arithmetic, concurrency double-spend, CSRF, session-cookie flags, open redirect, and admin role/IDOR. It added one **High** (H-1, OTP-verify brute-force), one **Low** (L-10, map-action privilege asymmetry), and one **Info** (I-3, admin cookie flags rely on library defaults). Everything else on that list was verified **safe** — see *Additionally Verified Safe* below.
+> **Follow-up pass (2026-07-07).** A second read-only pass extended coverage to vectors the first pass did not reach: OTP _verification_ brute-force, payment-webhook authenticity, OTP randomness, SQL injection, RouterOS command injection / SSRF, money arithmetic, concurrency double-spend, CSRF, session-cookie flags, open redirect, and admin role/IDOR. It added one **High** (H-1, OTP-verify brute-force), one **Low** (L-10, map-action privilege asymmetry), and one **Info** (I-3, admin cookie flags rely on library defaults). Everything else on that list was verified **safe** — see _Additionally Verified Safe_ below.
 
 > **Remediation status (2026-07-07).** This report is preserved as the point-in-time, read-only audit
 > (the engagement itself changed no code). Remediation shipped separately in two phases: everything
@@ -51,7 +51,7 @@ A multi-agent audit was run per security dimension (authn-authz, payments, grant
 
 ### Key takeaways
 
-1. **One high-severity vulnerability was confirmed on the follow-up pass:** OTP *verification* is brute-forceable (H-1) — the verify action has no throttle and its only guard, better-auth's 3-attempt counter, is a non-atomic read-check-write that a concurrency race defeats, enabling customer account takeover (session + wallet). The next most consequential defects are the customer-side grant/network-authorization gaps, both rated **medium**.
+1. **One high-severity vulnerability was confirmed on the follow-up pass:** OTP _verification_ is brute-forceable (H-1) — the verify action has no throttle and its only guard, better-auth's 3-attempt counter, is a non-atomic read-check-write that a concurrency race defeats, enabling customer account takeover (session + wallet). The next most consequential defects are the customer-side grant/network-authorization gaps, both rated **medium**.
 2. **Client-supplied device MAC is trusted end-to-end (the theme of this audit).** The customer app never binds the target MAC to the caller's own device on either the JSON grant endpoint or the dashboard form actions. This underpins three distinct findings: self-funded access resale, a **remote targeted DoS** against another user's live session (cross-user router-bypass collision), and an unthrottled bind/unbind amplification path.
 3. **SMS toll-fraud is the clearest abuse-cost risk.** The OTP send limiter is keyed only per phone number (and optional MAC) with no per-IP/global cap, so one source can drain the operator's paid SMS balance across an enumerable PH mobile number space.
 4. **Rate-limit coverage is inconsistent.** The programmatic grant endpoint and webhook are throttled, but the dashboard grant actions, the top-up checkout action, and the forgot-password recipient axis are not.
@@ -72,11 +72,12 @@ A multi-agent audit was run per security dimension (authn-authz, payments, grant
 - **Category / Dimension:** Authentication / OTP brute-force — authn-authz (follow-up pass)
 - **Corrected severity:** High
 
-**Description:** The `verify` form action calls `auth.api.verifyPhoneNumber({ body: { phoneNumber, code } })` (line 43) with **no** rate limit of any kind — only the sibling `resend` action is throttled (`enforceOtpSendLimit`, line 67). Because this is a *programmatic* `auth.api.*` call rather than an HTTP request through better-auth's router, better-auth's own HTTP rate limiter (`onRequestRateLimit`) never fires on it either. The only defense against guessing the 6-digit code (`otpLength: 6`, 1,000,000-value space, `expiresIn: 300` = 5-minute window, `auth.ts:71-73`) is the plugin's `allowedAttempts: 3` counter. That counter is implemented as a non-atomic read-modify-write: `findVerificationValue` (read), parse `attempts`, gate on `>= allowedAttempts`, then `updateVerificationValue` writing `attempts+1` on a wrong guess or `deleteVerificationValue` on cap/success (`routes.mjs:281,286-296`) — with no transaction, row lock, or atomic increment. Under Postgres read-committed, a burst of concurrent verify requests all read the same low `attempts`, all pass the `>= 3` gate, and last-writer-wins keeps the persisted counter near 1, so the cap-triggered delete rarely fires and the code survives burst after burst until it expires.
+**Description:** The `verify` form action calls `auth.api.verifyPhoneNumber({ body: { phoneNumber, code } })` (line 43) with **no** rate limit of any kind — only the sibling `resend` action is throttled (`enforceOtpSendLimit`, line 67). Because this is a _programmatic_ `auth.api.*` call rather than an HTTP request through better-auth's router, better-auth's own HTTP rate limiter (`onRequestRateLimit`) never fires on it either. The only defense against guessing the 6-digit code (`otpLength: 6`, 1,000,000-value space, `expiresIn: 300` = 5-minute window, `auth.ts:71-73`) is the plugin's `allowedAttempts: 3` counter. That counter is implemented as a non-atomic read-modify-write: `findVerificationValue` (read), parse `attempts`, gate on `>= allowedAttempts`, then `updateVerificationValue` writing `attempts+1` on a wrong guess or `deleteVerificationValue` on cap/success (`routes.mjs:281,286-296`) — with no transaction, row lock, or atomic increment. Under Postgres read-committed, a burst of concurrent verify requests all read the same low `attempts`, all pass the `>= 3` gate, and last-writer-wins keeps the persisted counter near 1, so the cap-triggered delete rarely fires and the code survives burst after burst until it expires.
 
-**Impact:** Remote account takeover of an arbitrary **customer** account. The only precondition is initiating a login for the victim's phone number (the login identifier — attacker-suppliable), which sends one SMS and issues the attacker a `pending` cookie. The attacker then floods `POST /auth/verify?/verify` with concurrent distinct guesses; the racy counter lets far more than 3 guesses through per code, and the 5-sends/hr cap only limits *fresh* codes, not guesses-per-code. A successful match signs the attacker in as the victim (`signUpOnVerification` / session cookie set via the sveltekit plugin), yielding the victim's session and spendable `credit_balance`. Blast radius is customer-tier only (no admin/owner reach).
+**Impact:** Remote account takeover of an arbitrary **customer** account. The only precondition is initiating a login for the victim's phone number (the login identifier — attacker-suppliable), which sends one SMS and issues the attacker a `pending` cookie. The attacker then floods `POST /auth/verify?/verify` with concurrent distinct guesses; the racy counter lets far more than 3 guesses through per code, and the 5-sends/hr cap only limits _fresh_ codes, not guesses-per-code. A successful match signs the attacker in as the victim (`signUpOnVerification` / session cookie set via the sveltekit plugin), yielding the victim's session and spendable `credit_balance`. Blast radius is customer-tier only (no admin/owner reach).
 
 **Evidence:**
+
 ```
 verify/+page.server.ts:43   await auth.api.verifyPhoneNumber({ body: { phoneNumber: pending.phone, code } });  // no rateLimit / enforceOtpSendLimit — only `resend` (line 67) is throttled
 auth.ts:71-73               otpLength: 6, expiresIn: 300, allowedAttempts: 3
@@ -104,6 +105,7 @@ routes.mjs:281-296          otp = findVerificationValue(...); [v, attempts] = ot
 **Impact:** An authenticated account can gift/resell network access to arbitrary devices: one free-time claim (15 min) can be pointed at any MAC per 12h cooldown, and a credit/points buy can grant paid internet to any chosen MAC (up to `MAX_DEVICES_PER_ACCOUNT`). It is also the root enabler of the cross-user collision/DoS (M-2).
 
 **Evidence:**
+
 ```
 if (!isValidMac(body.macAddress)) error(400, 'A valid macAddress is required');
 ... result = await startFreeAccessAndBindDevice(db, network, { userId: user.id, macAddress: body.macAddress });
@@ -125,6 +127,7 @@ if (!isValidMac(body.macAddress)) error(400, 'A valid macAddress is required');
 **Impact:** Any authenticated customer can repeatedly and remotely knock a targeted victim off WiFi by binding+unbinding the victim's MAC (trivially sniffable on a shared hotspot). No credit cost is required (a free-time window suffices), and the attacker never needs to be on the victim's device.
 
 **Evidence:**
+
 ```
 unbindDevice:
   where(and(eq(networkSessions.id, input.sessionId),
@@ -149,6 +152,7 @@ Schema: index('network_sessions_mac_address_idx').on(t.macAddress)  // no unique
 **Impact:** SMS-pumping / toll fraud: one source triggers unlimited total SMS (5 per number across thousands of numbers), draining the operator's paid SMS balance and mass-spamming Filipino subscribers.
 
 **Evidence:**
+
 ```
 const checks = [consumeRateLimit(db, { key: { phoneNumber: phone }, max: OTP_SENDS_PER_HOUR, now })];
 if (mac) { checks.push(consumeRateLimit(db, { key: { macAddress: mac }, ... })); }
@@ -170,6 +174,7 @@ if (mac) { checks.push(consumeRateLimit(db, { key: { macAddress: mac }, ... }));
 **Impact:** Authenticated request-amplification: unbounded outbound Maya checkout creations, DB row growth in `payment_checkouts`, and router `openCheckoutAccess` calls per attacker — resource exhaustion and third-party API abuse.
 
 **Evidence:**
+
 ```
 checkout: async (event) => { ... const checkout = await payments.createCheckout({ ... });
 // no rateLimit('checkout_user', user.id, ...) anywhere in the action, while grant/webhook/handoff all rate-limit
@@ -189,11 +194,12 @@ checkout: async (event) => { ... const checkout = await payments.createCheckout(
 - **Category / Dimension:** Broken Object-Level Authorization / IDOR — authn-authz
 - **Corrected severity:** Low (unchanged)
 
-**Description:** The authenticated grant path validates only the *shape* of `macAddress` (`isValidMac`/`MAC_RE`) — it never binds the target MAC to the caller's own device. Any authenticated customer can POST `/api/network/grant` (or submit the dashboard `startFreeTime`/`buyTier`/`bindThisDevice` forms) with an arbitrary MAC and drop the router firewall for that device, spending their own free-time/credits. The captive-portal premise (the session you paid for goes to *your* device) is fully client-controlled. The code comment at lines 37-42 explicitly acknowledges this.
+**Description:** The authenticated grant path validates only the _shape_ of `macAddress` (`isValidMac`/`MAC_RE`) — it never binds the target MAC to the caller's own device. Any authenticated customer can POST `/api/network/grant` (or submit the dashboard `startFreeTime`/`buyTier`/`bindThisDevice` forms) with an arbitrary MAC and drop the router firewall for that device, spending their own free-time/credits. The captive-portal premise (the session you paid for goes to _your_ device) is fully client-controlled. The code comment at lines 37-42 explicitly acknowledges this.
 
 **Impact:** An authenticated guest can grant WiFi access (free-time or paid-from-own-wallet) to any device MAC — enabling access resale/sharing. Bounded because it consumes the caller's own wallet/cooldown, so no cross-account theft.
 
 **Evidence:**
+
 ```
 if (!isValidMac(body.macAddress)) error(400, 'A valid macAddress is required');
 ... // 'Format-validating here doesn't bind the MAC to the caller's own device, but it closes the malformed-input vector'
@@ -201,7 +207,7 @@ if (!isValidMac(body.macAddress)) error(400, 'A valid macAddress is required');
 
 **Verifier — confirmed (high confidence):** The service (`sessions.ts:683-759`) binds the passed MAC to the caller's own `userId` and calls `network.grant({ macAddress })` with no check that the MAC was issued to that user; `resolveMacForUser` is only a fallback when the field is empty. Impact genuinely bounded to self-funded sharing, and partly inherent to a NATing captive portal (server can't reliably learn the true client MAC). Low is accurate.
 
-*(Note: L-1 and M-1 describe the same underlying MAC-trust weakness from the authn-authz and grants-network dimensions respectively; M-1 carries the higher severity because it chains into the M-2 DoS.)*
+_(Note: L-1 and M-1 describe the same underlying MAC-trust weakness from the authn-authz and grants-network dimensions respectively; M-1 carries the higher severity because it chains into the M-2 DoS.)_
 
 ---
 
@@ -211,11 +217,12 @@ if (!isValidMac(body.macAddress)) error(400, 'A valid macAddress is required');
 - **Category / Dimension:** Authentication / 2FA enforcement gap — authn-authz
 - **Corrected severity:** Low (unchanged)
 
-**Description:** For an active staff account that has a password but has not yet enrolled TOTP, `signInEmail` establishes a full session from the password alone (no `twoFactorRedirect`). `finishStaffSignIn` then runs immediately and grants that device the admin internet bypass (`grantAdminAccess`) before any second factor exists. The `enroll-2fa` `enable` action requires only the account password, so a password holder can self-enroll their *own* authenticator and gain full dashboard access. This contradicts `postLogin.ts`'s stated intent ("never grant internet on an unverified half-login"). Admin login is rate-limited per-IP (10/15min) but has no per-account lockout.
+**Description:** For an active staff account that has a password but has not yet enrolled TOTP, `signInEmail` establishes a full session from the password alone (no `twoFactorRedirect`). `finishStaffSignIn` then runs immediately and grants that device the admin internet bypass (`grantAdminAccess`) before any second factor exists. The `enroll-2fa` `enable` action requires only the account password, so a password holder can self-enroll their _own_ authenticator and gain full dashboard access. This contradicts `postLogin.ts`'s stated intent ("never grant internet on an unverified half-login"). Admin login is rate-limited per-IP (10/15min) but has no per-account lockout.
 
 **Impact:** An attacker who obtains/guesses the password of a staff member who set it via the activation link but has not completed first-login 2FA enrollment can bind their own TOTP, reach the full owner/admin dashboard, and receive an admin internet bypass on their own device.
 
 **Evidence:**
+
 ```
 postLogin.ts: 'Active staff get instant internet on their device: ... await grantAdminAccess(network, mac)' runs for the non-2FA path;
 enroll-2fa enable action: auth.api.enableTwoFactor({ body: { password }, ... })  // password-only, outside the (app) 2FA gate
@@ -236,6 +243,7 @@ enroll-2fa enable action: auth.api.enableTwoFactor({ body: { password }, ... }) 
 **Impact:** Not attacker-reachable in the current deployment: checkouts are always created server-side with `currency:'PHP'` (`top-up/+page.server.ts:176`) under the merchant's own Maya account, and a payer cannot change the currency of a PHP checkout. Defense-in-depth gap — relevant if a non-PHP or mixed-currency market is ever added.
 
 **Evidence:**
+
 ```
 reconcilePayments.ts:213-221
 const expectedMinor = Math.round(Number(claimed.amount) * 100);
@@ -258,6 +266,7 @@ if (args.amountMinor !== expectedMinor) { ... return { credited: false, reason: 
 **Impact:** Removes the per-user throttle the programmatic endpoint relies on, letting an attacker script rapid arbitrary-MAC bind/unbind cycles against the router (spurious LRU evictions, repeated victim-MAC revokes) at will.
 
 **Evidence:**
+
 ```
 grant/+server.ts:45  const rl = await rateLimit('grant_user', user.id, 20); if (!rl.allowed) error(429, ...)
 // no equivalent call in startFreeTime / buyTier / bindThisDevice
@@ -278,6 +287,7 @@ grant/+server.ts:45  const rl = await rateLimit('grant_user', user.id, 20); if (
 **Impact:** A weak auth secret weakens signing of admin session cookies and at-rest encryption of staff 2FA seeds/backup codes; if guessable, an attacker can forge admin sessions or decrypt second-factor material. The documented guardrail is not enforced.
 
 **Evidence:**
+
 ```
 const REQUIRED = ['DATABASE_URL', 'BETTER_AUTH_SECRET', 'ORIGIN'] as const;
 const missing: string[] = REQUIRED.filter((k) => !env[k]);  // presence only, no length/entropy check
@@ -298,6 +308,7 @@ const missing: string[] = REQUIRED.filter((k) => !env[k]);  // presence only, no
 **Impact:** The public locator map can be framed (clickjacking) and served without MIME-sniffing protection. Low impact because the locator is unauthenticated and read-only, but an inconsistency with the other two apps' hardened baseline.
 
 **Evidence:**
+
 ```
 export const handle = Sentry.sentryHandle();  // no setSecurityHeaders; no X-Frame-Options/CSP/nosniff anywhere in file
 ```
@@ -312,11 +323,12 @@ export const handle = Sentry.sentryHandle();  // no setSecurityHeaders; no X-Fra
 - **Category / Dimension:** Secrets handling — secrets-config-deps
 - **Corrected severity:** Low (unchanged)
 
-**Description:** The real `.env` files (correctly gitignored — verified not tracked and never in git history) contain live-looking secrets: a Sentry auth token with mutate scope, a Resend API key, the MikroTik router password, and `OWNER_PASSWORD="password123"`. Critically, `apps/admin/.env`, `apps/customer/.env`, and `apps/locator/.env` all set the *same* `BETTER_AUTH_SECRET`, contradicting `apps/admin/.env.example` which states the admin secret must be "DISTINCT from the customer app." `bootstrap-owner` only enforces password length ≥ 8, so `password123` passes.
+**Description:** The real `.env` files (correctly gitignored — verified not tracked and never in git history) contain live-looking secrets: a Sentry auth token with mutate scope, a Resend API key, the MikroTik router password, and `OWNER_PASSWORD="password123"`. Critically, `apps/admin/.env`, `apps/customer/.env`, and `apps/locator/.env` all set the _same_ `BETTER_AUTH_SECRET`, contradicting `apps/admin/.env.example` which states the admin secret must be "DISTINCT from the customer app." `bootstrap-owner` only enforces password length ≥ 8, so `password123` passes.
 
 **Impact:** A shared auth secret removes the intended isolation between the low-value public locator/customer apps and the owner-privileged admin app: a leak of the secret from any one app lets an attacker forge admin sessions and decrypt admin 2FA seeds. Live tokens/passwords in the working tree risk accidental exposure (container image, backup, non-ignored path). Not committed, so contained to the local/deploy filesystem.
 
 **Evidence:**
+
 ```
 admin .env: BETTER_AUTH_SECRET="sANS5eVFOM7UcmmICyWZvIMl8sLjVI/gHOkQ4xrT7P0="  (identical to customer & locator .env)
 OWNER_PASSWORD="password123"; SENTRY_AUTH_TOKEN="sntryu_2c09..."; RESEND_API_KEY="re_KAtH2YgQ_..."
@@ -337,6 +349,7 @@ OWNER_PASSWORD="password123"; SENTRY_AUTH_TOKEN="sntryu_2c09..."; RESEND_API_KEY
 **Impact:** Device MAC addresses (persistent device identifiers / PII) accumulate in plaintext server logs, inconsistent with the codebase's own PII-redaction policy; log access or shipping to an aggregator exposes them.
 
 **Evidence:**
+
 ```
 function logResolved(via, detail, networkId) { console.info('[topup] AP resolved', { via, ...detail, networkId }); }
 // called as logResolved('device-mac', { mac, apName }, byMac); and console.warn('[topup] MAC→AP unresolved', { mac, apName });
@@ -357,6 +370,7 @@ function logResolved(via, detail, networkId) { console.info('[topup] AP resolved
 **Impact:** Reset-email flooding / Resend cost + sender-domain reputation abuse against a specific staff mailbox from many IPs; the per-recipient defense that exists for invites is not applied here.
 
 **Evidence:**
+
 ```
 await rateLimit('admin_forgot_ip', clientIp(event), 5, 15 * 60 * 1000);
 await auth.api.requestPasswordReset({ body: { email, redirectTo: '/reset-password' } });  // no checkAdminEmailLimit(email)
@@ -377,6 +391,7 @@ await auth.api.requestPasswordReset({ body: { email, redirectTo: '/reset-passwor
 **Impact:** A non-owner staff member can alter or delete the operator's AP location map (display-only geography), a lower-trust action than the owner-gated Networks management it visually mirrors. No data loss beyond reversible marker edits; flagged as a privilege-boundary inconsistency to confirm against intent.
 
 **Evidence:**
+
 ```
 map/+page.server.ts:75-171   addPlace / updatePlace / nameCluster / deletePlace  // no requireOwner(...) — cf. networks/staff/content actions which all call requireOwner
 ```
@@ -400,6 +415,7 @@ map/+page.server.ts:75-171   addPlace / updatePlace / nameCluster / deletePlace 
 **Impact:** A real money-integrity exposure for the buyer (paid, received nothing) rather than an attacker exploit — it fails closed against crediting (correct for security) but leaves funds stranded with no automated refund/alert-to-refund SLA. Worth confirming the mismatch warning is wired to an alert plus a documented refund runbook.
 
 **Evidence:**
+
 ```
 reconcilePayments.ts:214-221
 if (args.amountMinor !== expectedMinor) { console.warn('[credit] amount mismatch — refusing to credit', {...}); return { credited: false, reason: 'amount_mismatch' }; }
@@ -421,6 +437,7 @@ if (args.amountMinor !== expectedMinor) { console.warn('[credit] amount mismatch
 **Impact:** If a future change introduces a reflected/stored script sink, there is no CSP fallback to blunt it; the customer portal frequently runs over plain HTTP on the LAN, raising the value of a `script-src` baseline.
 
 **Evidence:**
+
 ```
 h.set('Content-Security-Policy', "frame-ancestors 'self'");  // no script-src/style-src directive anywhere
 ```
@@ -440,6 +457,7 @@ h.set('Content-Security-Policy', "frame-ancestors 'self'");  // no script-src/st
 **Impact:** No vulnerability today — the resolved attributes match the customer app's hardened baseline. Purely a robustness/parity observation: pin `defaultCookieAttributes` (and `useSecureCookies`) on the admin instance so the owner-privileged app's cookie security is explicit rather than inherited.
 
 **Evidence:**
+
 ```
 admin auth.ts:100   advanced: { cookiePrefix: 'radius-admin' }   // no defaultCookieAttributes / useSecureCookies — cf. customer auth.ts:57-67 which pins httpOnly/sameSite/secure
 ```
@@ -454,7 +472,7 @@ The 2026-07-07 pass examined these vectors and found **no exploitable defect**; 
 
 - **Payment-webhook authenticity (SAFE):** The Maya webhook is transport-unsigned, but forging a "paid" event cannot mint credit. `verifyWebhook` reads only a payment `id` from the body and authoritatively re-fetches `GET /payments/v1/payments/{id}` with the merchant secret key (`maya.ts:203-217,320-337`), trusting that response, not the body. Attribution requires a real `payment_checkouts` row matching the 32-hex `referenceId` nonce (`paymentWebhook.ts:96-126`); crediting is an atomic claim idempotent on `externalTransactionId` (`reconcilePayments.ts:191-195`, `credits.ts:124`). The unauthenticated surface is DoS-scoped only and already has a 120/min/IP cap.
 - **OTP generation randomness (SAFE):** `generateOTP` → better-auth `generateRandomString(size, '0-9')` uses `crypto.getRandomValues` with rejection sampling (no modulo bias); no `Math.random`.
-- **SQL injection (SAFE):** Every `sql\`\`` in `packages/core` / `packages/db` binds values as Drizzle parameters (e.g. `sessions.ts:870`, `staff.ts:132`, `credits.ts`/`points.ts` arithmetic); no `sql.raw`, no interpolated `db.execute`.
+- **SQL injection (SAFE):** Every `sql\`\``in`packages/core`/`packages/db`binds values as Drizzle parameters (e.g.`sessions.ts:870`, `staff.ts:132`, `credits.ts`/`points.ts`arithmetic); no`sql.raw`, no interpolated `db.execute`.
 - **RouterOS command injection / SSRF (SAFE):** The binary RouterOS API (`node-routeros`) sends each attribute as a length-prefixed word, so a newline/space/`=` inside a MAC or comment cannot frame a second command (`mikrotik.ts:433-444`); request-reachable MACs are format-validated and uppercased, all comment tags are internally generated, and router host/port come only from env (`network.ts:10`) — never request-derived.
 - **Money arithmetic (SAFE):** Amounts are never client-supplied (all derive from server-side package rows); minor-unit conversion is integer-safe with NaN guards (`maya.ts:92-94`, `reconcilePayments.ts:170,213-214`); negative/zero guards exist at every spend/earn seam (`credits.ts:110,159`, `points.ts:48,96`); points-earn is floored on the validated charged amount.
 - **Concurrency / double-spend (SAFE):** Credit/points spend use conditional `UPDATE ... WHERE balance >= amount` (row-lock serialized); free-time claim uses conditional `UPDATE ... WHERE lastFreeSessionAt <= cutoff RETURNING`; paid buy runs spend+bind+grant in one transaction with `SELECT ... FOR UPDATE`; payment-credit claim is an atomic single-winner `UPDATE ... RETURNING` plus `externalTransactionId` idempotency. No check-then-write double-spend.
@@ -477,6 +495,7 @@ The 2026-07-07 pass examined these vectors and found **no exploitable defect**; 
 **Impact:** If deployed behind a reverse proxy with `ADDRESS_HEADER` misconfigured, all per-IP limiters become bypassable via a forged `X-Forwarded-For` header (or collapse to one bucket → self-DoS lockout).
 
 **Evidence:**
+
 ```
 return event.getClientAddress().replace(/^::ffff:/, '');
 // trusts adapter-node ADDRESS_HEADER/XFF_DEPTH env — .env.example: 'Getting XFF_DEPTH wrong ... makes the client IP SPOOFABLE'
@@ -488,8 +507,8 @@ return event.getClientAddress().replace(/^::ffff:/, '');
 
 ## Appendix — Refuted Findings
 
-| Finding | File | Why refuted |
-|---------|------|-------------|
+| Finding                                                               | File           | Why refuted                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| --------------------------------------------------------------------- | -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Postgres exposed on all interfaces with trivial hardcoded credentials | `compose.yaml` | Every literal fact holds (`5432:5432`, `root/mysecretpassword`, unpinned `postgres` image), but the impact/severity assume a production deployment that does not exist in the repo. `compose.yaml` has only a single `db` service named `local`; README labels it "shared Postgres for local dev," `.env` files are unshared, and there is no production compose/Dockerfile/deploy manifest. The claim that "any device on the target WiFi can log in as root and read all customer/admin data" is refuted — production operators supply their own credentials. Residual issue is a low dev-hardening nit (local DB binds `0.0.0.0`, exposing seeded/test data on an untrusted network), which does not support a medium data-breach finding. |
 
 ---

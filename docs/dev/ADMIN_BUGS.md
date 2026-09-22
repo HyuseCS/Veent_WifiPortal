@@ -35,4 +35,3 @@ edit form opened.
 the edit panel into view and focuses the Name field. Done imperatively via `tick()` (not an `$effect`
 on `editing`) so typing in the form doesn't re-trigger a scroll on every keystroke.
 (`apps/admin/src/routes/(app)/content/packages/+page.svelte`)
-

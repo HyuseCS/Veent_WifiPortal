@@ -1,13 +1,13 @@
 ---
 name: protocol:all-development-protocols
-description: "Router for shared development protocols: read order and file roles for the protocol folder."
+description: 'Router for shared development protocols: read order and file roles for the protocol folder.'
 date: 09-06-26
 metadata:
   node_type: memory
   type: protocol
   read_order: 0
   required: true
-  read_when: "any substantial planning, research, validation, or implementation task — read first to route into the protocol folder"
+  read_when: 'any substantial planning, research, validation, or implementation task — read first to route into the protocol folder'
 ---
 
 # Development Protocols

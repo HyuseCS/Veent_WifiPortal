@@ -1,13 +1,13 @@
 ---
 name: protocol:vc-system-behavior-10-update-process
-description: "UPDATE PROCESS phase reference: closeout packet, Tier-1 required audits, and archival."
+description: 'UPDATE PROCESS phase reference: closeout packet, Tier-1 required audits, and archival.'
 date: 09-06-26
 metadata:
   node_type: memory
   type: protocol
   read_order: 1
   required: false
-  read_when: "running or auditing the UPDATE PROCESS phase"
+  read_when: 'running or auditing the UPDATE PROCESS phase'
 ---
 
 # UPDATE PROCESS Phase
@@ -51,6 +51,7 @@ Run all 5 before doing any archival work. No exceptions.
 **[U1] vc-audit-vc** — REQUIRED if any agent, skill, or `.claude/` file was modified.
 
 Runs:
+
 - `validate-agent-parity.mjs`
 - `validate-skills.mjs`
 - `validate-guide-sync.mjs`
@@ -61,6 +62,7 @@ Runs:
 **[U2] vc-audit-context** — REQUIRED if any `process/context/` file or context group was modified. Also REQUIRED if the EVL handoff summary contains any `CONTEXT_PARTIAL: [area]` flags — even if no context file was directly modified.
 
 Runs:
+
 - `validate-context-discovery.mjs`
 - `validate-all-context.mjs`
 
@@ -69,6 +71,7 @@ Runs:
 **[U3] vc-audit-plans** — REQUIRED at natural stopping points (feature complete or "what's next?").
 
 Runs:
+
 - `validate-plan-inventory.mjs`
 
 Surfaces stale, missing, or mis-classified plans before declaring the session complete.
@@ -147,6 +150,7 @@ The U-S5 packet always supersedes the EVL preliminary packet.
 **EVL preliminary packet disk write.** EVL step 1 must write the preliminary closeout packet to disk before routing to UPDATE PROCESS. This file is the crash-recovery source. If it is absent, U-S5 re-runs EVL gate checks from scratch.
 
 Write path:
+
 - Feature-scoped: `process/features/{feature}/reports/{phase}-evl-preliminary.md`
 - General plans: `process/general-plans/reports/{phase-slug}-evl-preliminary.md`
 
@@ -159,6 +163,7 @@ Where `{phase}` = plan filename slug (strip `_PLAN_*.md` suffix) for non-phase-p
 Count signals from these 5 sources. Use the exact threshold phrases below — do not paraphrase.
 
 **Signal sources:**
+
 - **(a)** Files touched: 1–4 files = 0 signal; 5+ files = 1 signal
 - **(b1)** `process/development-protocols/`, `.claude/agents/`, or `.claude/skills/` changed = 1 signal
 - **(b2)** `README.md`, `AGENTS.md`, or `CLAUDE.md` changed = 1 additional signal (max 2 from b)
@@ -169,6 +174,7 @@ Count signals from these 5 sources. Use the exact threshold phrases below — do
 Maximum possible score: 6
 
 **Threshold phrases (use verbatim):**
+
 - **LOW (0–1):** `"UPDATE PROCESS available if you want."`
 - **MEDIUM (2):** `"Recommend UPDATE PROCESS -- significant changes detected."`
 - **HIGH (3+):** `"Strongly recommend UPDATE PROCESS -- harness/protocol files touched."`
@@ -270,14 +276,14 @@ UPDATE PROCESS has exactly two user touchpoints — one at entry, one at exit. N
 
 ## Terminal Phase-End Recommendation Gate (single round-trip)
 
-UPDATE PROCESS is the terminal phase, so its exit gate recommends what the session does *next* — there is no fixed downstream phase. Present everything in one block for **confirm / push back / go**, with the recommended option driven by the drift score:
+UPDATE PROCESS is the terminal phase, so its exit gate recommends what the session does _next_ — there is no fixed downstream phase. Present everything in one block for **confirm / push back / go**, with the recommended option driven by the drift score:
 
 1. **Closeout summary** — closeout packet classification + drift score + what was archived/updated + any Phase-3 improvements proposed (numbered, for one-shot approval).
 2. **Recommended next step (marked recommended), bidirectional** — driven by drift:
    - **Move on / close out** (recommended when drift is LOW 0–1) — session complete; `"UPDATE PROCESS complete. Ready for next feature or task."`
    - **Start a new phase program** (recommended when natural next work was identified) — route through `vc-generate-phase-program` to scaffold the umbrella + stubs.
    - **Loop back on drift** (recommended when drift is HIGH 3+ and gap items remain) — create follow-up plan stubs / re-open targeted work. Bounded by the vc-autoresearch 10-cycle cap. Under /goal: auto-create stubs (per Drift Signal Scoring); do NOT spawn vc-execute-agent without PVL.
-3. **Optional deep work** (extra audit pass, memory consolidation, plan-inventory cleanup) offered as *choices*, not a pause.
+3. **Optional deep work** (extra audit pass, memory consolidation, plan-inventory cleanup) offered as _choices_, not a pause.
 
 Under `/goal` this gate auto-proceeds on the drift-driven recommended option.
 

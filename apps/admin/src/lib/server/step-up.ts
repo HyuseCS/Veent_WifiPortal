@@ -27,10 +27,16 @@ export async function verifyStepUp(
 	const identifier = event.locals.user?.id ?? clientIp(event);
 	const rl = await rateLimit(opts.scope, identifier, 5, 15 * 60 * 1000);
 	if (!rl.allowed) {
-		return fail(429, { action: opts.action, error: 'Too many attempts. Please wait a few minutes.' });
+		return fail(429, {
+			action: opts.action,
+			error: 'Too many attempts. Please wait a few minutes.'
+		});
 	}
 	if (!isTotpCode(code)) {
-		return fail(400, { action: opts.action, error: 'Enter the 6-digit code from your authenticator.' });
+		return fail(400, {
+			action: opts.action,
+			error: 'Enter the 6-digit code from your authenticator.'
+		});
 	}
 	try {
 		await auth.api.verifyTOTP({ body: { code }, headers: event.request.headers });

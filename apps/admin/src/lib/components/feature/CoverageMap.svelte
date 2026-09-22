@@ -153,4 +153,3 @@
 </script>
 
 <div bind:this={mapEl} class="h-full w-full"></div>
-

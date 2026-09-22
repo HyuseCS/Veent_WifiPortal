@@ -1,6 +1,6 @@
 ---
 name: context:all-database
-description: "Drizzle/Postgres schema, migrations, client setup, and shared cross-app tables — the database group entrypoint/router"
+description: 'Drizzle/Postgres schema, migrations, client setup, and shared cross-app tables — the database group entrypoint/router'
 keywords: database, drizzle, postgres, schema, migration, db:push, db:generate, db:migrate, db:studio, db:seed, drizzle-kit, client, connection pool, rate_limits, network_health, journal drift, idempotent migrations
 related: [context:all-auth]
 date: 10-07-26
@@ -97,15 +97,15 @@ here when a `schema-guide.md`, `migration-procedures.md`, or `seeding.md` is spl
 
 ## Commands
 
-| Command | What it does |
-|---|---|
-| `bun run db:start` | `docker compose up` — starts local Postgres (port 5432, db `local`, user `root`) |
-| `bun run db:push` | `drizzle-kit push` — pushes the schema straight to the DB, no migration file. **This is how the local dev DB is actually kept in sync.** |
-| `bun run db:generate` | `drizzle-kit generate` — writes a new migration file under `packages/db/drizzle/` from the schema diff |
-| `bun run db:migrate` | `drizzle-kit migrate` — replays the committed migration chain. **Fails against the local dev DB** — see Canonical Notes |
-| `bun run db:studio` | `drizzle-kit studio` — browser DB explorer |
-| `bun run db:seed` | `bun run src/seed.ts` inside `@veent/db` |
-| `bun run db:idempotent` | `bun scripts/idempotent-migrations.ts` — rewrites `packages/db/drizzle/*.sql` to be idempotent; one-off maintenance, safe to re-run |
+| Command                 | What it does                                                                                                                             |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `bun run db:start`      | `docker compose up` — starts local Postgres (port 5432, db `local`, user `root`)                                                         |
+| `bun run db:push`       | `drizzle-kit push` — pushes the schema straight to the DB, no migration file. **This is how the local dev DB is actually kept in sync.** |
+| `bun run db:generate`   | `drizzle-kit generate` — writes a new migration file under `packages/db/drizzle/` from the schema diff                                   |
+| `bun run db:migrate`    | `drizzle-kit migrate` — replays the committed migration chain. **Fails against the local dev DB** — see Canonical Notes                  |
+| `bun run db:studio`     | `drizzle-kit studio` — browser DB explorer                                                                                               |
+| `bun run db:seed`       | `bun run src/seed.ts` inside `@veent/db`                                                                                                 |
+| `bun run db:idempotent` | `bun scripts/idempotent-migrations.ts` — rewrites `packages/db/drizzle/*.sql` to be idempotent; one-off maintenance, safe to re-run      |
 
 All root `db:*` scripts proxy to `bun run --filter @veent/db <script>` (except `db:idempotent`,
 which runs the root script directly).
@@ -172,7 +172,7 @@ Update this group when:
   was rewritten in the same change-set to do real Manila-day → UTC-instant math (fixed −8h, no DST)
   instead of the old wall-clock-spelling `Date.UTC(...)` trick. **Any new timestamp column on this
   surface (or anywhere finance/session-adjacent) should be declared `timestamp('col', { withTimezone:
-  true })` from the start** — this whole migration exists only because early columns weren't.
+true })` from the start** — this whole migration exists only because early columns weren't.
   Full detail: `process/general-plans/active/finance-timestamptz-migration_23-07-26/` (plan/spec/
   report — PROD APPLY STILL PENDING as of 2026-07-23, plan intentionally kept in `active/`, not yet
   archived).

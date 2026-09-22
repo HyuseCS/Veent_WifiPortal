@@ -1,14 +1,15 @@
 ---
 name: protocol:program-goal-charter-template
-description: "Blank and filled Program Goal Charter template for phase-program umbrella plans. Defines the north-star, definition of done, scope tiers, and hard safety constraints for autonomous multi-phase sessions."
+description: 'Blank and filled Program Goal Charter template for phase-program umbrella plans. Defines the north-star, definition of done, scope tiers, and hard safety constraints for autonomous multi-phase sessions.'
 date: 15-06-26
 metadata:
   node_type: reference
   type: protocol
   read_order: 10
   required: false
-  read_when: "building a phase-program umbrella plan or needing the compressed session-goal block format"
+  read_when: 'building a phase-program umbrella plan or needing the compressed session-goal block format'
 ---
+
 # Program Goal Charter Template
 
 This is the canonical template for the **Program Goal Charter** required by every phase program.

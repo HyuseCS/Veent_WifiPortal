@@ -1,6 +1,6 @@
 ---
 name: report:per-ap-visibility-live-verification
-description: "Live-router read-only verification of Phase A E4/E5/G14/G16 probes — deferred gates from per-ap-visibility_PLAN_16-07-26.md"
+description: 'Live-router read-only verification of Phase A E4/E5/G14/G16 probes — deferred gates from per-ap-visibility_PLAN_16-07-26.md'
 date: 17-07-26
 metadata:
   node_type: memory
@@ -35,7 +35,7 @@ Zero `/set`, `/add`, `/remove` calls were issued at any point.
   circuit-id attribution work correctly against the live router. But **neither test AP (including
   the one expected to be online) showed UP via ping** — root-caused, with direct A/B proof, to the
   router's own hotspot walled-garden firewall (`hs-unauth-to`, `action=reject
-  reject-with=icmp-host-prohibited`) rejecting ICMP to any hotspot client that isn't
+reject-with=icmp-host-prohibited`) rejecting ICMP to any hotspot client that isn't
   authorized/bypassed. Every physical AP is itself an un-bypassed hotspot client, so
   **`pingHosts`-based liveness will read every AP as permanently DOWN regardless of real health**,
   until the router is configured to exempt AP addresses (walled-garden or ip-binding bypass). This
@@ -73,11 +73,11 @@ Keys on raw lease rows matching that pattern: ["dhcp-option", "agent-circuit-id"
 `agent-circuit-id` is the real OLT-inserted Option 82 circuit id, and it is populated exactly as
 the code assumes. Sample raw values observed (not secrets — circuit ids are safe to show):
 
-| MAC | host-name | address | agent-circuit-id | status |
-|---|---|---|---|---|
-| `E4:67:1E:B6:FB:9C` | `OAP3000G-FK9C` | `10.210.59.33` | `OLT-9 xpon 0/1/0/12:5.3.70` | bound |
-| `E4:67:1E:B6:FC:60` | `OAP3000G-FC6G` | `10.210.59.7` | `OLT-9 xpon 0/1/0/4:16.3.70` | bound |
-| `7C:B2:7D:47:17:97` | `HyuseTP` (not an AP — OUI mismatch) | `10.210.59.11` | `OLT-9 xpon 0/1/0/4:16.3.70` | bound |
+| MAC                 | host-name                            | address        | agent-circuit-id             | status |
+| ------------------- | ------------------------------------ | -------------- | ---------------------------- | ------ |
+| `E4:67:1E:B6:FB:9C` | `OAP3000G-FK9C`                      | `10.210.59.33` | `OLT-9 xpon 0/1/0/12:5.3.70` | bound  |
+| `E4:67:1E:B6:FC:60` | `OAP3000G-FC6G`                      | `10.210.59.7`  | `OLT-9 xpon 0/1/0/4:16.3.70` | bound  |
+| `7C:B2:7D:47:17:97` | `HyuseTP` (not an AP — OUI mismatch) | `10.210.59.11` | `OLT-9 xpon 0/1/0/4:16.3.70` | bound  |
 
 **Code implication:** none. `DHCP_OPTION82_CIRCUIT_KEY = 'agent-circuit-id'` in
 `packages/core/src/integrations/network/mikrotik.ts` line 74 is correct as shipped.
@@ -209,7 +209,7 @@ ever reaches the AP's radio.
 **This means Risk R3's stated mitigation ("research confirmed AP3000G answers ICMP") is not
 actually being exercised by `pingHosts` today** — the packets are rejected by the router itself,
 never reaching the AP, so we cannot yet confirm or deny whether AP3000G answers ICMP once
-reachable. What we *can* say with certainty: **as currently deployed, `pingHosts`-based liveness
+reachable. What we _can_ say with certainty: **as currently deployed, `pingHosts`-based liveness
 will report every AP as DOWN, permanently, regardless of the AP's actual physical/radio state**,
 because no AP MAC/IP is in the walled garden or the bypassed ip-binding table (only
 `veent-admin`, `OLT1`, `OLT9`, and `dev portal host` are exempted today).
@@ -232,19 +232,19 @@ only, and router-side firewall/walled-garden changes are outside a debugging pro
 **Recommendation:** do not treat "AP-Pabayo shows DOWN" as a shippable G16 PASS. File this as a
 new backlog/plan item (distinct from the existing traffic-counter re-probe note) before Phase A is
 considered fully verified against the live router — the outage-sweep interplay flagged in R3
-("a false AP-down would freeze paid guests' time") is a *live, currently-reproducible* condition
+("a false AP-down would freeze paid guests' time") is a _live, currently-reproducible_ condition
 today, not a hypothetical.
 
 ---
 
 ## Summary Table
 
-| Probe | Gate | Verdict | Code change needed? |
-|---|---|---|---|
-| E5 | Option 82 key | CONFIRMED — key matches | No |
-| E4 | ping multiplex safety | WORKS — confirmed with mixed real/timeout concurrent pings | No |
-| G14 | byte counter monotonicity | INCONCLUSIVE — no active clients to observe | No (ships degradation branch as planned) |
-| G16 | live up/down sanity | INCONCLUSIVE + HIGH-SEVERITY finding — hotspot walled-garden blocks ICMP to all non-bypassed APs, so liveness reads DOWN regardless of real AP health | Follow-up decision needed (router-side walled-garden exemption, or an INNOVATE-level redesign of the liveness probe path) — not implemented here |
+| Probe | Gate                      | Verdict                                                                                                                                               | Code change needed?                                                                                                                              |
+| ----- | ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| E5    | Option 82 key             | CONFIRMED — key matches                                                                                                                               | No                                                                                                                                               |
+| E4    | ping multiplex safety     | WORKS — confirmed with mixed real/timeout concurrent pings                                                                                            | No                                                                                                                                               |
+| G14   | byte counter monotonicity | INCONCLUSIVE — no active clients to observe                                                                                                           | No (ships degradation branch as planned)                                                                                                         |
+| G16   | live up/down sanity       | INCONCLUSIVE + HIGH-SEVERITY finding — hotspot walled-garden blocks ICMP to all non-bypassed APs, so liveness reads DOWN regardless of real AP health | Follow-up decision needed (router-side walled-garden exemption, or an INNOVATE-level redesign of the liveness probe path) — not implemented here |
 
 ## Constraints Honored
 
@@ -264,7 +264,7 @@ today, not a hypothetical.
 
 1. Does AP3000G actually answer ICMP once reachable? Still unverified — R3's mitigation claim is
    unconfirmed pending a walled-garden exemption test.
-2. Is `hs-unauth-to` blocking *all* router-originated traffic to non-bypassed hosts, or only
+2. Is `hs-unauth-to` blocking _all_ router-originated traffic to non-bypassed hosts, or only
    ICMP specifically? Not probed (out of scope for this read-only pass) — matters for whether a
    future liveness mechanism (e.g. TCP probe, ARP-only) would fare any better without a config
    change.
@@ -387,13 +387,13 @@ No new evidence either way; the original G14 backlog re-probe note still applies
 
 ### Re-probe summary table
 
-| Check | Verdict | Detail |
-|---|---|---|
-| ip-binding bypass entries exist | **CONFIRMED** | All 3 MACs present, `type=bypassed`, correct comments |
-| Direct ping — AP-Pabayo / AP-Headend | **CONFIRMED UP** | 1ms RTT, 0% loss, both — was 100% loss pre-bypass |
-| Feature read path — AP-Pabayo / AP-Headend | **CONFIRMED UP with correct circuit ids** | Matches original E5 attribution, stable across sessions |
-| Feature read path — AP-Corrales (expected DOWN) | **NOT REPRODUCED — read UP** | Live traffic evidence (`found-by: ICMP echo...`, growing byte counters, 4m45s uptime) shows this MAC is genuinely active right now; negative case unverified this session |
-| G14 (byte counter monotonicity) | **INCONCLUSIVE (unchanged)** | Still 0 active hotspot sessions in both samples |
+| Check                                           | Verdict                                   | Detail                                                                                                                                                                    |
+| ----------------------------------------------- | ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ip-binding bypass entries exist                 | **CONFIRMED**                             | All 3 MACs present, `type=bypassed`, correct comments                                                                                                                     |
+| Direct ping — AP-Pabayo / AP-Headend            | **CONFIRMED UP**                          | 1ms RTT, 0% loss, both — was 100% loss pre-bypass                                                                                                                         |
+| Feature read path — AP-Pabayo / AP-Headend      | **CONFIRMED UP with correct circuit ids** | Matches original E5 attribution, stable across sessions                                                                                                                   |
+| Feature read path — AP-Corrales (expected DOWN) | **NOT REPRODUCED — read UP**              | Live traffic evidence (`found-by: ICMP echo...`, growing byte counters, 4m45s uptime) shows this MAC is genuinely active right now; negative case unverified this session |
+| G14 (byte counter monotonicity)                 | **INCONCLUSIVE (unchanged)**              | Still 0 active hotspot sessions in both samples                                                                                                                           |
 
 ### Updated recommendation
 

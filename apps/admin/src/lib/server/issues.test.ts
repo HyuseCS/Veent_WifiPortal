@@ -94,9 +94,7 @@ function fakeDb(before: unknown[] = []) {
 }
 
 const eventTypes = (inserts: { table: string; rows: unknown }[]): string[] =>
-	inserts
-		.filter((i) => i.table === 'event')
-		.map((i) => (i.rows as { type: string }).type);
+	inserts.filter((i) => i.table === 'event').map((i) => (i.rows as { type: string }).type);
 
 describe('createIssue events', () => {
 	it('records a created event plus one assigned per initial assignee', async () => {
@@ -124,7 +122,14 @@ describe('createIssue events', () => {
 		const { db, inserts } = fakeDb();
 		await createIssue(
 			db,
-			{ title: 'x', description: null, priority: 'low', networkId: null, dueDate: null, assigneeIds: [] },
+			{
+				title: 'x',
+				description: null,
+				priority: 'low',
+				networkId: null,
+				dueDate: null,
+				assigneeIds: []
+			},
 			'mgr'
 		);
 		expect(eventTypes(inserts)).toEqual([ISSUE_EVENT.created]);
@@ -148,21 +153,30 @@ describe('setIssueStatus events', () => {
 
 	it('records a note_edited event when an already-resolved note is changed (H2)', async () => {
 		const { db, inserts } = fakeDb([{ status: 'resolved', resolutionNote: 'old' }]);
-		const result = await setIssueStatus(db, 1, 'resolved', { resolutionNote: 'new', actorId: 'mgr' });
+		const result = await setIssueStatus(db, 1, 'resolved', {
+			resolutionNote: 'new',
+			actorId: 'mgr'
+		});
 		expect(result).toBe('updated');
 		expect(eventTypes(inserts)).toEqual([ISSUE_EVENT.noteEdited]);
 	});
 
 	it('no-ops when an already-resolved note is unchanged', async () => {
 		const { db, inserts } = fakeDb([{ status: 'resolved', resolutionNote: 'same' }]);
-		const result = await setIssueStatus(db, 1, 'resolved', { resolutionNote: 'same', actorId: 'mgr' });
+		const result = await setIssueStatus(db, 1, 'resolved', {
+			resolutionNote: 'same',
+			actorId: 'mgr'
+		});
 		expect(result).toBe('unchanged');
 		expect(eventTypes(inserts)).toEqual([]);
 	});
 
 	it('returns not_found when the incident id does not exist', async () => {
 		const { db, inserts } = fakeDb([]); // before row read returns nothing
-		const result = await setIssueStatus(db, 999, 'resolved', { resolutionNote: 'x', actorId: 'mgr' });
+		const result = await setIssueStatus(db, 999, 'resolved', {
+			resolutionNote: 'x',
+			actorId: 'mgr'
+		});
 		expect(result).toBe('not_found');
 		expect(eventTypes(inserts)).toEqual([]);
 	});
@@ -173,8 +187,20 @@ describe('createIssueFromSentry', () => {
 		const { db, inserts } = fakeDb();
 		await createIssueFromSentry(
 			db,
-			{ issueId: 'S1', shortId: 'RADIUS-ADMIN-3F', permalink: 'https://sentry.io/x', title: 'Boom' },
-			{ title: 'Track boom', description: null, priority: 'high', networkId: null, dueDate: null, assigneeIds: ['u1'] },
+			{
+				issueId: 'S1',
+				shortId: 'RADIUS-ADMIN-3F',
+				permalink: 'https://sentry.io/x',
+				title: 'Boom'
+			},
+			{
+				title: 'Track boom',
+				description: null,
+				priority: 'high',
+				networkId: null,
+				dueDate: null,
+				assigneeIds: ['u1']
+			},
 			'mgr'
 		);
 		expect(eventTypes(inserts)).toEqual([ISSUE_EVENT.created, ISSUE_EVENT.assigned]);
@@ -233,7 +259,10 @@ describe('takeIssue', () => {
 		const ok = await takeIssue(db, 1, 'u9');
 		expect(ok).toBe(true);
 		expect(inserts.map((i) => i.table)).toEqual(['assignee', 'event']);
-		const event = inserts.find((i) => i.table === 'event')!.rows as { type: string; toValue: string };
+		const event = inserts.find((i) => i.table === 'event')!.rows as {
+			type: string;
+			toValue: string;
+		};
 		expect(event.type).toBe(ISSUE_EVENT.assigned);
 		expect(event.toValue).toBe('u9'); // self-assign
 	});
@@ -258,7 +287,14 @@ describe('updateIssue events', () => {
 		await updateIssue(
 			db,
 			1,
-			{ title: 't', description: null, priority: 'high', networkId: null, dueDate: null, assigneeIds: ['u2'] },
+			{
+				title: 't',
+				description: null,
+				priority: 'high',
+				networkId: null,
+				dueDate: null,
+				assigneeIds: ['u2']
+			},
 			'mgr'
 		);
 		// order: priority_changed, then unassigned(u1), then assigned(u2)

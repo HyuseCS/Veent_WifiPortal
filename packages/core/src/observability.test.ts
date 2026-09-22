@@ -18,33 +18,55 @@ describe('scrubEvent', () => {
 
 	it('masks all three MAC forms (colon, hyphen, bare 12-hex), keeping the vendor prefix', () => {
 		// Router log lines carry MACs in any of these shapes — all must be redacted.
-		expect(scrubEvent({ message: 'dev AA:BB:CC:DD:EE:FF' } as ErrorEvent).message).toBe('dev AA:BB:CC•••');
-		expect(scrubEvent({ message: 'dev AA-BB-CC-DD-EE-FF' } as ErrorEvent).message).toBe('dev AA-BB-CC•••');
+		expect(scrubEvent({ message: 'dev AA:BB:CC:DD:EE:FF' } as ErrorEvent).message).toBe(
+			'dev AA:BB:CC•••'
+		);
+		expect(scrubEvent({ message: 'dev AA-BB-CC-DD-EE-FF' } as ErrorEvent).message).toBe(
+			'dev AA-BB-CC•••'
+		);
 		expect(scrubEvent({ message: 'dev AABBCCDDEEFF' } as ErrorEvent).message).toBe('dev AABBCC•••');
 	});
 
 	it('leaves non-MAC hex runs and mixed separators untouched', () => {
 		// 11- and 13-hex are not MACs; a mixed-separator run is not a real MAC either.
 		expect(scrubEvent({ message: 'id AABBCCDDEEF' } as ErrorEvent).message).toBe('id AABBCCDDEEF');
-		expect(scrubEvent({ message: 'id AABBCCDDEEFFA' } as ErrorEvent).message).toBe('id AABBCCDDEEFFA');
-		expect(scrubEvent({ message: 'id AA:BB-CC:DD-EE:FF' } as ErrorEvent).message).toBe('id AA:BB-CC:DD-EE:FF');
+		expect(scrubEvent({ message: 'id AABBCCDDEEFFA' } as ErrorEvent).message).toBe(
+			'id AABBCCDDEEFFA'
+		);
+		expect(scrubEvent({ message: 'id AA:BB-CC:DD-EE:FF' } as ErrorEvent).message).toBe(
+			'id AA:BB-CC:DD-EE:FF'
+		);
 	});
 
 	it('masks PH phone shapes as phones, not MACs', () => {
 		// +639171234567 is 12 digit-only chars — the old bare-MAC branch swallowed it and exposed
 		// the carrier prefix (+639171•••). All PH variants must mask with the phone shape instead.
-		expect(scrubEvent({ message: 'call +639171234567' } as ErrorEvent).message).toBe('call +63•••67');
+		expect(scrubEvent({ message: 'call +639171234567' } as ErrorEvent).message).toBe(
+			'call +63•••67'
+		);
 		expect(scrubEvent({ message: 'call 09171234567' } as ErrorEvent).message).toBe('call 091•••67');
-		expect(scrubEvent({ message: 'call 0917 123 4567' } as ErrorEvent).message).toBe('call 091•••67');
-		expect(scrubEvent({ message: 'call 0917-123-4567' } as ErrorEvent).message).toBe('call 091•••67');
-		expect(scrubEvent({ message: 'call +63 917 123 4567' } as ErrorEvent).message).toBe('call +63•••67');
+		expect(scrubEvent({ message: 'call 0917 123 4567' } as ErrorEvent).message).toBe(
+			'call 091•••67'
+		);
+		expect(scrubEvent({ message: 'call 0917-123-4567' } as ErrorEvent).message).toBe(
+			'call 091•••67'
+		);
+		expect(scrubEvent({ message: 'call +63 917 123 4567' } as ErrorEvent).message).toBe(
+			'call +63•••67'
+		);
 	});
 
 	it('leaves timestamps, amounts, and numeric ids unmasked', () => {
 		// The old generic ≥9-digit rule rewrote these to first3•••last2, garbling every event.
-		expect(scrubEvent({ message: 'ts 1782969590415' } as ErrorEvent).message).toBe('ts 1782969590415');
-		expect(scrubEvent({ message: 'paid 150000 centavos' } as ErrorEvent).message).toBe('paid 150000 centavos');
-		expect(scrubEvent({ message: 'checkout 9876543210' } as ErrorEvent).message).toBe('checkout 9876543210');
+		expect(scrubEvent({ message: 'ts 1782969590415' } as ErrorEvent).message).toBe(
+			'ts 1782969590415'
+		);
+		expect(scrubEvent({ message: 'paid 150000 centavos' } as ErrorEvent).message).toBe(
+			'paid 150000 centavos'
+		);
+		expect(scrubEvent({ message: 'checkout 9876543210' } as ErrorEvent).message).toBe(
+			'checkout 9876543210'
+		);
 	});
 
 	it('still masks an all-digit bare MAC via the 12-digit catch-all', () => {
@@ -126,7 +148,9 @@ describe('scrubEvent', () => {
 		expect(e.request?.data).toBeUndefined();
 		// PII surviving in the URL / query-string is masked, not shipped verbatim.
 		expect(e.request?.url).not.toContain('juan@example.com');
-		expect((e.request as { query_string?: string })?.query_string).not.toContain('juan@example.com');
+		expect((e.request as { query_string?: string })?.query_string).not.toContain(
+			'juan@example.com'
+		);
 		expect(e.user?.id).toBe('u1'); // id kept — the useful signal
 		expect(e.user?.ip_address).toBeUndefined();
 		expect(e.user?.email).toBeUndefined();
@@ -180,7 +204,10 @@ describe('sentryOptions', () => {
 	});
 
 	it('Case B: leaves a normal Error untouched, PII still scrubbed', () => {
-		const { event, hint } = buildErrorEvent(new Error('normal bug'), 'normal bug for juan@example.com');
+		const { event, hint } = buildErrorEvent(
+			new Error('normal bug'),
+			'normal bug for juan@example.com'
+		);
 		const out = beforeSend(event, hint);
 		// Level unchanged — a real bug stays at error level (input had no level → stays undefined).
 		expect(out.level).toBeUndefined();

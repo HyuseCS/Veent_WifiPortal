@@ -1,13 +1,13 @@
 ---
 name: protocol:vc-system-behavior-05-spec
-description: "SPEC phase reference: product-discovery requirements doc, user-review checkpoint, and skip conditions."
+description: 'SPEC phase reference: product-discovery requirements doc, user-review checkpoint, and skip conditions.'
 date: 09-06-26
 metadata:
   node_type: memory
   type: protocol
   read_order: 1
   required: false
-  read_when: "running or auditing the SPEC phase"
+  read_when: 'running or auditing the SPEC phase'
 ---
 
 # SPEC Phase Reference
@@ -18,7 +18,7 @@ SPEC is a **product-discovery document**. It captures, in plain language, **what
 
 It is written for a **human reviewer**, not for an engineer. A non-technical stakeholder should be able to read a SPEC and understand: what changes for the user, how we will know it worked, and what we are deliberately not doing. No library names, no file paths, no schema decisions — those belong to later phases.
 
-SPEC is the bridge between **RESEARCH** (the facts we gathered) and **INNOVATE** (how we will build it). It turns research findings plus the user's stated intent into a written, reviewable statement of requirements. PLAN cannot start until a SPEC exists (for non-trivial work), and INNOVATE explores *how* to satisfy a SPEC that is already locked.
+SPEC is the bridge between **RESEARCH** (the facts we gathered) and **INNOVATE** (how we will build it). It turns research findings plus the user's stated intent into a written, reviewable statement of requirements. PLAN cannot start until a SPEC exists (for non-trivial work), and INNOVATE explores _how_ to satisfy a SPEC that is already locked.
 
 **SPEC consumes:** RESEARCH findings + the user's intent. **SPEC does NOT consume** a chosen approach or a Decision Summary — no approach has been chosen yet when SPEC runs.
 
@@ -34,8 +34,8 @@ RESEARCH → SPEC → [INNOVATE] → PLAN → VALIDATE → EXECUTE → UPDATE PR
 ```
 
 - **RESEARCH** gathers the facts.
-- **SPEC** locks *what* the user wants and *why* (this phase — for user review).
-- **INNOVATE** (bracketed = skippable) explores *how* to satisfy the SPEC.
+- **SPEC** locks _what_ the user wants and _why_ (this phase — for user review).
+- **INNOVATE** (bracketed = skippable) explores _how_ to satisfy the SPEC.
 - **PLAN** turns the chosen "how" into concrete steps.
 
 In a phase program, SPEC runs **once** during the outer loop and governs every inner phase:
@@ -51,11 +51,11 @@ The inner loop never writes a SPEC. The umbrella (program-level) SPEC written in
 
 ## When SPEC Is Skipped
 
-| Context | Skip? |
-|---|---|
+| Context                                    | Skip?                                                                                                                                     |
+| ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
 | General / top-level flow, non-trivial work | **Never skipped.** SPEC always runs for non-trivial work — it is the user-review checkpoint. (INNOVATE is the skippable phase, not SPEC.) |
-| Phase program inner loop | Always skipped. The umbrella SPEC governs. |
-| Trivial fix (orchestrator-classified) | May be skipped when: single file, under 15 lines, no auth or billing surface, no new behavioral contract. |
+| Phase program inner loop                   | Always skipped. The umbrella SPEC governs.                                                                                                |
+| Trivial fix (orchestrator-classified)      | May be skipped when: single file, under 15 lines, no auth or billing surface, no new behavioral contract.                                 |
 
 > **Skip relationship:** For non-trivial work, **SPEC always runs and INNOVATE is optional.** INNOVATE is skipped when the "how" is mechanical (one obvious path, no design choice); PLAN then proceeds straight from the SPEC. SPEC never depends on INNOVATE output — INNOVATE is downstream of SPEC.
 
@@ -81,7 +81,7 @@ Run this first. Restate what the user wants documented and for which task — bu
 - Confirm the RESEARCH findings are present in the prompt (SPEC's primary input). The user's intent — their request, brainstorm input, and any feedback — is the other input.
 - If no RESEARCH findings and no user intent are present: emit `SPEC_INTENT_BLOCKED: Missing input — no research findings or user intent to document. Cannot write SPEC.`
 
-> There is **no Decision Summary** at SPEC time and SPEC never expects one. (Approach selection happens in INNOVATE, which runs *after* SPEC.)
+> There is **no Decision Summary** at SPEC time and SPEC never expects one. (Approach selection happens in INNOVATE, which runs _after_ SPEC.)
 
 ### [SP-S1] vc-context-discovery
 
@@ -182,10 +182,12 @@ for the reviewer — kept at the bottom because the user-facing sections lead.
 **Acceptance Criteria (Testable Outcomes):** Each criterion is an observable outcome — phrased so the reviewer recognizes it as "what I want." Independently verifiable. No criterion references a file path or implementation detail. Minimum one criterion per user-story area. Maximum 20 criteria per SPEC.
 
 Every acceptance criterion MUST carry two secondary annotations (under the outcome, not in the headline):
+
 - `proven by:` — the named test scenario/gate that verifies it (requirement→test link).
 - `strategy:` — one of Fully-Automated / Hybrid / Agent-Probe.
 
 Rules:
+
 - Every acceptance criterion MUST name the test scenario that proves it and its strategy. A criterion with no `proven by:` scenario is incomplete.
 - **Every criterion MUST be provable by comprehensive tests, with a fully-automated E2E/integration gate wherever the behavior is automatable** — agent-probe or Known-Gap stand only as the explicitly-justified residual where automation is genuinely impossible (no automatable AND no hybrid/agent-probe coverage possible).
 - Scenario enumeration MUST be **grounded in the test-context-discovery performed in RESEARCH** (the full `all-tests.md` router + its downstream chain, with scenarios grouped by the 3 strategies — see `04-research.md` [R5] Part C). Scenarios must come from that enumeration, **not invented** here.
@@ -245,6 +247,7 @@ Follow these steps in order:
 This signal means the SPEC file is fully written, all sections are present, and Open Questions is resolved (or backlogged under /goal).
 
 **What it means:**
+
 - SPEC is locked. INNOVATE may begin.
 - The orchestrator routes to **vc-innovate-agent** by default, passing the SPEC file path explicitly. INNOVATE explores how to satisfy the SPEC.
 - **Skip case:** when the "how" is mechanical (one obvious implementation path, no design choice), INNOVATE is skipped and the orchestrator routes straight to vc-plan-agent, passing the SPEC.
@@ -263,6 +266,7 @@ This signal means something is missing that prevents the SPEC from being written
 - At step 9: `## Open Questions` is non-empty when trying to finalize (interactive session only)
 
 **What the orchestrator does (interactive, no /goal):**
+
 - Does NOT route onward (neither INNOVATE nor PLAN).
 - Surfaces the blocked questions to the user.
 - Waits for the user to provide answers.
@@ -291,7 +295,7 @@ The one routine exit pause for SPEC. Present in a single block for **confirm / p
    - **Advance** to INNOVATE — default, when `## Open Questions` is empty/"None" and all sections are present. (Or advance to PLAN when the "how" is mechanical and INNOVATE is skipped.)
    - **Re-run SPEC (loop back)** — when intent is still ambiguous but not formally blocked. Name the specific gaps + questions feeding the next entry gate. Bounded by the vc-autoresearch 10-cycle cap.
 3. **Recommended strategy** for the next phase (INNOVATE, or PLAN if skipping INNOVATE) — 4-option suite with 7-signal score + cost, one marked recommended, as selectable choices.
-4. **Optional deep work** (vc-sequential-thinking, vc-scenario) offered as *choices*, not a pause.
+4. **Optional deep work** (vc-sequential-thinking, vc-scenario) offered as _choices_, not a pause.
 
 Under `/goal` this gate auto-proceeds on the recommended option (re-SPEC bounded by the active-loop cap).
 
@@ -314,18 +318,22 @@ All of these must be true before the phase is complete:
 ## Orchestrator Behavior
 
 **RESEARCH → SPEC transition:**
+
 - Confirm RESEARCH produced a findings summary (the SPEC's primary input). Pass it, plus the user's stated intent/brainstorm, explicitly in the subagent prompt.
 - There is no Decision Summary to check — INNOVATE has not run yet.
 
 **Before spawning vc-spec-agent:**
+
 - Check for an existing SPEC file in the task folder. If one exists: pass its path as the update target.
 - Confirm the task folder exists. If not: create it before spawning.
 
 **After PHASE_COMPLETE: SPEC:**
+
 - Default: route to **vc-innovate-agent**. Pass the SPEC file path explicitly.
 - Skip case (mechanical "how"): route to vc-plan-agent instead, passing the SPEC file path.
 
 **After SPEC_INTENT_BLOCKED (interactive only):**
+
 - Surface open questions to the user.
 - Wait for resolution.
 - Re-spawn vc-spec-agent with resolved answers.
@@ -349,6 +357,7 @@ SPEC has exactly two routine user touchpoints — one at entry, one at exit. In 
 When running under /goal in a phase program inner loop, SPEC is never written. The umbrella SPEC from the outer loop is the requirements doc for all phases.
 
 If the inner loop discovers a scope gap vs. the umbrella SPEC:
+
 - Note it in the phase report under `## SPEC Gaps`.
 - Add a backlog note.
 - Continue. The inner loop does not block.

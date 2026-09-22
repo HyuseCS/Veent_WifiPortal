@@ -19,9 +19,7 @@
 </svelte:head>
 
 <main class="flex min-h-screen flex-col lg:bg-surface">
-	<div
-		class="flex w-full flex-1 flex-col lg:flex-none lg:overflow-hidden gap-8"
-	>
+	<div class="flex w-full flex-1 flex-col lg:flex-none lg:overflow-hidden gap-8">
 		<div class="flex items-center gap-3 bg-brand px-5 py-3">
 			<a
 				href={resolve('/')}
@@ -40,7 +38,10 @@
 			</p>
 
 			{#if data.handoffExpired}
-				<p class="mb-5 rounded-xl border border-warning/30 bg-warning/10 px-4 py-3 text-[13px] font-medium text-ink" role="status">
+				<p
+					class="mb-5 rounded-xl border border-warning/30 bg-warning/10 px-4 py-3 text-[13px] font-medium text-ink"
+					role="status"
+				>
 					That "open in your browser" link expired. Just log in with your number below.
 				</p>
 			{/if}

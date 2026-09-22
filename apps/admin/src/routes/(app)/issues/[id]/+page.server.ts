@@ -37,7 +37,8 @@ export const actions: Actions = {
 	comment: async (event) => {
 		const userId = event.locals.user?.id;
 		const id = Number(event.params.id);
-		if (!userId || !Number.isInteger(id) || id <= 0) return fail(400, { error: 'Invalid request.' });
+		if (!userId || !Number.isInteger(id) || id <= 0)
+			return fail(400, { error: 'Invalid request.' });
 
 		const notManager = await requireManager(userId, '');
 		if (notManager && !(await isAssignee(db, id, userId))) {
@@ -52,7 +53,8 @@ export const actions: Actions = {
 		const form = await event.request.formData();
 		const body = String(form.get('body') ?? '').trim();
 		if (!body) return fail(400, { error: 'Comment cannot be empty.' });
-		if (body.length > 2000) return fail(400, { error: 'Comment is too long (2000 characters max).' });
+		if (body.length > 2000)
+			return fail(400, { error: 'Comment is too long (2000 characters max).' });
 
 		await addComment(db, id, userId, body);
 		return { ok: true };
@@ -63,7 +65,8 @@ export const actions: Actions = {
 	updateStatus: async (event) => {
 		const userId = event.locals.user?.id;
 		const id = Number(event.params.id);
-		if (!userId || !Number.isInteger(id) || id <= 0) return fail(400, { error: 'Invalid request.' });
+		if (!userId || !Number.isInteger(id) || id <= 0)
+			return fail(400, { error: 'Invalid request.' });
 
 		const notManager = await requireManager(userId, '');
 		if (notManager && !(await isAssignee(db, id, userId))) {

@@ -122,7 +122,14 @@ function parseIssueInput(
 	const due = parseDueDate(String(form.get('issue-dueDate') ?? ''), existingDueMs);
 	if ('error' in due) return { error: due.error };
 
-	const assigneeIds = [...new Set(form.getAll('assigneeId').map((v) => String(v)).filter(Boolean))];
+	const assigneeIds = [
+		...new Set(
+			form
+				.getAll('assigneeId')
+				.map((v) => String(v))
+				.filter(Boolean)
+		)
+	];
 	return { input: { title, description, priority, networkId, dueDate: due.dueDate, assigneeIds } };
 }
 
@@ -168,7 +175,11 @@ export const actions: Actions = {
 		// Any signed-in staff may self-report — cap the abuse ceiling so a tampered client can't spam
 		// the Open pool (30 / 15 min, per-user). Same shape as the Sentry track limiter (M4c).
 		const rl = await rateLimit('admin_issue_selfreport', userId, 30, 15 * 60 * 1000);
-		if (!rl.allowed) return fail(429, { action: 'selfReport', error: 'Too many attempts. Please wait a few minutes.' });
+		if (!rl.allowed)
+			return fail(429, {
+				action: 'selfReport',
+				error: 'Too many attempts. Please wait a few minutes.'
+			});
 		const form = await event.request.formData();
 		const parsed = parseIssueInput(form);
 		if ('error' in parsed) return fail(400, { action: 'selfReport', error: parsed.error });
@@ -191,7 +202,12 @@ export const actions: Actions = {
 		const added = await updateIssue(db, id, parsed.input, event.locals.user!.id);
 		// Only NEW assignees get an email (updateIssue returns the diff), never on every edit.
 		// Fire-and-forget best-effort notify (never throws, must not block the response) — L2.
-		void notifyAssignees(added, event.locals.user!, { id, title: parsed.input.title }, event.url.origin);
+		void notifyAssignees(
+			added,
+			event.locals.user!,
+			{ id, title: parsed.input.title },
+			event.url.origin
+		);
 		return { ok: true, action: 'update', id };
 	},
 
@@ -227,10 +243,14 @@ export const actions: Actions = {
 
 		const resolutionNote = String(form.get('resolutionNote') ?? '').trim() || null;
 		if (resolutionNote && resolutionNote.length > 2000) {
-			return fail(400, { action: 'updateStatus', error: 'Resolution note is too long (2000 characters max).' });
+			return fail(400, {
+				action: 'updateStatus',
+				error: 'Resolution note is too long (2000 characters max).'
+			});
 		}
 		const result = await setIssueStatus(db, id, status, { resolutionNote, actorId: userId! });
-		if (result === 'not_found') return fail(404, { action: 'updateStatus', error: 'Incident not found.' });
+		if (result === 'not_found')
+			return fail(404, { action: 'updateStatus', error: 'Incident not found.' });
 		return { ok: true, action: 'updateStatus', id };
 	},
 
@@ -243,7 +263,8 @@ export const actions: Actions = {
 		const id = issueId(form);
 		if (id == null) return fail(400, { action: 'take', error: 'Invalid issue.' });
 		const claimed = await takeIssue(db, id, userId);
-		if (!claimed) return fail(409, { action: 'take', error: 'This incident was already taken.', id });
+		if (!claimed)
+			return fail(409, { action: 'take', error: 'This incident was already taken.', id });
 		return { ok: true, action: 'take', id };
 	},
 

@@ -74,7 +74,9 @@ async function fetchWithRetry(
 			// A timeout or a network-level failure (DNS, connection reset) is transient — the caller
 			// (webhook verify) should ask the gateway to retry rather than reject the event as bad.
 			if (e instanceof Error && e.name === 'AbortError') {
-				throw new RetryablePaymentError(`maya: request timed out after ${timeoutMs}ms`, { cause: e });
+				throw new RetryablePaymentError(`maya: request timed out after ${timeoutMs}ms`, {
+					cause: e
+				});
 			}
 			throw new RetryablePaymentError(
 				`maya: network error: ${e instanceof Error ? e.message : String(e)}`,
@@ -93,7 +95,6 @@ function toMinor(amount: string | number | undefined | null): number {
 	if (amount === undefined || amount === null || amount === '') return NaN;
 	return Math.round(Number(amount) * 100);
 }
-
 
 /** Shape of the fields we read off a Maya payment object (GET /payments/v1/payments/{id}). */
 interface MayaPayment {
@@ -124,12 +125,19 @@ function mapDetail(
 	p: MayaPayment
 ): Pick<
 	PaymentEvent,
-	'fundSourceType' | 'fundSourceMasked' | 'receiptNo' | 'errorCode' | 'errorMessage' | 'buyerName' | 'buyerEmail'
+	| 'fundSourceType'
+	| 'fundSourceMasked'
+	| 'receiptNo'
+	| 'errorCode'
+	| 'errorMessage'
+	| 'buyerName'
+	| 'buyerEmail'
 > {
 	const masked = p.fundSource?.details?.last4
 		? `••••${p.fundSource.details.last4}`
 		: (p.fundSource?.details?.masked ?? undefined);
-	const buyerName = [p.buyer?.firstName, p.buyer?.lastName].filter(Boolean).join(' ').trim() || undefined;
+	const buyerName =
+		[p.buyer?.firstName, p.buyer?.lastName].filter(Boolean).join(' ').trim() || undefined;
 	return {
 		fundSourceType: p.fundSource?.type ?? undefined,
 		fundSourceMasked: masked,
@@ -187,7 +195,9 @@ function toPaymentEvent(payment: MayaPayment): PaymentEvent {
 	// A paid payment SHOULD carry a currency; the credit path asserts it (L-3). Surface a missing one
 	// rather than let the `?? 'PHP'` default below mask it — a real Maya paid event always includes it.
 	if (status === 'paid' && !payment.currency) {
-		console.warn('[maya] paid payment has no currency — defaulting to PHP', { paymentId: payment.id });
+		console.warn('[maya] paid payment has no currency — defaulting to PHP', {
+			paymentId: payment.id
+		});
 	}
 	return {
 		externalTransactionId: payment.id,
@@ -205,10 +215,17 @@ function toPaymentEvent(payment: MayaPayment): PaymentEvent {
  * makes an unsigned/relayed webhook trustworthy: a spoofed body can't fabricate a real paid
  * payment. Bounded by a timeout + small retry so a slow Maya API can't pin the caller.
  */
-async function fetchPaymentEvent(base: string, secretKey: string, paymentId: string): Promise<PaymentEvent> {
-	const res = await fetchWithRetry(`${base}/payments/v1/payments/${encodeURIComponent(paymentId)}`, {
-		headers: { authorization: basicAuth(secretKey) }
-	});
+async function fetchPaymentEvent(
+	base: string,
+	secretKey: string,
+	paymentId: string
+): Promise<PaymentEvent> {
+	const res = await fetchWithRetry(
+		`${base}/payments/v1/payments/${encodeURIComponent(paymentId)}`,
+		{
+			headers: { authorization: basicAuth(secretKey) }
+		}
+	);
 	if (!res.ok) {
 		const detail = await res.text().catch(() => '');
 		const message = `maya: payment lookup failed (${res.status}): ${detail}`;
@@ -229,7 +246,11 @@ async function fetchPaymentEvent(base: string, secretKey: string, paymentId: str
  * carry several attempts): prefer a settled success, else the latest terminal outcome, else report
  * the pending one. Returns null when Maya has no payment for the RRN yet (buyer hasn't paid).
  */
-async function fetchPaymentByRrn(base: string, secretKey: string, rrn: string): Promise<PaymentEvent | null> {
+async function fetchPaymentByRrn(
+	base: string,
+	secretKey: string,
+	rrn: string
+): Promise<PaymentEvent | null> {
 	const res = await fetchWithRetry(`${base}/payments/v1/payment-rrns/${encodeURIComponent(rrn)}`, {
 		headers: { authorization: basicAuth(secretKey) }
 	});
@@ -244,7 +265,11 @@ async function fetchPaymentByRrn(base: string, secretKey: string, rrn: string): 
 	const withStatus = (want: PaymentEvent['status']) =>
 		list.find((p) => mapStatus(p.paymentStatus ?? p.status, p.isPaid === true) === want);
 	const chosen =
-		withStatus('paid') ?? withStatus('failed') ?? withStatus('expired') ?? withStatus('cancelled') ?? list[0];
+		withStatus('paid') ??
+		withStatus('failed') ??
+		withStatus('expired') ??
+		withStatus('cancelled') ??
+		list[0];
 	return toPaymentEvent(chosen);
 }
 
@@ -350,9 +375,12 @@ export function createMayaProvider(config: MayaConfig): PaymentProvider {
 			// from the payments endpoint, the SAME source the webhook trusts. Without this, a paid
 			// payment whose webhook was missed (DO/tunnel down) reads back as `pending` here forever
 			// and never credits. Same timeout + retry bound as the webhook re-fetch.
-			const res = await fetchWithRetry(`${base}/checkout/v1/checkouts/${encodeURIComponent(checkoutId)}`, {
-				headers: { authorization: basicAuth(config.secretKey) }
-			});
+			const res = await fetchWithRetry(
+				`${base}/checkout/v1/checkouts/${encodeURIComponent(checkoutId)}`,
+				{
+					headers: { authorization: basicAuth(config.secretKey) }
+				}
+			);
 			if (res.status === 404) return null; // gateway has no record (yet)
 			if (!res.ok) {
 				const detail = await res.text().catch(() => '');

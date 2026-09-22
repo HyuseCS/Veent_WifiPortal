@@ -1,6 +1,6 @@
 ---
 name: protocol:autopilot
-description: "Autopilot Mode — named trigger that front-loads all clarification into one consolidated round then drives the full RIPER-5 flow unattended. Defines trigger phrases, provisional goal block format, mode marker syntax, per-gate decision policy, hard stops, and deactivation rules."
+description: 'Autopilot Mode — named trigger that front-loads all clarification into one consolidated round then drives the full RIPER-5 flow unattended. Defines trigger phrases, provisional goal block format, mode marker syntax, per-gate decision policy, hard stops, and deactivation rules.'
 date: 11-06-26
 metadata:
   node_type: memory
@@ -42,27 +42,29 @@ Trigger detection fires at session start or at any phase boundary (after RESEARC
 
 Autopilot Mode supports three lanes. Specify the lane by adding a suffix to the trigger phrase:
 
-| Trigger form | Lane | Flow |
-|---|---|---|
-| `autopilot quick: [task]` | `quick` | scout → edit → scoped check (QUICK FIX lane) |
-| `autopilot fast: [task]` | `fast` | R → S → I → P → V → EXECUTE + EVL (FAST MODE) |
-| `autopilot [task]` | `full` | complete RIPER-5 (current default) |
-| `autopilot full: [task]` | `full` | complete RIPER-5 (explicit) |
+| Trigger form              | Lane    | Flow                                          |
+| ------------------------- | ------- | --------------------------------------------- |
+| `autopilot quick: [task]` | `quick` | scout → edit → scoped check (QUICK FIX lane)  |
+| `autopilot fast: [task]`  | `fast`  | R → S → I → P → V → EXECUTE + EVL (FAST MODE) |
+| `autopilot [task]`        | `full`  | complete RIPER-5 (current default)            |
+| `autopilot full: [task]`  | `full`  | complete RIPER-5 (explicit)                   |
 
 Lane suffix detection (standalone or sentence-initial rule applies — same as §Trigger Phrases):
+
 - Before standard trigger-phrase matching, check whether the message begins with `autopilot quick:`, `autopilot fast:`, or `autopilot full:`.
 - When matched, extract the task description after the colon (trim leading whitespace), set the lane, then continue the standard Trigger-Anywhere Detection Flow (situation review → CLR).
 - Suffix variants cannot be embedded in descriptive text ("the autopilot fast: pipeline is broken" does NOT trigger fast lane).
 
 **Lane behavior table:**
 
-| Lane | Flow | Artifacts | Pauses |
-|---|---|---|---|
-| `quick` | scout → edit → scoped check | none (no plan / contract / EVL) | zero (EXECUTE CONSENT covers the one confirm) |
-| `fast` | R → S → I → P → V → EXECUTE + EVL | plan file + validate-contract | zero (EXECUTE CONSENT satisfies post-VALIDATE pause) |
-| `full` | complete RIPER-5 (current default) | all standard artifacts | standard gates |
+| Lane    | Flow                               | Artifacts                       | Pauses                                               |
+| ------- | ---------------------------------- | ------------------------------- | ---------------------------------------------------- |
+| `quick` | scout → edit → scoped check        | none (no plan / contract / EVL) | zero (EXECUTE CONSENT covers the one confirm)        |
+| `fast`  | R → S → I → P → V → EXECUTE + EVL  | plan file + validate-contract   | zero (EXECUTE CONSENT satisfies post-VALIDATE pause) |
+| `full`  | complete RIPER-5 (current default) | all standard artifacts          | standard gates                                       |
 
 **Escalation rule:** If quick-lane scope guard triggers (`QUICK_FIX_ABORT`), the orchestrator escalates one lane up (quick → fast). If fast-mode detects the task requires full RIPER-5 ceremony (3+ phase program, high-risk surface not in contract), the orchestrator escalates (fast → full). In both cases:
+
 - Locked clarifications from the CLR carry over — no re-asking.
 - The orchestrator emits a one-line notice: `escalated to [lane]: [reason]` (not a new signal string — this is plain prose).
 
@@ -75,6 +77,7 @@ LANE: quick|fast|full
 When absent, defaults to `full` (backward compatible — old goal blocks without LANE still pass the D1 validator). When present, only `quick`, `fast`, and `full` are valid values; any other value causes the D1 validator to FAIL.
 
 **CLR lane question:** When task size is ambiguous, the consolidated clarification round gains one extra choice:
+
 > "Lane: quick / fast / full — suggested [X] from size signals. Confirm or override."
 
 See `§Trigger Phrases` for the canonical list — lane-suffix variants are trigger examples: add `autopilot quick: [task]` / `autopilot fast: [task]` / `autopilot full: [task]`. See `§Provisional Goal Block Format` for the optional `LANE:` 10th field.
@@ -162,6 +165,7 @@ Immediately after emitting the provisional goal block to chat, write it to disk 
 ```
 
 Where:
+
 - `{active-task-folder}` is the task folder for the current feature's active plan (e.g. `process/features/development-process/active/autopilot-mode_11-06-26/`).
 - `{slug}` matches the plan slug.
 - `{dd-mm-yy}` is today's date.
@@ -216,20 +220,20 @@ The signal is printed to chat (not written to a file). It is listed in the signa
 
 Per-gate decision policy for a running autopilot session:
 
-| Gate | Autopilot behavior |
-|---|---|
-| Combined Clarification Gate (entry) | Consumed before run starts (one-round rule — see §Consolidated Clarification Round) |
-| SPEC user review | `SPEC_INTENT_BLOCKED` items become backlog notes; run continues |
-| INNOVATE approach selection | Orchestrator self-selects the recommended approach from the Decision Summary |
-| Strategy-compare confirms | Orchestrator auto-selects recommended strategy |
-| ENTER VALIDATE suggestion | Auto-proceeds |
-| PVL supplement cycles | Auto-runs up to 10-cycle cap; gaps beyond cap become known-gaps in phase report |
-| ENTER EXECUTE MODE gate | Standing consent granted by autopilot trigger (see EXECUTE CONSENT field in goal block) |
-| High-risk evidence pack | **PAUSES and asks — manual-first always** |
-| EVL cycles | Auto-runs up to 10-cycle cap; gaps become known-gaps |
-| Post-EXECUTE cleanup | Auto-classifies; routes to UPDATE PROCESS autonomously or surfaces DONE_WITH_CONCERNS if ambiguous |
-| Feasibility-probe (needs-live-provider cost class) | **PAUSES and asks — manual-first always (double opt-in per vc-feasibility-test)** |
-| Cascade BLOCKED (two consecutive phases BLOCKED-skipped) | **PAUSES and asks — program-level hard stop** |
+| Gate                                                     | Autopilot behavior                                                                                 |
+| -------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| Combined Clarification Gate (entry)                      | Consumed before run starts (one-round rule — see §Consolidated Clarification Round)                |
+| SPEC user review                                         | `SPEC_INTENT_BLOCKED` items become backlog notes; run continues                                    |
+| INNOVATE approach selection                              | Orchestrator self-selects the recommended approach from the Decision Summary                       |
+| Strategy-compare confirms                                | Orchestrator auto-selects recommended strategy                                                     |
+| ENTER VALIDATE suggestion                                | Auto-proceeds                                                                                      |
+| PVL supplement cycles                                    | Auto-runs up to 10-cycle cap; gaps beyond cap become known-gaps in phase report                    |
+| ENTER EXECUTE MODE gate                                  | Standing consent granted by autopilot trigger (see EXECUTE CONSENT field in goal block)            |
+| High-risk evidence pack                                  | **PAUSES and asks — manual-first always**                                                          |
+| EVL cycles                                               | Auto-runs up to 10-cycle cap; gaps become known-gaps                                               |
+| Post-EXECUTE cleanup                                     | Auto-classifies; routes to UPDATE PROCESS autonomously or surfaces DONE_WITH_CONCERNS if ambiguous |
+| Feasibility-probe (needs-live-provider cost class)       | **PAUSES and asks — manual-first always (double opt-in per vc-feasibility-test)**                  |
+| Cascade BLOCKED (two consecutive phases BLOCKED-skipped) | **PAUSES and asks — program-level hard stop**                                                      |
 
 ---
 

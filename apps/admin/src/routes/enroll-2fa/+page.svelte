@@ -84,8 +84,8 @@
 					<div class="space-y-2 border-t border-border pt-4">
 						<p class="text-sm font-medium text-ink">2. Save your backup codes</p>
 						<p class="text-xs text-muted">
-							Each code works once if you lose your device. Store them somewhere safe — they
-							won't be shown again.
+							Each code works once if you lose your device. Store them somewhere safe — they won't
+							be shown again.
 						</p>
 						<ul class="grid grid-cols-2 gap-1 rounded-lg bg-surface p-3 font-mono text-sm text-ink">
 							{#each form.backupCodes as code (code)}

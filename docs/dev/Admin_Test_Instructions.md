@@ -26,12 +26,12 @@ the `owner@veent.test` login itself).
 
 ### Scripts at a glance
 
-| Command | What it does | Use for |
-|---------|--------------|---------|
-| `test:seed` | Clean rebuild + fixed deterministic dataset (20 customers, 150 payments, …) | **Static** testing — a known snapshot |
-| `test:simulate` | Streams random live activity into the DB (self-bootstraps if empty) | **Dynamic** testing — live SSE dashboard |
-| `test:simulate:fresh` | Wipes data, then streams live activity from zero | Watch the dashboard fill **from empty** |
-| `test:clear` | Truncates all data, keeps the schema | Leave the DB **empty** when done |
+| Command               | What it does                                                                | Use for                                  |
+| --------------------- | --------------------------------------------------------------------------- | ---------------------------------------- |
+| `test:seed`           | Clean rebuild + fixed deterministic dataset (20 customers, 150 payments, …) | **Static** testing — a known snapshot    |
+| `test:simulate`       | Streams random live activity into the DB (self-bootstraps if empty)         | **Dynamic** testing — live SSE dashboard |
+| `test:simulate:fresh` | Wipes data, then streams live activity from zero                            | Watch the dashboard fill **from empty**  |
+| `test:clear`          | Truncates all data, keeps the schema                                        | Leave the DB **empty** when done         |
 
 All are run as `bun run --filter radius-admin <command>` from the repo root.
 
@@ -60,13 +60,13 @@ It builds a realistic, **deterministic** snapshot of a WiFi operator mid-operati
 
 ### What gets created
 
-| Area | Data |
-|------|------|
-| **Staff** | 1 owner (active) + 5 admins: 3 active, 1 pending, 1 disabled |
-| **Customers** | 20 total — 3 blocked, 4 low-balance (< ₱10), 13 normal; ~8 currently online |
-| **Access points** | 6 — healthy, degraded (high latency), offline, and one unmapped (no coordinates) |
-| **Payments** | 150 over 90 days — mix of success / failed / expired / cancelled, all 5 fund sources, ~1/3 in the last 7 days, some unattributed (no linked user) |
-| **Sessions** | Active (online users), expired history, and free-time grants |
+| Area              | Data                                                                                                                                              |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Staff**         | 1 owner (active) + 5 admins: 3 active, 1 pending, 1 disabled                                                                                      |
+| **Customers**     | 20 total — 3 blocked, 4 low-balance (< ₱10), 13 normal; ~8 currently online                                                                       |
+| **Access points** | 6 — healthy, degraded (high latency), offline, and one unmapped (no coordinates)                                                                  |
+| **Payments**      | 150 over 90 days — mix of success / failed / expired / cancelled, all 5 fund sources, ~1/3 in the last 7 days, some unattributed (no linked user) |
+| **Sessions**      | Active (online users), expired history, and free-time grants                                                                                      |
 
 ---
 
@@ -77,14 +77,14 @@ It builds a realistic, **deterministic** snapshot of a WiFi operator mid-operati
 Run the simulator to generate **continuous random activity** so you can test the **live SSE
 dashboard**. It runs forever (Ctrl+C to stop) and, at random intervals, performs random actions:
 
-| Action | What it writes | Where it shows up live |
-|--------|----------------|------------------------|
-| 👤 **Signup** | New `customer_user` (zero balance, no history) | `/users` list grows |
-| 🟢 **Arrive** | New active session (spends credits for a tier, or free 15 min) | `/dashboard` active sessions + per-AP user counts |
-| 🔴 **Depart** | Expires a current active session | `/dashboard` active list shrinks |
-| 💰 **Top-up** | `PAYMENT_SUCCESS` + credit ledger + balance increment | `/dashboard` revenue KPI · `/finance` · `/users` balance |
-| ⚠️ **Failed payment** | `PAYMENT_FAILED/EXPIRED/CANCELLED` (no credit) | `/finance` only |
-| 📶 **Health flap** | Updates an AP's latency/throughput; occasionally toggles it offline | `/dashboard` + `/networks` AP cards |
+| Action                | What it writes                                                      | Where it shows up live                                   |
+| --------------------- | ------------------------------------------------------------------- | -------------------------------------------------------- |
+| 👤 **Signup**         | New `customer_user` (zero balance, no history)                      | `/users` list grows                                      |
+| 🟢 **Arrive**         | New active session (spends credits for a tier, or free 15 min)      | `/dashboard` active sessions + per-AP user counts        |
+| 🔴 **Depart**         | Expires a current active session                                    | `/dashboard` active list shrinks                         |
+| 💰 **Top-up**         | `PAYMENT_SUCCESS` + credit ledger + balance increment               | `/dashboard` revenue KPI · `/finance` · `/users` balance |
+| ⚠️ **Failed payment** | `PAYMENT_FAILED/EXPIRED/CANCELLED` (no credit)                      | `/finance` only                                          |
+| 📶 **Health flap**    | Updates an AP's latency/throughput; occasionally toggles it offline | `/dashboard` + `/networks` AP cards                      |
 
 **It is self-bootstrapping — you do _not_ need to seed first.** On startup it ensures the catalog
 (packages + APs) and an owner login exist, creating them if missing. Customers are **not** pre-created:
@@ -117,12 +117,14 @@ Then open **`/dashboard`** in the browser and watch the Active Sessions table, r
 cards update without refreshing. Each simulator action also prints a timestamped log line in Terminal 2.
 
 **Two ways to start:**
+
 - **`test:simulate`** — populate on top of whatever's already in the DB (run after `test:seed`, or on
   its own — it bootstraps the catalog + owner if missing).
 - **`test:simulate:fresh`** — wipe all data first (like `test:clear`), then build from scratch: 0
   customers → signups → top-ups → sessions. Best for watching the dashboard fill from empty.
 
 > **Notes**
+>
 > - Needs only a **migrated schema**. If the schema doesn't exist yet, run `test:seed` (or
 >   `db:migrate`) once first; the simulator will tell you if it's missing.
 > - The owner login it ensures is **`owner@veent.test` / `password123`** (needs `BETTER_AUTH_SECRET`
@@ -145,20 +147,21 @@ All staff share the password **`password123`**.
 > You'll need a TOTP app (Google Authenticator, 1Password, Authy, …) to test as any staff
 > member. The active-status check + device grant run only **after** the code is verified.
 
-| Email | Role | Status | Expected behaviour |
-|-------|------|--------|--------------------|
-| `owner@veent.test` | owner | active | Full access — incl. **Staff** page and customer **wipe** |
-| `adrian@veent.test` | admin | active | Normal admin — **no** Staff page (owner-only) |
-| `bea@veent.test` | admin | active | Normal admin |
-| `cleo@veent.test` | admin | active | Normal admin |
-| `pia@veent.test` | admin | pending | Login should be **rejected** ("not activated yet") |
-| `dane@veent.test` | admin | disabled | Login should be **rejected** ("not active") |
+| Email               | Role  | Status   | Expected behaviour                                       |
+| ------------------- | ----- | -------- | -------------------------------------------------------- |
+| `owner@veent.test`  | owner | active   | Full access — incl. **Staff** page and customer **wipe** |
+| `adrian@veent.test` | admin | active   | Normal admin — **no** Staff page (owner-only)            |
+| `bea@veent.test`    | admin | active   | Normal admin                                             |
+| `cleo@veent.test`   | admin | active   | Normal admin                                             |
+| `pia@veent.test`    | admin | pending  | Login should be **rejected** ("not activated yet")       |
+| `dane@veent.test`   | admin | disabled | Login should be **rejected** ("not active")              |
 
 ---
 
 ## Page-by-page test checklist
 
 ### `/login` + 2FA
+
 - [ ] **First login** `owner@veent.test` / `password123` → redirected to `/enroll-2fa`;
       enroll (QR/key + backup codes + a code) → lands on `/dashboard`.
 - [ ] **Later logins** (enrolled) → password → `/login/2fa` → enter a 6-digit code → `/dashboard`.
@@ -169,6 +172,7 @@ All staff share the password **`password123`**.
 - [ ] Wrong password → "Sign in failed".
 
 ### `/dashboard`
+
 - [ ] KPI cards show Gross Revenue (~₱6,600), Free-Time Grants, Avg. Session.
 - [ ] 7-day revenue chart has bars across several days.
 - [ ] **Active Sessions** table lists online devices with a live countdown (watch it tick).
@@ -177,15 +181,18 @@ All staff share the password **`password123`**.
 - [ ] **Live updates (simulator):** run `test:simulate` (see [Live simulation](#live-simulation-dynamic-dashboard-testing)) and watch the Active Sessions table, revenue KPI, and AP cards change on their own — no refresh.
 
 ### `/networks`
+
 - [ ] All health tones present: Healthy, Degraded (Cafe Patio), Offline (Parking Lobby).
 - [ ] Per-AP active-user counts are populated for online APs.
 - [ ] Editing an AP's interface binding / location persists.
 
 ### `/map`
+
 - [ ] Mapped APs appear as pins; **AP — Rooftop Deck** is unmapped and should **not** appear.
 - [ ] Adding a location to Rooftop from `/networks` makes it appear here.
 
 ### `/users`
+
 - [ ] Rows show the three tones: Blocked (3), warning (4) — labelled **No credits** (zero
       balance) or **Low Balance** (< ₱10), Active (13).
 - [ ] ~8 users show as online.
@@ -195,6 +202,7 @@ All staff share the password **`password123`**.
 - [ ] **Owner only:** request wipe code → code is printed to the dev console → wipe clears all customers.
 
 ### `/finance`
+
 - [ ] Toggle `7d` / `30d` / `90d` — KPIs and the chart change (90d uses weekly buckets).
 - [ ] Transactions table shows the full funnel: success, failed, expired, cancelled.
 - [ ] Fund-source donut shows all methods (Card, GCash, Maya Wallet, ShopeePay, QR Ph).
@@ -202,6 +210,7 @@ All staff share the password **`password123`**.
 - [ ] **CSV export** downloads a file matching the current filter.
 
 ### `/staff` (owner only)
+
 - [ ] Visiting as a non-owner (`adrian@veent.test`) → **403**.
 - [ ] As owner: table shows active / pending / disabled badges.
 - [ ] Invite a new admin; enable/disable a member.
@@ -243,7 +252,7 @@ bun run --filter radius-admin test:e2e
 
 The hardening pass (grant atomicity, rate limiting, env validation) is mostly covered by
 **unit tests that need no server and no DB** — run those first; the manual steps only confirm
-each limiter is actually *wired into* its endpoint.
+each limiter is actually _wired into_ its endpoint.
 
 ### Automated (no server, no DB)
 
@@ -256,16 +265,16 @@ bunx vitest run maya-webhook      # re-fetch verification, status mapping, centa
 
 ### Manual wiring confirmations (need the relevant dev server)
 
-| What | How | Expect |
-|------|-----|--------|
-| **Admin login limit** (10 / 15 min per IP) | POST `/login` with a wrong password 11× from one IP | 11th response is `429` |
-| **2FA verify limit** (10 / 15 min per IP) | Enter a wrong code at `/login/2fa` 11× | 11th response is `429` |
-| **Role step-up limit** (5 / 15 min per IP) | Submit a wrong TOTP on promote / owner-change 6× | 6th response is `429` |
-| **Finance export limit** (20 / hr per admin) | Click CSV export >20× in an hour | eventually `429` |
-| **SSE stream cap** (6 / user) | Open `/dashboard` in 7 tabs as one user | 7th SSE connection rejected `429` |
-| **Admin email limit** | Request a wipe code 6× (owner) | 6th returns `429` (no email sent) |
-| **Grant atomicity** | (customer app) buy a tier with the network controller forced to fail | balance **unchanged**, 502/503 "credits were not charged" |
-| **Cron allowlist** | set `CRON_IP_ALLOWLIST="1.2.3.4"` in `apps/customer/.env`, restart, then `curl -i -X POST localhost:<port>/api/network/revoke -H "x-cron-secret: $CRON_SECRET"` | `403` (request IP not allowlisted) |
+| What                                         | How                                                                                                                                                             | Expect                                                    |
+| -------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| **Admin login limit** (10 / 15 min per IP)   | POST `/login` with a wrong password 11× from one IP                                                                                                             | 11th response is `429`                                    |
+| **2FA verify limit** (10 / 15 min per IP)    | Enter a wrong code at `/login/2fa` 11×                                                                                                                          | 11th response is `429`                                    |
+| **Role step-up limit** (5 / 15 min per IP)   | Submit a wrong TOTP on promote / owner-change 6×                                                                                                                | 6th response is `429`                                     |
+| **Finance export limit** (20 / hr per admin) | Click CSV export >20× in an hour                                                                                                                                | eventually `429`                                          |
+| **SSE stream cap** (6 / user)                | Open `/dashboard` in 7 tabs as one user                                                                                                                         | 7th SSE connection rejected `429`                         |
+| **Admin email limit**                        | Request a wipe code 6× (owner)                                                                                                                                  | 6th returns `429` (no email sent)                         |
+| **Grant atomicity**                          | (customer app) buy a tier with the network controller forced to fail                                                                                            | balance **unchanged**, 502/503 "credits were not charged" |
+| **Cron allowlist**                           | set `CRON_IP_ALLOWLIST="1.2.3.4"` in `apps/customer/.env`, restart, then `curl -i -X POST localhost:<port>/api/network/revoke -H "x-cron-secret: $CRON_SECRET"` | `403` (request IP not allowlisted)                        |
 
 > The cron + grant rows exercise the **customer** app, so they need `cd apps/customer && bun run dev`
 > (and the env change requires a restart). The login/export/SSE/email rows are admin-app.
@@ -282,11 +291,11 @@ Temporarily unset a required var (e.g. `BETTER_AUTH_SECRET`) and start the app *
 
 Stop the simulator first (Ctrl+C). Then pick based on what you want left behind:
 
-| Goal | Command |
-|------|---------|
-| **Run another clean test** (wipe + repopulate) | `bun run --filter radius-admin test:seed` |
-| **Leave the DB empty** (no test data, schema kept) | `bun run --filter radius-admin test:clear` |
-| **Clear customers only**, in-app | `/users` → owner **wipe** (request code → printed to dev console → confirm) |
+| Goal                                               | Command                                                                     |
+| -------------------------------------------------- | --------------------------------------------------------------------------- |
+| **Run another clean test** (wipe + repopulate)     | `bun run --filter radius-admin test:seed`                                   |
+| **Leave the DB empty** (no test data, schema kept) | `bun run --filter radius-admin test:clear`                                  |
+| **Clear customers only**, in-app                   | `/users` → owner **wipe** (request code → printed to dev console → confirm) |
 
 **`test:clear`** (`apps/admin/scripts/clear-test-data.ts`) truncates the data tables and cascades to
 every dependent (auth rows, profiles, ledger, sessions, payments). It keeps the schema and the

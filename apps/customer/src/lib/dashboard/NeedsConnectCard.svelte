@@ -35,8 +35,8 @@
 			{#if devices.atCap}
 				<div class="text-[14px] font-bold text-ink">Device limit reached</div>
 				<div class="mb-3 text-[12.5px] text-muted">
-					Your account is on {devices.cap} devices. Connect this one by replacing the device you've
-					used least recently{devices.oldest?.macTail ? ` (··${devices.oldest.macTail})` : ''}.
+					Your account is on {devices.cap} devices. Connect this one by replacing the device you've used
+					least recently{devices.oldest?.macTail ? ` (··${devices.oldest.macTail})` : ''}.
 				</div>
 			{:else}
 				<div class="text-[14px] font-bold text-ink">This device isn't connected</div>

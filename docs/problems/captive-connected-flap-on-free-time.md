@@ -10,7 +10,7 @@
 
 Implemented **Option 1** (surgical denies), the lowest-risk approach — the broad `*.google.com` /
 `*.gstatic.com` reCAPTCHA allows are left untouched, and only the OS **probe** hosts are denied,
-placed *above* the allows so they win (walled-garden is first-match, top-to-bottom):
+placed _above_ the allows so they win (walled-garden is first-match, top-to-bottom):
 
 - `provisionWalledGarden()` now supports `deny` entries with an optional `path`, inserted at the top
   via `place-before`, and is **idempotent** (a re-run detects an equivalent deny — host-insensitive,
@@ -27,6 +27,7 @@ including `www.google.com path=/generate_204`, which the router had been missing
 `www.google.com` path `/generate_204`.
 
 **Still to close this out (on-device):**
+
 - Pre-auth `curl` test below on an un-granted Android device (204 → intercept).
 - Reproduce the free-time flow and confirm the flap is gone.
 - Maya-checkout smoke test — confirm reCAPTCHA still renders (the broad allows are untouched, so it
@@ -34,7 +35,7 @@ including `www.google.com path=/generate_204`, which the router had been missing
 
 **Known limitation:** the `www.google.com` path deny is **HTTP-only** — the router matches `path` on
 cleartext HTTP but sees only the SNI host on HTTPS, so an HTTPS `www.google.com/generate_204` probe
-would still match the `*.google.com` allow. Android's *primary* probe is
+would still match the `*.google.com` allow. Android's _primary_ probe is
 `http://connectivitycheck.gstatic.com/generate_204` (plain HTTP, fully host-denied), so the main
 vector is closed; if the flap persists, this HTTPS path is the next suspect, along with the secondary
 contributor (Option 3) and grant-settle timing (Option 4).
@@ -53,8 +54,8 @@ contributor (Option 3) and grant-settle timing (Option 4).
 
 The button's server action (`startFreeTime` → `startFreeAccessAndBindDevice`) grants a MAC bypass
 binding and returns `{ connected: true }` — a normal grant. The flap has the signature of a
-**captive-portal *detector* false positive**, which is driven by what the OS can reach pre-auth,
-not by our grant. The timing of the click just changes *when* the OS re-probes, which is why it
+**captive-portal _detector_ false positive**, which is driven by what the OS can reach pre-auth,
+not by our grant. The timing of the click just changes _when_ the OS re-probes, which is why it
 correlates loosely with the button but isn't caused by it.
 
 ## Root-cause hypothesis: the walled garden answers Android's connectivity probe pre-auth
@@ -70,12 +71,12 @@ Google domains so Maya's checkout can load its reCAPTCHA:
 
 But **Android's own captive-portal probe hosts live under exactly those domains**:
 
-- `connectivitycheck.gstatic.com/generate_204`  → matches `*.gstatic.com`
+- `connectivitycheck.gstatic.com/generate_204` → matches `*.gstatic.com`
 - `www.google.com/generate_204`, `clients3.google.com/generate_204` → match `*.google.com`
 
 So, **before the device is granted**, when Android happens to probe one of those hosts the router
 lets it straight through to Google, which returns a real **HTTP 204** → Android concludes "this
-network has internet" and shows **"Connected"**, dismissing the sheet. But the device is *not*
+network has internet" and shows **"Connected"**, dismissing the sheet. But the device is _not_
 actually authenticated — only walled-garden hosts are reachable. On the next validation (or the
 first real request to a non-whitelisted host) Android sees the hotspot intercept again and reverts
 to **"Sign in to network."**
@@ -86,7 +87,7 @@ to **"Sign in to network."**
   `www.google.com/generate_204`, `clients3.google.com/generate_204`, and the fallback
   `connectivitycheck.android.com` (which is **not** whitelisted). You only get the false
   "Connected" on attempts that happen to hit a whitelisted Google/gstatic probe.
-- **Brief "Connected" then revert** — a whitelisted-probe 204 is a *false positive*; the
+- **Brief "Connected" then revert** — a whitelisted-probe 204 is a _false positive_; the
   subsequent full validation against the still-intercepted network fails.
 - **Android-specific** — Apple's probe host is `captive.apple.com` (not whitelisted), so iOS
   doesn't false-positive the same way; the reporter saw this on the CNA/"Sign in to network" flow.
@@ -103,8 +104,8 @@ The portal serves its **own** unconditional-success probe responses:
 - `apps/customer/src/routes/ncsi.txt/+server.ts`, `connecttest.txt/+server.ts` → always the
   Windows success bodies
 
-Each assumes *"reaching this handler at all means the router already decided this device is allowed
-through"* (see the comment in `generate_204/+server.ts:11-14`). But the portal origin
+Each assumes _"reaching this handler at all means the router already decided this device is allowed
+through"_ (see the comment in `generate_204/+server.ts:11-14`). But the portal origin
 (`10.210.0.9`) is itself in the walled garden (`walled-garden.md:96-97`), so a device can reach
 these paths **pre-auth**. If any probe is ever directed at the portal host before the grant
 settles, it too gets an unconditional success → another false "Connected." Lesser factor than the
@@ -163,5 +164,5 @@ Options 1 + 3 address the two independent leaks directly and are the most robust
   post-grant settle path.
 - `packages/core/src/integrations/network/mikrotik.ts:151-166,226-258` — `grant()` +
   `flushHotspotHost()` (how fast the bypass takes effect).
-</content>
-</invoke>
+  </content>
+  </invoke>

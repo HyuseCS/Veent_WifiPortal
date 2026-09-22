@@ -19,26 +19,26 @@ cooldown window) for immediate access without spending credits.
 
 ## 3. Actors
 
-| Actor | Type | Role |
-| --- | --- | --- |
-| **WiFi Guest** | Primary | Connects to WiFi, authenticates, and manages credits. |
-| **Network Router** | Secondary | Receives the access grant — a bypassed RouterOS `ip-binding` written over the router API — that opens internet access. |
-| **Payment Gateway** | Secondary | Hosts checkout and emits the payment webhook. |
+| Actor               | Type      | Role                                                                                                                   |
+| ------------------- | --------- | ---------------------------------------------------------------------------------------------------------------------- |
+| **WiFi Guest**      | Primary   | Connects to WiFi, authenticates, and manages credits.                                                                  |
+| **Network Router**  | Secondary | Receives the access grant — a bypassed RouterOS `ip-binding` written over the router API — that opens internet access. |
+| **Payment Gateway** | Secondary | Hosts checkout and emits the payment webhook.                                                                          |
 
 ## 4. Use Cases
 
-| Use Case | Description | Relationships |
-| --- | --- | --- |
-| **Authenticate Identity** | Guest signs in to the portal. | `«include»` Query PostgreSQL via Drizzle |
-| **View Dashboard** | Guest views balance, tiers, and session info. | `«include»` Query PostgreSQL via Drizzle |
-| **Query PostgreSQL via Drizzle** | Reads/writes persistent data through the Drizzle ORM. | included by Authenticate & View Dashboard |
-| **Spend Credits on Tier** | Guest selects a tier and consumes credits. | `«include»` Deduct Credits & Log Session |
-| **Deduct Credits & Log Session** | Decrements balance and records the session. | `«include»` Trigger grant_url Redirect |
-| **Trigger grant_url Redirect** | Signals the router to open internet access — the app writes a bypassed `ip-binding` over the RouterOS API (no HTTP redirect). | → Network Router |
-| **Top-Up Credit Bundle** | Guest buys additional credits. | `«include»` Generate Checkout Session |
-| **Generate Checkout Session** | Creates a checkout at the payment gateway. | → Payment Gateway, `«include»` Verify Webhook Payload |
-| **Verify Webhook Payload** | Establishes payment authenticity by re-fetching the payment from the gateway API — the unsigned webhook body is not trusted. | ← Payment Gateway, `«include»` Add Credits to Balance |
-| **Add Credits to Balance** | Credits the verified amount to the account. | — |
+| Use Case                         | Description                                                                                                                   | Relationships                                         |
+| -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
+| **Authenticate Identity**        | Guest signs in to the portal.                                                                                                 | `«include»` Query PostgreSQL via Drizzle              |
+| **View Dashboard**               | Guest views balance, tiers, and session info.                                                                                 | `«include»` Query PostgreSQL via Drizzle              |
+| **Query PostgreSQL via Drizzle** | Reads/writes persistent data through the Drizzle ORM.                                                                         | included by Authenticate & View Dashboard             |
+| **Spend Credits on Tier**        | Guest selects a tier and consumes credits.                                                                                    | `«include»` Deduct Credits & Log Session              |
+| **Deduct Credits & Log Session** | Decrements balance and records the session.                                                                                   | `«include»` Trigger grant_url Redirect                |
+| **Trigger grant_url Redirect**   | Signals the router to open internet access — the app writes a bypassed `ip-binding` over the RouterOS API (no HTTP redirect). | → Network Router                                      |
+| **Top-Up Credit Bundle**         | Guest buys additional credits.                                                                                                | `«include»` Generate Checkout Session                 |
+| **Generate Checkout Session**    | Creates a checkout at the payment gateway.                                                                                    | → Payment Gateway, `«include»` Verify Webhook Payload |
+| **Verify Webhook Payload**       | Establishes payment authenticity by re-fetching the payment from the gateway API — the unsigned webhook body is not trusted.  | ← Payment Gateway, `«include»` Add Credits to Balance |
+| **Add Credits to Balance**       | Credits the verified amount to the account.                                                                                   | —                                                     |
 
 ## 5. Preconditions
 
@@ -58,12 +58,14 @@ cooldown window) for immediate access without spending credits.
 ## 7. Main Flows
 
 ### 7.1 Authenticate & View Dashboard
+
 1. The Guest submits credentials (**Authenticate Identity**).
 2. The system queries PostgreSQL via Drizzle to verify the Guest.
 3. The Guest is shown the dashboard (**View Dashboard**), which again queries
    PostgreSQL via Drizzle for balance and session data.
 
 ### 7.2 Spend Credits on a Tier
+
 1. The Guest selects a tier (**Spend Credits on Tier**).
 2. The system deducts credits and logs the session
    (**Deduct Credits & Log Session**).
@@ -72,6 +74,7 @@ cooldown window) for immediate access without spending credits.
    internet access.
 
 ### 7.3 Top-Up Credit Bundle
+
 1. The Guest chooses a credit bundle (**Top-Up Credit Bundle**).
 2. The system generates a checkout session
    (**Generate Checkout Session**) with the **Payment Gateway**.

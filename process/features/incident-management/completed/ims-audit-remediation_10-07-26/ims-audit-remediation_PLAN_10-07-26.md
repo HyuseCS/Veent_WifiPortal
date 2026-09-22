@@ -1,6 +1,6 @@
 ---
 name: plan:ims-audit-remediation
-description: "Remediate all 13 findings (2H, 5M, 6L) from the PR #74 Incident Management System audit across apps/admin + packages/db, in 5 phases"
+description: 'Remediate all 13 findings (2H, 5M, 6L) from the PR #74 Incident Management System audit across apps/admin + packages/db, in 5 phases'
 date: 10-07-26
 feature: incident-management
 ---
@@ -85,6 +85,7 @@ Context routing consulted: `process/context/all-context.md` → `process/context
 Files this plan changes or reads (all citations verified in prior research):
 
 **Phase 1 (H1, H2)**
+
 - `apps/admin/src/routes/(app)/sentry/+page.server.ts` — `?/track` action (:85-90; due-date NaN block :99-106)
 - `apps/admin/src/lib/server/sentry/map.ts` — `httpsUrl()` (:19-21); export + add snapshot-validation helper
 - `apps/admin/src/lib/server/sentry/map.test.ts` — extend
@@ -97,15 +98,18 @@ Files this plan changes or reads (all citations verified in prior research):
 - `apps/admin/src/lib/server/issues.test.ts` — extend
 
 **Phase 2 (M1, L4, M3)**
+
 - `apps/admin/src/lib/server/notifications.ts` — `notifWhere()` (:47-53), innerJoin sites
   unreadCount (:60), listNotifications (:96), markAllNotificationsRead (:137), NOTIFIABLE_EVENTS (:24-30)
 - `apps/admin/src/routes/(app)/issues/[id]/detail/+server.ts` — `isPoolItem` (:29-30) + `ISSUE_STATUS` import from `@veent/core` (G2)
 - `apps/admin/src/lib/server/notifications.test.ts` — extend
 
 **Phase 3 (M2)**
+
 - `apps/admin/e2e/.auth/owner.json`, `apps/admin/e2e/.auth/owner-totp.txt` — `git rm --cached` (tracked despite gitignore)
 
 **Phase 4 (M4, M5)**
+
 - `apps/admin/src/lib/server/formValidation.ts` — NEW: shared `parseDueDate(raw, existingDueMs?)`
 - `apps/admin/src/routes/(app)/issues/+page.server.ts` — `parseIssueInput()` (:106-142); title/description caps
 - `apps/admin/src/routes/(app)/sentry/+page.server.ts` — `?/track` due-date, `?/selfReport`, `?/comment` rate limits
@@ -114,6 +118,7 @@ Files this plan changes or reads (all citations verified in prior research):
 - new/extended tests for `formValidation.ts`
 
 **Phase 5 (Lows)**
+
 - `apps/admin/src/lib/components/ui/BaseDialog.svelte` — backdrop dismiss (:52-58, onclick :64)
 - `apps/admin/src/routes/(app)/issues/+page.server.ts` (:164,:201) + `sentry/+page.server.ts` (:130) — `void notifyAssignees`
 - `packages/core/probe.sample.ts` — delete
@@ -161,6 +166,7 @@ Files this plan changes or reads (all citations verified in prior research):
 ### Phase 1 — High severity (H1 + H2)
 
 **H1 — stored XSS via unvalidated `sentryPermalink`**
+
 1. Export `httpsUrl()` from `sentry/map.ts` and add a small exported snapshot-validation helper next
    to it (unit-testable): non-empty `sentryPermalink` failing the `https://` gate → reject; format-check
    `sentryIssueId` against `/^\d{1,32}$/`, `sentryShortId` against `/^[A-Za-z0-9._-]{0,64}$/`, cap
@@ -169,23 +175,15 @@ Files this plan changes or reads (all citations verified in prior research):
    `'Invalid Sentry permalink.'` (reject loudly — legit UI always sends https from the Sentry API).
 3. Extend `sentry/map.test.ts` with `javascript:`/non-https rejection + valid-https pass + format-check cases.
 
-**H2 — resolution-note edits silently dropped**
-4. Migration: relax `admin_issue_event_type_ck` CHECK to add `'note_edited'`
-   (`packages/db/src/schema/admin-issue-event.ts:36,42-45`). Generate the migration file.
-5. Add `ISSUE_EVENT.noteEdited` (`issues.ts:33-41`) + `eventSummary()` case ("updated the resolution
-   note") (:363-388).
-6. Change `setIssueStatus` (:621-661): return `'updated'|'unchanged'|'not_found'`; add `resolutionNote`
-   to the `before` query (currently selects only `status`); same-status branch — when `resolved` AND
-   the note differs → update `resolutionNote` + `updatedAt`, `recordEvent(tx, {type: note_edited,
-   note: newNote})`, return `'updated'`; unchanged note → `'unchanged'`. Rewrite the :635-636 comment.
-7. Update both callers: `'not_found'` → `fail(404)`; add `resolutionNote ≤ 2000` cap (pre-satisfies
-   part of M4b). Callers at `issues/[id]/+page.server.ts:72-73` and `issues/+page.server.ts:236-237`.
-8. Add Timeline META entry for `note_edited` (`Timeline.svelte:24-32`): `PenLine` icon, `text-ink` tone.
-9. Leave `NOTIFIABLE_EVENTS` unchanged — add a code comment explaining note edits are deliberately
-   not notifiable.
-10. Client flows self-heal (My Issues card + detail page auto-submit) — NO component changes; verify in browser.
-11. Tests (`issues.test.ts`): update "records nothing when unchanged" (still true for non-resolved);
-    add resolved+changed-note → note_edited, resolved+same-note → no-op, missing-id → `'not_found'`.
+**H2 — resolution-note edits silently dropped** 4. Migration: relax `admin_issue_event_type_ck` CHECK to add `'note_edited'`
+(`packages/db/src/schema/admin-issue-event.ts:36,42-45`). Generate the migration file. 5. Add `ISSUE_EVENT.noteEdited` (`issues.ts:33-41`) + `eventSummary()` case ("updated the resolution
+note") (:363-388). 6. Change `setIssueStatus` (:621-661): return `'updated'|'unchanged'|'not_found'`; add `resolutionNote`
+to the `before` query (currently selects only `status`); same-status branch — when `resolved` AND
+the note differs → update `resolutionNote` + `updatedAt`, `recordEvent(tx, {type: note_edited,
+   note: newNote})`, return `'updated'`; unchanged note → `'unchanged'`. Rewrite the :635-636 comment. 7. Update both callers: `'not_found'` → `fail(404)`; add `resolutionNote ≤ 2000` cap (pre-satisfies
+part of M4b). Callers at `issues/[id]/+page.server.ts:72-73` and `issues/+page.server.ts:236-237`. 8. Add Timeline META entry for `note_edited` (`Timeline.svelte:24-32`): `PenLine` icon, `text-ink` tone. 9. Leave `NOTIFIABLE_EVENTS` unchanged — add a code comment explaining note edits are deliberately
+not notifiable. 10. Client flows self-heal (My Issues card + detail page auto-submit) — NO component changes; verify in browser. 11. Tests (`issues.test.ts`): update "records nothing when unchanged" (still true for non-resolved);
+add resolved+changed-note → note_edited, resolved+same-note → no-op, missing-id → `'not_found'`.
 
 **Phase 1 gates:** `cd apps/admin && bun run test` (18 green + new) · root `bun run check` · `bun run lint`
 · **`cd packages/db && bunx tsc --noEmit` (G3 — typecheck the `admin-issue-event.ts` schema edit; root `bun run check` fans out to `apps/*` only and does NOT cover `packages/db`; equivalently, assert a clean `db:generate` diff for the CHECK relaxation)**
@@ -198,18 +196,18 @@ migration file. Suggested commit: `fix(admin/issues): validate Sentry permalink 
     listNotifications :96, markAllNotificationsRead :137): innerJoin → leftJoin with ON
     `(issueId match AND adminUserId = userId AND assignedAt <= event.createdAt)` — the `assignedAt`
     bound IS M1. Audience predicate: `and(inArray(type, NOTIFIABLE), actor ≠ userId,
-    or(isNotNull(assignee.adminUserId), and(eq(type,'unassigned'), eq(toValue, userId))))` — the OR
+or(isNotNull(assignee.adminUserId), and(eq(type,'unassigned'), eq(toValue, userId))))` — the OR
     branch IS L4 (removed person sees their own unassignment). Read-state is event×user scoped —
     markOne/markAll unchanged. Do NOT add an index (`admin_issue_assignee_user_idx` exists).
 13. **M3** — `detail/+server.ts:29-30`:
     `isPoolItem = issue.assignees.length === 0 && issue.status === ISSUE_STATUS.open;`
-13a. **M3 import (G2)** — `ISSUE_STATUS` is NOT currently imported in
+    13a. **M3 import (G2)** — `ISSUE_STATUS` is NOT currently imported in
     `apps/admin/src/routes/(app)/issues/[id]/detail/+server.ts`. Its canonical source is `@veent/core`
     (verified cycle-2: `issues.ts` imports it from `@veent/core` and does NOT re-export it). That file
     already imports `getAdminRole, MANAGER_ROLES` from `@veent/core` — add `ISSUE_STATUS` to THAT
     existing `@veent/core` import, NOT to the `$lib/server/issues` import. Without this the M3
     predicate will not typecheck.
-13b. **M3 proof (G4)** — the M3 predicate has no dedicated unit test; its automated proof is
+    13b. **M3 proof (G4)** — the M3 predicate has no dedicated unit test; its automated proof is
     `bun run check` (import + type) plus the admin e2e `incident-detail` spec. Add/name this
     assertion in that spec: **a resolved-and-unassigned incident returns 404 to a non-assignee staff
     member** (and stays readable to an assignee).
@@ -261,7 +259,7 @@ Suggested commit: `chore(admin/e2e): stop tracking throwaway auth session + TOTP
 25. **L6a** — `NotificationBell.svelte`: drop `role="menu"`/`menuitem` for a labelled panel + list;
     remove `aria-live` from the remounting `<ul>` (:122).
 26. **L6b** — fold the unread count into the link's accessible name (sr-only) in `Sidebar.svelte:174-179`
-    + `MobileDrawer.svelte:173-178`; remove the `<span>` `aria-label`.
+    - `MobileDrawer.svelte:173-178`; remove the `<span>` `aria-label`.
 27. **L6c** — one-line comment amendment on `markNotificationRead` (:123-129) covering the
     real-but-invisible-incident case.
 28. **L3** — ceiling comment on the manager branch of `/issues` load (upgrade path: paginate + fetch
@@ -285,38 +283,38 @@ Suggested commit: `chore(admin/e2e): stop tracking throwaway auth session + TOTP
 
 ## Public Contracts change summary (execute-agent quick reference)
 
-| Change | Phase | Callers to update in same phase |
-|---|---|---|
-| `setIssueStatus` return `'updated'\|'unchanged'\|'not_found'` | 1 | `issues/[id]/+page.server.ts:72-73`, `issues/+page.server.ts:236-237` |
-| new `note_edited` event type + CHECK migration | 1 | Timeline META, eventSummary |
-| `?/track` https/format validation | 1 | UI unaffected (always https) |
-| notification audience predicate (M1/L4) | 2 | 3 query sites in notifications.ts |
-| new rate-limit scopes | 4 | `?/selfReport`, `?/comment` |
+| Change                                                        | Phase | Callers to update in same phase                                       |
+| ------------------------------------------------------------- | ----- | --------------------------------------------------------------------- |
+| `setIssueStatus` return `'updated'\|'unchanged'\|'not_found'` | 1     | `issues/[id]/+page.server.ts:72-73`, `issues/+page.server.ts:236-237` |
+| new `note_edited` event type + CHECK migration                | 1     | Timeline META, eventSummary                                           |
+| `?/track` https/format validation                             | 1     | UI unaffected (always https)                                          |
+| notification audience predicate (M1/L4)                       | 2     | 3 query sites in notifications.ts                                     |
+| new rate-limit scopes                                         | 4     | `?/selfReport`, `?/comment`                                           |
 
 ---
 
 ## Verification Evidence
 
-| Gate / Scenario | Strategy | Proves SPEC criterion |
-|---|---|---|
-| `cd apps/admin && bun run test` — 18 existing IMS unit tests stay green | Fully-Automated | No regression across all phases |
-| `sentry/map.test.ts`: `javascript:`/non-https permalink → reject; valid https → pass; id/shortId format checks | Fully-Automated | H1 stored-XSS closed |
-| `issues.test.ts`: resolved+changed-note → `note_edited` + `'updated'`; resolved+same-note → no-op; missing-id → `'not_found'`; unchanged non-resolved records nothing | Fully-Automated | H2 note persistence + audit trail |
-| Apply CHECK DDL to local dev DB (push-managed); keep generated migration file | Hybrid (precondition: local dev DB) | H2 migration valid on prod chain |
-| `cd packages/db && bunx tsc --noEmit` (or clean `db:generate` diff) — typechecks the `admin-issue-event.ts` schema edit | Fully-Automated | H2 schema edit typechecked (G3 — root `bun run check` excludes `packages/db`) |
-| `notifications.test.ts`: `NOTIFIABLE_EVENTS` membership + predicate/row-mapping + self-action exclusion — **JS-shape only** (the `fakeDb` returns canned rows; does NOT exercise the leftJoin/`assignedAt`/OR SQL) | Fully-Automated (JS-shape only) | Partial: M1/L4 unit-shape guard (G1) |
-| admin e2e `incident-notifications` spec + browser scenario 4 — M1 `assignedAt` bound + L4 OR-predicate actually filter Postgres rows | Hybrid (e2e) + Agent-Probe (browser scenario 4) | M1 + L4 feed correctness (SQL semantics) (G1) |
-| admin e2e `incident-detail` spec: a resolved-and-unassigned incident returns 404 to a non-assignee staff member (readable to an assignee) | Hybrid (precondition: e2e harness) | M3 pool-readability predicate (G4) |
-| `formValidation.ts` unit tests: past-date reject, NaN reject, grandfathering, UTC-midnight | Fully-Automated | M4a shared due-date validation |
-| `git status` shows `owner.json` + `owner-totp.txt` staged for removal | Fully-Automated | M2 secrets untracked |
-| root `bun run check` + `bun run lint` (Svelte a11y) clean | Fully-Automated | M3/M5/L6 correctness + a11y |
-| admin e2e: 5 IMS specs on throwaway `radius_admin_test` harness (`TEST_ENV` blanks RESEND) | Hybrid (precondition: e2e harness) | End-to-end IMS flows intact |
-| `vc-risk-evidence-pack` 5-artifact set in `{task-folder}/harness/` produced before closeout | Manual-first (human handoff) | G5 — HIGH-risk manual-first evidence |
-| (1) resolve from My Issues card with note → persists + `note_edited` in timeline | Agent-Probe + human handoff | H2 client self-heal (UI-visible) |
-| (2) edit note on detail page while resolved → persists | Agent-Probe + human handoff | H2 detail-page edit |
-| (3) `?/track` POST with `javascript:` permalink → 400 | Agent-Probe + human handoff | H1 in live request path |
-| (4) newly assigned user's bell has no pre-assignment backlog; unassigned user sees the unassignment | Agent-Probe + human handoff | M1 + L4 in live feed |
-| (5) BaseDialog keyboard-activation (Firefox) + drag-select from input stays open; true backdrop click closes | Agent-Probe + human handoff | L1 dismiss correctness |
+| Gate / Scenario                                                                                                                                                                                                    | Strategy                                        | Proves SPEC criterion                                                         |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------- | ----------------------------------------------------------------------------- |
+| `cd apps/admin && bun run test` — 18 existing IMS unit tests stay green                                                                                                                                            | Fully-Automated                                 | No regression across all phases                                               |
+| `sentry/map.test.ts`: `javascript:`/non-https permalink → reject; valid https → pass; id/shortId format checks                                                                                                     | Fully-Automated                                 | H1 stored-XSS closed                                                          |
+| `issues.test.ts`: resolved+changed-note → `note_edited` + `'updated'`; resolved+same-note → no-op; missing-id → `'not_found'`; unchanged non-resolved records nothing                                              | Fully-Automated                                 | H2 note persistence + audit trail                                             |
+| Apply CHECK DDL to local dev DB (push-managed); keep generated migration file                                                                                                                                      | Hybrid (precondition: local dev DB)             | H2 migration valid on prod chain                                              |
+| `cd packages/db && bunx tsc --noEmit` (or clean `db:generate` diff) — typechecks the `admin-issue-event.ts` schema edit                                                                                            | Fully-Automated                                 | H2 schema edit typechecked (G3 — root `bun run check` excludes `packages/db`) |
+| `notifications.test.ts`: `NOTIFIABLE_EVENTS` membership + predicate/row-mapping + self-action exclusion — **JS-shape only** (the `fakeDb` returns canned rows; does NOT exercise the leftJoin/`assignedAt`/OR SQL) | Fully-Automated (JS-shape only)                 | Partial: M1/L4 unit-shape guard (G1)                                          |
+| admin e2e `incident-notifications` spec + browser scenario 4 — M1 `assignedAt` bound + L4 OR-predicate actually filter Postgres rows                                                                               | Hybrid (e2e) + Agent-Probe (browser scenario 4) | M1 + L4 feed correctness (SQL semantics) (G1)                                 |
+| admin e2e `incident-detail` spec: a resolved-and-unassigned incident returns 404 to a non-assignee staff member (readable to an assignee)                                                                          | Hybrid (precondition: e2e harness)              | M3 pool-readability predicate (G4)                                            |
+| `formValidation.ts` unit tests: past-date reject, NaN reject, grandfathering, UTC-midnight                                                                                                                         | Fully-Automated                                 | M4a shared due-date validation                                                |
+| `git status` shows `owner.json` + `owner-totp.txt` staged for removal                                                                                                                                              | Fully-Automated                                 | M2 secrets untracked                                                          |
+| root `bun run check` + `bun run lint` (Svelte a11y) clean                                                                                                                                                          | Fully-Automated                                 | M3/M5/L6 correctness + a11y                                                   |
+| admin e2e: 5 IMS specs on throwaway `radius_admin_test` harness (`TEST_ENV` blanks RESEND)                                                                                                                         | Hybrid (precondition: e2e harness)              | End-to-end IMS flows intact                                                   |
+| `vc-risk-evidence-pack` 5-artifact set in `{task-folder}/harness/` produced before closeout                                                                                                                        | Manual-first (human handoff)                    | G5 — HIGH-risk manual-first evidence                                          |
+| (1) resolve from My Issues card with note → persists + `note_edited` in timeline                                                                                                                                   | Agent-Probe + human handoff                     | H2 client self-heal (UI-visible)                                              |
+| (2) edit note on detail page while resolved → persists                                                                                                                                                             | Agent-Probe + human handoff                     | H2 detail-page edit                                                           |
+| (3) `?/track` POST with `javascript:` permalink → 400                                                                                                                                                              | Agent-Probe + human handoff                     | H1 in live request path                                                       |
+| (4) newly assigned user's bell has no pre-assignment backlog; unassigned user sees the unassignment                                                                                                                | Agent-Probe + human handoff                     | M1 + L4 in live feed                                                          |
+| (5) BaseDialog keyboard-activation (Firefox) + drag-select from input stays open; true backdrop click closes                                                                                                       | Agent-Probe + human handoff                     | L1 dismiss correctness                                                        |
 
 ---
 
@@ -438,20 +436,20 @@ Rationale: 5/7 signals present (S1 multi-package, S2 schema/auth surface, S6 hig
 
 ### Test gates (C3 5-column — additive; legacy line form retained below)
 
-| criterion id | behavior | strategy | proving test | gap-resolution |
-|---|---|---|---|---|
-| H1 | non-https / `javascript:` permalink rejected; https passes; id/shortId format-checked; title capped | Fully-Automated | `cd apps/admin && bun run test` — `sentry/map.test.ts` new cases | B |
-| H2-persist | resolved+changed-note persists note + records `note_edited`; resolved+same-note no-ops; missing-id → `'not_found'` | Fully-Automated | `cd apps/admin && bun run test` — `issues.test.ts` (recorder-fake pins event contract + tri-state return) | B |
-| H2-migration | `admin_issue_event_type_ck` accepts `note_edited` | Hybrid | apply CHECK DDL directly to local dev DB (push-managed); keep `db:generate` migration file; `cd packages/db && bunx tsc --noEmit` typechecks the edit | B (precondition: local dev DB) |
-| M1 | pre-assignment history excluded from a new assignee's feed (assignedAt bound) | Hybrid + Agent-Probe | admin e2e `incident-notifications` spec + browser scenario 4 (unit mock cannot exercise SQL — see "What this does NOT prove") | C |
-| L4 | removed person sees their own unassignment event | Hybrid + Agent-Probe | admin e2e + browser scenario 4 | C |
-| M3 | resolved/in-progress unassigned incident NOT pool-readable | Hybrid | `bun run check` (import + type) + admin e2e `incident-detail` spec (resolved-unassigned → 404 to non-assignee) | C |
-| M2 | `owner.json` + `owner-totp.txt` untracked | Fully-Automated | `git status` shows both staged for removal | A |
-| M4a | past-date reject / NaN reject / grandfathering / UTC-midnight | Fully-Automated | `cd apps/admin && bun run test` — new `formValidation.test.ts` | B |
-| M3/M5/L6 | typecheck + a11y lint clean | Fully-Automated | root `bun run check` + `bun run lint` | A |
-| e2e | 5 IMS specs green on throwaway harness | Hybrid | `bun run --filter radius-admin test:e2e` (precondition: `radius_admin_test` DB, `TEST_ENV` blanks RESEND) | B |
-| UI (H2/H1/M1/L4/L1) | 5 browser scenarios | Agent-Probe + human handoff | agent browser pass + human verification handoff (non-shell gate) | C |
-| high-risk-pack | 5-artifact evidence pack for HIGH-risk classes | Manual-first | `vc-risk-evidence-pack` set in `{task-folder}/harness/` before closeout | D→C (produced at EXECUTE) |
+| criterion id        | behavior                                                                                                           | strategy                    | proving test                                                                                                                                          | gap-resolution                 |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------ | --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------ |
+| H1                  | non-https / `javascript:` permalink rejected; https passes; id/shortId format-checked; title capped                | Fully-Automated             | `cd apps/admin && bun run test` — `sentry/map.test.ts` new cases                                                                                      | B                              |
+| H2-persist          | resolved+changed-note persists note + records `note_edited`; resolved+same-note no-ops; missing-id → `'not_found'` | Fully-Automated             | `cd apps/admin && bun run test` — `issues.test.ts` (recorder-fake pins event contract + tri-state return)                                             | B                              |
+| H2-migration        | `admin_issue_event_type_ck` accepts `note_edited`                                                                  | Hybrid                      | apply CHECK DDL directly to local dev DB (push-managed); keep `db:generate` migration file; `cd packages/db && bunx tsc --noEmit` typechecks the edit | B (precondition: local dev DB) |
+| M1                  | pre-assignment history excluded from a new assignee's feed (assignedAt bound)                                      | Hybrid + Agent-Probe        | admin e2e `incident-notifications` spec + browser scenario 4 (unit mock cannot exercise SQL — see "What this does NOT prove")                         | C                              |
+| L4                  | removed person sees their own unassignment event                                                                   | Hybrid + Agent-Probe        | admin e2e + browser scenario 4                                                                                                                        | C                              |
+| M3                  | resolved/in-progress unassigned incident NOT pool-readable                                                         | Hybrid                      | `bun run check` (import + type) + admin e2e `incident-detail` spec (resolved-unassigned → 404 to non-assignee)                                        | C                              |
+| M2                  | `owner.json` + `owner-totp.txt` untracked                                                                          | Fully-Automated             | `git status` shows both staged for removal                                                                                                            | A                              |
+| M4a                 | past-date reject / NaN reject / grandfathering / UTC-midnight                                                      | Fully-Automated             | `cd apps/admin && bun run test` — new `formValidation.test.ts`                                                                                        | B                              |
+| M3/M5/L6            | typecheck + a11y lint clean                                                                                        | Fully-Automated             | root `bun run check` + `bun run lint`                                                                                                                 | A                              |
+| e2e                 | 5 IMS specs green on throwaway harness                                                                             | Hybrid                      | `bun run --filter radius-admin test:e2e` (precondition: `radius_admin_test` DB, `TEST_ENV` blanks RESEND)                                             | B                              |
+| UI (H2/H1/M1/L4/L1) | 5 browser scenarios                                                                                                | Agent-Probe + human handoff | agent browser pass + human verification handoff (non-shell gate)                                                                                      | C                              |
+| high-risk-pack      | 5-artifact evidence pack for HIGH-risk classes                                                                     | Manual-first                | `vc-risk-evidence-pack` set in `{task-folder}/harness/` before closeout                                                                               | D→C (produced at EXECUTE)      |
 
 gap-resolution legend: A — proven now · B — gate added by this plan's checklist · C — deferred to named later gate (e2e/browser/human handoff) · D — backlog test-building stub.
 
@@ -479,6 +477,7 @@ C-4 reconciliation: the `strategy` column carries only the 3 proving strategies 
 - Security surface: PASS — H1 https gate reuses existing `httpsUrl()` semantics (`startsWith('https://')`) plus format checks + title cap; loud `fail(400)` is safe (Sentry API always returns https; UI never sends non-https). M2 `git rm --cached` correct; rotation note captured (secret is in history). High-risk classes (XSS/trust-boundary, schema migration, auth predicate, secret) are handled by opus EXECUTE + agent browser pass + human handoff + `vc-risk-evidence-pack` (G5). Host-pinning correctly deferred to backlog with documentation.
 
 Section feasibility:
+
 - Phase 1 (H1+H2): PASS (cycle-2: G3 resolved) — mechanically feasible (`httpsUrl` module-local today, export + snapshot helper OK; `setIssueStatus` before-query must add `resolutionNote` — plan states this). Highest-risk edit: the same-status resolved+note-differs branch (must record `note_edited` so resolution metadata is never mutated without an audit trail — the exact concern the existing :635-636 comment raises). Gap: Phase 1 gate does not typecheck the packages/db schema edit (see Infra fit) — **resolved (G3)**.
 - Phase 2 (M1+L4+M3): PASS (cycle-2: G1/G2/G4 resolved; G2 import-source corrected to @veent/core) — highest-risk edit in the whole plan (innerJoin→leftJoin predicate restructure across all 3 query sites at once; partial change desyncs read-state). Gaps: (a) the M3 fix `issue.status === ISSUE_STATUS.open` requires adding `ISSUE_STATUS` to the `$lib/server/issues` import in `detail/+server.ts` — **resolved (G2)**, item 13a added; (b) M1/L4 unit-tier mislabel — **resolved (G1)**; (c) M3 had no named automated proof — **resolved (G4)**, item 13b names the incident-detail e2e assertion.
 - Phase 3 (M2): PASS — both files confirmed tracked (`git ls-files apps/admin/e2e/.auth/`); stage-only `git rm --cached` feasible; gitignore already covers the dir.
@@ -496,12 +495,13 @@ No vacuous-green: every developed behavior has a Fully-Automated or Hybrid+Agent
 ### Cycle-2 re-validation note (PVL cycle 2 — 2026-07-10)
 
 Re-ran V1–V7 against the supplemented plan. All 5 cycle-1 supplements verified landed and code-accurate:
+
 - G1 — `notifications.test.ts:28-30` confirmed to use a `fakeDb` Proxy that resolves to canned rows regardless of the WHERE/JOIN predicate; the M1/L4 retiering to Hybrid (e2e) + Agent-Probe (browser 4) is accurate.
 - G2 — `ISSUE_STATUS` reachability confirmed. Found + corrected an import-source imprecision: it is exported by `@veent/core` (not re-exported by `$lib/server/issues`; `issues.ts` export surface has no `ISSUE_STATUS`). Item 13a / Touchpoints / E1 corrected to name `@veent/core` — the file already imports from it. Self-correcting at the `bun run check` gate regardless.
 - G3 — `packages/db/tsconfig.json` exists and the `db:generate` script is present → the `cd packages/db && bunx tsc --noEmit` (or clean `db:generate` diff) gate is viable.
 - G4 — `apps/admin/e2e/incident-detail.e2e.ts` exists → the named "resolved-unassigned → 404 to non-assignee" assertion has a host spec.
 - G5 — Final step 31 (vc-risk-evidence-pack 5-artifact set under `{task-folder}/harness/`) present.
-No NEW gaps introduced by the supplements beyond the G2 import-source wording (now corrected). All plan-referenced paths resolve on disk. Structural validator: 0 failures / 0 warnings.
+  No NEW gaps introduced by the supplements beyond the G2 import-source wording (now corrected). All plan-referenced paths resolve on disk. Structural validator: 0 failures / 0 warnings.
 
 ### Open gaps — NONE unresolved (cycle 2). All 5 cycle-1 CONCERNs (G1–G5) verified resolved against code; the G2 import-source imprecision was corrected in-plan. History of the 5 cycle-1 gaps retained below:
 
@@ -521,23 +521,23 @@ No NEW gaps introduced by the supplements beyond the G2 import-source wording (n
 
 ### Plan updates applied (PVL supplement cycle — DONE)
 
-| # | What changed | Where in plan | Gap |
-|---|---|---|---|
-| P1 | Retiered M1/L4: split into a JS-shape-only Fully-Automated row + a Hybrid(e2e)+Agent-Probe(browser 4) SQL-semantics row; Phase 2 item 14 states unit test is JS-shape only | Verification Evidence table + Phase 2 item 14 | G1 |
-| P2 | Added sub-step 13a: import `ISSUE_STATUS` into detail/+server.ts; Touchpoints updated | Phase 2 checklist item 13a | G2 |
-| P3 | Added `cd packages/db && bunx tsc --noEmit` (or clean `db:generate` diff) to Phase 1 gate; Verification Evidence row added | Phase 1 gates + Verification Evidence | G3 |
-| P4 | Added item 13b naming the incident-detail e2e assertion (resolved-unassigned → 404 to non-assignee); Verification Evidence row added | Phase 2 item 13b / Verification Evidence | G4 |
-| P5 | Added Final step 31 (vc-risk-evidence-pack 5-artifact set in harness/); Verification Evidence row added | Final (after Phase 5) / Verification Evidence | G5 |
+| #   | What changed                                                                                                                                                               | Where in plan                                 | Gap |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------- | --- |
+| P1  | Retiered M1/L4: split into a JS-shape-only Fully-Automated row + a Hybrid(e2e)+Agent-Probe(browser 4) SQL-semantics row; Phase 2 item 14 states unit test is JS-shape only | Verification Evidence table + Phase 2 item 14 | G1  |
+| P2  | Added sub-step 13a: import `ISSUE_STATUS` into detail/+server.ts; Touchpoints updated                                                                                      | Phase 2 checklist item 13a                    | G2  |
+| P3  | Added `cd packages/db && bunx tsc --noEmit` (or clean `db:generate` diff) to Phase 1 gate; Verification Evidence row added                                                 | Phase 1 gates + Verification Evidence         | G3  |
+| P4  | Added item 13b naming the incident-detail e2e assertion (resolved-unassigned → 404 to non-assignee); Verification Evidence row added                                       | Phase 2 item 13b / Verification Evidence      | G4  |
+| P5  | Added Final step 31 (vc-risk-evidence-pack 5-artifact set in harness/); Verification Evidence row added                                                                    | Final (after Phase 5) / Verification Evidence | G5  |
 
 ### Execute-agent instructions
 
-| # | Instruction | Trigger condition |
-|---|---|---|
-| E1 | When editing `detail/+server.ts` for M3, add `ISSUE_STATUS` to the existing `@veent/core` import (already brings in `getAdminRole`/`MANAGER_ROLES`) — NOT `$lib/server/issues`, which does not re-export `ISSUE_STATUS`. Do not assume it is already imported. | Phase 2 entry |
-| E2 | Phase 1: verify the CHECK migration by applying the DDL directly to the local dev DB (push-managed — `db:migrate` fails on journal drift); still run `db:generate` and keep the generated migration file for the prod chain; run `cd packages/db && bunx tsc --noEmit` to typecheck the schema edit. | Phase 1 migration step |
-| E3 | Phase 2: change all 3 notification query sites (unreadCount, listNotifications, markAllNotificationsRead) AND `notifWhere` in ONE pass — a partial innerJoin→leftJoin change desyncs read-state. Do not commit Phase 2 with any site left on the old join. | Phase 2 entry |
-| E4 | notifications.test.ts unit tests can only assert JS-level shape (the fakeDb returns canned rows). Do NOT claim the unit test proves the assignedAt/OR SQL filter; the e2e + browser scenario 4 are the real proof. | Phase 2 tests |
-| E5 | High-risk classes present: produce the `vc-risk-evidence-pack` 5-artifact set in `{task-folder}/harness/` and complete the agent browser pass + human handoff before treating the work as ready for closeout. Stage changes per phase; never commit. | Before closeout |
+| #   | Instruction                                                                                                                                                                                                                                                                                          | Trigger condition      |
+| --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------- |
+| E1  | When editing `detail/+server.ts` for M3, add `ISSUE_STATUS` to the existing `@veent/core` import (already brings in `getAdminRole`/`MANAGER_ROLES`) — NOT `$lib/server/issues`, which does not re-export `ISSUE_STATUS`. Do not assume it is already imported.                                       | Phase 2 entry          |
+| E2  | Phase 1: verify the CHECK migration by applying the DDL directly to the local dev DB (push-managed — `db:migrate` fails on journal drift); still run `db:generate` and keep the generated migration file for the prod chain; run `cd packages/db && bunx tsc --noEmit` to typecheck the schema edit. | Phase 1 migration step |
+| E3  | Phase 2: change all 3 notification query sites (unreadCount, listNotifications, markAllNotificationsRead) AND `notifWhere` in ONE pass — a partial innerJoin→leftJoin change desyncs read-state. Do not commit Phase 2 with any site left on the old join.                                           | Phase 2 entry          |
+| E4  | notifications.test.ts unit tests can only assert JS-level shape (the fakeDb returns canned rows). Do NOT claim the unit test proves the assignedAt/OR SQL filter; the e2e + browser scenario 4 are the real proof.                                                                                   | Phase 2 tests          |
+| E5  | High-risk classes present: produce the `vc-risk-evidence-pack` 5-artifact set in `{task-folder}/harness/` and complete the agent browser pass + human handoff before treating the work as ready for closeout. Stage changes per phase; never commit.                                                 | Before closeout        |
 
 Gate: PASS (0 FAILs, 0 unresolved CONCERNs; all 5 cycle-1 CONCERNs G1–G5 verified resolved against code in cycle 2; G2 import-source imprecision corrected in-plan)
 Accepted by: session (autonomous, orchestrator-driven PVL) — accepted concerns: G1 M1/L4 tier accuracy, G2 ISSUE_STATUS import, G3 packages/db typecheck gate, G4 M3 e2e assertion naming, G5 high-risk evidence pack — all APPLIED to the plan body and verified against code in cycle 2. Cycle-2 verdict: PASS (no residual concerns; G2 import-source corrected to @veent/core).

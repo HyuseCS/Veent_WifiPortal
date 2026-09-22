@@ -25,26 +25,26 @@ All of Phase A, B, and C are implemented on branch `dev/sentry`. **Verification:
 (admin 71, customer 31, locator 6) plus `packages/core` observability 7, and all three
 apps build with no Sentry env (0 leaked client source maps). Not yet committed.
 
-| Step | Status | Notes |
-|------|--------|-------|
-| A1 permalink https guard | ✅ done | `httpsUrl()` in `map.ts`; +tests. Components already gated `{#if permalink}`. |
-| A2 promise cache | ✅ done | in-flight dedup + 10s `FAIL_TTL` + 100-entry cap; new `client.test.ts` (4 cases). |
-| A3 `console.error` → `log.error` | ✅ done | **7** customer-dashboard sites + 1 admin `networks` (`applyInterfaceLimit`). |
-| B1 client sampling + env | ✅ done | `PUBLIC_SENTRY_TRACES_SAMPLE_RATE` (NaN-safe) + customer `PUBLIC_SENTRY_ENVIRONMENT` mirror. |
-| B2 client release | ✅ done | `PUBLIC_SENTRY_RELEASE` on both client inits. |
-| B3 MAC regex | ✅ done | colon / hyphen / bare-12-hex; +tests in `observability.test.ts`. |
-| B4 `.env.example` docs | ✅ done | admin (11 vars incl. server-only) + customer + locator. |
-| C1 locator telemetry | ✅ done | `app` union widened; dep added (lockfile +2 lines); two hooks; env doc. |
-| C2 cron monitors | ✅ done | `Sentry.withMonitor` on revoke / reconcile / health-refresh, schedule `* * * * *`. |
-| C3 DB query tracing | ✅ resolved — **no code** | `postgresJsIntegration` already a default when tracing is on (see §C3). |
-| C4 source-maps upload | ✅ done | `sentrySvelteKit` gated on full upload config; token-less builds unchanged. |
-| S3 triage perms | ⛔ closed | all-staff confirmed intended; no change. |
+| Step                             | Status                    | Notes                                                                                        |
+| -------------------------------- | ------------------------- | -------------------------------------------------------------------------------------------- |
+| A1 permalink https guard         | ✅ done                   | `httpsUrl()` in `map.ts`; +tests. Components already gated `{#if permalink}`.                |
+| A2 promise cache                 | ✅ done                   | in-flight dedup + 10s `FAIL_TTL` + 100-entry cap; new `client.test.ts` (4 cases).            |
+| A3 `console.error` → `log.error` | ✅ done                   | **7** customer-dashboard sites + 1 admin `networks` (`applyInterfaceLimit`).                 |
+| B1 client sampling + env         | ✅ done                   | `PUBLIC_SENTRY_TRACES_SAMPLE_RATE` (NaN-safe) + customer `PUBLIC_SENTRY_ENVIRONMENT` mirror. |
+| B2 client release                | ✅ done                   | `PUBLIC_SENTRY_RELEASE` on both client inits.                                                |
+| B3 MAC regex                     | ✅ done                   | colon / hyphen / bare-12-hex; +tests in `observability.test.ts`.                             |
+| B4 `.env.example` docs           | ✅ done                   | admin (11 vars incl. server-only) + customer + locator.                                      |
+| C1 locator telemetry             | ✅ done                   | `app` union widened; dep added (lockfile +2 lines); two hooks; env doc.                      |
+| C2 cron monitors                 | ✅ done                   | `Sentry.withMonitor` on revoke / reconcile / health-refresh, schedule `* * * * *`.           |
+| C3 DB query tracing              | ✅ resolved — **no code** | `postgresJsIntegration` already a default when tracing is on (see §C3).                      |
+| C4 source-maps upload            | ✅ done                   | `sentrySvelteKit` gated on full upload config; token-less builds unchanged.                  |
+| S3 triage perms                  | ⛔ closed                 | all-staff confirmed intended; no change.                                                     |
 
 **Deviations from the plan as written, discovered during implementation:**
 
 - **A3 count:** the customer dashboard had **7** raw `console.error` catch sites, not 6
   (the plan's own step-A3 table already listed all 7; only the prose said 6). All 7 migrated.
-- **C4 source-map leak fix (important):** `filesToDeleteAfterUpload` only runs *after* a
+- **C4 source-map leak fix (important):** `filesToDeleteAfterUpload` only runs _after_ a
   successful upload, so a token-less build would have generated **and shipped** client `.map`
   files (verified: 47 admin / 18 customer). Fixed by gating the whole `sentrySvelteKit` plugin
   on `SENTRY_AUTH_TOKEN` + `SENTRY_ORG_SLUG` + `SENTRY_PROJECT_ID` all being present, so
@@ -178,7 +178,7 @@ vitest setup of `map.test.ts`; stub `Date.now` with `vi.spyOn` / `vi.setSystemTi
 - Inserting > `MAX_ENTRIES` distinct keys keeps `cache.size <= MAX_ENTRIES` (verify
   indirectly: oldest key re-fetches, newest doesn't).
 
-*Testability note:* `cached` is module-private. Either export it (plainest), or test
+_Testability note:_ `cached` is module-private. Either export it (plainest), or test
 through `fetchLatestEventRaw` with a mocked `fetch`. Exporting is fine — it carries
 no credentials.
 
@@ -193,20 +193,20 @@ warning, `scope` tag) in BOTH apps. These catch sites predate it and still use r
 `console.error`, so the core business failures — grants, binds, revokes — are
 invisible to Sentry.
 
-**File 1:** `apps/customer/src/routes/dashboard/+page.server.ts` *(outside `/admin`
-— explicitly approved by this plan)*. `const log = logger('dashboard')` already
+**File 1:** `apps/customer/src/routes/dashboard/+page.server.ts` _(outside `/admin`
+— explicitly approved by this plan)_. `const log = logger('dashboard')` already
 exists at line 25. Replace all 6 sites; drop the `[customer]` prefix (the logger's
 scope tag already carries it):
 
-| Line | Before | After |
-|---|---|---|
-| 71 | `console.error('[customer] auto-bind failed:', err);` | `log.error('auto-bind failed:', err);` |
-| 135 | `console.error('[customer] startFreeTime grant failed:', err);` | `log.error('startFreeTime grant failed:', err);` |
-| 200 | `console.error('[customer] bindThisDevice grant failed:', err);` | `log.error('bindThisDevice grant failed:', err);` |
-| 220 | `console.error('[customer] unbindDevice failed:', err);` | `log.error('unbindDevice failed:', err);` |
-| 234 | `console.error('[customer] unbindAll failed:', err);` | `log.error('unbindAll failed:', err);` |
-| 250 | `console.error('[customer] pauseAccess failed:', err);` | `log.error('pauseAccess failed:', err);` |
-| 273 | `console.error('[customer] resumeAccess failed:', err);` | `log.error('resumeAccess failed:', err);` |
+| Line | Before                                                           | After                                             |
+| ---- | ---------------------------------------------------------------- | ------------------------------------------------- |
+| 71   | `console.error('[customer] auto-bind failed:', err);`            | `log.error('auto-bind failed:', err);`            |
+| 135  | `console.error('[customer] startFreeTime grant failed:', err);`  | `log.error('startFreeTime grant failed:', err);`  |
+| 200  | `console.error('[customer] bindThisDevice grant failed:', err);` | `log.error('bindThisDevice grant failed:', err);` |
+| 220  | `console.error('[customer] unbindDevice failed:', err);`         | `log.error('unbindDevice failed:', err);`         |
+| 234  | `console.error('[customer] unbindAll failed:', err);`            | `log.error('unbindAll failed:', err);`            |
+| 250  | `console.error('[customer] pauseAccess failed:', err);`          | `log.error('pauseAccess failed:', err);`          |
+| 273  | `console.error('[customer] resumeAccess failed:', err);`         | `log.error('resumeAccess failed:', err);`         |
 
 Do NOT touch line 99 (`console.warn` for handoff-token generation — warn-level noise,
 deliberately not escalated) or line 174 (`buyTier`, already `log.error`).
@@ -250,7 +250,7 @@ const rate = Number(env.PUBLIC_SENTRY_TRACES_SAMPLE_RATE ?? '0.2');
 and in the `sentryOptions({...})` input:
 
 ```ts
-tracesSampleRate: dev ? 1.0 : Number.isFinite(rate) ? rate : 0.2
+tracesSampleRate: dev ? 1.0 : Number.isFinite(rate) ? rate : 0.2;
 ```
 
 The `Number.isFinite` guard matters: `Number('abc')` is `NaN`, and a garbage env
@@ -271,7 +271,7 @@ requires a client release. Clients can't read private env, so this needs a `PUBL
 var. Add to both `sentryOptions({...})` inputs:
 
 ```ts
-release: env.PUBLIC_SENTRY_RELEASE
+release: env.PUBLIC_SENTRY_RELEASE;
 ```
 
 `undefined` is fine — behavior is identical to today when the var is unset. At deploy
@@ -347,7 +347,7 @@ the customer app only ingests, it has no Sentry-API dashboard.
 Each C-step needs its own explicit go-ahead at execution time; they touch new apps
 or build tooling. They are independent of each other except C4 → depends on B2.
 
-### C1 — Locator app telemetry (audit E2) *(outside `/admin`)*
+### C1 — Locator app telemetry (audit E2) _(outside `/admin`)_
 
 `apps/locator` is a deployed public-facing app with zero telemetry — no hooks files,
 no Sentry dependency, not even `@veent/core` in its `package.json` (though its vite
@@ -375,8 +375,8 @@ dev, throwing inside `+page.server.ts` produces a Sentry event tagged
 
 ### C2 — Sentry Cron Monitors for the scheduled jobs (audit E3)
 
-The cron *endpoints* are already Sentry-covered (they run inside the apps); a dead
-*scheduler* — the systemd timer that pokes them — fails silently, and paid time
+The cron _endpoints_ are already Sentry-covered (they run inside the apps); a dead
+_scheduler_ — the systemd timer that pokes them — fails silently, and paid time
 stops expiring. Check-ins detect "the job didn't run", which nothing detects today.
 
 Wrap each handler body **after** `requireCron(event)` — an unauthorized probe must
@@ -402,10 +402,10 @@ export const POST: RequestHandler = async (event) => {
 
 Targets and slugs:
 
-| Route | Slug |
-|---|---|
-| `apps/customer/src/routes/api/network/revoke/+server.ts` | `customer-network-revoke` |
-| `apps/customer/src/routes/api/payments/reconcile/+server.ts` | `customer-payments-reconcile` |
+| Route                                                                                | Slug                           |
+| ------------------------------------------------------------------------------------ | ------------------------------ |
+| `apps/customer/src/routes/api/network/revoke/+server.ts`                             | `customer-network-revoke`      |
+| `apps/customer/src/routes/api/payments/reconcile/+server.ts`                         | `customer-payments-reconcile`  |
 | admin `POST /api/network/health/refresh` (verify exact route path in the tree first) | `admin-network-health-refresh` |
 
 Implementer notes:
@@ -481,7 +481,7 @@ values/PII appear in span descriptions; if they do, scrub or abort the step).
    ```
 
 2. **Token hygiene (critical):** the upload plugin reads `SENTRY_AUTH_TOKEN` from the
-   *build* environment and needs `project:releases` scope. That is a **different
+   _build_ environment and needs `project:releases` scope. That is a **different
    token** from the runtime dashboard one (event:read/write + org:read). Create a
    dedicated releases-scoped token, provide it only in the build/CI environment,
    never in the runtime `.env`, never committed. Because both tokens use the same
@@ -545,8 +545,8 @@ also a rollback. C4 is additionally reversible by removing the vite plugin block
 
 ## File index (everything the full plan touches)
 
-| Phase | Files |
-|---|---|
-| A | `apps/admin/src/lib/server/sentry/map.ts` (+`map.test.ts`), `apps/admin/src/lib/server/sentry/client.ts` (+new `client.test.ts`), `apps/admin/src/lib/components/feature/sentry/SentryIssuesTable.svelte` + `SentryIssueDialog.svelte` (guard only if missing), `apps/customer/src/routes/dashboard/+page.server.ts`, `apps/admin/src/routes/(app)/networks/+page.server.ts` |
-| B | `apps/admin/src/hooks.client.ts`, `apps/customer/src/hooks.client.ts`, `packages/core/src/observability.ts` (+tests), `apps/admin/.env.example`, `apps/customer/.env.example` |
-| C | `packages/core/src/observability.ts` (app union), `apps/locator/package.json` + new `src/hooks.{client,server}.ts` + `.env.example`, `apps/customer/src/routes/api/network/revoke/+server.ts`, `apps/customer/src/routes/api/payments/reconcile/+server.ts`, admin health-refresh route, `apps/admin/vite.config.ts`, `apps/customer/vite.config.ts`, `docs/DEPLOYMENT.md` (token-hygiene note) |
+| Phase | Files                                                                                                                                                                                                                                                                                                                                                                                           |
+| ----- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A     | `apps/admin/src/lib/server/sentry/map.ts` (+`map.test.ts`), `apps/admin/src/lib/server/sentry/client.ts` (+new `client.test.ts`), `apps/admin/src/lib/components/feature/sentry/SentryIssuesTable.svelte` + `SentryIssueDialog.svelte` (guard only if missing), `apps/customer/src/routes/dashboard/+page.server.ts`, `apps/admin/src/routes/(app)/networks/+page.server.ts`                    |
+| B     | `apps/admin/src/hooks.client.ts`, `apps/customer/src/hooks.client.ts`, `packages/core/src/observability.ts` (+tests), `apps/admin/.env.example`, `apps/customer/.env.example`                                                                                                                                                                                                                   |
+| C     | `packages/core/src/observability.ts` (app union), `apps/locator/package.json` + new `src/hooks.{client,server}.ts` + `.env.example`, `apps/customer/src/routes/api/network/revoke/+server.ts`, `apps/customer/src/routes/api/payments/reconcile/+server.ts`, admin health-refresh route, `apps/admin/vite.config.ts`, `apps/customer/vite.config.ts`, `docs/DEPLOYMENT.md` (token-hygiene note) |

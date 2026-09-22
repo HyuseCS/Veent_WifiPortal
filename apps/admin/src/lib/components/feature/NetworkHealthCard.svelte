@@ -58,9 +58,24 @@
 	});
 
 	const metrics = $derived([
-		{ label: 'Uptime', value: ap.uptime, class: 'text-ink', title: undefined as string | undefined },
-		{ label: 'Latency', value: ap.latency, class: latColor, title: undefined as string | undefined },
-		{ label: 'Users', value: String(ap.users), class: 'text-ink', title: undefined as string | undefined },
+		{
+			label: 'Uptime',
+			value: ap.uptime,
+			class: 'text-ink',
+			title: undefined as string | undefined
+		},
+		{
+			label: 'Latency',
+			value: ap.latency,
+			class: latColor,
+			title: undefined as string | undefined
+		},
+		{
+			label: 'Users',
+			value: String(ap.users),
+			class: 'text-ink',
+			title: undefined as string | undefined
+		},
 		{
 			label: 'Tput',
 			value: ap.throughput,
@@ -127,7 +142,9 @@
 		{#each metrics as metric (metric.label)}
 			<div class="flex flex-col gap-1">
 				<dt class="text-[10px] font-bold tracking-wide text-muted uppercase">{metric.label}</dt>
-				<dd class="font-mono text-sm font-semibold {metric.class}" title={metric.title}>{metric.value}</dd>
+				<dd class="font-mono text-sm font-semibold {metric.class}" title={metric.title}>
+					{metric.value}
+				</dd>
 			</div>
 		{/each}
 	</dl>

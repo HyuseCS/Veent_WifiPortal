@@ -351,7 +351,8 @@
 									title="Show this cluster on the map"
 								>
 									<span class="truncate text-sm font-semibold text-ink">{cluster.name}</span>
-									<span class="shrink-0 font-mono text-xs text-muted">{cluster.members.length}</span>
+									<span class="shrink-0 font-mono text-xs text-muted">{cluster.members.length}</span
+									>
 								</button>
 							</div>
 							{#if !collapsed[cluster.name]}

@@ -1,13 +1,13 @@
 ---
 name: protocol:vc-system-behavior-03-session-start
-description: "Session-start behavior: Context Envelope emission and Tier-0 required skills at the start of every inner-loop agent."
+description: 'Session-start behavior: Context Envelope emission and Tier-0 required skills at the start of every inner-loop agent.'
 date: 09-06-26
 metadata:
   node_type: memory
   type: protocol
   read_order: 1
   required: false
-  read_when: "understanding session-start steps and the Context Envelope"
+  read_when: 'understanding session-start steps and the Context Envelope'
 ---
 
 # VC System Behavior — Session Start
@@ -34,6 +34,7 @@ Run these commands and reads before anything else:
 - If you know the feature name: `find process/features/{feature}/ -type f | sort`
 
 If more than 5 candidate files match the task keywords, prioritize in this order:
+
 1. The currently-active plan file whose name matches the task
 2. `process/context/all-context.md`
 3. The most recently modified active plan file
@@ -59,12 +60,14 @@ This runs before any routing or subagent spawn.
 Produce two things — both are required:
 
 **(a) Deep restatement** — Articulate what you understand the user wants:
+
 - Scope: what will change, what will not
 - Goal: the underlying outcome the user wants, not just the stated task
 - Constraints: anything the user implied (time, approach, limits)
 - Related work: any active plans or prior context that seems relevant
 
 **(b) Deeper clarifying questions** — Ask questions that surface unstated assumptions:
+
 - What does success look like specifically?
 - Are there areas that must NOT be touched?
 - Is there an existing plan that should be resumed?
@@ -78,14 +81,14 @@ Format (feeds the combined gate): "Here is what I understand: [deep restatement]
 
 In these cases, Tier 0 still fires but the restatement and questions are shorter:
 
-| Trigger | Restatement | Questions | Wait for go-ahead |
-|---|---|---|---|
-| /goal mid-program execution | Emit brief | Skip | Skip |
-| Continuation phrase ("go", "proceed", "continue", "just do it") | Emit brief | Skip | Skip |
-| Explicit mode command ("ENTER X MODE") | Emit brief | Skip | Skip |
-| Pure single-target information question | Emit brief | Skip | Skip |
-| Trivial fix (single-file, no new dependencies, no schema/API/auth, under 15 lines) | Emit 1-line | Skip | Skip |
-| Resuming active plan | Emit 1-line | Skip | Skip |
+| Trigger                                                                            | Restatement | Questions | Wait for go-ahead |
+| ---------------------------------------------------------------------------------- | ----------- | --------- | ----------------- |
+| /goal mid-program execution                                                        | Emit brief  | Skip      | Skip              |
+| Continuation phrase ("go", "proceed", "continue", "just do it")                    | Emit brief  | Skip      | Skip              |
+| Explicit mode command ("ENTER X MODE")                                             | Emit brief  | Skip      | Skip              |
+| Pure single-target information question                                            | Emit brief  | Skip      | Skip              |
+| Trivial fix (single-file, no new dependencies, no schema/API/auth, under 15 lines) | Emit 1-line | Skip      | Skip              |
+| Resuming active plan                                                               | Emit 1-line | Skip      | Skip              |
 
 #### Ambiguity Scoring
 
@@ -104,6 +107,7 @@ This skill does two things. Both are required.
 **Part A — Directory discovery:**
 
 Run:
+
 ```bash
 find process/context/ -type f | sort
 find process/development-protocols/ -type f | sort
@@ -112,15 +116,19 @@ find process/development-protocols/ -type f | sort
 Then read `process/context/all-context.md` and follow its routing table to load the smallest relevant context group files. Each `all-{group}.md` is itself a router — follow it to load the 1–2 relevant deeper files for the blast radius.
 
 If `Feature:` is set in the prompt:
+
 ```bash
 find process/features/{feature}/ -type f | sort
 ```
+
 This lists all subdirs: active/, backlog/, completed/, reports/, references/.
 
 If the task touches testing, verification, or debugging:
+
 ```bash
 find process/context/tests/ -type f | sort
 ```
+
 Then load `process/context/tests/all-tests.md` and follow its routing chain to the relevant deeper file.
 
 **Part B — Frontmatter extraction:**
@@ -128,6 +136,7 @@ Then load `process/context/tests/all-tests.md` and follow its routing chain to t
 For every plan file found in active/ (or passed in the prompt), extract these YAML frontmatter fields: `name`, `description`, `feature`, `phase`, `date`.
 
 If a plan file has no YAML frontmatter block (legacy format):
+
 - Extract from prose: `name` from first H1 heading, `feature` from file path, `phase` as N/A, `date` from filename date suffix if present
 - Mark extracted fields as `(inferred)`
 - Emit `FRONTMATTER_MISSING` warning in the Context Envelope
@@ -151,18 +160,18 @@ validate-contract:     {yes / no}
 
 #### Context Envelope Fields
 
-| Field | Source |
-|---|---|
-| `feature` | Plan frontmatter or path |
-| `phase` | Plan frontmatter |
-| `session-goal` | If plan has `## Session Goal` → use that (mark `(from plan)`). If no plan yet → use vc-intent-clarify restatement (mark `(from restatement)`) |
+| Field                   | Source                                                                                                                                                       |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `feature`               | Plan frontmatter or path                                                                                                                                     |
+| `phase`                 | Plan frontmatter                                                                                                                                             |
+| `session-goal`          | If plan has `## Session Goal` → use that (mark `(from plan)`). If no plan yet → use vc-intent-clarify restatement (mark `(from restatement)`)                |
 | `blast-radius-packages` | If plan has `## Blast Radius` → use that. If no plan → derive from vc-scout output (mark `(estimated — no plan yet)`). If vc-scout not run → write `PENDING` |
-| `active-plan` | Part B frontmatter extraction |
-| `test-runner` | From all-tests.md routing. Multiple runners: use pipe-delimited format `bun test | vitest`. If routing not yet run: write `PENDING — see all-tests.md`. Note for G1 template consumers: the pipe-delimited format is a display convention, not a shell command. G1 template must expand to sequential execution. |
-| `validate-contract` | Check for the section in the plan file |
-| `branch` | `git status` — fallback: `(detached HEAD)` or `(no git repo)` |
-| `worktree` | `git worktree list` — fallback: `main (no worktrees)` or `(no git repo)` |
-| `context-group` | Context routing match from all-context.md |
+| `active-plan`           | Part B frontmatter extraction                                                                                                                                |
+| `test-runner`           | From all-tests.md routing. Multiple runners: use pipe-delimited format `bun test                                                                             | vitest`. If routing not yet run: write `PENDING — see all-tests.md`. Note for G1 template consumers: the pipe-delimited format is a display convention, not a shell command. G1 template must expand to sequential execution. |
+| `validate-contract`     | Check for the section in the plan file                                                                                                                       |
+| `branch`                | `git status` — fallback: `(detached HEAD)` or `(no git repo)`                                                                                                |
+| `worktree`              | `git worktree list` — fallback: `main (no worktrees)` or `(no git repo)`                                                                                     |
+| `context-group`         | Context routing match from all-context.md                                                                                                                    |
 
 > Note on field order: The template block above is emitted in the canonical 10-field order: feature → phase → session-goal → branch → worktree → context-group → blast-radius-packages → active-plan → test-runner → validate-contract. Copying the template verbatim produces canonical output. (The same field-order note appears in `04-research.md`.)
 > The H4 interim format uses this same canonical 10-field set.
@@ -172,6 +181,7 @@ validate-contract:     {yes / no}
 #### If Context Discovery Fails
 
 If the feature folder is missing, all-context.md is broken, or find returns nothing:
+
 - Proceed with best-effort context — use Grep/Bash to find relevant files organically.
 - Never halt because context discovery returned empty.
 - Emit a `CONTEXT_PARTIAL` warning inside the phase report under a normal DONE or DONE_WITH_CONCERNS exit status.
@@ -192,6 +202,7 @@ This skill also does two things. Both are required.
 **Harness session-scanning rule:** For sessions involving agent, skill, or harness work, Part A MUST also scan `process/features/development-process/backlog/` for NOTE files with severity HIGH or CRITICAL, and surface these as "active harness improvement items" in the plan-discovery output.
 
 **How frontmatter matching works:**
+
 - (a) Match if `feature` field equals the current feature folder name exactly; OR
 - (b) If no `feature` field: match if the current feature folder name appears (case-insensitive) in the `description` field
 - (c) If no `Feature:` in the prompt, rule (b) does not apply. All plans without a feature frontmatter field are grouped as "unmatched (no feature context)".
@@ -200,6 +211,7 @@ This skill also does two things. Both are required.
 
 **Stale plan rule:**
 A plan is stale for discovery if it is more than 90 days old AND any of:
+
 - It matched only by substring (no exact feature name match), OR
 - Its status is CONDITIONAL or BLOCKED AND no Implementation Checklist items have been ticked since the plan was created
 
@@ -277,6 +289,7 @@ Full specification: `process/development-protocols/autopilot.md §Consolidated C
 ### Step 7 — Route to vc-research-agent
 
 Pass these along when spawning:
+
 - Context files loaded in Step 3
 - Feature scope
 - Plan path if known

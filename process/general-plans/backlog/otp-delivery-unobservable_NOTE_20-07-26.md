@@ -8,6 +8,8 @@ metadata:
   feature: general-plans
 ---
 
+**Tracked as GH #101 — https://github.com/HyuseCS/Veent_WifiPortal/issues/101**
+
 # OTP delivery is unobservable (silent accept-then-drop)
 
 > **PARKED — not on the actionable list (22-07-26).** The root cause (Cast rejecting 100% of sends)
@@ -36,7 +38,7 @@ native form POST `?/resend` action) that re-sends via the current `SMS_PROVIDER`
 `enforceOtpSendLimit` budget as the initial send (no bypass; 429 with friendly retry message when
 over budget). Kept as-is by decision 22-07-26 (the 45s cooldown was deliberately not changed).
 
-**Still open (the genuine remainder):** the *DLR-aware* sub-options — (a) **alternate-channel
+**Still open (the genuine remainder):** the _DLR-aware_ sub-options — (a) **alternate-channel
 resend** (fall back to a different provider when Cast is the known-bad one), and (b) **"delivery
 uncertain" messaging** (wire the guest UI to the confirmed DLR-rejection signal so a guest whose OTP
 is confirmed-rejected is told delivery may have failed, rather than silently offered a resend for a
@@ -76,7 +78,7 @@ complete outage would look, from inside the app, identical to a healthy day.
 `docs/cast-sms-integration-analysis.md` §5 explicitly considered and deferred this:
 
 > **Delivery status** (`GET /sms/status/{id}`, `dlr_status`). We fire-and-forget OTPs; polling DLRs
-> buys nothing for a 5-minute code. *Skip.*
+> buys nothing for a 5-minute code. _Skip._
 
 That was a reasonable call on the information available at the time (no evidence of carrier
 rejection, and a 5-minute code has a narrow window anyway). Today's live test contradicts the

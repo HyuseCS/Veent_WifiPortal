@@ -1,4 +1,4 @@
-# Bug: buying time on a *second* account (after logout) doesn't grant the device internet
+# Bug: buying time on a _second_ account (after logout) doesn't grant the device internet
 
 > Status: **FIXED 2026-07-02** (Options 1 + 2 below). Was flagged 2026-07-01 as an
 > application-logic bug in the customer app's MAC-resolution chain — not a router/ops blocker
@@ -12,7 +12,7 @@ Added an **account-independent, device-scoped MAC memory** so resolution no long
 logged-in account, plus a logout→login re-thread. Concretely:
 
 - **Option 2 — `veent_device` cookie** (`apps/customer/src/lib/server/portal.ts`): a long-lived
-  (180-day), httpOnly cookie holding the last MAC seen in *this browser*, written at both points
+  (180-day), httpOnly cookie holding the last MAC seen in _this browser_, written at both points
   the MAC becomes known — `capturePortalContext` (`?mac=` capture) and `persistResolvedMac`
   (IP→MAC). It is **not** cleared on sign-out. `resolveMacForUser`
   (`network-location.ts`) now reads it **after** live detection but **before** the per-user
@@ -21,19 +21,19 @@ logged-in account, plus a logout→login re-thread. Concretely:
   common same-browser second-account case: account B recovers the device MAC even though its own
   per-user history is empty.
 - **Option 1 — re-thread on sign-out** (`dashboard/+page.server.ts` `signOut`): resolves the MAC
-  *before* destroying the session and redirects to `/login?mac=<mac>`, so hooks re-capture it into
+  _before_ destroying the session and redirects to `/login?mac=<mac>`, so hooks re-capture it into
   the short-lived `veent_portal` cookie for the incoming account, and `login/+page.server.ts`
   falls back to `getDeviceMac()` so the pending-OTP cookie / rate-limit key still carry the MAC.
 
 **Security note:** no new attack surface. The `veent_device` MAC is client-assertable in the same
 way `?mac=` already is (captive-portal MAC is inherently client-supplied), and the grant remains
 MAC-only. Setting the cookie to a victim's MAC would only bind (and grant, at the attacker's own
-credit cost) the *victim's* device — not the attacker's — so there is no hijack incentive. (The
+credit cost) the _victim's_ device — not the attacker's — so there is no hijack incentive. (The
 one real escalation this client-MAC assertion used to enable — bind a victim's MAC, then unbind to
-cut the *shared* router bypass and knock them offline — is now blocked by the M-2 cross-user revoke
+cut the _shared_ router bypass and knock them offline — is now blocked by the M-2 cross-user revoke
 guard; see `docs/SECURITY_RISKS.md` → R12.)
 
-**Not implemented:** true cross-*browser* second-account logins (device cookie lives in one
+**Not implemented:** true cross-_browser_ second-account logins (device cookie lives in one
 browser's jar) still rely on IP→MAC, which the hotspot NAT defeats — same residual gap the doc
 notes for Options 1+2. Option 3 (seed from live IP→MAC) needs IP→MAC to work at all.
 
@@ -61,7 +61,7 @@ notes for Options 1+2. Option 3 (seed from live IP→MAC) needs IP→MAC to work
 - "The MAC is only saved from the first number they logged in." — i.e. the device identity is
   captured for account A but lost for account B.
 
-## How the MAC is *supposed* to flow
+## How the MAC is _supposed_ to flow
 
 The router only ever injects `?mac=` **once**, on the initial captive redirect. From there the app
 re-threads it through every hop:
@@ -105,11 +105,11 @@ Every layer of the chain that carries the device MAC is either **browser-scoped*
 
 Result for account B: the MAC resolves to `null` (hard "device not detected" on
 `buyTier`/`startFreeTime`, which reject a non-matching MAC at `dashboard/+page.server.ts:151`), or,
-in deployments where IP→MAC *does* resolve, a grant is issued but the OS captive banner / device
+in deployments where IP→MAC _does_ resolve, a grant is issued but the OS captive banner / device
 never actually settles onto the bypass — either way the second account's buy does not put **this
 device** online.
 
-**Why going back to account A works:** on A's first pass the real MAC *was* captured and
+**Why going back to account A works:** on A's first pass the real MAC _was_ captured and
 `rememberAccountMac()` persisted it to `customer_profile.last_known_mac`
 (`network-location.ts:76-80,104-118`). So `resolveMacForUser(A)` recovers the MAC from A's durable
 per-account fallback even with the cookie gone — a durable signal account B simply never had.
@@ -126,13 +126,13 @@ robustness:
    case. Doesn't help if the second login happens in a genuinely different browser.
 2. **Keep a device-scoped (not user-scoped) MAC hint** that survives sign-out — e.g. a separate
    long-lived `veent_device` cookie set from any successful `?mac=` capture, read by
-   `resolveMac()` *before* the per-user fallbacks. Makes MAC resolution independent of which
+   `resolveMac()` _before_ the per-user fallbacks. Makes MAC resolution independent of which
    account is logged in.
 3. **Prefer live IP→MAC over the per-user fallback when they disagree**, and make the per-user
-   fallback the *last* resort only (it already is), but *also* seed a freshly-resolved MAC onto the
+   fallback the _last_ resort only (it already is), but _also_ seed a freshly-resolved MAC onto the
    new account so B stops being empty. (Requires IP→MAC to work, which the NAT defeats today.)
 4. **Detect the mismatch and warn instead of silently granting.** If the resolved MAC came only
-   from a *different* account's history, surface "reconnect through the WiFi portal" rather than
+   from a _different_ account's history, surface "reconnect through the WiFi portal" rather than
    binding a possibly-stale MAC — avoids the "active in logs but no internet" confusion.
 
 Option 1 + option 2 together cover both the same-browser and cross-browser variants and keep the
@@ -150,5 +150,5 @@ grant path MAC-correct regardless of account.
   portal cookie), `buyTier`/`startFreeTime` MAC gate (lines 122,146,151).
 - `packages/core/src/integrations/network/mikrotik.ts:226` — `grant()` is MAC-only (no account
   identity), confirming access hinges entirely on the correct MAC being resolved.
-</content>
-</invoke>
+  </content>
+  </invoke>

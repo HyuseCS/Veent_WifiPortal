@@ -1,13 +1,13 @@
 ---
 name: protocol:vc-system-behavior-06-innovate
-description: "INNOVATE phase reference: approach comparison, decision summary, and predict/scenario usage."
+description: 'INNOVATE phase reference: approach comparison, decision summary, and predict/scenario usage.'
 date: 09-06-26
 metadata:
   node_type: memory
   type: protocol
   read_order: 1
   required: false
-  read_when: "running or auditing the INNOVATE phase"
+  read_when: 'running or auditing the INNOVATE phase'
 ---
 
 # INNOVATE Phase Reference
@@ -18,7 +18,7 @@ INNOVATE is where the agent explores **how** to satisfy the locked SPEC. It look
 
 **Input:** the locked SPEC (the product-discovery requirements doc from the SPEC phase — what the user wants and why) plus the RESEARCH findings. INNOVATE answers "given these requirements, which implementation approach is best?" **Output:** a Decision Summary that feeds PLAN.
 
-INNOVATE runs *after* SPEC (`RESEARCH → SPEC → INNOVATE → PLAN`). It is the skippable phase for non-trivial work: when the "how" is mechanical (one obvious implementation path, no real design choice), INNOVATE is skipped and PLAN proceeds straight from the SPEC.
+INNOVATE runs _after_ SPEC (`RESEARCH → SPEC → INNOVATE → PLAN`). It is the skippable phase for non-trivial work: when the "how" is mechanical (one obvious implementation path, no real design choice), INNOVATE is skipped and PLAN proceeds straight from the SPEC.
 
 ---
 
@@ -129,7 +129,7 @@ The one exit pause for INNOVATE. Present everything in a single block for **conf
    - **Advance** to PLAN — when two or more viable approaches were genuinely explored and one is clearly chosen with no unmitigated high-risk threat. (SPEC already ran upstream; INNOVATE always advances to PLAN.)
    - **Re-run INNOVATE (loop back)** — when fewer than two viable approaches survive, vc-predict surfaced an unmitigated high-risk threat, or accepted constraints conflict. Name the specific gaps + questions that feed the next entry gate. Bounded by the vc-autoresearch 10-cycle cap.
 3. **Recommended strategy** for the next phase — full 4-option suite (sequential / parallel-subagents / workflow / agent-team) with 7-signal score + cost estimates, one marked recommended, presented as selectable choices.
-4. **Optional deep work** (vc-scenario, vc-security, vc-sequential-thinking, parallel approach exploration from I7) offered as *choices*, not a pause.
+4. **Optional deep work** (vc-scenario, vc-security, vc-sequential-thinking, parallel approach exploration from I7) offered as _choices_, not a pause.
 
 **Three or more phases detected:** If the locked SPEC (its scope / out-of-scope / independent-workstream framing), the Decision Summary, or research findings contain any of these signals — explicit "Phase N" labels, three or more independent work streams with no shared blast-radius files, or a multi-session delivery horizon — the recommended strategy MUST be **agent-team** (one agent per phase plan), routed through this gate. (The SPEC is the earliest place program shape becomes visible; INNOVATE reads it from there.) This is required because phase plan agents need to communicate to avoid blast-radius overlap and dependency conflicts.
 
@@ -145,17 +145,21 @@ Copy this format exactly. Every section is required. If the PLAN agent receives 
 ## Decision Summary
 
 ### Chosen Approach
+
 [Name] — [1-sentence rationale]
 
 ### Why This Over Alternatives
+
 | Alternative | Why Rejected |
-|---|---|
-| [Alt 1] | [1 sentence] |
+| ----------- | ------------ |
+| [Alt 1]     | [1 sentence] |
 
 ### Risk Predictions
+
 [vc-predict 5-persona output, verbatim or summarized per persona]
 
 ### Key Constraints Accepted
+
 [Trade-offs the plan must honor]
 ```
 
@@ -164,10 +168,12 @@ Copy this format exactly. Every section is required. If the PLAN agent receives 
 ## Orchestrator Behavior
 
 **Before spawning the agent:**
+
 - Confirm the Decision Summary does not already exist.
 - Pass: the locked SPEC file path + research findings + INNOVATE strategy recommendation. INNOVATE explores how to satisfy the SPEC, so the SPEC is its primary input.
 
 **After the agent finishes:**
+
 - Receive the Decision Summary (chosen approach + rejected alternatives + rationale + Risk Predictions).
 - Receive strategy recommendation for PLAN.
 - If three or more phases were detected: surface the agent-team recommendation.

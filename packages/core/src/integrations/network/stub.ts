@@ -42,7 +42,9 @@ export function createStubNetworkController(
 			log(`[network:stub] RESOLVE-MAC ${ipAddress} → null`);
 			return null;
 		},
-		async openHostAccessForDevice(input: DeviceHostAccessInput): Promise<{ ipAddress: string | null }> {
+		async openHostAccessForDevice(
+			input: DeviceHostAccessInput
+		): Promise<{ ipAddress: string | null }> {
 			// No router / no device IP in dev — log intent so the checkout flow is traceable.
 			log(`[network:stub] OPEN-HOST-ACCESS ${input.macAddress} → ${input.hosts.join(', ')}`);
 			return { ipAddress: null };

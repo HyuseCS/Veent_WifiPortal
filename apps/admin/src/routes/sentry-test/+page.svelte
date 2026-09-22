@@ -40,7 +40,9 @@
 	</header>
 
 	<section class="flex flex-col gap-3 rounded-lg border border-white/10 p-5">
-		<h2 class="text-sm font-semibold tracking-wide uppercase">Server (definitive — bypasses browser)</h2>
+		<h2 class="text-sm font-semibold tracking-wide uppercase">
+			Server (definitive — bypasses browser)
+		</h2>
 		<p class="text-sm text-muted-foreground">
 			Sent Node → Sentry directly, so ad-blockers / CORS / tracking-protection can't interfere.
 		</p>
@@ -65,7 +67,9 @@
 	</section>
 
 	<section class="flex flex-col gap-3 rounded-lg border border-white/10 p-5">
-		<h2 class="text-sm font-semibold tracking-wide uppercase">Client (browser — may be ad-block blocked)</h2>
+		<h2 class="text-sm font-semibold tracking-wide uppercase">
+			Client (browser — may be ad-block blocked)
+		</h2>
 		<div class="flex flex-wrap gap-3">
 			<button
 				type="button"

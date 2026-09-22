@@ -1,6 +1,6 @@
 ---
 name: plan:router-timeout-sentry-classify
-description: "Classify router-unreachable timeouts as Sentry warnings (not errors) without breaking the cron withMonitor check-in"
+description: 'Classify router-unreachable timeouts as Sentry warnings (not errors) without breaking the cron withMonitor check-in'
 date: 17-07-26
 feature: general
 ---
@@ -45,7 +45,7 @@ cron monitor's red/green signal.
   `adminAccess.ts` into one shared helper. That is a real duplication but is out of scope for this
   fix — track as a backlog item if surfaced, don't act on it here.
 - Do NOT change the timeout error MESSAGE TEXT in either helper (`"${label} timed out after
-  ${ms}ms"` / `"resolveMacByIp timed out after ${ms}ms"`) — an existing test
+${ms}ms"` / `"resolveMacByIp timed out after ${ms}ms"`) — an existing test
   (`mikrotik.spec.ts` line 83) asserts `.rejects.toThrow(/timed out/)` and must keep passing
   unmodified in behavior, only strengthened with an `instanceof` assertion.
 
@@ -64,14 +64,14 @@ This is a SIMPLE single-session plan — no phase split. The plan is considered 
 
 ## Touchpoints
 
-| File | Change |
-|---|---|
-| `packages/core/src/integrations/network/types.ts` | Add new `RouterUnreachableError` class (near top of file, alongside the other exported types/interfaces — no existing class to mirror in this file, so place it as a new top-level export, doc-commented like `RetryablePaymentError`) |
-| `packages/core/src/integrations/network/mikrotik.ts` | Add real (non-type) import of `RouterUnreachableError` from `./types`; change `withTimeout()` (lines 221–236) to `reject(new RouterUnreachableError(...))` instead of `reject(new Error(...))` |
-| `packages/core/src/services/adminAccess.ts` | Add real (non-type) import of `RouterUnreachableError` from `../integrations/network/types`; change `withTimeout()` (lines 105–119) to `reject(new RouterUnreachableError(...))` instead of `reject(new Error(...))` |
-| `packages/core/src/observability.ts` | Add real import of `RouterUnreachableError` from `./integrations/network/types`; rewrite `beforeSend` in `sentryOptions()` (lines 220–237) from the one-arg form to a two-arg `(event, hint)` form that classifies `RouterUnreachableError` to `warning` level, then always returns `scrubEvent(event)` |
-| `packages/core/src/integrations/network/mikrotik.spec.ts` | Strengthen the existing timeout test (line 81–86) to also assert `instanceof RouterUnreachableError` |
-| `packages/core/src/observability.test.ts` | Add new `beforeSend` classification test cases with 3 test cases (see Verification Evidence) |
+| File                                                      | Change                                                                                                                                                                                                                                                                                                  |
+| --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `packages/core/src/integrations/network/types.ts`         | Add new `RouterUnreachableError` class (near top of file, alongside the other exported types/interfaces — no existing class to mirror in this file, so place it as a new top-level export, doc-commented like `RetryablePaymentError`)                                                                  |
+| `packages/core/src/integrations/network/mikrotik.ts`      | Add real (non-type) import of `RouterUnreachableError` from `./types`; change `withTimeout()` (lines 221–236) to `reject(new RouterUnreachableError(...))` instead of `reject(new Error(...))`                                                                                                          |
+| `packages/core/src/services/adminAccess.ts`               | Add real (non-type) import of `RouterUnreachableError` from `../integrations/network/types`; change `withTimeout()` (lines 105–119) to `reject(new RouterUnreachableError(...))` instead of `reject(new Error(...))`                                                                                    |
+| `packages/core/src/observability.ts`                      | Add real import of `RouterUnreachableError` from `./integrations/network/types`; rewrite `beforeSend` in `sentryOptions()` (lines 220–237) from the one-arg form to a two-arg `(event, hint)` form that classifies `RouterUnreachableError` to `warning` level, then always returns `scrubEvent(event)` |
+| `packages/core/src/integrations/network/mikrotik.spec.ts` | Strengthen the existing timeout test (line 81–86) to also assert `instanceof RouterUnreachableError`                                                                                                                                                                                                    |
+| `packages/core/src/observability.test.ts`                 | Add new `beforeSend` classification test cases with 3 test cases (see Verification Evidence)                                                                                                                                                                                                            |
 
 ## Public Contracts
 
@@ -82,7 +82,7 @@ This is a SIMPLE single-session plan — no phase split. The plan is considered 
   it does NOT need a new subpath — it lives inside the existing `./integrations` surface.
   VALIDATE confirmed: `types.ts` is re-exported via `export * from './types'` in
   `network/index.ts` → `export * from './network'` in `integrations/index.ts` → `export * from
-  './integrations'` in `src/index.ts`, so the new class auto-propagates to `@veent/core` `.` and
+'./integrations'` in `src/index.ts`, so the new class auto-propagates to `@veent/core` `.` and
   `./integrations` with no barrel edit required.
 - **`sentryOptions()` return shape**: `beforeSend` signature changes from `(event: ErrorEvent) => ErrorEvent`
   to `(event: ErrorEvent, hint: EventHint) => ErrorEvent`. This is the standard Sentry SDK
@@ -100,11 +100,11 @@ This is a SIMPLE single-session plan — no phase split. The plan is considered 
   2 test files).
 - **Shared-surface blast radius**: `sentryOptions()` / `beforeSend` is called from EVERY app's
   Sentry init (`apps/admin/src/hooks.server.ts` + `hooks.client.ts`, `apps/customer/src/hooks.server.ts`
-  + `hooks.client.ts`, `apps/locator/src/hooks.server.ts` + `hooks.client.ts` — verify exact hook
-  file names at EXECUTE time). This is a DELIBERATE, INTENDED widening: admin's own MAC-detect flow
-  (`resolveMacByIp` in `adminAccess.ts`) also throws `RouterUnreachableError` on timeout, so admin's
-  Sentry noise gets classified too — that's a feature of this fix, not a side effect to guard
-  against.
+  - `hooks.client.ts`, `apps/locator/src/hooks.server.ts` + `hooks.client.ts` — verify exact hook
+    file names at EXECUTE time). This is a DELIBERATE, INTENDED widening: admin's own MAC-detect flow
+    (`resolveMacByIp` in `adminAccess.ts`) also throws `RouterUnreachableError` on timeout, so admin's
+    Sentry noise gets classified too — that's a feature of this fix, not a side effect to guard
+    against.
 - **Locator app is unaffected in practice**: `packages/core/src/integrations/network/types.ts` has
   no imports of `node-routeros`, Maya, or Resend (VALIDATE re-confirmed via grep — 0 imports, pure
   type/interface file), so importing `RouterUnreachableError` into `observability.ts` does not pull any
@@ -138,19 +138,16 @@ This is a SIMPLE single-session plan — no phase split. The plan is considered 
 4. In `packages/core/src/services/adminAccess.ts`:
    - Add `import { RouterUnreachableError } from '../integrations/network/types';` (check existing
      imports first; merge if a `./types`-equivalent import already exists).
-   - In `withTimeout()` (line 107), change `reject(new Error(\`resolveMacByIp timed out after ${ms}ms\`))`
-     to `reject(new RouterUnreachableError(\`resolveMacByIp timed out after ${ms}ms\`))`. Message
+   - In `withTimeout()` (line 107), change `reject(new Error(\`resolveMacByIp timed out after ${ms}ms\`))`to`reject(new RouterUnreachableError(\`resolveMacByIp timed out after ${ms}ms\`))`. Message
      text unchanged.
 5. In `packages/core/src/observability.ts`:
    - Add `import { RouterUnreachableError } from './integrations/network/types';` near the top
      (alongside the existing `@sentry/core` imports at lines 17–18).
    - Rewrite `beforeSend` inside `sentryOptions()` (currently line 234) from:
-     ```
-     beforeSend: (event: ErrorEvent) => scrubEvent(event),
-     ```
+     `      beforeSend: (event: ErrorEvent) => scrubEvent(event),
+     `
      to a two-arg form using `EventHint` from `@sentry/core`:
-     ```
-     beforeSend: (event: ErrorEvent, hint: EventHint) => {
+     `      beforeSend: (event: ErrorEvent, hint: EventHint) => {
        const isRouterUnreachable =
          hint.originalException instanceof RouterUnreachableError ||
          event.exception?.values?.[0]?.type === 'RouterUnreachableError';
@@ -159,10 +156,10 @@ This is a SIMPLE single-session plan — no phase split. The plan is considered 
        }
        return scrubEvent(event);
      },
-     ```
+     `
      — VALIDATE ground-truthed the exact type shapes against installed `@sentry/core` 10.62.0
      (see validate-contract). Add `EventHint` to the existing `import type { ErrorEvent,
-     TransactionEvent } from '@sentry/core'` line (line 18) — see execute-agent instruction E2. Both
+TransactionEvent } from '@sentry/core'` line (line 18) — see execute-agent instruction E2. Both
      branches (matched and unmatched) MUST return `scrubEvent(event)` — PII scrub is non-negotiable
      and must never be skipped regardless of classification outcome.
    - Do NOT change `beforeSendTransaction` (line 235) — out of scope, transactions don't carry
@@ -197,19 +194,19 @@ This is a SIMPLE single-session plan — no phase split. The plan is considered 
 
 Test routing followed `process/context/tests/all-tests.md` (bunx vitest run — see project unit-test runner gotcha: never `bun test <file>`, bun's native runner silently no-ops `vi.setSystemTime`/vitest-only features).
 
-
-| Gate / Scenario | Strategy | Proves SPEC criterion |
-|---|---|---|
-| `bunx vitest run packages/core/src/integrations/network/mikrotik.spec.ts` | Fully-Automated | Timeout rejection is `instanceof RouterUnreachableError`, existing `/timed out/` message-text behavior unchanged |
-| `bunx vitest run packages/core/src/observability.test.ts` — Case A (`hint.originalException instanceof RouterUnreachableError` → `level: 'warning'`) | Fully-Automated | `beforeSend` downgrades `RouterUnreachableError` events to warning via the primary discriminator |
-| `bunx vitest run packages/core/src/observability.test.ts` — Case B (normal `Error` → level unchanged) | Fully-Automated | Non-router errors are NOT downgraded — real bugs stay at error level |
-| `bunx vitest run packages/core/src/observability.test.ts` — Case C (`event.exception.values[0].type` fallback → `level: 'warning'`) | Fully-Automated | Fallback discriminator works independent of `hint.originalException` (covers cases where Sentry SDK normalizes the exception before `hint` is populated) |
-| `bunx vitest run packages/core/src/observability.test.ts` — PII-scrub-still-runs assertions (Cases A & B) | Fully-Automated | `scrubEvent` PII redaction is never skipped regardless of classification branch taken |
-| `bun run check` (scoped at minimum to `packages/core`; full monorepo check acceptable) | Fully-Automated | No TypeScript/svelte-check regressions from the new class, two throw-site changes, and the `beforeSend` signature change |
-| Existing `mikrotik.spec.ts` full suite green | Fully-Automated | No regression to other timeout/connect/ping tests in the same file |
-| Manual/agent-probe: confirm `Sentry.withMonitor('customer-network-revoke')` check-in code path is untouched (grep for `withMonitor` usage in `apps/customer/src/routes/api/network/revoke/+server.ts` and confirm no try/catch was added around the sweep calls) | Agent-Probe | Non-Goal #1 held — cron red-signal propagation is unchanged |
+| Gate / Scenario                                                                                                                                                                                                                                                  | Strategy        | Proves SPEC criterion                                                                                                                                    |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `bunx vitest run packages/core/src/integrations/network/mikrotik.spec.ts`                                                                                                                                                                                        | Fully-Automated | Timeout rejection is `instanceof RouterUnreachableError`, existing `/timed out/` message-text behavior unchanged                                         |
+| `bunx vitest run packages/core/src/observability.test.ts` — Case A (`hint.originalException instanceof RouterUnreachableError` → `level: 'warning'`)                                                                                                             | Fully-Automated | `beforeSend` downgrades `RouterUnreachableError` events to warning via the primary discriminator                                                         |
+| `bunx vitest run packages/core/src/observability.test.ts` — Case B (normal `Error` → level unchanged)                                                                                                                                                            | Fully-Automated | Non-router errors are NOT downgraded — real bugs stay at error level                                                                                     |
+| `bunx vitest run packages/core/src/observability.test.ts` — Case C (`event.exception.values[0].type` fallback → `level: 'warning'`)                                                                                                                              | Fully-Automated | Fallback discriminator works independent of `hint.originalException` (covers cases where Sentry SDK normalizes the exception before `hint` is populated) |
+| `bunx vitest run packages/core/src/observability.test.ts` — PII-scrub-still-runs assertions (Cases A & B)                                                                                                                                                        | Fully-Automated | `scrubEvent` PII redaction is never skipped regardless of classification branch taken                                                                    |
+| `bun run check` (scoped at minimum to `packages/core`; full monorepo check acceptable)                                                                                                                                                                           | Fully-Automated | No TypeScript/svelte-check regressions from the new class, two throw-site changes, and the `beforeSend` signature change                                 |
+| Existing `mikrotik.spec.ts` full suite green                                                                                                                                                                                                                     | Fully-Automated | No regression to other timeout/connect/ping tests in the same file                                                                                       |
+| Manual/agent-probe: confirm `Sentry.withMonitor('customer-network-revoke')` check-in code path is untouched (grep for `withMonitor` usage in `apps/customer/src/routes/api/network/revoke/+server.ts` and confirm no try/catch was added around the sweep calls) | Agent-Probe     | Non-Goal #1 held — cron red-signal propagation is unchanged                                                                                              |
 
 ### Test Infra Improvement Notes
+
 (none identified yet)
 
 ## Dependencies, Risks, Integration Notes
@@ -252,45 +249,53 @@ Rationale: signal score 1/7 — only S7 present (6 files ≥ 5-file threshold). 
 
 Test gates (C3 5-column table):
 
-| criterion id | behavior | strategy | proving test | gap-resolution |
-|---|---|---|---|---|
-| AC2 | Timeout rejects with `instanceof RouterUnreachableError`; `/timed out/` message text unchanged | Fully-Automated | `bunx vitest run packages/core/src/integrations/network/mikrotik.spec.ts` | B |
-| AC3 (primary) | `beforeSend` downgrades `RouterUnreachableError` to `level: 'warning'` via `hint.originalException instanceof` | Fully-Automated | `bunx vitest run packages/core/src/observability.test.ts` (Case A) | B |
-| AC4 | Normal `Error` NOT downgraded — level left unchanged | Fully-Automated | `bunx vitest run packages/core/src/observability.test.ts` (Case B) | B |
-| AC3 (fallback) | Fallback discriminator `event.exception.values[0].type === 'RouterUnreachableError'` → warning, independent of hint | Fully-Automated | `bunx vitest run packages/core/src/observability.test.ts` (Case C) | B |
-| AC3 (PII) | `scrubEvent` PII redaction runs on BOTH matched and unmatched branches | Fully-Automated | `bunx vitest run packages/core/src/observability.test.ts` (PII assertions, Cases A & B) | B |
-| AC1/AC2/AC3 | No TS/svelte-check regression from new class + throw-site + `beforeSend` signature change | Fully-Automated | `bun run check` | A |
-| regression | No regression to other timeout/connect/ping tests | Fully-Automated | `bunx vitest run packages/core/src/integrations/network/mikrotik.spec.ts` (full file) | A |
-| AC5 | `withMonitor` cron red-signal propagation unchanged — no try/catch added around sweep calls | Agent-Probe | grep `withMonitor` + sweep calls in `apps/customer/src/routes/api/network/revoke/+server.ts`; confirm no try/catch wrapping | A |
+| criterion id   | behavior                                                                                                            | strategy        | proving test                                                                                                                | gap-resolution |
+| -------------- | ------------------------------------------------------------------------------------------------------------------- | --------------- | --------------------------------------------------------------------------------------------------------------------------- | -------------- |
+| AC2            | Timeout rejects with `instanceof RouterUnreachableError`; `/timed out/` message text unchanged                      | Fully-Automated | `bunx vitest run packages/core/src/integrations/network/mikrotik.spec.ts`                                                   | B              |
+| AC3 (primary)  | `beforeSend` downgrades `RouterUnreachableError` to `level: 'warning'` via `hint.originalException instanceof`      | Fully-Automated | `bunx vitest run packages/core/src/observability.test.ts` (Case A)                                                          | B              |
+| AC4            | Normal `Error` NOT downgraded — level left unchanged                                                                | Fully-Automated | `bunx vitest run packages/core/src/observability.test.ts` (Case B)                                                          | B              |
+| AC3 (fallback) | Fallback discriminator `event.exception.values[0].type === 'RouterUnreachableError'` → warning, independent of hint | Fully-Automated | `bunx vitest run packages/core/src/observability.test.ts` (Case C)                                                          | B              |
+| AC3 (PII)      | `scrubEvent` PII redaction runs on BOTH matched and unmatched branches                                              | Fully-Automated | `bunx vitest run packages/core/src/observability.test.ts` (PII assertions, Cases A & B)                                     | B              |
+| AC1/AC2/AC3    | No TS/svelte-check regression from new class + throw-site + `beforeSend` signature change                           | Fully-Automated | `bun run check`                                                                                                             | A              |
+| regression     | No regression to other timeout/connect/ping tests                                                                   | Fully-Automated | `bunx vitest run packages/core/src/integrations/network/mikrotik.spec.ts` (full file)                                       | A              |
+| AC5            | `withMonitor` cron red-signal propagation unchanged — no try/catch added around sweep calls                         | Agent-Probe     | grep `withMonitor` + sweep calls in `apps/customer/src/routes/api/network/revoke/+server.ts`; confirm no try/catch wrapping | A              |
 
 gap-resolution legend: A — proven now; B — gate added by this plan's checklist; C — deferred to later phase; D — backlog test-building stub.
 C-4 reconciliation: `strategy` column carries only the 3 proving strategies (Fully-Automated / Hybrid / Agent-Probe). No Known-Gap rows — every developed behavior has an automated or agent-probe gate.
 
 Legacy line form (retained for existing validate-contract consumers):
+
 - mikrotik.ts throw site: Fully-automated: `bunx vitest run packages/core/src/integrations/network/mikrotik.spec.ts`
 - observability.ts beforeSend classification: Fully-automated: `bunx vitest run packages/core/src/observability.test.ts`
 - typecheck: Fully-automated: `bun run check`
 - withMonitor invariant: agent-probe: grep revoke/+server.ts for try/catch around sweep calls
 
 Failing stub (Case A — Fully-Automated):
+
 ```
 test("should downgrade RouterUnreachableError events to warning via hint.originalException", () => {
   throw new Error("NOT IMPLEMENTED — TDD stub: beforeSend sets level='warning' when hint.originalException instanceof RouterUnreachableError")
 })
 ```
+
 Failing stub (Case B — Fully-Automated):
+
 ```
 test("should NOT downgrade a normal Error passed through beforeSend", () => {
   throw new Error("NOT IMPLEMENTED — TDD stub: beforeSend leaves level unchanged for a plain Error")
 })
 ```
+
 Failing stub (Case C — Fully-Automated):
+
 ```
 test("should downgrade via event.exception.values[0].type fallback when hint is absent", () => {
   throw new Error("NOT IMPLEMENTED — TDD stub: beforeSend fallback discriminator sets level='warning'")
 })
 ```
+
 Failing stub (mikrotik instanceof — Fully-Automated):
+
 ```
 test("should reject via timeout with an instanceof RouterUnreachableError", () => {
   throw new Error("NOT IMPLEMENTED — TDD stub: connectHardened timeout rejection is instanceof RouterUnreachableError")
@@ -298,6 +303,7 @@ test("should reject via timeout with an instanceof RouterUnreachableError", () =
 ```
 
 Dimension findings:
+
 - Infra fit: PASS — target file paths, line numbers, and the `@veent/core` barrel re-export chain (`types.ts` → `network/index.ts` → `integrations/index.ts` → `src/index.ts` via `export *`) all confirmed on disk. `packages/core` uses Vitest; `bunx vitest run <file>` is the correct scoped command (bun-native `bun test <file>` gotcha avoided).
 - Test coverage: PASS — all developed behaviors covered by Fully-Automated gates (5 vitest cases + typecheck + regression) plus one Agent-Probe for the withMonitor no-touch invariant. No Known-Gap rows. No high-risk class requiring a hybrid gate (observability data-classification only).
 - Breaking changes: PASS — GROUND-TRUTHED against installed `@sentry/core` 10.62.0 `.d.ts`: (a) `beforeSend?: (event: ErrorEvent, hint: EventHint) => PromiseLike<ErrorEvent|null> | ErrorEvent | null` (options.d.ts:597); (b) `EventHint.originalException?: unknown` (event.d.ts:82); (c) `Event.level?: SeverityLevel` where `SeverityLevel = 'fatal'|'error'|'warning'|'log'|'info'|'debug'` (mutable, 'warning' valid); (d) `Exception.type?: string` exists for the fallback discriminator. `scrubEvent<T>(event:T):T` return is assignable to the `ErrorEvent|null` return type. No signature mismatch. `RouterUnreachableError` IS-A `Error`, so all existing `.catch`/`.rejects.toThrow` callers keep working.
@@ -307,12 +313,14 @@ Dimension findings:
 - Section C (test additions): PASS — existing `mikrotik.spec.ts:81-86` test body and `observability.test.ts` structure confirmed; `connectHardened` re-throws unchanged (line 269, no wrapping catch) so `instanceof` assertion is safe. One advisory (nest new tests in existing `sentryOptions` describe) captured as execute-agent instruction E1.
 
 Execute-agent instructions:
+
 - E1: `observability.test.ts` already contains a `describe('sentryOptions', ...)` block (line 135, tracesSampleRate clamping only). Nest the 3 new `beforeSend` classification cases (A/B/C) + PII-scrub assertions INSIDE that existing `sentryOptions` describe block — do NOT create a sibling `describe('sentryOptions beforeSend classification', ...)`. Trigger: Implementation Checklist item 7.
 - E2: When editing `observability.ts` line 18, add `EventHint` to the existing `import type { ErrorEvent, TransactionEvent } from '@sentry/core'` line — do not add a separate import statement. `EventHint` is exported from `@sentry/core` (confirmed event.d.ts:77). Trigger: Implementation Checklist item 5.
 
 Open gaps: none
 
 What this coverage does NOT prove:
+
 - `bunx vitest run packages/core/src/integrations/network/mikrotik.spec.ts` does NOT prove real MikroTik router behavior — it uses the mocked `node-routeros` fake connection; it proves the timeout-rejection type contract only, not live-router timeout timing.
 - `bunx vitest run packages/core/src/observability.test.ts` does NOT prove that a REAL Sentry SDK, at runtime, populates `hint.originalException` for this specific throw path (that depends on Sentry's internal event pipeline). It proves the `beforeSend` function's own classification logic against constructed event/hint stubs. The Case C fallback discriminator exists precisely to cover the case where the SDK normalizes the exception before `hint` is populated — but neither branch is proven against a live Sentry dispatch.
 - `bun run check` does NOT prove runtime correctness — only TypeScript/svelte-check type validity across the apps fan-out (note: `packages/core` itself has no `check` script; type-safety of the core change is proven transitively when the apps that import it are checked, plus the vitest type-level usage).

@@ -1,13 +1,13 @@
 ---
 name: protocol:implementation-standards
-description: "Durable implementation standards, file-size guidance, error-handling preferences, quality gates, and commit hygiene."
+description: 'Durable implementation standards, file-size guidance, error-handling preferences, quality gates, and commit hygiene.'
 date: 09-06-26
 metadata:
   node_type: memory
   type: protocol
   read_order: 3
   required: false
-  read_when: "writing or reviewing code — engineering standards and quality gates"
+  read_when: 'writing or reviewing code — engineering standards and quality gates'
 ---
 
 # Implementation Standards
@@ -83,7 +83,7 @@ runtime behavior. Fields in scope for this program:
   ```yaml
   hooks:
     PreToolUse:
-      - matcher: "Write"
+      - matcher: 'Write'
         hooks:
           - type: command
             command: "node .claude/hooks/agent-write-guard.mjs --agent <agent-slug> --allowlist '<glob>'"

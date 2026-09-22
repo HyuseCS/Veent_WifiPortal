@@ -141,10 +141,15 @@
 			<div class="flex items-center justify-between gap-2 border-b border-border px-3 py-2.5">
 				<span class="text-sm font-semibold text-ink">Notifications</span>
 				{#if notifications.length > 0}
-					<form method="post" action="/issues?/markAllRead" use:enhance={() => async ({ update }) => {
-						open = false;
-						await update(); // invalidates → sidebar badge + list refresh
-					}}>
+					<form
+						method="post"
+						action="/issues?/markAllRead"
+						use:enhance={() =>
+							async ({ update }) => {
+								open = false;
+								await update(); // invalidates → sidebar badge + list refresh
+							}}
+					>
 						<button
 							type="submit"
 							class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-brand outline-none transition-colors hover:bg-surface focus-visible:ring-2 focus-visible:ring-brand/40"
@@ -180,9 +185,10 @@
 								method="post"
 								action="/issues?/markOne"
 								class="shrink-0 p-1.5"
-								use:enhance={() => async ({ update }) => {
-									await update();
-								}}
+								use:enhance={() =>
+									async ({ update }) => {
+										await update();
+									}}
 							>
 								<input type="hidden" name="eventId" value={n.id} />
 								<button

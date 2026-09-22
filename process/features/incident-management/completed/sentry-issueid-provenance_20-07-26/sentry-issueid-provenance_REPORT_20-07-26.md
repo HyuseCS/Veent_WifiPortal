@@ -1,6 +1,6 @@
 ---
 name: report:sentry-issueid-provenance-execute
-description: "EXECUTE phase report — M4d provenance gate implemented and unit-green; e2e hybrid gate RED on a falsified plan premise"
+description: 'EXECUTE phase report — M4d provenance gate implemented and unit-green; e2e hybrid gate RED on a falsified plan premise'
 phase: sentry-issueid-provenance
 date: 2026-07-20
 status: COMPLETE
@@ -47,19 +47,19 @@ unrelated to this work.
 
 **Red-first discipline honoured retroactively:** with the `+page.server.ts` change stashed, 5 of the
 7 tests fail; restoring it turns them green. The 2 that pass under revert are the two
-behaviour-*preservation* tests (unconfigured-skip, malformed-snapshot-rejected-first), which is the
+behaviour-_preservation_ tests (unconfigured-skip, malformed-snapshot-rejected-first), which is the
 correct signal — they assert unchanged behaviour, so they must be green both before and after.
 
 ## Test Gate Outcomes
 
-| Gate | Command | Result |
-|---|---|---|
-| G1 / G1b / G2 / G3 / G4 | `bunx vitest run src/routes/(app)/sentry/track-provenance.test.ts` | **PASS** — 7/7 |
-| REG | `cd apps/admin && bunx vitest run` (full suite) | **PASS** — 20 files, 149 tests |
-| TYPE | `cd apps/admin && bun run check` | **PASS** — 2307 files, 0 errors, 0 warnings |
-| G3-e2e | `cd apps/admin && bun run test:e2e -- incident-sentry` | **PASS** — after the §Supplement fix; spec unmodified |
-| e2e suite | `cd apps/admin && bun run test:e2e` | **15 pass / 4 fail** vs baseline **14 pass / 5 fail** — same 4 pre-existing failures, no new ones |
-| LIVE | live-Sentry agent probe | **NOT RUN** — no sandbox; documented known-gap per plan |
+| Gate                    | Command                                                            | Result                                                                                            |
+| ----------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------- |
+| G1 / G1b / G2 / G3 / G4 | `bunx vitest run src/routes/(app)/sentry/track-provenance.test.ts` | **PASS** — 7/7                                                                                    |
+| REG                     | `cd apps/admin && bunx vitest run` (full suite)                    | **PASS** — 20 files, 149 tests                                                                    |
+| TYPE                    | `cd apps/admin && bun run check`                                   | **PASS** — 2307 files, 0 errors, 0 warnings                                                       |
+| G3-e2e                  | `cd apps/admin && bun run test:e2e -- incident-sentry`             | **PASS** — after the §Supplement fix; spec unmodified                                             |
+| e2e suite               | `cd apps/admin && bun run test:e2e`                                | **15 pass / 4 fail** vs baseline **14 pass / 5 fail** — same 4 pre-existing failures, no new ones |
+| LIVE                    | live-Sentry agent probe                                            | **NOT RUN** — no sandbox; documented known-gap per plan                                           |
 
 ## BLOCKING FINDING — the G3-e2e premise is false
 
@@ -67,6 +67,7 @@ The plan, the validate-contract, and `incident-sentry.e2e.ts`'s own header comme
 **Sentry is unconfigured in the e2e test env**. It is not.
 
 Evidence:
+
 - `apps/admin/e2e/config.ts:21-28` — `TEST_ENV` blanks `RESEND_API_KEY` and `EMAIL_FROM`, but does
   **not** blank any `SENTRY_*` key.
 - `playwright.config.ts:24` passes `TEST_ENV` to the webserver, which therefore **inherits the real
@@ -89,8 +90,8 @@ not introduced by this change, but worth surfacing.
 ### Why this was surfaced rather than silently fixed
 
 The fix was small and idiomatic, but it was **not in the Implementation Checklist** and it mutates
-shared e2e harness config that every other spec depends on. Per the EXECUTE constraint — *if reality
-contradicts the plan, stop and report rather than improvise* — it was surfaced for a decision
+shared e2e harness config that every other spec depends on. Per the EXECUTE constraint — _if reality
+contradicts the plan, stop and report rather than improvise_ — it was surfaced for a decision
 instead of applied unilaterally. Approval was granted; see §Supplement.
 
 ## Supplement (approved out-of-checklist change)
@@ -103,7 +104,7 @@ instead of applied unilaterally. Approval was granted; see §Supplement.
 Sentry alongside the DB / router / mailer overrides it already documented.
 
 **Why it was outside the original checklist:** the plan treated "Sentry is unconfigured in e2e" as a
-given fact about the environment, so no checklist step existed to *make* it true. The plan's
+given fact about the environment, so no checklist step existed to _make_ it true. The plan's
 Non-Goals said "no change to e2e", but in context that referred to the spec file
 (`incident-sentry.e2e.ts`) — harness config was simply never considered, because the premise was
 assumed rather than verified. This is a plan-premise correction, not a scope expansion: it changes
@@ -146,7 +147,7 @@ Why it went unnoticed: those calls were previously read-only, non-fatal, and inv
 dashboard degrades gracefully on Sentry failure, so nothing ever went red. M4d only exposed it by
 making the code path fail loudly. The stale comment at the top of `incident-sentry.e2e.ts` ("The
 Sentry API is unconfigured in the test env (no token)") suggests the author genuinely believed it was
-unconfigured, and it likely *was* on a machine without those `.env` keys.
+unconfigured, and it likely _was_ on a machine without those `.env` keys.
 
 Residual risk now closed: test runs no longer consume production Sentry API quota, and no test can
 mutate live Sentry state. Worth a general lesson for the harness — **`TEST_ENV` should enumerate
@@ -157,11 +158,11 @@ non-issue.
 
 ## Plan Deviations
 
-| # | Deviation | Rationale | Class |
-|---|---|---|---|
-| 1 | Test file named `track-provenance.test.ts` instead of `+page.server.test.ts` | SvelteKit emits `Files prefixed with + are reserved` three times per run for the planned name. The plan explicitly permits "(or the actual path chosen)". Same directory, same coverage. | Within-blast-radius |
-| 2 | `map.ts` and `formValidation.ts` left unmocked | Both are pure; E1 listed them as mockable, not mandatory-to-mock. Using the real ones strengthens the ordering assertions. | Within-blast-radius |
-| 3 | 7 tests written instead of the 5 stubs | Added two ordering tests (gate runs before field validation; snapshot validation runs before any Sentry call). Additive. | Within-blast-radius |
+| #   | Deviation                                                                    | Rationale                                                                                                                                                                                | Class               |
+| --- | ---------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------- |
+| 1   | Test file named `track-provenance.test.ts` instead of `+page.server.test.ts` | SvelteKit emits `Files prefixed with + are reserved` three times per run for the planned name. The plan explicitly permits "(or the actual path chosen)". Same directory, same coverage. | Within-blast-radius |
+| 2   | `map.ts` and `formValidation.ts` left unmocked                               | Both are pure; E1 listed them as mockable, not mandatory-to-mock. Using the real ones strengthens the ordering assertions.                                                               | Within-blast-radius |
+| 3   | 7 tests written instead of the 5 stubs                                       | Added two ordering tests (gate runs before field validation; snapshot validation runs before any Sentry call). Additive.                                                                 | Within-blast-radius |
 
 | 4 | `TEST_ENV` Sentry blanking in `apps/admin/e2e/config.ts` | Out-of-checklist harness fix correcting the plan's false premise. **Surfaced first, explicitly user-approved before applying.** Full detail in §Supplement. | Hard-stop class — surfaced, approved, then applied |
 
@@ -174,7 +175,7 @@ was reported, and the change was made only after explicit approval with an expli
 - **`TEST_ENV` did not neutralize Sentry credentials** (`apps/admin/e2e/config.ts`) — **RESOLVED**
   by the approved supplement above. See §Standalone hygiene finding for the full write-up.
 - **`incident-sentry.e2e.ts`'s header comment is stale** — it states "The Sentry API is unconfigured
-  in the test env (no token)". That is now *true again* thanks to the supplement, so the comment is
+  in the test env (no token)". That is now _true again_ thanks to the supplement, so the comment is
   no longer misleading. **Left unedited on purpose**, since the spec file was under a
   do-not-modify constraint. Worth a one-line touch-up in a future pass to note that the guarantee
   now comes from `TEST_ENV`, not from an absent `.env`.

@@ -1,6 +1,6 @@
 ---
 name: report:ims-audit-remediation-evl-iteration-001
-description: "EVL cycle 1 — IMS e2e hybrid gate red from test-side issues; scoped test-only fix dispatched"
+description: 'EVL cycle 1 — IMS e2e hybrid gate red from test-side issues; scoped test-only fix dispatched'
 date: 10-07-26
 feature: incident-management
 metadata:
@@ -41,4 +41,5 @@ Two mandated test-only fixes applied + staged → **4/7 IMS e2e specs pass** (we
 **Decision:** stopped the headless EVL chase at 2 cycles. Core app behavior (M1/L4/self-exclusion, H1, H2) is green on all deterministic gates and demonstrably working at the e2e tier for the cases that execute. Modernizing the IMS e2e specs to the post-L6a ARIA + fixing the login-helper timeout is tracked as a **follow-up** (backlog stub at UPDATE PROCESS), not a blocker for this remediation.
 
 ### Follow-up stub (→ backlog at UPDATE PROCESS)
+
 Modernize IMS e2e specs after the L6a a11y change: replace `role="menuitem"` dropdown queries with the post-L6a labelled-list/link roles; raise the `loginNonManager` helper timeout (or reuse a stored non-manager storageState) so the M3 assertion runs under the 60s cap; then confirm `incident-notifications` `:113` 2-unread with a live trace.

@@ -20,9 +20,11 @@ checkout also pulls `*.alipay.com` / `*.alipayobjects.com` / `*.alicdn.com`, whi
 unmatched by hostname rules.
 
 The operator fixed this LIVE with a **temporary manual IP allow** on the router:
+
 ```
 /ip hotspot walled-garden ip add dst-address=<resolved payments.gcash.com IP>
 ```
+
 This is not durable — the resolved IP can change, and Alipay's supporting asset hosts were not
 added at all (untested whether they're also required for GCash to load fully).
 

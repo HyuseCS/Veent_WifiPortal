@@ -90,7 +90,11 @@ describe('planGrant — mutual-exclusion precedence', () => {
 
 	it('admin grant NO-OPS on a device already bypassed by a guest binding (paid time kept)', () => {
 		expect(
-			planGrant([bypassed('veent-portal')], { isAdmin: true, nowMs: NOW, guestTag: ADMIN_BYPASS_TAG })
+			planGrant([bypassed('veent-portal')], {
+				isAdmin: true,
+				nowMs: NOW,
+				guestTag: ADMIN_BYPASS_TAG
+			})
 		).toEqual({ action: 'noop' });
 	});
 
@@ -154,7 +158,11 @@ describe('planGrant — mutual-exclusion precedence', () => {
 
 	it('admin grant converts a lone unrelated non-bypassed row in place (rows[0] fallback)', () => {
 		expect(
-			planGrant([regular('manual-block')], { isAdmin: true, nowMs: NOW, guestTag: GUEST_BYPASS_TAG })
+			planGrant([regular('manual-block')], {
+				isAdmin: true,
+				nowMs: NOW,
+				guestTag: GUEST_BYPASS_TAG
+			})
 		).toEqual({ action: 'set', id: '*2', comment: `veent-admin:${NOW}`, flush: true });
 	});
 });

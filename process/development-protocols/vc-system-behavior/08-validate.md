@@ -1,13 +1,13 @@
 ---
 name: protocol:vc-system-behavior-08-validate
-description: "VALIDATE phase (PVL) reference: V1–V7 gate sequence, fan-out layers, and validate-contract schema."
+description: 'VALIDATE phase (PVL) reference: V1–V7 gate sequence, fan-out layers, and validate-contract schema.'
 date: 09-06-26
 metadata:
   node_type: memory
   type: protocol
   read_order: 1
   required: false
-  read_when: "running or auditing the VALIDATE/PVL phase"
+  read_when: 'running or auditing the VALIDATE/PVL phase'
 ---
 
 # VALIDATE Phase (PVL)
@@ -42,7 +42,7 @@ PVL loop:
                         BLOCKED → plan-validate-fix loop (or backlog note) → back to V1
 ```
 
-> **Single-trip rule (PHASE-GATES).** VALIDATE has exactly two user touchpoints: an **entry** Combined Clarification Gate (`03-session-start.md` Step 6.5 — intent restatement + clarifying questions + 4 strategy options + PVL run-mode, in ONE `AskUserQuestion`) and an **exit** Phase-End Recommendation Gate (V4, single round-trip). The V1–V7 PVL gates are internal machine gates, NOT user round-trips. V5 is the user-decision step *inside* the single exit gate (V4), not a separate pause. Under `/goal` both user gates auto-proceed. See `12-reference.md` PHASE-GATES.
+> **Single-trip rule (PHASE-GATES).** VALIDATE has exactly two user touchpoints: an **entry** Combined Clarification Gate (`03-session-start.md` Step 6.5 — intent restatement + clarifying questions + 4 strategy options + PVL run-mode, in ONE `AskUserQuestion`) and an **exit** Phase-End Recommendation Gate (V4, single round-trip). The V1–V7 PVL gates are internal machine gates, NOT user round-trips. V5 is the user-decision step _inside_ the single exit gate (V4), not a separate pause. Under `/goal` both user gates auto-proceed. See `12-reference.md` PHASE-GATES.
 
 ### PVL Mode Selection
 
@@ -51,6 +51,7 @@ The PVL run-mode (auto-run vs step-by-step) is NOT a separate pause. It is folde
 **Under /goal:** Always auto-run. No user prompt.
 
 **Outside /goal:** The entry gate surfaces this choice once (sticky for the full PVL), alongside the intent restatement and 4-option strategy suite:
+
 > "Ready to start PVL. How do you want to run it?
 > (a) Auto-run — validate → if CONDITIONAL/BLOCKED: plan-agent fixes → re-validate from V1 → repeat until PASS or 10-cycle cap.
 > (b) Step-by-step — present V7 verdict → you confirm → plan-agent supplements → re-validate → present verdict → confirm → loop or move forward.
@@ -171,12 +172,12 @@ Under /goal: scan the plan file for `## Inner Loop Refresh Note` with a date new
 
 ### Layer 1 (4 agents, always run in parallel)
 
-| Dimension | What it checks | Context loaded |
-|---|---|---|
-| Infra/setup fit | Container/worker/runtime architecture; target paths, ports | all-context.md → container + infra groups |
-| Test coverage | Realistic tier strategy; checks whether vc-test-coverage-plan was invoked and tier assignments exist for all blast-radius areas | all-tests.md routing chain |
-| Breaking changes | API contracts, schemas, public contracts, downstream consumers | Plan Public Contracts + Blast Radius |
-| Security surface | STRIDE/OWASP via vc-security internally | Invokes vc-security internally |
+| Dimension        | What it checks                                                                                                                  | Context loaded                            |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------- |
+| Infra/setup fit  | Container/worker/runtime architecture; target paths, ports                                                                      | all-context.md → container + infra groups |
+| Test coverage    | Realistic tier strategy; checks whether vc-test-coverage-plan was invoked and tier assignments exist for all blast-radius areas | all-tests.md routing chain                |
+| Breaking changes | API contracts, schemas, public contracts, downstream consumers                                                                  | Plan Public Contracts + Blast Radius      |
+| Security surface | STRIDE/OWASP via vc-security internally                                                                                         | Invokes vc-security internally            |
 
 Per-agent output format: `Dimension / Status (PASS/CONCERN/FAIL) / Findings / Confidence / Notes`
 
@@ -198,7 +199,7 @@ For each CONCERN: invoke vc-scenario. For high-risk items: invoke vc-predict.
 
 When a Layer 2 dimension agent identifies a plan section that depends on an **untested runtime/system behavior** — one that cannot be answered by reading source files — it emits:
 
-  VC-FEASIBILITY-PROBE-NEEDED: [hypothesis] — cost-class: [class]
+VC-FEASIBILITY-PROBE-NEEDED: [hypothesis] — cost-class: [class]
 
 and halts its own analysis. The agent does NOT continue to the per-agent output format.
 
@@ -257,7 +258,7 @@ When Layer 1 and Layer 2 give different verdicts for the same blast-radius area:
 
 ## V4 — Validate Menu (the single exit Phase-End Recommendation Gate)
 
-V4 **is** the one exit round-trip for VALIDATE. Everything the user decides about this phase — accept, supplement, re-run agents, re-validate, loop back to PLAN, or proceed to EXECUTE — is presented here in one block with a recommended option marked. There is no separate post-V7 ask: the /goal-block print prompt and the `ENTER EXECUTE MODE` advance are surfaced as options *inside* this gate (see V7).
+V4 **is** the one exit round-trip for VALIDATE. Everything the user decides about this phase — accept, supplement, re-run agents, re-validate, loop back to PLAN, or proceed to EXECUTE — is presented here in one block with a recommended option marked. There is no separate post-V7 ask: the /goal-block print prompt and the `ENTER EXECUTE MODE` advance are surfaced as options _inside_ this gate (see V7).
 
 ### Required Skill
 
@@ -361,7 +362,7 @@ All of these must be present:
 
 ### NEEDS_CONTEXT Sub-Case
 
-If vc-plan-agent returns NEEDS_CONTEXT during a validate-fix loop (an out-of-scope gap): 
+If vc-plan-agent returns NEEDS_CONTEXT during a validate-fix loop (an out-of-scope gap):
 
 1. Record the out-of-scope gap(s) as backlog notes with `NEW PLAN REQUIRED` flag.
 2. Add a `## Known Gaps (Resolved via Backlog)` section to the plan file (or append if it exists), with entry: `- [gap name]: known-gap: documented as NEW PLAN REQUIRED — backlog: [path]`
@@ -439,6 +440,7 @@ SUPPLEMENT REQUEST:
 ```
 
 The plan-agent in supplement mode must:
+
 - Only touch sections listed in the gap list.
 - Not expand scope beyond the listed sections.
 - If resolving a gap requires touching unlisted sections: flag it and halt. Do not self-authorize scope expansion.
@@ -478,6 +480,7 @@ Execute start: [first run command] | [e2e spec] | probe: [probe scenario] | high
 > Under a true /goal run, the listed hard-stops/safety constraints are recorded as backlog notes and execution continues; they are live pauses only outside /goal.
 
 Rules:
+
 - Keep under 4000 characters.
 - Name the umbrella plan path or state "N/A" explicitly.
 - List hard stops verbatim from the validate-contract.

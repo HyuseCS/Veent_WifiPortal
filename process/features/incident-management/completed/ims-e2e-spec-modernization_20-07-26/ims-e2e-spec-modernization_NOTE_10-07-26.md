@@ -1,6 +1,6 @@
 ---
 name: plan:ims-e2e-spec-modernization
-description: "CLOSED 20-07-26 — see process/features/incident-management/completed/ims-e2e-spec-modernization_20-07-26/. Modernize IMS e2e specs: post-L6a ARIA, loginNonManager timeout, live-trace the :113 assertion, add Report-an-issue tile coverage"
+description: 'CLOSED 20-07-26 — see process/features/incident-management/completed/ims-e2e-spec-modernization_20-07-26/. Modernize IMS e2e specs: post-L6a ARIA, loginNonManager timeout, live-trace the :113 assertion, add Report-an-issue tile coverage'
 date: 10-07-26
 feature: incident-management
 ---

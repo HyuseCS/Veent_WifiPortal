@@ -250,7 +250,10 @@ async function afterBind(
 		try {
 			await network.activateSession({ macAddress });
 		} catch (err) {
-			console.warn('[sessions] activateSession failed (access still granted):', (err as Error).message);
+			console.warn(
+				'[sessions] activateSession failed (access still granted):',
+				(err as Error).message
+			);
 		}
 	}
 }
@@ -541,7 +544,9 @@ export async function getActiveAccess(
 	const pausedAt = profile?.accessPausedAt ?? null;
 	const paused = !!pausedAt;
 	// Paused → remaining is frozen (ignores wall-clock); live → counts down to `window`.
-	const remainingMs = paused ? window.getTime() - pausedAt.getTime() : window.getTime() - now.getTime();
+	const remainingMs = paused
+		? window.getTime() - pausedAt.getTime()
+		: window.getTime() - now.getTime();
 	if (remainingMs <= 0) return null;
 
 	const devices = await db
@@ -571,7 +576,9 @@ export async function getActiveAccess(
 		name: profile.packageName ?? null,
 		isFree: (profile.accessPackageId ?? null) == null,
 		paused,
-		pausedReason: paused ? ((profile.accessPausedReason as 'user' | 'outage' | null) ?? 'user') : null,
+		pausedReason: paused
+			? ((profile.accessPausedReason as 'user' | 'outage' | null) ?? 'user')
+			: null,
 		remainingMs,
 		devices: devices.map((d) => ({
 			id: d.id,
@@ -621,10 +628,14 @@ export async function pauseAccountAccess(
 		const window = p?.accessExpiresAt ?? null;
 		// Already paused → idempotent success with the frozen remaining.
 		if (p?.accessPausedAt) {
-			return { ok: true as const, remainingMs: (window?.getTime() ?? 0) - p.accessPausedAt.getTime() };
+			return {
+				ok: true as const,
+				remainingMs: (window?.getTime() ?? 0) - p.accessPausedAt.getTime()
+			};
 		}
 		if (!window || window <= now) return { ok: false as const, reason: 'no_access' as const };
-		if (p.accessPackageId == null) return { ok: false as const, reason: 'free_not_pausable' as const };
+		if (p.accessPackageId == null)
+			return { ok: false as const, reason: 'free_not_pausable' as const };
 
 		await tx
 			.update(customerProfile)
@@ -1013,10 +1024,7 @@ async function revokeGuestUnlessShared(
 	await network.revoke(mac, { tag: GUEST_BYPASS_TAG });
 }
 
-export async function reconcileGuestBindings(
-	db: DB,
-	network: NetworkController
-): Promise<number> {
+export async function reconcileGuestBindings(db: DB, network: NetworkController): Promise<number> {
 	if (!network.listGuestBindings) return 0;
 	const bindings = await network.listGuestBindings();
 	if (bindings.length === 0) return 0;

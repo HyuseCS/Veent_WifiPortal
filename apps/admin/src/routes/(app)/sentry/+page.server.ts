@@ -49,7 +49,8 @@ async function mutate(event: RequestEvent, action: string, run: (id: string) => 
 	if (!isSentryConfigured()) return fail(503, { action, error: 'Sentry API not configured.' });
 
 	const rl = await rateLimit('admin_sentry_mutate', clientIp(event), 30, 15 * 60 * 1000);
-	if (!rl.allowed) return fail(429, { action, error: 'Too many attempts. Please wait a few minutes.' });
+	if (!rl.allowed)
+		return fail(429, { action, error: 'Too many attempts. Please wait a few minutes.' });
 
 	const id = String((await event.request.formData()).get('id') ?? '').trim();
 	if (!id) return fail(400, { action, error: 'Missing issue id.' });
@@ -90,7 +91,8 @@ export const actions: Actions = {
 		// Same throttle as resolve/ignore — track creates an incident + fires notifications, so it
 		// needs the same abuse ceiling. Keyed per signed-in user (30 tracks / 15 min).
 		const rl = await rateLimit('admin_sentry_track', userId, 30, 15 * 60 * 1000);
-		if (!rl.allowed) return fail(429, { action: 'track', error: 'Too many attempts. Please wait a few minutes.' });
+		if (!rl.allowed)
+			return fail(429, { action: 'track', error: 'Too many attempts. Please wait a few minutes.' });
 
 		const form = await event.request.formData();
 		const sentryIssueId = String(form.get('sentryIssueId') ?? '').trim();
@@ -135,7 +137,8 @@ export const actions: Actions = {
 		const description = String(form.get('issue-description') ?? '').trim() || null;
 
 		const priority = String(form.get('issue-priority') ?? 'medium');
-		if (!isIssuePriority(priority)) return fail(400, { action: 'track', error: 'Invalid priority.' });
+		if (!isIssuePriority(priority))
+			return fail(400, { action: 'track', error: 'Invalid priority.' });
 
 		// Same due-date rules as the incident form (UTC midnight + past-date rejection) — previously
 		// track NaN-checked only and silently accepted past dates (M4a).
@@ -144,10 +147,22 @@ export const actions: Actions = {
 		const dueDate = due.dueDate;
 
 		const assigneeIds = await validAssignees([
-			...new Set(form.getAll('assigneeId').map((v) => String(v)).filter(Boolean))
+			...new Set(
+				form
+					.getAll('assigneeId')
+					.map((v) => String(v))
+					.filter(Boolean)
+			)
 		]);
 
-		const input: IssueInput = { title, description, priority, networkId: null, dueDate, assigneeIds };
+		const input: IssueInput = {
+			title,
+			description,
+			priority,
+			networkId: null,
+			dueDate,
+			assigneeIds
+		};
 		let id: number;
 		try {
 			id = await createIssueFromSentry(
@@ -160,7 +175,10 @@ export const actions: Actions = {
 			// The partial unique index on sentry_issue_id (source='sentry') is the race-safe guard
 			// against duplicate incidents — a 23505 here means this error is already tracked.
 			if (err && typeof err === 'object' && 'code' in err && err.code === '23505') {
-				return fail(409, { action: 'track', error: 'This Sentry issue is already tracked as an incident.' });
+				return fail(409, {
+					action: 'track',
+					error: 'This Sentry issue is already tracked as an incident.'
+				});
 			}
 			throw err;
 		}

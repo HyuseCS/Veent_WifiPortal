@@ -69,7 +69,8 @@
 		use:enhance={() => {
 			submitting = true;
 			return async ({ result, update }) => {
-				const data = result.type === 'success' || result.type === 'failure' ? result.data : undefined;
+				const data =
+					result.type === 'success' || result.type === 'failure' ? result.data : undefined;
 				const d = data as
 					| { error?: string; sent?: string[]; failed?: { email: string; error: string }[] }
 					| undefined;

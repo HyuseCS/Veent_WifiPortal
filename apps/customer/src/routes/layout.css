@@ -17,77 +17,88 @@
 	font-style: normal;
 	font-weight: 400;
 	font-display: block;
-	src: url('../../node_modules/@fontsource/plus-jakarta-sans/files/plus-jakarta-sans-latin-400-normal.woff2') format('woff2');
+	src: url('../../node_modules/@fontsource/plus-jakarta-sans/files/plus-jakarta-sans-latin-400-normal.woff2')
+		format('woff2');
 }
 @font-face {
 	font-family: 'Plus Jakarta Sans';
 	font-style: normal;
 	font-weight: 500;
 	font-display: block;
-	src: url('../../node_modules/@fontsource/plus-jakarta-sans/files/plus-jakarta-sans-latin-500-normal.woff2') format('woff2');
+	src: url('../../node_modules/@fontsource/plus-jakarta-sans/files/plus-jakarta-sans-latin-500-normal.woff2')
+		format('woff2');
 }
 @font-face {
 	font-family: 'Plus Jakarta Sans';
 	font-style: normal;
 	font-weight: 600;
 	font-display: block;
-	src: url('../../node_modules/@fontsource/plus-jakarta-sans/files/plus-jakarta-sans-latin-600-normal.woff2') format('woff2');
+	src: url('../../node_modules/@fontsource/plus-jakarta-sans/files/plus-jakarta-sans-latin-600-normal.woff2')
+		format('woff2');
 }
 @font-face {
 	font-family: 'Plus Jakarta Sans';
 	font-style: normal;
 	font-weight: 700;
 	font-display: block;
-	src: url('../../node_modules/@fontsource/plus-jakarta-sans/files/plus-jakarta-sans-latin-700-normal.woff2') format('woff2');
+	src: url('../../node_modules/@fontsource/plus-jakarta-sans/files/plus-jakarta-sans-latin-700-normal.woff2')
+		format('woff2');
 }
 @font-face {
 	font-family: 'Montserrat';
 	font-style: normal;
 	font-weight: 500;
 	font-display: block;
-	src: url('../../node_modules/@fontsource/montserrat/files/montserrat-latin-500-normal.woff2') format('woff2');
+	src: url('../../node_modules/@fontsource/montserrat/files/montserrat-latin-500-normal.woff2')
+		format('woff2');
 }
 @font-face {
 	font-family: 'Montserrat';
 	font-style: normal;
 	font-weight: 600;
 	font-display: block;
-	src: url('../../node_modules/@fontsource/montserrat/files/montserrat-latin-600-normal.woff2') format('woff2');
+	src: url('../../node_modules/@fontsource/montserrat/files/montserrat-latin-600-normal.woff2')
+		format('woff2');
 }
 @font-face {
 	font-family: 'Montserrat';
 	font-style: normal;
 	font-weight: 700;
 	font-display: block;
-	src: url('../../node_modules/@fontsource/montserrat/files/montserrat-latin-700-normal.woff2') format('woff2');
+	src: url('../../node_modules/@fontsource/montserrat/files/montserrat-latin-700-normal.woff2')
+		format('woff2');
 }
 @font-face {
 	font-family: 'Montserrat';
 	font-style: normal;
 	font-weight: 800;
 	font-display: block;
-	src: url('../../node_modules/@fontsource/montserrat/files/montserrat-latin-800-normal.woff2') format('woff2');
+	src: url('../../node_modules/@fontsource/montserrat/files/montserrat-latin-800-normal.woff2')
+		format('woff2');
 }
 @font-face {
 	font-family: 'JetBrains Mono';
 	font-style: normal;
 	font-weight: 400;
 	font-display: block;
-	src: url('../../node_modules/@fontsource/jetbrains-mono/files/jetbrains-mono-latin-400-normal.woff2') format('woff2');
+	src: url('../../node_modules/@fontsource/jetbrains-mono/files/jetbrains-mono-latin-400-normal.woff2')
+		format('woff2');
 }
 @font-face {
 	font-family: 'JetBrains Mono';
 	font-style: normal;
 	font-weight: 500;
 	font-display: block;
-	src: url('../../node_modules/@fontsource/jetbrains-mono/files/jetbrains-mono-latin-500-normal.woff2') format('woff2');
+	src: url('../../node_modules/@fontsource/jetbrains-mono/files/jetbrains-mono-latin-500-normal.woff2')
+		format('woff2');
 }
 @font-face {
 	font-family: 'JetBrains Mono';
 	font-style: normal;
 	font-weight: 600;
 	font-display: block;
-	src: url('../../node_modules/@fontsource/jetbrains-mono/files/jetbrains-mono-latin-600-normal.woff2') format('woff2');
+	src: url('../../node_modules/@fontsource/jetbrains-mono/files/jetbrains-mono-latin-600-normal.woff2')
+		format('woff2');
 }
 
 /*

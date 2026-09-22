@@ -10,7 +10,13 @@
  * Needs DATABASE_URL (falls back to the shared local compose DB).
  */
 import { createDb } from '@veent/db';
-import { customerUser, customerProfile, packages, networkSessions, creditLedger } from '@veent/db/schema';
+import {
+	customerUser,
+	customerProfile,
+	packages,
+	networkSessions,
+	creditLedger
+} from '@veent/db/schema';
 import { startPaidAccessAndBindDevice, startFreeAccessAndBindDevice } from '@veent/core';
 import { createStubNetworkController } from '@veent/core/integrations';
 import { eq, like } from 'drizzle-orm';
@@ -108,14 +114,14 @@ async function main() {
 		const uid = `${PREFIX}solo`;
 		await seedUser(uid, 100);
 		const N = 10;
-		const results = await Promise.allSettled(
-			Array.from({ length: N }, (_, i) => buy(uid, i))
-		);
+		const results = await Promise.allSettled(Array.from({ length: N }, (_, i) => buy(uid, i)));
 		const ok = results.filter((r) => r.status === 'fulfilled' && r.value.ok).length;
 		const rejected = results.filter((r) => r.status === 'rejected').length;
 		const bal = await balanceOf(uid);
 		console.log(`\n── A: same user × ${N} concurrent buys (balance 100, cost ${COST}) ──`);
-		console.log(`   succeeded=${ok}  insufficient/declined=${N - ok - rejected}  threw=${rejected}  finalBalance=${bal}`);
+		console.log(
+			`   succeeded=${ok}  insufficient/declined=${N - ok - rejected}  threw=${rejected}  finalBalance=${bal}`
+		);
 		check('A: exactly 5 buys succeed (no overspend)', ok === 5, `got ${ok}`);
 		check('A: final balance is exactly 0', bal === 0, `got ${bal}`);
 		check('A: balance never went negative', bal >= 0, `got ${bal}`);
@@ -136,7 +142,9 @@ async function main() {
 		const balances = await Promise.all(ids.map(balanceOf));
 		const allZero = balances.every((b) => b === 0);
 		console.log(`\n── B: ${N} distinct users × 1 concurrent buy each ──`);
-		console.log(`   succeeded=${ok}/${N}  threw=${rejected}  allBalancesZero=${allZero}  wall=${ms}ms`);
+		console.log(
+			`   succeeded=${ok}/${N}  threw=${rejected}  allBalancesZero=${allZero}  wall=${ms}ms`
+		);
 		check('B: all 50 buys succeed', ok === N, `got ${ok}`);
 		check('B: every balance lands on 0', allZero);
 		check('B: nothing threw/deadlocked', rejected === 0, `${rejected} threw`);
@@ -151,7 +159,9 @@ async function main() {
 		await seedUser(uid, 0);
 		const N = 5;
 		const results = await Promise.allSettled(
-			Array.from({ length: N }, (_, i) => startFreeAccessAndBindDevice(db, network, { userId: uid, macAddress: mac(100 + i) }))
+			Array.from({ length: N }, (_, i) =>
+				startFreeAccessAndBindDevice(db, network, { userId: uid, macAddress: mac(100 + i) })
+			)
 		);
 		const eligible = results.filter((r) => r.status === 'fulfilled' && r.value.ok).length;
 		console.log(`\n── C: same user × ${N} concurrent free-time claims (12h cooldown) ──`);
@@ -166,7 +176,9 @@ async function main() {
 	}
 
 	await cleanup();
-	console.log(`\n${failures === 0 ? '🎉 all invariants held' : `⚠️  ${failures} check(s) failed`}\n`);
+	console.log(
+		`\n${failures === 0 ? '🎉 all invariants held' : `⚠️  ${failures} check(s) failed`}\n`
+	);
 	process.exit(failures === 0 ? 0 : 1);
 }
 

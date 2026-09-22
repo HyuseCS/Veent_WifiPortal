@@ -1,13 +1,13 @@
 ---
 name: protocol:vc-system-behavior-02-skill-tiers
-description: "Skill tier reference: REQUIRED vs CONDITIONAL labels and which skills each phase must invoke."
+description: 'Skill tier reference: REQUIRED vs CONDITIONAL labels and which skills each phase must invoke.'
 date: 09-06-26
 metadata:
   node_type: memory
   type: protocol
   read_order: 1
   required: false
-  read_when: "deciding which skills are mandatory vs optional for a phase"
+  read_when: 'deciding which skills are mandatory vs optional for a phase'
 ---
 
 # VC System Behavior — Skill Tiers
@@ -62,12 +62,12 @@ Under `/goal`, `vc-agent-strategy-compare` likewise auto-selects from the 7-sign
 
 For trivial fixes (single-file, under 15 lines, no schema/API/auth changes) and active-plan resumes, all 5 Tier-0 skills still fire — but in a shorter form:
 
-| Skill | Abbreviated behavior |
-|---|---|
-| vc-intent-clarify | 1-line restatement, auto-proceed, no questions |
-| vc-context-discovery | CLAUDE.md routing only, no full group chain |
-| vc-plan-discovery | Scan active/ but expect no results; no deep search |
-| vc-review-situation | Branch confirmation only |
+| Skill                     | Abbreviated behavior                               |
+| ------------------------- | -------------------------------------------------- |
+| vc-intent-clarify         | 1-line restatement, auto-proceed, no questions     |
+| vc-context-discovery      | CLAUDE.md routing only, no full group chain        |
+| vc-plan-discovery         | Scan active/ but expect no results; no deep search |
+| vc-review-situation       | Branch confirmation only                           |
 | vc-agent-strategy-compare | Sequential confirmed without full 7-signal scoring |
 
 **Active-plan resume timing:** Active-plan resume abbreviated mode fires only when: (1) exactly one matching plan file is found AND (2) the user's request contains the plan name or feature name. If either condition is missing, run full `vc-intent-clarify`.
@@ -102,22 +102,22 @@ When creating 3 or more phase plans at the same time, `vc-agent-strategy-compare
 
 These skills are required within specific phases. Skipping one is a phase compliance failure.
 
-| Skill | Required in |
-|---|---|
-| vc-scout | RESEARCH, INNOVATE, PLAN, EXECUTE — runs as the first scanning step, before any grep or glob. (Not SPEC: SPEC sits between RESEARCH and INNOVATE and reuses RESEARCH findings rather than re-scouting.) |
-| vc-docs-seeker | RESEARCH (on first encounter with any library), INNOVATE (library-dependent approach), PLAN (before API-signature checklist steps), EXECUTE (unclear API signatures). (Not SPEC: SPEC reuses RESEARCH findings and does not re-docs-seek.) |
-| vc-test-coverage-plan | RESEARCH (test gap analysis before finalizing findings), PLAN (TDD-first during drafting), PVL/V3 (section III tier assignments) |
-| vc-generate-spec | SPEC — all SPEC creates and updates go through this skill's templates. Its output is a product-discovery requirements doc (what the user wants + why, readable, with diagrams, for user review) and is the INPUT to INNOVATE — SPEC precedes INNOVATE. |
-| vc-generate-plan | PLAN — all plan creates and updates go through this skill's schema |
-| vc-generate-phase-program | PLAN — when shape is PHASE PROGRAM, invoke this before writing any file |
-| vc-validate-findings | PVL/V2 — both layers are mandatory |
-| vc-autoresearch | PVL (runs the plan-validate-fix loop as bookkeeper, `domain: plan`) and EVL (runs the execute-validate-fix loop, `domain: tests`). Owns the iteration counter, plateau/regression detection, TSV log, and 10-cycle cap; phase agents keep their own gate/supplement mechanics. Also usable standalone for spec/doc/UX hardening. See `.claude/skills/vc-autoresearch/SKILL.md` §PVL Wiring / §EVL Wiring. |
-| vc-sequential-thinking | PVL/V3 (conflicting verdicts), EXECUTE (ambiguous step ordering) |
-| vc-predict | INNOVATE (before Decision Summary), PLAN (COMPLEX plans, before checklist) |
-| vc-generate-closeout | UPDATE PROCESS (9-field closeout packet before archiving), EVL step 1 |
-| vc-audit-vc | UPDATE PROCESS — only if any agent, skill, or `.claude/` file was modified |
-| vc-audit-context | UPDATE PROCESS — only if any `process/context/` file was modified |
-| vc-audit-plans | UPDATE PROCESS — at natural session stopping points |
+| Skill                     | Required in                                                                                                                                                                                                                                                                                                                                                                                               |
+| ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| vc-scout                  | RESEARCH, INNOVATE, PLAN, EXECUTE — runs as the first scanning step, before any grep or glob. (Not SPEC: SPEC sits between RESEARCH and INNOVATE and reuses RESEARCH findings rather than re-scouting.)                                                                                                                                                                                                   |
+| vc-docs-seeker            | RESEARCH (on first encounter with any library), INNOVATE (library-dependent approach), PLAN (before API-signature checklist steps), EXECUTE (unclear API signatures). (Not SPEC: SPEC reuses RESEARCH findings and does not re-docs-seek.)                                                                                                                                                                |
+| vc-test-coverage-plan     | RESEARCH (test gap analysis before finalizing findings), PLAN (TDD-first during drafting), PVL/V3 (section III tier assignments)                                                                                                                                                                                                                                                                          |
+| vc-generate-spec          | SPEC — all SPEC creates and updates go through this skill's templates. Its output is a product-discovery requirements doc (what the user wants + why, readable, with diagrams, for user review) and is the INPUT to INNOVATE — SPEC precedes INNOVATE.                                                                                                                                                    |
+| vc-generate-plan          | PLAN — all plan creates and updates go through this skill's schema                                                                                                                                                                                                                                                                                                                                        |
+| vc-generate-phase-program | PLAN — when shape is PHASE PROGRAM, invoke this before writing any file                                                                                                                                                                                                                                                                                                                                   |
+| vc-validate-findings      | PVL/V2 — both layers are mandatory                                                                                                                                                                                                                                                                                                                                                                        |
+| vc-autoresearch           | PVL (runs the plan-validate-fix loop as bookkeeper, `domain: plan`) and EVL (runs the execute-validate-fix loop, `domain: tests`). Owns the iteration counter, plateau/regression detection, TSV log, and 10-cycle cap; phase agents keep their own gate/supplement mechanics. Also usable standalone for spec/doc/UX hardening. See `.claude/skills/vc-autoresearch/SKILL.md` §PVL Wiring / §EVL Wiring. |
+| vc-sequential-thinking    | PVL/V3 (conflicting verdicts), EXECUTE (ambiguous step ordering)                                                                                                                                                                                                                                                                                                                                          |
+| vc-predict                | INNOVATE (before Decision Summary), PLAN (COMPLEX plans, before checklist)                                                                                                                                                                                                                                                                                                                                |
+| vc-generate-closeout      | UPDATE PROCESS (9-field closeout packet before archiving), EVL step 1                                                                                                                                                                                                                                                                                                                                     |
+| vc-audit-vc               | UPDATE PROCESS — only if any agent, skill, or `.claude/` file was modified                                                                                                                                                                                                                                                                                                                                |
+| vc-audit-context          | UPDATE PROCESS — only if any `process/context/` file was modified                                                                                                                                                                                                                                                                                                                                         |
+| vc-audit-plans            | UPDATE PROCESS — at natural session stopping points                                                                                                                                                                                                                                                                                                                                                       |
 
 ---
 
@@ -126,15 +126,15 @@ These skills are required within specific phases. Skipping one is a phase compli
 These skills activate when specific conditions are met.
 Before skipping a Tier-2 skill, check whether its condition applies.
 
-| Skill | Run when |
-|---|---|
-| vc-security | The approach, plan, or section involves auth, billing, secrets, trust-boundary changes, or public API changes |
-| vc-scenario | The approach or checklist item touches auth, billing, external APIs, or destructive operations |
-| vc-problem-solving | Blocked after 2 or more attempts; scope keeps expanding; no viable approach found |
-| vc-risk-evidence-pack | A high-risk class is identified in the plan blast radius or validate findings |
-| vc-web-testing | Playwright, Vitest, or k6 test work is within the blast radius |
-| vc-frontend-design | A UI/UX implementation task is within EXECUTE |
-| vc-agent-strategy-compare (mid-phase) | 2 or more distinct investigation directions found mid-RESEARCH, or 2–3 approaches surfaced mid-INNOVATE |
+| Skill                                 | Run when                                                                                                      |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| vc-security                           | The approach, plan, or section involves auth, billing, secrets, trust-boundary changes, or public API changes |
+| vc-scenario                           | The approach or checklist item touches auth, billing, external APIs, or destructive operations                |
+| vc-problem-solving                    | Blocked after 2 or more attempts; scope keeps expanding; no viable approach found                             |
+| vc-risk-evidence-pack                 | A high-risk class is identified in the plan blast radius or validate findings                                 |
+| vc-web-testing                        | Playwright, Vitest, or k6 test work is within the blast radius                                                |
+| vc-frontend-design                    | A UI/UX implementation task is within EXECUTE                                                                 |
+| vc-agent-strategy-compare (mid-phase) | 2 or more distinct investigation directions found mid-RESEARCH, or 2–3 approaches surfaced mid-INNOVATE       |
 
 ---
 
@@ -158,19 +158,20 @@ All skills that support this follow the same contract.
 
 ### Which Skills Support Simple/Deep
 
-| Skill | Use Simple when | Use Deep when |
-|---|---|---|
-| vc-intent-clarify | Ambiguity score 3 or less, narrow scope | Score 4/4, phase program kickoff, 3+ packages, architectural decision |
-| vc-scenario | Contained checklist item, narrow blast radius | Auth/billing/schema surface, 3+ files, HIGH_RISK label |
-| vc-predict | Contained feature, no prior attempts known | Pattern previously tried in codebase, known failure surface |
-| vc-agent-strategy-compare | File count and test infra are clear from context | Signal 3 or 5 cannot be scored without scanning |
-| vc-generate-closeout | Session just ended, context is fresh | Resumed session, long execute, multi-phase program |
-| vc-validate-findings | Self-contained plan, fresh context | Container/infra blast radius, 5+ packages, phase program |
-| vc-review-situation | Quick orientation ("what's next") | Program review, session resume, full handoff needed |
+| Skill                     | Use Simple when                                  | Use Deep when                                                         |
+| ------------------------- | ------------------------------------------------ | --------------------------------------------------------------------- |
+| vc-intent-clarify         | Ambiguity score 3 or less, narrow scope          | Score 4/4, phase program kickoff, 3+ packages, architectural decision |
+| vc-scenario               | Contained checklist item, narrow blast radius    | Auth/billing/schema surface, 3+ files, HIGH_RISK label                |
+| vc-predict                | Contained feature, no prior attempts known       | Pattern previously tried in codebase, known failure surface           |
+| vc-agent-strategy-compare | File count and test infra are clear from context | Signal 3 or 5 cannot be scored without scanning                       |
+| vc-generate-closeout      | Session just ended, context is fresh             | Resumed session, long execute, multi-phase program                    |
+| vc-validate-findings      | Self-contained plan, fresh context               | Container/infra blast radius, 5+ packages, phase program              |
+| vc-review-situation       | Quick orientation ("what's next")                | Program review, session resume, full handoff needed                   |
 
 ### Enforcement
 
 When invoking a skill that supports simple/deep, you must:
+
 1. Explicitly decide which mode to use.
 2. State the reason for the choice.
 

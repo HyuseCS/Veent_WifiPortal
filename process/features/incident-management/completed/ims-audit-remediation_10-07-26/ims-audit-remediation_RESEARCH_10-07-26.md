@@ -78,23 +78,26 @@ this research, only structure it into the plan artifact.
 ## The agreed 5-phase remediation structure (carry into the plan artifact)
 
 ### Phase 1 — High severity
+
 **H1 (stored XSS):** export/reuse `httpsUrl()` from sentry/map.ts in the `?/track` action —
 non-empty permalink failing the https gate → fail(400) 'Invalid Sentry permalink.' (reject loudly;
 legit UI always sends https from the Sentry API). Format-check `sentryIssueId` (/^\d{1,32}$/),
 `sentryShortId` (/^[A-Za-z0-9._-]{0,64}$/), cap `sentryTitle` ≤500. Put snapshot validation in a
 small exported helper next to httpsUrl for unit testing; extend sentry/map.test.ts.
 **H2 (silent note drop):** (1) schema CHECK + migration adding 'note_edited'; (2) ISSUE_EVENT.noteEdited
-+ eventSummary case ("updated the resolution note"); (3) setIssueStatus returns
-'updated'|'unchanged'|'not_found', selects resolutionNote in the before query, same-status branch:
-resolved + note differs → update resolutionNote+updatedAt, recordEvent(note_edited, note: newNote),
-'updated'; rewrite the :635-636 comment; (4) both updateStatus callers: 'not_found' → fail(404),
-plus resolutionNote ≤2000 cap (pre-satisfies part of M4b); (5) Timeline META entry (PenLine icon,
-text-ink tone); (6) NOTIFIABLE_EVENTS deliberately unchanged (note why in code); (7) client flows
-self-heal — NO component changes; verify in browser.
-Tests: update "records nothing when unchanged" (still true for non-resolved); add resolved+changed-note,
-resolved+same-note no-op, missing-id → 'not_found'.
+
+- eventSummary case ("updated the resolution note"); (3) setIssueStatus returns
+  'updated'|'unchanged'|'not_found', selects resolutionNote in the before query, same-status branch:
+  resolved + note differs → update resolutionNote+updatedAt, recordEvent(note_edited, note: newNote),
+  'updated'; rewrite the :635-636 comment; (4) both updateStatus callers: 'not_found' → fail(404),
+  plus resolutionNote ≤2000 cap (pre-satisfies part of M4b); (5) Timeline META entry (PenLine icon,
+  text-ink tone); (6) NOTIFIABLE_EVENTS deliberately unchanged (note why in code); (7) client flows
+  self-heal — NO component changes; verify in browser.
+  Tests: update "records nothing when unchanged" (still true for non-resolved); add resolved+changed-note,
+  resolved+same-note no-op, missing-id → 'not_found'.
 
 ### Phase 2 — Feed/endpoint predicates (M1 + L4 + M3)
+
 M1+L4 one restructure in notifications.ts (all 3 query sites): innerJoin → leftJoin with ON
 (issueId match AND adminUserId=userId AND assignedAt <= event.createdAt) [the assignedAt bound IS
 M1]; audience predicate: and(inArray(type,NOTIFIABLE), actor distinct from userId,
@@ -105,11 +108,13 @@ Tests: extend notifications.test.ts — pre-assignment excluded, unassigned visi
 person, self-actions still excluded.
 
 ### Phase 3 — M2 committed secrets
+
 Stage `git rm --cached apps/admin/e2e/.auth/owner.json apps/admin/e2e/.auth/owner-totp.txt`
 (STAGE ONLY — user commits). gitignore already covers e2e/.auth/. Regenerate throwaway harness
 creds (TOTP re-enroll) on next e2e run; committed secret should rotate since it's in history.
 
 ### Phase 4 — M4 validation consistency + M5 comment drift
+
 M4a: extract shared `parseDueDate(raw, existingDueMs?)` into
 `apps/admin/src/lib/server/formValidation.ts` (+ tests); use in parseIssueInput AND track.
 M4b: title ≤200 + description ≤5000 in parseIssueInput (snapshot + resolutionNote caps landed in Phase 1).
@@ -119,6 +124,7 @@ M4d (provenance vs Sentry API): BACKLOG.
 M5: rewrite watermark header comment in incident-notifications.e2e.ts to per-event read-row model.
 
 ### Phase 5 — Lows
+
 L1: BaseDialog — onpointerdown records press-started-on-backdrop (e.target===el + outside rect);
 click handler requires pressOnBackdrop AND e.target===el AND outside rect → open=false; reset flag.
 L2: `await notifyAssignees` → `void notifyAssignees` ×3 (never-throws; node/VPS runtime).
@@ -130,6 +136,7 @@ L3: ceiling comment on manager branch of /issues load (upgrade path: paginate + 
 expand via existing /issues/[id]/detail); backlog stub.
 
 ## Verification gates (for the validate-contract later)
+
 - Per phase: `cd apps/admin && bun run test` (18 existing tests stay green + new ones), root
   `bun run check`, `bun run lint`.
 - Phase 1 migration: apply CHECK DDL directly to local dev DB; keep generated migration file.
@@ -141,10 +148,12 @@ expand via existing /issues/[id]/detail); backlog stub.
   keyboard-activation (Firefox) + drag-select from input → stays open; true backdrop click closes.
 
 ## Backlog items (record in plan)
+
 - Sentry permalink host pinning (H1 hardening); sentryIssueId provenance check via Sentry API (M4d)
 - Manager board pagination + event-history-on-expand (L3)
 
 ## Constraints
+
 - User commits himself — staged changes + suggested conventional-commit messages per phase only.
 - audit.md (repo root, tracked) must be `git mv`ed into the task folder as the plan's audit
   reference artifact (user-approved).

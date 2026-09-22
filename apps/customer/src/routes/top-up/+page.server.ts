@@ -96,7 +96,10 @@ export const actions: Actions = {
 		// authenticated guest can't loop it to exhaust those resources / abuse the gateway. Placed
 		// before those calls (the form parse above is cheap) and echoes `values` like the other fails.
 		if (!(await rateLimit('checkout_user', user.id, 20)).allowed) {
-			return fail(429, { error: 'Too many checkout attempts. Please wait a moment and try again.', values });
+			return fail(429, {
+				error: 'Too many checkout attempts. Please wait a moment and try again.',
+				values
+			});
 		}
 
 		if (!Number.isFinite(packageId)) return fail(400, { error: 'Missing package', values });
@@ -163,7 +166,10 @@ export const actions: Actions = {
 			} catch (e) {
 				console.warn('[topup] openCheckoutAccess failed', (e as Error).message);
 				// Low-priority: best-effort captcha pre-auth (already a failed router span). Watch the volume.
-				captureHandled(e, { level: 'warning', tags: { area: 'network', scope: 'checkout-access' } });
+				captureHandled(e, {
+					level: 'warning',
+					tags: { area: 'network', scope: 'checkout-access' }
+				});
 			}
 		}
 		// Watermark the ledger now; the processing page polls for a topup row above

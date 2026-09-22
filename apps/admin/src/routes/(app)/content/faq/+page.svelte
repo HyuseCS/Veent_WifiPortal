@@ -45,7 +45,8 @@
 	function confirmRemove(f: Faq) {
 		dialogProps = {
 			title: 'Delete FAQ entry',
-			message: "This permanently deletes the entry and can't be undone. Enter your authenticator code to confirm.",
+			message:
+				"This permanently deletes the entry and can't be undone. Enter your authenticator code to confirm.",
 			action: '?/remove',
 			fields: { id: f.id },
 			submitLabel: 'Delete',

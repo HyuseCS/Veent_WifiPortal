@@ -33,12 +33,12 @@ delivers the message text.
 
 Set these in `apps/customer/.env` (documented in `.env.example`):
 
-| Var | Required | Notes |
-|-----|----------|-------|
-| `ITEXMO_API_CODE` | yes | API code from the iTexMo dashboard. |
-| `ITEXMO_EMAIL` | yes | Your iTexMo account email. |
-| `ITEXMO_PASSWORD` | yes | Your iTexMo account password. |
-| `ITEXMO_SENDER_ID` | no | Approved sender id; sent only when set. On a **trial** account this MUST be `ITM.TEST3`. |
+| Var                | Required | Notes                                                                                    |
+| ------------------ | -------- | ---------------------------------------------------------------------------------------- |
+| `ITEXMO_API_CODE`  | yes      | API code from the iTexMo dashboard.                                                      |
+| `ITEXMO_EMAIL`     | yes      | Your iTexMo account email.                                                               |
+| `ITEXMO_PASSWORD`  | yes      | Your iTexMo account password.                                                            |
+| `ITEXMO_SENDER_ID` | no       | Approved sender id; sent only when set. On a **trial** account this MUST be `ITM.TEST3`. |
 
 The first three are required to send.
 
@@ -48,10 +48,10 @@ The first three are required to send.
 them with no code change (e.g. depending on which SMS account is approved first). Only the selected
 provider's config is read. UniSMS config (when `SMS_PROVIDER=unisms`):
 
-| Env var | Required | Notes |
-| --- | --- | --- |
-| `UNISMS_SECRET_KEY` | yes | API secret key (`sk_…`); sent as the Basic-auth username with an empty password. |
-| `UNISMS_SENDER_ID` | yes | UniSMS requires a sender id on every message. |
+| Env var             | Required | Notes                                                                            |
+| ------------------- | -------- | -------------------------------------------------------------------------------- |
+| `UNISMS_SECRET_KEY` | yes      | API secret key (`sk_…`); sent as the Basic-auth username with an empty password. |
+| `UNISMS_SENDER_ID`  | yes      | UniSMS requires a sender id on every message.                                    |
 
 UniSMS (`POST unismsapi.com/api/sms`) takes the recipient in **E.164** (`+63…`, which
 `normalizePhone` already produces); iTexMo takes the **local** `09…` form. The fail-safe and 10s
@@ -83,11 +83,11 @@ Note the endpoint is `/3rdparty/v1/messages` (plural) and the body uses `textMes
 `message` string field is **deprecated** in the SMS Gate API. Success is `202 Accepted` with
 `{ id, state, recipients }`; a non-2xx, an unparseable body, or `state === "Failed"` is a send failure.
 
-| Env var | Required | Notes |
-| --- | --- | --- |
-| `SMSGATE_BASE_URL` | no | Defaults to `https://api.sms-gate.app`; override only for a self-hosted private server. |
-| `SMSGATE_USERNAME` | yes | Basic-auth username from the app's Cloud Server registration. |
-| `SMSGATE_PASSWORD` | yes | Basic-auth password from the app's Cloud Server registration. |
+| Env var            | Required | Notes                                                                                   |
+| ------------------ | -------- | --------------------------------------------------------------------------------------- |
+| `SMSGATE_BASE_URL` | no       | Defaults to `https://api.sms-gate.app`; override only for a self-hosted private server. |
+| `SMSGATE_USERNAME` | yes      | Basic-auth username from the app's Cloud Server registration.                           |
+| `SMSGATE_PASSWORD` | yes      | Basic-auth password from the app's Cloud Server registration.                           |
 
 Verify the credentials + round-trip first with the probe:
 `bun run scripts/test-smsgate.ts +639XXXXXXXXX` (prints the raw HTTP status + response).
@@ -97,7 +97,7 @@ Verify the credentials + round-trip first with the probe:
 `sendOtp` is deliberately fail-safe-by-environment:
 
 - **Dev** (any credential missing): prints `[otp] <provider> not configured — code for
-  <phone>: <code>` to the server console, so you can keep logging in locally.
+<phone>: <code>` to the server console, so you can keep logging in locally.
 - **Production** (any credential missing): **throws**. An OTP that can't be delivered
   must never be treated as "sent" — silently swallowing it would let anyone past the
   login with no code. Failing loudly forces the deployment to be configured first.

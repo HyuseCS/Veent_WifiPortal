@@ -53,8 +53,50 @@ const OWNER_EMAIL = 'owner@veent.test';
 const OWNER_PASSWORD = 'password123';
 
 const FUND_SOURCES = ['card', 'gcash', 'maya-wallet', 'shopeepay', 'qrph'] as const;
-const FIRST = ['Ana', 'Ben', 'Carlos', 'Divya', 'Erin', 'Felix', 'Grace', 'Hugo', 'Ines', 'Jomar', 'Kira', 'Leo', 'Maya', 'Noel', 'Olive', 'Paolo', 'Quinn', 'Rina', 'Sami', 'Tonio'] as const;
-const LAST = ['Reyes', 'Santos', 'Cruz', 'Lim', 'Garcia', 'Tan', 'Diaz', 'Flores', 'Mendoza', 'Castro', 'Aquino', 'Ramos', 'Torres', 'Gomez', 'Bautista', 'Navarro', 'Salazar', 'Villar', 'Ocampo', 'Yu'] as const;
+const FIRST = [
+	'Ana',
+	'Ben',
+	'Carlos',
+	'Divya',
+	'Erin',
+	'Felix',
+	'Grace',
+	'Hugo',
+	'Ines',
+	'Jomar',
+	'Kira',
+	'Leo',
+	'Maya',
+	'Noel',
+	'Olive',
+	'Paolo',
+	'Quinn',
+	'Rina',
+	'Sami',
+	'Tonio'
+] as const;
+const LAST = [
+	'Reyes',
+	'Santos',
+	'Cruz',
+	'Lim',
+	'Garcia',
+	'Tan',
+	'Diaz',
+	'Flores',
+	'Mendoza',
+	'Castro',
+	'Aquino',
+	'Ramos',
+	'Torres',
+	'Gomez',
+	'Bautista',
+	'Navarro',
+	'Salazar',
+	'Villar',
+	'Ocampo',
+	'Yu'
+] as const;
 
 const rand = () => Math.random();
 const randInt = (min: number, max: number) => min + Math.floor(rand() * (max - min + 1));
@@ -72,19 +114,85 @@ const SEED_PACKAGES = [
 	{ name: 'Free Time', type: 'free', durationMinutes: 15, creditCost: 0, isActive: true },
 	{ name: '₱20 — 50 Credits', type: 'bundle', fiatCost: 20, creditsProvided: 50, isActive: true },
 	{ name: '₱50 — 150 Credits', type: 'bundle', fiatCost: 50, creditsProvided: 150, isActive: true },
-	{ name: '₱100 — 350 Credits', type: 'bundle', fiatCost: 100, creditsProvided: 350, isActive: true },
+	{
+		name: '₱100 — 350 Credits',
+		type: 'bundle',
+		fiatCost: 100,
+		creditsProvided: 350,
+		isActive: true
+	},
 	{ name: '1 Hour', type: 'tier', creditCost: 20, durationMinutes: 60, isActive: true },
 	{ name: '3 Hours', type: 'tier', creditCost: 50, durationMinutes: 180, isActive: true },
 	{ name: '1 Day', type: 'tier', creditCost: 150, durationMinutes: 1440, isActive: true }
 ] satisfies (typeof packages.$inferInsert)[];
 
 const SEED_APS = [
-	{ name: 'AP — Ground Floor', online: true, uptimePct: '99.80', latencyMs: 12, throughputMbps: 84, latitude: '14.554700', longitude: '121.024500', address: 'Ground Floor', interfaceName: 'ether2-ground' },
-	{ name: 'AP — Floor 2', online: true, uptimePct: '99.50', latencyMs: 15, throughputMbps: 61, latitude: '14.554900', longitude: '121.024700', address: '2nd Floor', interfaceName: 'wlan2-floor2' },
-	{ name: 'AP — Cafe Patio', online: true, uptimePct: '97.10', latencyMs: 48, throughputMbps: 22, latitude: '14.555200', longitude: '121.025100', address: 'Cafe Patio', interfaceName: 'wlan3-patio' },
-	{ name: 'AP — Rooftop Deck', online: true, uptimePct: '99.90', latencyMs: 9, throughputMbps: 95, latitude: null, longitude: null, address: null, interfaceName: 'wlan4-roof' },
-	{ name: 'AP — Parking Lobby', online: false, uptimePct: '0.00', latencyMs: null, throughputMbps: 0, latitude: '14.554300', longitude: '121.024200', address: 'Basement Parking', interfaceName: 'ether5-parking' },
-	{ name: 'AP — Annex Hall', online: true, uptimePct: '98.40', latencyMs: 22, throughputMbps: 47, latitude: '14.555500', longitude: '121.025400', address: 'Annex Hall', interfaceName: 'wlan6-annex' }
+	{
+		name: 'AP — Ground Floor',
+		online: true,
+		uptimePct: '99.80',
+		latencyMs: 12,
+		throughputMbps: 84,
+		latitude: '14.554700',
+		longitude: '121.024500',
+		address: 'Ground Floor',
+		interfaceName: 'ether2-ground'
+	},
+	{
+		name: 'AP — Floor 2',
+		online: true,
+		uptimePct: '99.50',
+		latencyMs: 15,
+		throughputMbps: 61,
+		latitude: '14.554900',
+		longitude: '121.024700',
+		address: '2nd Floor',
+		interfaceName: 'wlan2-floor2'
+	},
+	{
+		name: 'AP — Cafe Patio',
+		online: true,
+		uptimePct: '97.10',
+		latencyMs: 48,
+		throughputMbps: 22,
+		latitude: '14.555200',
+		longitude: '121.025100',
+		address: 'Cafe Patio',
+		interfaceName: 'wlan3-patio'
+	},
+	{
+		name: 'AP — Rooftop Deck',
+		online: true,
+		uptimePct: '99.90',
+		latencyMs: 9,
+		throughputMbps: 95,
+		latitude: null,
+		longitude: null,
+		address: null,
+		interfaceName: 'wlan4-roof'
+	},
+	{
+		name: 'AP — Parking Lobby',
+		online: false,
+		uptimePct: '0.00',
+		latencyMs: null,
+		throughputMbps: 0,
+		latitude: '14.554300',
+		longitude: '121.024200',
+		address: 'Basement Parking',
+		interfaceName: 'ether5-parking'
+	},
+	{
+		name: 'AP — Annex Hall',
+		online: true,
+		uptimePct: '98.40',
+		latencyMs: 22,
+		throughputMbps: 47,
+		latitude: '14.555500',
+		longitude: '121.025400',
+		address: 'Annex Hall',
+		interfaceName: 'wlan6-annex'
+	}
 ] satisfies (typeof networkHealth.$inferInsert)[];
 
 async function ensureSchema() {
@@ -102,7 +210,9 @@ async function ensureSchema() {
 async function maybeFresh() {
 	if (!FRESH) return;
 	// Same wipe as test:clear — empty all data, keep the schema + admin_role lookup.
-	await client.unsafe('TRUNCATE customer_user, admin_user, network_health, packages RESTART IDENTITY CASCADE;');
+	await client.unsafe(
+		'TRUNCATE customer_user, admin_user, network_health, packages RESTART IDENTITY CASCADE;'
+	);
 	log('🧹', 'Fresh start: cleared all data.');
 }
 
@@ -120,7 +230,11 @@ async function ensureCatalog() {
 }
 
 async function ensureOwner() {
-	const [existing] = await db.select({ id: adminUser.id }).from(adminUser).where(eq(adminUser.email, OWNER_EMAIL)).limit(1);
+	const [existing] = await db
+		.select({ id: adminUser.id })
+		.from(adminUser)
+		.where(eq(adminUser.email, OWNER_EMAIL))
+		.limit(1);
 	if (existing) return;
 	if (!BETTER_AUTH_SECRET) {
 		log('⚠️ ', `No owner login and BETTER_AUTH_SECRET unset — run \`bootstrap:owner\` to log in.`);
@@ -133,11 +247,16 @@ async function ensureOwner() {
 		emailAndPassword: { enabled: true },
 		advanced: { cookiePrefix: 'radius-admin' }
 	});
-	const res = await auth.api.signUpEmail({ body: { name: 'Olivia Owner', email: OWNER_EMAIL, password: OWNER_PASSWORD } });
+	const res = await auth.api.signUpEmail({
+		body: { name: 'Olivia Owner', email: OWNER_EMAIL, password: OWNER_PASSWORD }
+	});
 	await db
 		.insert(adminProfile)
 		.values({ userId: res.user.id, role: STAFF_ROLE.owner, status: STAFF_STATUS.active })
-		.onConflictDoUpdate({ target: adminProfile.userId, set: { role: STAFF_ROLE.owner, status: STAFF_STATUS.active } });
+		.onConflictDoUpdate({
+			target: adminProfile.userId,
+			set: { role: STAFF_ROLE.owner, status: STAFF_STATUS.active }
+		});
 	log('🔑', `Created owner login: ${OWNER_EMAIL} / ${OWNER_PASSWORD}`);
 }
 
@@ -164,13 +283,20 @@ async function loadState() {
 	tiers = pkgRows.filter((p) => p.type === 'tier');
 
 	const rows = await db
-		.select({ id: customerUser.id, phone: customerUser.phoneNumber, blocked: customerProfile.blocked })
+		.select({
+			id: customerUser.id,
+			phone: customerUser.phoneNumber,
+			blocked: customerProfile.blocked
+		})
 		.from(customerUser)
 		.innerJoin(customerProfile, eq(customerProfile.userId, customerUser.id));
 	// Reuse each existing customer's most recent MAC so the Users "last device" is stable.
 	const macByUser = new Map<string, string>();
 	const hist = await db
-		.selectDistinctOn([networkSessions.userId], { userId: networkSessions.userId, mac: networkSessions.macAddress })
+		.selectDistinctOn([networkSessions.userId], {
+			userId: networkSessions.userId,
+			mac: networkSessions.macAddress
+		})
 		.from(networkSessions)
 		.where(isNotNull(networkSessions.macAddress))
 		.orderBy(networkSessions.userId, desc(networkSessions.startedAt));
@@ -186,17 +312,28 @@ async function loadState() {
 	signupSeq = customers.length;
 }
 
-const synthMac = (n: number) => `DE:AD:BE:EF:${randInt(16, 255).toString(16).padStart(2, '0').toUpperCase()}:${(n % 256).toString(16).padStart(2, '0').toUpperCase()}`;
+const synthMac = (n: number) =>
+	`DE:AD:BE:EF:${randInt(16, 255).toString(16).padStart(2, '0').toUpperCase()}:${(n % 256).toString(16).padStart(2, '0').toUpperCase()}`;
 
 const onlineApIds = async () =>
-	(await db.select({ id: networkHealth.id }).from(networkHealth).where(eq(networkHealth.online, true))).map((r) => r.id);
+	(
+		await db
+			.select({ id: networkHealth.id })
+			.from(networkHealth)
+			.where(eq(networkHealth.online, true))
+	).map((r) => r.id);
 const activeUserIds = async () =>
 	new Set(
 		(
 			await db
 				.select({ userId: networkSessions.userId })
 				.from(networkSessions)
-				.where(and(eq(networkSessions.status, SESSION_STATUS.active), gt(networkSessions.expiresAt, new Date())))
+				.where(
+					and(
+						eq(networkSessions.status, SESSION_STATUS.active),
+						gt(networkSessions.expiresAt, new Date())
+					)
+				)
 		).map((r) => r.userId)
 	);
 
@@ -220,7 +357,9 @@ async function signup(): Promise<Cust> {
 		createdAt: new Date(),
 		updatedAt: new Date()
 	});
-	await db.insert(customerProfile).values({ userId: id, role: 'user', creditBalance: '0', blocked: false });
+	await db
+		.insert(customerProfile)
+		.values({ userId: id, role: 'user', creditBalance: '0', blocked: false });
 	const cust: Cust = { id, phone, payerName, blocked: false, mac: synthMac(seq) };
 	customers.push(cust);
 	log('👤', `New signup: ${phone}`);
@@ -248,10 +387,14 @@ async function arrive() {
 		const spent = await db
 			.update(customerProfile)
 			.set({ creditBalance: sql`${customerProfile.creditBalance} - ${cost}` })
-			.where(and(eq(customerProfile.userId, cust.id), sql`${customerProfile.creditBalance} >= ${cost}`))
+			.where(
+				and(eq(customerProfile.userId, cust.id), sql`${customerProfile.creditBalance} >= ${cost}`)
+			)
 			.returning({ balance: customerProfile.creditBalance });
 		if (spent.length) {
-			await db.insert(creditLedger).values({ userId: cust.id, packageId: tier.id, amount: -cost, type: LEDGER_TYPE.spend });
+			await db
+				.insert(creditLedger)
+				.values({ userId: cust.id, packageId: tier.id, amount: -cost, type: LEDGER_TYPE.spend });
 			packageId = tier.id;
 			minutes = tier.durationMinutes ?? 60;
 			how = `${tier.name} (−${cost} cr)`;
@@ -275,11 +418,19 @@ async function depart() {
 	const [s] = await db
 		.select({ id: networkSessions.id, userId: networkSessions.userId })
 		.from(networkSessions)
-		.where(and(eq(networkSessions.status, SESSION_STATUS.active), gt(networkSessions.expiresAt, new Date())))
+		.where(
+			and(
+				eq(networkSessions.status, SESSION_STATUS.active),
+				gt(networkSessions.expiresAt, new Date())
+			)
+		)
 		.orderBy(sql`random()`)
 		.limit(1);
 	if (!s) return;
-	await db.update(networkSessions).set({ status: SESSION_STATUS.expired }).where(eq(networkSessions.id, s.id));
+	await db
+		.update(networkSessions)
+		.set({ status: SESSION_STATUS.expired })
+		.where(eq(networkSessions.id, s.id));
 	log('🔴', `${customers.find((c) => c.id === s.userId)?.phone ?? s.userId} disconnected`);
 }
 
@@ -346,7 +497,10 @@ async function failedPayment() {
 		packageId: bundle.id,
 		createdAt: new Date()
 	});
-	log('⚠️ ', `${cust?.payerName ?? 'Guest'} payment ${status.replace('PAYMENT_', '').toLowerCase()}`);
+	log(
+		'⚠️ ',
+		`${cust?.payerName ?? 'Guest'} payment ${status.replace('PAYMENT_', '').toLowerCase()}`
+	);
 }
 
 /** AP telemetry flap: new latency/throughput sample, occasionally toggles online. */
@@ -399,7 +553,9 @@ process.on('SIGINT', () => {
 	console.log('\nStopping simulator…');
 });
 
-console.log(`▸ Live simulator started — ${customers.length} customers, ${bundles.length} bundles, ${tiers.length} tiers.`);
+console.log(
+	`▸ Live simulator started — ${customers.length} customers, ${bundles.length} bundles, ${tiers.length} tiers.`
+);
 console.log(`  Interval ${MIN_MS}–${MAX_MS}ms. Open /dashboard and watch. Ctrl+C to stop.\n`);
 
 while (running) {

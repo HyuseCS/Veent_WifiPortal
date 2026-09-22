@@ -104,91 +104,98 @@ export const routerModel = pgTable(
  * admin Networks page and power the public "Radius" locator map (apps/locator).
  * Nullable: an AP with no coordinates simply isn't plotted on the map.
  */
-export const networkHealth = pgTable('network_health', {
-	id: serial('id').primaryKey(),
-	name: text('name').notNull(),
-	// Operator-set display name. `name` is the sweep's working identity — the natural key the health
-	// upsert writes on (interface rows) and re-derives from the DHCP hostname every refresh (AP rows),
-	// so a custom name written to `name` is clobbered/pruned on the next sample. `display_name` is the
-	// human label the sweep never touches: the UI and durable AP attribution show `display_name ?? name`.
-	// Null = no override (fall back to the router-derived `name`).
-	displayName: text('display_name'),
-	online: boolean('online').notNull().default(true),
-	// Whether the router's uplink/WAN was reachable at the last sample (shared across a router's
-	// interfaces). `online` is the raw per-AP LINK state; an AP with `online=true` but `wan_ok=false`
-	// (radio up, internet dead) is NOT serving guests, so the outage sweep treats it as down. Defaults
-	// true so a never-sampled/legacy row is never mistaken for a WAN outage.
-	wanOk: boolean('wan_ok').notNull().default(true),
-	// When the AP most recently transitioned online→offline (cleared on recovery). Drives the
-	// outage sweep's PAUSE debounce: guests on the AP are auto-paused only after it has been down for
-	// a sustained period, not on a brief blip.
-	offlineSince: timestamp('offline_since'),
-	// Mirror of offline_since for the RESUME side (cleared while offline). The outage sweep resumes a
-	// held guest only after their AP has been confirmed back UP for a sustained period — so a flapping
-	// AP can't un-freeze paid time on the first "online" sample and burn it while service is unstable.
-	onlineSince: timestamp('online_since'),
-	uptimePct: numeric('uptime_pct', { precision: 5, scale: 2 }).notNull().default('0'),
-	latencyMs: integer('latency_ms'),
-	users: integer('users').notNull().default(0),
-	// Per-AP/interface throughput in Mbps. NULLABLE for Phase A per-AP visibility: an AP row whose
-	// firmware doesn't expose hotspot byte counters carries `null` = "traffic unavailable" (the card
-	// shows "—"). Interface/pinned rows and every existing writer still write a number; default 0.
-	throughputMbps: integer('throughput_mbps').default(0),
-	lastSampleAt: timestamp('last_sample_at').notNull().defaultNow(),
-	latitude: numeric('latitude', { precision: 9, scale: 6 }),
-	longitude: numeric('longitude', { precision: 9, scale: 6 }),
-	address: text('address'),
-	// Operator-set binding: the router AP/interface name whose connected clients
-	// count toward this pin (network_sessions attribution). Lets a map pin be named
-	// anything while still tracking a specific interface. Null = no binding.
-	interfaceName: text('interface_name'),
-	// Router/AP model id — a slug key into the `router_model` catalog. Drives the
-	// simulated coverage radius on the map. Loose ref (no FK): an unknown/null model
-	// falls back to the default model's range, so deleting a catalog row is safe.
-	model: text('model'),
-	// Operator-calibrated coverage radius in metres, overriding the model's advertised
-	// range to match real-world reach (walls, height, interference). Null = fall back to
-	// the model's catalog range.
-	rangeMeters: integer('range_meters'),
-	// Operator label for the overlap cluster this AP belongs to. Clusters are computed live
-	// from coverage overlap (no stable id), so the name rides on the members: renaming a
-	// cluster mirrors this value across all its current members. Null = unnamed (shown as
-	// "Cluster N" in the UI).
-	clusterName: text('cluster_name'),
-	// Aggregate per-AP bandwidth caps, enforced on the router as a `/queue/simple` on this
-	// hotspot's client subnet (so all guests on the AP share the cap, bypass bindings and
-	// all). Kilobits/s; null = uncapped. Operator-set from the admin Networks card and
-	// preserved across the health sweep (see refreshNetworkHealth — telemetry-only upsert).
-	maxDownKbps: integer('max_down_kbps'),
-	maxUpKbps: integer('max_up_kbps'),
-	// ── Phase A per-AP visibility (router-side DHCP Option 82) ─────────────────────────────────
-	// Physical-AP identity for auto-discovered AP rows. NULL on interface/pinned rows (today's
-	// semantics). Unique (Postgres allows multiple NULLs) so an AP row is keyed on MAC, not IP —
-	// a lease IP change updates the same row. Uppercased at write time.
-	mac: text('mac'),
-	// Raw OLT-inserted Option 82 agent-circuit-id string (e.g. "OLT-9 xpon 0/1/0/4:16.3.70"). The
-	// join key between a client lease and its AP; APs sharing an ONU carry the same value (grouped
-	// at render time). NULL on non-AP rows.
-	apCircuitId: text('ap_circuit_id'),
-	// How this row's identity/attribution was derived. Phase A writes 'circuit-id'; 'ap-api' is
-	// reserved vocabulary for Phase B (Fatap AP API). NULL = interface/pinned row (not an AP row).
-	attributionSource: text('attribution_source'),
-	// Last cumulative attributed hotspot byte sum for this AP (Section 5 traffic-delta basis).
-	// NULL until the first counter sample lands, or permanently NULL when firmware hides counters.
-	trafficBytes: bigint('traffic_bytes', { mode: 'number' })
-}, (t) => [
-	// `name` is the natural key the health sweep upserts on (one row per router interface /
-	// map pin). Unique so concurrent sweeps can't race two rows for the same AP, and so the
-	// service can use onConflictDoUpdate instead of select-then-insert.
-	uniqueIndex('network_health_name_key').on(t.name),
-	// AP rows are keyed on `mac` (physical-AP identity). Unique so an AP-lease IP change updates the
-	// same row (AC8); Postgres permits multiple NULLs, so interface/pinned rows are unaffected.
-	uniqueIndex('network_health_mac_key').on(t.mac),
-	// A cap is either unset or a positive rate — a zero/negative Kbps is always corrupt.
-	// Mirrors the router_model range check; guards direct inserts and future migrations.
-	check('network_health_max_down_kbps_positive', sql`${t.maxDownKbps} IS NULL OR ${t.maxDownKbps} > 0`),
-	check('network_health_max_up_kbps_positive', sql`${t.maxUpKbps} IS NULL OR ${t.maxUpKbps} > 0`)
-]);
+export const networkHealth = pgTable(
+	'network_health',
+	{
+		id: serial('id').primaryKey(),
+		name: text('name').notNull(),
+		// Operator-set display name. `name` is the sweep's working identity — the natural key the health
+		// upsert writes on (interface rows) and re-derives from the DHCP hostname every refresh (AP rows),
+		// so a custom name written to `name` is clobbered/pruned on the next sample. `display_name` is the
+		// human label the sweep never touches: the UI and durable AP attribution show `display_name ?? name`.
+		// Null = no override (fall back to the router-derived `name`).
+		displayName: text('display_name'),
+		online: boolean('online').notNull().default(true),
+		// Whether the router's uplink/WAN was reachable at the last sample (shared across a router's
+		// interfaces). `online` is the raw per-AP LINK state; an AP with `online=true` but `wan_ok=false`
+		// (radio up, internet dead) is NOT serving guests, so the outage sweep treats it as down. Defaults
+		// true so a never-sampled/legacy row is never mistaken for a WAN outage.
+		wanOk: boolean('wan_ok').notNull().default(true),
+		// When the AP most recently transitioned online→offline (cleared on recovery). Drives the
+		// outage sweep's PAUSE debounce: guests on the AP are auto-paused only after it has been down for
+		// a sustained period, not on a brief blip.
+		offlineSince: timestamp('offline_since'),
+		// Mirror of offline_since for the RESUME side (cleared while offline). The outage sweep resumes a
+		// held guest only after their AP has been confirmed back UP for a sustained period — so a flapping
+		// AP can't un-freeze paid time on the first "online" sample and burn it while service is unstable.
+		onlineSince: timestamp('online_since'),
+		uptimePct: numeric('uptime_pct', { precision: 5, scale: 2 }).notNull().default('0'),
+		latencyMs: integer('latency_ms'),
+		users: integer('users').notNull().default(0),
+		// Per-AP/interface throughput in Mbps. NULLABLE for Phase A per-AP visibility: an AP row whose
+		// firmware doesn't expose hotspot byte counters carries `null` = "traffic unavailable" (the card
+		// shows "—"). Interface/pinned rows and every existing writer still write a number; default 0.
+		throughputMbps: integer('throughput_mbps').default(0),
+		lastSampleAt: timestamp('last_sample_at').notNull().defaultNow(),
+		latitude: numeric('latitude', { precision: 9, scale: 6 }),
+		longitude: numeric('longitude', { precision: 9, scale: 6 }),
+		address: text('address'),
+		// Operator-set binding: the router AP/interface name whose connected clients
+		// count toward this pin (network_sessions attribution). Lets a map pin be named
+		// anything while still tracking a specific interface. Null = no binding.
+		interfaceName: text('interface_name'),
+		// Router/AP model id — a slug key into the `router_model` catalog. Drives the
+		// simulated coverage radius on the map. Loose ref (no FK): an unknown/null model
+		// falls back to the default model's range, so deleting a catalog row is safe.
+		model: text('model'),
+		// Operator-calibrated coverage radius in metres, overriding the model's advertised
+		// range to match real-world reach (walls, height, interference). Null = fall back to
+		// the model's catalog range.
+		rangeMeters: integer('range_meters'),
+		// Operator label for the overlap cluster this AP belongs to. Clusters are computed live
+		// from coverage overlap (no stable id), so the name rides on the members: renaming a
+		// cluster mirrors this value across all its current members. Null = unnamed (shown as
+		// "Cluster N" in the UI).
+		clusterName: text('cluster_name'),
+		// Aggregate per-AP bandwidth caps, enforced on the router as a `/queue/simple` on this
+		// hotspot's client subnet (so all guests on the AP share the cap, bypass bindings and
+		// all). Kilobits/s; null = uncapped. Operator-set from the admin Networks card and
+		// preserved across the health sweep (see refreshNetworkHealth — telemetry-only upsert).
+		maxDownKbps: integer('max_down_kbps'),
+		maxUpKbps: integer('max_up_kbps'),
+		// ── Phase A per-AP visibility (router-side DHCP Option 82) ─────────────────────────────────
+		// Physical-AP identity for auto-discovered AP rows. NULL on interface/pinned rows (today's
+		// semantics). Unique (Postgres allows multiple NULLs) so an AP row is keyed on MAC, not IP —
+		// a lease IP change updates the same row. Uppercased at write time.
+		mac: text('mac'),
+		// Raw OLT-inserted Option 82 agent-circuit-id string (e.g. "OLT-9 xpon 0/1/0/4:16.3.70"). The
+		// join key between a client lease and its AP; APs sharing an ONU carry the same value (grouped
+		// at render time). NULL on non-AP rows.
+		apCircuitId: text('ap_circuit_id'),
+		// How this row's identity/attribution was derived. Phase A writes 'circuit-id'; 'ap-api' is
+		// reserved vocabulary for Phase B (Fatap AP API). NULL = interface/pinned row (not an AP row).
+		attributionSource: text('attribution_source'),
+		// Last cumulative attributed hotspot byte sum for this AP (Section 5 traffic-delta basis).
+		// NULL until the first counter sample lands, or permanently NULL when firmware hides counters.
+		trafficBytes: bigint('traffic_bytes', { mode: 'number' })
+	},
+	(t) => [
+		// `name` is the natural key the health sweep upserts on (one row per router interface /
+		// map pin). Unique so concurrent sweeps can't race two rows for the same AP, and so the
+		// service can use onConflictDoUpdate instead of select-then-insert.
+		uniqueIndex('network_health_name_key').on(t.name),
+		// AP rows are keyed on `mac` (physical-AP identity). Unique so an AP-lease IP change updates the
+		// same row (AC8); Postgres permits multiple NULLs, so interface/pinned rows are unaffected.
+		uniqueIndex('network_health_mac_key').on(t.mac),
+		// A cap is either unset or a positive rate — a zero/negative Kbps is always corrupt.
+		// Mirrors the router_model range check; guards direct inserts and future migrations.
+		check(
+			'network_health_max_down_kbps_positive',
+			sql`${t.maxDownKbps} IS NULL OR ${t.maxDownKbps} > 0`
+		),
+		check('network_health_max_up_kbps_positive', sql`${t.maxUpKbps} IS NULL OR ${t.maxUpKbps} > 0`)
+	]
+);
 
 /**
  * The device MAC that got an admin internet bypass (B3.2), stashed at login so the sliding

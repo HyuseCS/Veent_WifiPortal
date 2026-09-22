@@ -67,7 +67,7 @@ sendOTP: async ({ phoneNumber: phone, code }) => {
 		await enforceOtpSendLimit(phone, getPortalContext(ev)?.mac, clientIp(ev));
 	}
 	await sendOtp(phone, code);
-}
+};
 ```
 
 ### Why a single seam matters
@@ -156,7 +156,9 @@ every adapter imports the same boolean so the behavior is consistent across all 
 ```ts
 async function sendViaCast(phone: string, code: string): Promise<void> {
 	const apiKey = env.CAST_API_KEY;
-	if (!apiKey) { /* fail-safe-by-environment, see §2 */ }
+	if (!apiKey) {
+		/* fail-safe-by-environment, see §2 */
+	}
 
 	const payload: Record<string, unknown> = { to: phone, message: otpMessage(code) };
 	const senderId = env.CAST_SENDER_ID;
@@ -171,7 +173,9 @@ async function sendViaCast(phone: string, code: string): Promise<void> {
 
 	const body = await res.json().catch(() => null);
 	if (!res.ok || !body?.success) {
-		throw new Error(`Cast SMS rejected (${res.status})${body?.error_code ? ` [${body.error_code}]` : ''}: ${body?.error ?? 'no success flag'}`);
+		throw new Error(
+			`Cast SMS rejected (${res.status})${body?.error_code ? ` [${body.error_code}]` : ''}: ${body?.error ?? 'no success flag'}`
+		);
 	}
 
 	void logDeliveryAttempt('cast', body.message_id ?? null, phone);
@@ -183,16 +187,16 @@ async function sendViaCast(phone: string, code: string): Promise<void> {
 }
 ```
 
-| Aspect | Detail |
-|---|---|
-| Endpoint | `POST https://api.cast.ph/api/v1/otp/send` — the dedicated, higher-priority OTP pool, deliberately **not** `/sms/send` |
-| Auth | `x-api-key` header. Live keys start `cast_`; sandbox keys start `cast_test_` |
-| Phone format | E.164 as-is (`+639171234567`) — no reformatting; Cast accepts it directly |
-| Sender ID | `CAST_SENDER_ID` optional — only send it if the account has more than one approved sender id |
-| Success check | HTTP 2xx **and** `body.success === true` |
-| Failure | Non-2xx, or `success: false`. The stable machine-readable `error_code` is surfaced in the thrown message when present, alongside the human `error` string |
-| Timeout | `AbortSignal.timeout(10_000)` — 10 seconds |
-| Response fields used | `message_id` (persisted to the delivery log), `success`, `error`, `error_code` |
+| Aspect               | Detail                                                                                                                                                    |
+| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Endpoint             | `POST https://api.cast.ph/api/v1/otp/send` — the dedicated, higher-priority OTP pool, deliberately **not** `/sms/send`                                    |
+| Auth                 | `x-api-key` header. Live keys start `cast_`; sandbox keys start `cast_test_`                                                                              |
+| Phone format         | E.164 as-is (`+639171234567`) — no reformatting; Cast accepts it directly                                                                                 |
+| Sender ID            | `CAST_SENDER_ID` optional — only send it if the account has more than one approved sender id                                                              |
+| Success check        | HTTP 2xx **and** `body.success === true`                                                                                                                  |
+| Failure              | Non-2xx, or `success: false`. The stable machine-readable `error_code` is surfaced in the thrown message when present, alongside the human `error` string |
+| Timeout              | `AbortSignal.timeout(10_000)` — 10 seconds                                                                                                                |
+| Response fields used | `message_id` (persisted to the delivery log), `success`, `error`, `error_code`                                                                            |
 
 **The dev-only proof-of-send log.** After a successful accept, in dev only, the code logs both
 Cast's raw JSON response and the literal OTP message text sent. This is guarded by `if (dev)`
@@ -208,12 +212,12 @@ un-guarded "to help debug a production issue" — use the delivery log and DLR s
 All four adapters share the contract in §1; the differences are entirely gateway-specific
 formatting/auth quirks. Get these wrong and the adapter will silently mis-target every message.
 
-| Provider | Endpoint | Auth | Phone format | Notable quirk |
-|---|---|---|---|---|
-| **Cast** (default) | `POST https://api.cast.ph/api/v1/otp/send` | `x-api-key` header | E.164 as-is | Dedicated OTP pool, not the general SMS endpoint. Has the only DLR status endpoint of the four — see §5 |
-| **iTexMo** | `POST https://api.itexmo.com/api/broadcast-otp` | Credentials in the JSON body (`ApiCode`/`Email`/`Password`) | **Local `09xxxxxxxxx`**, converted from E.164 via `phone.replace(/^\+?63/, '0')` | `ITEXMO_SENDER_ID` optional, but **a TRIAL account must set it to exactly `"ITM.TEST3"`** — any other value on a trial account is rejected. Response shape is `{ Error, Accepted, Failed, ReferenceId, Message }`; a 200 with `Accepted: 0` still means nothing went out |
-| **UniSMS** | `POST https://unismsapi.com/api/sms` | HTTP Basic — **the secret key (`sk_…`) as the username, empty password** (`Buffer.from(\`${secretKey}:\`).toString('base64')`) | E.164 as-is | `UNISMS_SENDER_ID` is **required on every message** — unlike Cast where it's optional, UniSMS has no usable default. 201 Created on success; a `message.status === 'failed'` body still counts as a rejection despite the 2xx |
-| **SMS Gate** | `POST {SMSGATE_BASE_URL}/3rdparty/v1/messages` (default base `https://api.sms-gate.app`) | HTTP Basic (`username:password` from the app's Cloud Server registration) | E.164 as-is | Not a traditional SMS gateway — it's an **Android phone running the SMS Gate app in Cloud mode**. Both the phone and this server dial OUTBOUND to `api.sms-gate.app`, so it keeps working even when the site's AP isolates Wi-Fi clients or the operator doesn't control the router (a captive-portal-specific constraint). Explicitly a TEMPORARY stopgap — comment says "delete once iTexMo is live." 202 Accepted on success; a `state: 'Failed'` body counts as rejection |
+| Provider           | Endpoint                                                                                 | Auth                                                                                                                           | Phone format                                                                     | Notable quirk                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| ------------------ | ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Cast** (default) | `POST https://api.cast.ph/api/v1/otp/send`                                               | `x-api-key` header                                                                                                             | E.164 as-is                                                                      | Dedicated OTP pool, not the general SMS endpoint. Has the only DLR status endpoint of the four — see §5                                                                                                                                                                                                                                                                                                                                                                       |
+| **iTexMo**         | `POST https://api.itexmo.com/api/broadcast-otp`                                          | Credentials in the JSON body (`ApiCode`/`Email`/`Password`)                                                                    | **Local `09xxxxxxxxx`**, converted from E.164 via `phone.replace(/^\+?63/, '0')` | `ITEXMO_SENDER_ID` optional, but **a TRIAL account must set it to exactly `"ITM.TEST3"`** — any other value on a trial account is rejected. Response shape is `{ Error, Accepted, Failed, ReferenceId, Message }`; a 200 with `Accepted: 0` still means nothing went out                                                                                                                                                                                                      |
+| **UniSMS**         | `POST https://unismsapi.com/api/sms`                                                     | HTTP Basic — **the secret key (`sk_…`) as the username, empty password** (`Buffer.from(\`${secretKey}:\`).toString('base64')`) | E.164 as-is                                                                      | `UNISMS_SENDER_ID` is **required on every message** — unlike Cast where it's optional, UniSMS has no usable default. 201 Created on success; a `message.status === 'failed'` body still counts as a rejection despite the 2xx                                                                                                                                                                                                                                                 |
+| **SMS Gate**       | `POST {SMSGATE_BASE_URL}/3rdparty/v1/messages` (default base `https://api.sms-gate.app`) | HTTP Basic (`username:password` from the app's Cloud Server registration)                                                      | E.164 as-is                                                                      | Not a traditional SMS gateway — it's an **Android phone running the SMS Gate app in Cloud mode**. Both the phone and this server dial OUTBOUND to `api.sms-gate.app`, so it keeps working even when the site's AP isolates Wi-Fi clients or the operator doesn't control the router (a captive-portal-specific constraint). Explicitly a TEMPORARY stopgap — comment says "delete once iTexMo is live." 202 Accepted on success; a `state: 'Failed'` body counts as rejection |
 
 All four cap the call at `AbortSignal.timeout(10_000)` and treat a non-2xx response as a hard
 failure — a slow/unreachable gateway degrades to a normal thrown error rather than hanging the
@@ -241,16 +245,24 @@ every dashboard, and every health check stayed green while no guest could log in
 **`customer_otp_delivery_log` table** (`packages/db/src/schema/customer.ts`):
 
 ```ts
-export const customerOtpDeliveryLog = pgTable('customer_otp_delivery_log', {
-	id: serial('id').primaryKey(),
-	provider: text('provider').notNull(),
-	providerMessageId: text('provider_message_id'),
-	phoneMasked: text('phone_masked').notNull(),
-	status: text('status').notNull().default('pending'), // pending | rejected | unknown
-	createdAt: timestamp('created_at').notNull().defaultNow()
-}, (t) => [
-	index('customer_otp_delivery_log_provider_status_created_idx').on(t.provider, t.status, t.createdAt)
-]);
+export const customerOtpDeliveryLog = pgTable(
+	'customer_otp_delivery_log',
+	{
+		id: serial('id').primaryKey(),
+		provider: text('provider').notNull(),
+		providerMessageId: text('provider_message_id'),
+		phoneMasked: text('phone_masked').notNull(),
+		status: text('status').notNull().default('pending'), // pending | rejected | unknown
+		createdAt: timestamp('created_at').notNull().defaultNow()
+	},
+	(t) => [
+		index('customer_otp_delivery_log_provider_status_created_idx').on(
+			t.provider,
+			t.status,
+			t.createdAt
+		)
+	]
+);
 ```
 
 Every adapter writes a row on successful gateway accept, via `logDeliveryAttempt` inside `otp.ts`
@@ -265,22 +277,31 @@ the existing `POST /api/payments/reconcile` pattern:
 ```ts
 export const POST: RequestHandler = async (event) => {
 	requireCron(event);
-	return Sentry.withMonitor('customer-otp-sweep', async () => {
-		// select Cast rows still `pending`, created within the last 30 minutes
-		// for each: GET https://api.cast.ph/api/v1/sms/status/{providerMessageId}
-		// classify (see below), then always run the unconditional 48h prune
-	}, { schedule: { type: 'crontab', value: '*/5 * * * *' }, checkinMargin: 5, maxRuntime: 5, timezone: 'UTC' });
+	return Sentry.withMonitor(
+		'customer-otp-sweep',
+		async () => {
+			// select Cast rows still `pending`, created within the last 30 minutes
+			// for each: GET https://api.cast.ph/api/v1/sms/status/{providerMessageId}
+			// classify (see below), then always run the unconditional 48h prune
+		},
+		{
+			schedule: { type: 'crontab', value: '*/5 * * * *' },
+			checkinMargin: 5,
+			maxRuntime: 5,
+			timezone: 'UTC'
+		}
+	);
 };
 ```
 
 **Classification is deliberately conservative — alert only on the one proven-bad shape:**
 
-| Cast DLR response | Classification | Alert? |
-|---|---|---|
-| `dlr_status: "REJECTD"` or `status: "undelivered"` | `rejected` | **Yes** — the only alerting branch |
-| Any other value (`DELIVRD`, `PENDING`, an unrecognized string), a missing field, or a `null` body | left `pending` | No — treated as transient, re-checked next sweep |
-| Non-2xx HTTP response from the status endpoint, or a network error | left `pending` | No — the status endpoint being unhappy is not the carrier rejecting the message |
-| Still `pending` 30 minutes after send (`GIVE_UP_MS`) | `unknown` | No — terminal give-up, the code stops guessing |
+| Cast DLR response                                                                                 | Classification | Alert?                                                                          |
+| ------------------------------------------------------------------------------------------------- | -------------- | ------------------------------------------------------------------------------- |
+| `dlr_status: "REJECTD"` or `status: "undelivered"`                                                | `rejected`     | **Yes** — the only alerting branch                                              |
+| Any other value (`DELIVRD`, `PENDING`, an unrecognized string), a missing field, or a `null` body | left `pending` | No — treated as transient, re-checked next sweep                                |
+| Non-2xx HTTP response from the status endpoint, or a network error                                | left `pending` | No — the status endpoint being unhappy is not the carrier rejecting the message |
+| Still `pending` 30 minutes after send (`GIVE_UP_MS`)                                              | `unknown`      | No — terminal give-up, the code stops guessing                                  |
 
 The 30-minute give-up and the alert are both independent of the OTP's own 5-minute expiry — this
 sweep is about detecting a systemic outage, not about the individual code's validity window.
@@ -311,7 +332,7 @@ rising count, burying the alert exactly when it matters most.
   Cast is the only one of the four with a DLR status endpoint. Those three providers remain fully
   unobservable by design, not by oversight.
 - **One shape only.** The classifier only recognizes `dlr_status: "REJECTD"` and `status:
-  "undelivered"` as rejection — an unseen Cast failure mode with a different shape would silently
+"undelivered"` as rejection — an unseen Cast failure mode with a different shape would silently
   stay `pending` until the 30-minute give-up, with no alert either way.
 - **Never run against live delivered traffic.** All test coverage mocks `fetch`; the stability of
   Cast's real DLR response shape beyond the one shape observed live is unproven.
@@ -325,25 +346,25 @@ rising count, burying the alert exactly when it matters most.
 ## 6. Security and privacy properties
 
 - **Only the masked phone is ever persisted.** `maskPhone()` turns `+639171234567` into `+63 •••
-  ••• 4567`; `logDeliveryAttempt` stores that output, never the raw E.164 number. A dedicated test
+••• 4567`; `logDeliveryAttempt` stores that output, never the raw E.164 number. A dedicated test
   (`otp.spec.ts`) asserts the masked value does not contain the raw digit sequence.
 - **`scrubEvent` (`packages/core/src/observability.ts`)** is the shared strict PII redactor wired
   into every app's Sentry `beforeSend`/`beforeSendTransaction`. It drops values for keys matching
   a secret-shaped regex (`pass(word)?|secret|token|otp|^code$|authorization|cookie|api[-_]?key|
-  session[-_]?id|totp`) and masks emails/MACs/phones wherever they survive elsewhere in the event
+session[-_]?id|totp`) and masks emails/MACs/phones wherever they survive elsewhere in the event
   (message, breadcrumbs, exception, extra, contexts, request). It runs on every branch, including
   the OTP-delivery-rejection alert in §5.
 - **The delivery-log insert can never fail a send.** `logDeliveryAttempt` is `await`-ed **inside**
   a `try { … } catch (err) { captureHandled(err, { level: 'warning', tags: { area: 'otp-send-log'
-  } }); }` block — a DB error degrades to a Sentry warning, never to a failed login. This matters
+} }); }` block — a DB error degrades to a Sentry warning, never to a failed login. This matters
   because the OTP send path is the guest authentication path: it must never fail because logging
   failed.
 - **The drizzle-thenable trap.** A Drizzle query builder (`db.insert(...).values(...)`) is a
-  *thenable* — it doesn't actually run until awaited or otherwise consumed. If the `await` inside
+  _thenable_ — it doesn't actually run until awaited or otherwise consumed. If the `await` inside
   `logDeliveryAttempt`'s `try` block were removed "to make it truly fire-and-forget," the insert's
   eventual rejection would escape the `try/catch` entirely and surface as an **unhandled promise
   rejection** instead of a caught, logged warning — silently defeating the whole point of wrapping
-  it in a try/catch. The fire-and-forget behavior at the *call site* is achieved correctly instead,
+  it in a try/catch. The fire-and-forget behavior at the _call site_ is achieved correctly instead,
   by calling `void logDeliveryAttempt(...)` (not awaiting the wrapper itself) — the `await` stays
   inside the function so its own promise settles before the function returns, and `void` only
   detaches the caller from waiting on that already-safe promise. This exact regression was
@@ -358,23 +379,23 @@ All read from `$env/dynamic/private` in `apps/customer/src/lib/server/otp.ts`. N
 only — **never a real key value**. Where a prefix is meaningful for identifying live vs. sandbox,
 that prefix is documented (never a full key).
 
-| Var | Required? | Purpose |
-|---|---|---|
-| `SMS_PROVIDER` | No — defaults to `"cast"` | Selects the adapter: `cast` \| `itexmo` \| `unisms` \| `smsgate`. Unset/blank → Cast. Any other **unrecognized non-empty** value throws at send time |
-| `CAST_API_KEY` | Required for Cast | `x-api-key` header value. Live keys start with the prefix `cast_`; sandbox keys start with `cast_test_` |
-| `CAST_SENDER_ID` | Optional | Only needed if the Cast account has more than one approved sender id |
-| `ITEXMO_API_CODE` / `ITEXMO_EMAIL` / `ITEXMO_PASSWORD` | Required (all three) for iTexMo | iTexMo account credentials, sent in the request body |
-| `ITEXMO_SENDER_ID` | Optional | Approved sender id. **On a trial account this must be exactly `"ITM.TEST3"`** |
-| `UNISMS_SECRET_KEY` | Required for UniSMS | The API secret key (`sk_…`); used as the Basic-auth username with an empty password |
-| `UNISMS_SENDER_ID` | Required for UniSMS | UniSMS requires a sender id on every message — there is no usable default |
-| `SMSGATE_BASE_URL` | Optional | Defaults to `https://api.sms-gate.app`; override only for a self-hosted private SMS Gate server |
-| `SMSGATE_USERNAME` / `SMSGATE_PASSWORD` | Required (both) for SMS Gate | Basic-auth credentials from the app's Cloud Server registration |
+| Var                                                    | Required?                       | Purpose                                                                                                                                              |
+| ------------------------------------------------------ | ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `SMS_PROVIDER`                                         | No — defaults to `"cast"`       | Selects the adapter: `cast` \| `itexmo` \| `unisms` \| `smsgate`. Unset/blank → Cast. Any other **unrecognized non-empty** value throws at send time |
+| `CAST_API_KEY`                                         | Required for Cast               | `x-api-key` header value. Live keys start with the prefix `cast_`; sandbox keys start with `cast_test_`                                              |
+| `CAST_SENDER_ID`                                       | Optional                        | Only needed if the Cast account has more than one approved sender id                                                                                 |
+| `ITEXMO_API_CODE` / `ITEXMO_EMAIL` / `ITEXMO_PASSWORD` | Required (all three) for iTexMo | iTexMo account credentials, sent in the request body                                                                                                 |
+| `ITEXMO_SENDER_ID`                                     | Optional                        | Approved sender id. **On a trial account this must be exactly `"ITM.TEST3"`**                                                                        |
+| `UNISMS_SECRET_KEY`                                    | Required for UniSMS             | The API secret key (`sk_…`); used as the Basic-auth username with an empty password                                                                  |
+| `UNISMS_SENDER_ID`                                     | Required for UniSMS             | UniSMS requires a sender id on every message — there is no usable default                                                                            |
+| `SMSGATE_BASE_URL`                                     | Optional                        | Defaults to `https://api.sms-gate.app`; override only for a self-hosted private SMS Gate server                                                      |
+| `SMSGATE_USERNAME` / `SMSGATE_PASSWORD`                | Required (both) for SMS Gate    | Basic-auth credentials from the app's Cloud Server registration                                                                                      |
 
 **These vars are deliberately excluded from `apps/customer/src/lib/server/validateEnv.ts`'s
 boot-time required list.** `validateEnv.ts`'s own header comment states the reasoning directly:
 
 > Hard-required (prod): the DB, auth secret, cron secret, and Maya keys — a real portal needs all
-> of them. … SMS (ITEXMO_*) is the OTP teammate's config and validated in their path.
+> of them. … SMS (ITEXMO\_\*) is the OTP teammate's config and validated in their path.
 
 In other words: SMS config validation is intentionally pushed down into each `sendViaX` adapter
 (the fail-safe-by-environment check in §2) rather than centralized at boot. This was a deliberate
@@ -463,7 +484,7 @@ section is transferable to any stack.
   from `validateEnv.ts` (§7). Verify Cast is actually delivering (via the DLR endpoint, not the
   send response) before relying on it in any new environment.
 - **Verify delivery with the DLR endpoint, never the send response.** `GET
-  https://api.cast.ph/api/v1/sms/status/{message_id}` (`dlr_status`, `status`). Polling immediately
+https://api.cast.ph/api/v1/sms/status/{message_id}` (`dlr_status`, `status`). Polling immediately
   after send returns something like `status: "sent"` and proves nothing — DLRs land seconds to
   minutes later.
 - **Shell-vs-`.env` trap.** A stale exported `CAST_API_KEY` in a shell session can shadow the value
@@ -505,12 +526,16 @@ at module scope. The pattern:
 const state = vi.hoisted(() => ({ dev: false, env: {} as Record<string, string | undefined> }));
 
 vi.mock('$app/environment', () => ({
-	get dev() { return state.dev; },
+	get dev() {
+		return state.dev;
+	},
 	browser: false,
 	building: false
 }));
 vi.mock('$env/dynamic/private', () => ({
-	get env() { return state.env; }
+	get env() {
+		return state.env;
+	}
 }));
 
 import { sendOtp } from './otp'; // imported AFTER the mocks are registered

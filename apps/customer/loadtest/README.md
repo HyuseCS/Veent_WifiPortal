@@ -16,26 +16,29 @@ MikroTik** — measuring the end-to-end limit: SvelteKit → Drizzle pool (10) �
 ## Prerequisites
 
 - **k6** installed on the machine you run the test from (it's a standalone binary, not a bun dep):
-  - Arch: `sudo pacman -S k6`  ·  macOS: `brew install k6`  ·  or https://k6.io/docs/get-started/installation/
+  - Arch: `sudo pacman -S k6` · macOS: `brew install k6` · or https://k6.io/docs/get-started/installation/
 - Network reachability from the k6 machine to the **app host** (the teammate's laptop).
-- `bun` + `apps/customer/.env` (DATABASE_URL, BETTER_AUTH_SECRET, ORIGIN, MIKROTIK_*) for seed/cleanup.
+- `bun` + `apps/customer/.env` (DATABASE*URL, BETTER_AUTH_SECRET, ORIGIN, MIKROTIK*\*) for seed/cleanup.
 
 ## Run it
 
 **1. Seed sessions** (mints real phone-OTP sessions without SMS; writes `sessions.json`).
 Run where it can reach the DB:
+
 ```bash
 bun run --filter veent-customer loadtest:seed          # 100 users
 COUNT=100 bun run --filter veent-customer loadtest:seed # explicit
 ```
 
 **2. Run the spike** — point k6 at the app host. `sessions.json` must sit next to the script:
+
 ```bash
 k6 run -e BASE_URL=http://<laptop-host> -e VUS=100 apps/customer/loadtest/grant-spike.js
 # e.g. BASE_URL=http://10.210.0.9
 ```
 
-**3. Clean up** — REQUIRED. Run on the **host laptop** (needs MIKROTIK_* to reach the router):
+**3. Clean up** — REQUIRED. Run on the **host laptop** (needs MIKROTIK\_\* to reach the router):
+
 ```bash
 bun run --filter veent-customer loadtest:cleanup
 ```
@@ -55,6 +58,7 @@ bun run --filter veent-customer loadtest:cleanup
   router at once; this is the real stress on the MikroTik and the most likely place to see timeouts.
 
 ## Files
+
 - `seed-sessions.ts` — mints N `veent-portal` sessions (tagged `@loadtest.veent.local`) → `sessions.json`
 - `grant-spike.js` — the k6 scenario
 - `cleanup.ts` — deletes tagged users + reconciles router bindings
