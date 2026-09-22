@@ -1,5 +1,14 @@
 # veent-wifiportal - All Context
 
+Last updated: 2026-09-22 (GoTyme walled-garden recon in-flight, NOT complete — first of the 9
+queued wallet/bank recon cycles; see `docs/mikrotik/walled-garden.md` candidate table. EXECUTE
+paused at HARD PAUSE #1, blocked on staging router/Winbox access to produce a live DNS-cache
+capture. Plan: `process/general-plans/active/gotyme-walled-garden-recon_22-09-26/
+gotyme-walled-garden-recon_PLAN_22-09-26.md`; standalone resume doc:
+`gotyme-walled-garden-recon_HANDOFF_22-09-26.md` in the same task folder. This supersedes the
+30-07-26 "`process/general-plans/active/` is now empty of plan folders" framing below —
+`active/` currently holds this one in-progress plan.)
+
 Last updated: 2026-07-30 (plan-inventory + backlog reconciliation, session 2 — user-confirmed
 30-07-26 on staging: (a) deploy-VM portal reachability fixed, `10.210.54.133` now allowed in the
 `veent-admin:portal` walled-garden tag via `PORTAL_LAN_IPS`; (b) the trimmed `PAYMENT_HOSTS` set
