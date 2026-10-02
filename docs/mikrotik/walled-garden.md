@@ -439,7 +439,7 @@ until live-verified.
 | ------------- | ---------------------------------------------------------------------------------- | ---------- |
 | GoTyme        | `*.gotyme.com.ph` (dst-host) + `aws-gate.licelus.com` (`gotyme-resolve` scheduler) | VERIFIED   |
 | SeaBank       | `httpdns.seabank.ph` (`seabank-resolve` scheduler only, no dst-host rule)         | VERIFIED   |
-| GCash app     | `*.gcash.com` app hosts (web checkout already works via `gcash-resolve`)           | UNVERIFIED |
+| GCash app     | `login`/`api`/`mdap`/`acm`/`customer-segment` `.mynt.xyz` (`gcash-app-resolve` scheduler) | VERIFIED   |
 | GrabPay       | `*.grab.com`                                                                       | UNVERIFIED |
 | ShopeePay     | `*.shopeepay.ph`, `*.shopee.ph`                                                    | UNVERIFIED |
 | Coins.ph      | `*.coins.ph`                                                                       | UNVERIFIED |
