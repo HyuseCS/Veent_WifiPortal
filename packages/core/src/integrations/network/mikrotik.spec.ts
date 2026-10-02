@@ -6,6 +6,7 @@ import {
 	provisionGcashResolveScheduler,
 	provisionGotymeResolveScheduler,
 	provisionSeabankResolveScheduler,
+	provisionGcashAppResolveScheduler,
 	reconcileWalledGarden,
 	wipeWalledGarden
 } from './mikrotik';
@@ -309,6 +310,78 @@ describe('provisionSeabankResolveScheduler (SeaBank HTTPDNS CNAME resolve-script
 		const res = await provisionSeabankResolveScheduler(mikrotikConfig);
 		expect(res.scheduler.created).toBe(true);
 		expect(routerTable.scheduler.map((s) => s.name)).toEqual(['gcash-resolve', 'seabank-resolve']);
+	});
+});
+
+const EXPECTED_GCASH_APP_ON_EVENT = `
+  :do {
+    :local loginIp [:resolve login.mynt.xyz];
+    :if ([:len [/ip hotspot walled-garden ip find comment="gcash-app-login-auto"]] = 0) do={
+      /ip hotspot walled-garden ip add dst-address=$loginIp comment="gcash-app-login-auto"
+    } else={
+      /ip hotspot walled-garden ip set [find comment="gcash-app-login-auto"] dst-address=$loginIp
+    }
+  } on-error={}
+  :do {
+    :local apiIp [:resolve api.mynt.xyz];
+    :if ([:len [/ip hotspot walled-garden ip find comment="gcash-app-api-auto"]] = 0) do={
+      /ip hotspot walled-garden ip add dst-address=$apiIp comment="gcash-app-api-auto"
+    } else={
+      /ip hotspot walled-garden ip set [find comment="gcash-app-api-auto"] dst-address=$apiIp
+    }
+  } on-error={}
+  :do {
+    :local mdapIp [:resolve mdap.paas.mynt.xyz];
+    :if ([:len [/ip hotspot walled-garden ip find comment="gcash-app-mdap-auto"]] = 0) do={
+      /ip hotspot walled-garden ip add dst-address=$mdapIp comment="gcash-app-mdap-auto"
+    } else={
+      /ip hotspot walled-garden ip set [find comment="gcash-app-mdap-auto"] dst-address=$mdapIp
+    }
+  } on-error={}
+  :do {
+    :local acmIp [:resolve acm.mynt.xyz];
+    :if ([:len [/ip hotspot walled-garden ip find comment="gcash-app-acm-auto"]] = 0) do={
+      /ip hotspot walled-garden ip add dst-address=$acmIp comment="gcash-app-acm-auto"
+    } else={
+      /ip hotspot walled-garden ip set [find comment="gcash-app-acm-auto"] dst-address=$acmIp
+    }
+  } on-error={}
+  :do {
+    :local segmentIp [:resolve customer-segment.mynt.xyz];
+    :if ([:len [/ip hotspot walled-garden ip find comment="gcash-app-segment-auto"]] = 0) do={
+      /ip hotspot walled-garden ip add dst-address=$segmentIp comment="gcash-app-segment-auto"
+    } else={
+      /ip hotspot walled-garden ip set [find comment="gcash-app-segment-auto"] dst-address=$segmentIp
+    }
+  } on-error={}
+`;
+
+describe('provisionGcashAppResolveScheduler (GCash app mynt.xyz CNAME resolve-script)', () => {
+	it('adds the gcash-app-resolve scheduler once; a 2nd call is a full no-op (matched by name)', async () => {
+		resetRouterTable();
+		const first = await provisionGcashAppResolveScheduler(mikrotikConfig);
+		expect(first.scheduler).toEqual({ value: 'gcash-app-resolve', created: true });
+		expect(routerTable.scheduler).toHaveLength(1);
+		expect(routerTable.scheduler[0].name).toBe('gcash-app-resolve');
+		expect(routerTable.scheduler[0].interval).toBe('5m');
+
+		const second = await provisionGcashAppResolveScheduler(mikrotikConfig);
+		expect(second.scheduler).toEqual({ value: 'gcash-app-resolve', created: false });
+		expect(routerTable.scheduler).toHaveLength(1);
+	});
+
+	it('sends the on-event body verbatim', async () => {
+		resetRouterTable();
+		await provisionGcashAppResolveScheduler(mikrotikConfig);
+		expect(routerTable.scheduler[0]['on-event']).toBe(EXPECTED_GCASH_APP_ON_EVENT);
+	});
+
+	it('coexists with gcash-resolve without matching it as already present', async () => {
+		resetRouterTable();
+		await provisionGcashResolveScheduler(mikrotikConfig);
+		const res = await provisionGcashAppResolveScheduler(mikrotikConfig);
+		expect(res.scheduler.created).toBe(true);
+		expect(routerTable.scheduler.map((s) => s.name)).toEqual(['gcash-resolve', 'gcash-app-resolve']);
 	});
 });
 

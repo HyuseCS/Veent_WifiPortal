@@ -32,7 +32,7 @@ Every row on the walled garden is one of these. The first three are code-owned a
 | `veent-admin:probe`          | `walled-garden` (`action=deny`)      | OS captive-probe hosts (`PROBE_DENIES`)                          | `setup:router` call 1                                                           |
 | `veent-admin:payment`        | `walled-garden` (`action=allow`)     | payment-gateway hosts (`PAYMENT_HOSTS`)                          | `setup:router` call 2                                                           |
 | `veent-admin:portal`         | `walled-garden` + `walled-garden ip` | admin/portal origin (`ORIGIN` + `ADMIN_WG_HOSTS`/`ADMIN_WG_IPS`) | `setup:router` call 3                                                           |
-| `gcash-auto` / `gotyme-auto` / `seabank-auto` | `walled-garden ip` | one self-healing edge IP each (GCash; GoTyme Licel gate; SeaBank HTTPDNS) | the `gcash-resolve` / `gotyme-resolve` / `seabank-resolve` schedulers (not `provisionWalledGarden`) |
+| `gcash-auto` / `gotyme-auto` / `seabank-auto` / `gcash-app-login-auto` / `gcash-app-api-auto` / `gcash-app-mdap-auto` / `gcash-app-acm-auto` / `gcash-app-segment-auto` | `walled-garden ip` | one self-healing edge IP each (GCash; GoTyme Licel gate; SeaBank HTTPDNS; GCash app login, API and history) | the `gcash-resolve` / `gotyme-resolve` / `seabank-resolve` / `gcash-app-resolve` schedulers (not `provisionWalledGarden`) |
 
 A fifth, **transient** family appears only during a checkout: `veent-checkout:<epochMs>` — per-device
 reCAPTCHA allows scoped to the paying device's IP, opened and swept by the customer app (see
@@ -301,6 +301,79 @@ them. Fix: a `seabank-resolve` scheduler (`provisionSeabankResolveScheduler()`, 
 
 Imperva answers with 1 A record, so the GoTyme 1-of-3 `:resolve` gap does not apply here.
 
+### `gcash-app-*-auto` — the GCash app's login, API and history hosts need the same resolve-script
+
+GCash web checkout is covered by `gcash-resolve`, but the native GCash app also needs five more hosts.
+Login, QR and send money need `login.mynt.xyz` (**CNAMEs to Imperva**) and `api.mynt.xyz` (**CNAMEs
+to Akamai edgekey**). Transaction history also needs `mdap.paas.mynt.xyz` (Imperva) plus
+`acm.mynt.xyz` / `customer-segment.mynt.xyz` (Imperva). v6 `dst-host` rules cannot follow those
+CNAMEs. Fix: a `gcash-app-resolve` scheduler (`provisionGcashAppResolveScheduler()`, called from
+`setup:router` right after `seabank-resolve`) that upserts five `walled-garden ip` rows:
+`comment="gcash-app-login-auto"` (login.mynt.xyz), `comment="gcash-app-api-auto"` (api.mynt.xyz),
+`comment="gcash-app-mdap-auto"` (mdap.paas.mynt.xyz), `comment="gcash-app-acm-auto"` (acm.mynt.xyz)
+and `comment="gcash-app-segment-auto"` (customer-segment.mynt.xyz). Without it, GCash app login
+fails after the PIN request, or transaction history does not load. During recon `acm` and
+`customer-segment` shared one Imperva IP, so tests could not tell which one history needs; both are
+kept. Prefer `bun run setup:router`; the manual equivalent is:
+
+```
+/system scheduler add name=gcash-app-resolve interval=5m on-event={
+  :do {
+    :local loginIp [:resolve login.mynt.xyz];
+    :if ([:len [/ip hotspot walled-garden ip find comment="gcash-app-login-auto"]] = 0) do={
+      /ip hotspot walled-garden ip add dst-address=$loginIp comment="gcash-app-login-auto"
+    } else={
+      /ip hotspot walled-garden ip set [find comment="gcash-app-login-auto"] dst-address=$loginIp
+    }
+  } on-error={}
+  :do {
+    :local apiIp [:resolve api.mynt.xyz];
+    :if ([:len [/ip hotspot walled-garden ip find comment="gcash-app-api-auto"]] = 0) do={
+      /ip hotspot walled-garden ip add dst-address=$apiIp comment="gcash-app-api-auto"
+    } else={
+      /ip hotspot walled-garden ip set [find comment="gcash-app-api-auto"] dst-address=$apiIp
+    }
+  } on-error={}
+  :do {
+    :local mdapIp [:resolve mdap.paas.mynt.xyz];
+    :if ([:len [/ip hotspot walled-garden ip find comment="gcash-app-mdap-auto"]] = 0) do={
+      /ip hotspot walled-garden ip add dst-address=$mdapIp comment="gcash-app-mdap-auto"
+    } else={
+      /ip hotspot walled-garden ip set [find comment="gcash-app-mdap-auto"] dst-address=$mdapIp
+    }
+  } on-error={}
+  :do {
+    :local acmIp [:resolve acm.mynt.xyz];
+    :if ([:len [/ip hotspot walled-garden ip find comment="gcash-app-acm-auto"]] = 0) do={
+      /ip hotspot walled-garden ip add dst-address=$acmIp comment="gcash-app-acm-auto"
+    } else={
+      /ip hotspot walled-garden ip set [find comment="gcash-app-acm-auto"] dst-address=$acmIp
+    }
+  } on-error={}
+  :do {
+    :local segmentIp [:resolve customer-segment.mynt.xyz];
+    :if ([:len [/ip hotspot walled-garden ip find comment="gcash-app-segment-auto"]] = 0) do={
+      /ip hotspot walled-garden ip add dst-address=$segmentIp comment="gcash-app-segment-auto"
+    } else={
+      /ip hotspot walled-garden ip set [find comment="gcash-app-segment-auto"] dst-address=$segmentIp
+    }
+  } on-error={}
+}
+
+# Confirm it's live:
+/system scheduler print where name=gcash-app-resolve
+/ip hotspot walled-garden ip print where comment~"gcash-app-"
+```
+
+Each host is wrapped in `:do {} on-error={}`, so one failed lookup leaves that row unchanged and
+does not stop the others. v6 has no `:onerror`.
+
+Other GCash app hosts seen in recon (`mobilegw.alipay.com`, `iclientgw-sea.alipay.com`,
+`gw.zamcs.com`, `mgs-region-gcash.alipayplus.com`) were proven NOT needed by on/off tests — do not add them.
+
+Residual: Akamai rotates edge IPs, so `api.mynt.xyz` can drift between 5-minute runs (same 1-IP
+limit as the GoTyme F3 gap).
+
 ### 3-D Secure / card ACS — per-deployment
 
 Card payments may step up to the **issuing bank's** ACS domain, which can't be predicted in advance.
@@ -379,7 +452,7 @@ until live-verified.
 | ------------- | ---------------------------------------------------------------------------------- | ---------- |
 | GoTyme        | `*.gotyme.com.ph` (dst-host) + `aws-gate.licelus.com` (`gotyme-resolve` scheduler) | VERIFIED   |
 | SeaBank       | `httpdns.seabank.ph` (`seabank-resolve` scheduler only, no dst-host rule)         | VERIFIED   |
-| GCash app     | `*.gcash.com` app hosts (web checkout already works via `gcash-resolve`)           | UNVERIFIED |
+| GCash app     | `login`/`api`/`mdap`/`acm`/`customer-segment` `.mynt.xyz` (`gcash-app-resolve` scheduler) | VERIFIED   |
 | GrabPay       | `*.grab.com`                                                                       | UNVERIFIED |
 | ShopeePay     | `*.shopeepay.ph`, `*.shopee.ph`                                                    | UNVERIFIED |
 | Coins.ph      | `*.coins.ph`                                                                       | UNVERIFIED |
