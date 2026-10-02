@@ -32,7 +32,7 @@ Every row on the walled garden is one of these. The first three are code-owned a
 | `veent-admin:probe`          | `walled-garden` (`action=deny`)      | OS captive-probe hosts (`PROBE_DENIES`)                          | `setup:router` call 1                                                           |
 | `veent-admin:payment`        | `walled-garden` (`action=allow`)     | payment-gateway hosts (`PAYMENT_HOSTS`)                          | `setup:router` call 2                                                           |
 | `veent-admin:portal`         | `walled-garden` + `walled-garden ip` | admin/portal origin (`ORIGIN` + `ADMIN_WG_HOSTS`/`ADMIN_WG_IPS`) | `setup:router` call 3                                                           |
-| `gcash-auto` / `gotyme-auto` / `seabank-auto` / `gcash-app-login-auto` / `gcash-app-api-auto` / `gcash-app-mdap-auto` / `gcash-app-acm-auto` / `gcash-app-segment-auto` | `walled-garden ip` | one self-healing edge IP each (GCash; GoTyme Licel gate; SeaBank HTTPDNS; GCash app login, API and history) | the `gcash-resolve` / `gotyme-resolve` / `seabank-resolve` / `gcash-app-resolve` schedulers (not `provisionWalledGarden`) |
+| `gcash-auto` / `gotyme-auto` / `seabank-auto` / `gcash-app-login-auto` / `gcash-app-api-auto` / `gcash-app-mdap-auto` / `gcash-app-acm-auto` / `gcash-app-segment-auto` | `walled-garden ip` | up to 4 recent edge IPs each (GCash; GoTyme Licel gate; SeaBank HTTPDNS; GCash app login, API and history) | the `gcash-resolve` / `gotyme-resolve` / `seabank-resolve` / `gcash-app-resolve` schedulers (not `provisionWalledGarden`) |
 
 A fifth, **transient** family appears only during a checkout: `veent-checkout:<epochMs>` — per-device
 reCAPTCHA allows scoped to the paying device's IP, opened and swept by the customer app (see
@@ -210,9 +210,10 @@ checkout and get reaped afterward — that's expected, not drift.
 **rotates**. RouterOS v6 `dst-host` walled-garden matching **cannot follow a CNAME chain** to a
 wildcard like `*.gcash.com`, so a host rule never matches and GCash checkout dead-ends — regardless
 of plain vs. encrypted DNS (this is a CNAME-matching gap, **not** a DoH-hiding problem). The fix is a
-`/system scheduler` item, `gcash-resolve`, that re-resolves the host every 5 minutes and upserts a
-single `walled-garden ip` row (`comment="gcash-auto"`) with the fresh IP — self-healing as Akamai's
-edge IP changes, no hardcoded IP:
+`/system scheduler` item, `gcash-resolve`, that re-resolves the host every 5 minutes and keeps the last 4
+distinct IPs it resolved to as `walled-garden ip` rows (`comment="gcash-auto"`) — self-healing as
+Akamai's edge IP changes, no hardcoded IP. If the resolved IP already has a row, nothing happens.
+Otherwise a new row is added, and if the comment then has more than 4 rows the oldest is removed:
 
 - Provisioned by `provisionGcashResolveScheduler()` in `packages/core/.../mikrotik.ts`, called from
   `setup:router` alongside the host provisioning. Idempotent — matched by `name=gcash-resolve`, so a
@@ -220,23 +221,47 @@ edge IP changes, no hardcoded IP:
 - The on-event body is a **hardcoded, static** RouterOS script (never templatized from data — a
   router-resident-scheduled-code injection guardrail).
 - Distinct match keys: the scheduler **item** is keyed by `name=gcash-resolve`; the on-event body's
-  own **upsert** target on the `walled-garden ip` layer is keyed by `comment="gcash-auto"`.
+  own **add-and-trim** target on the `walled-garden ip` layer is keyed by `comment="gcash-auto"`.
 
 ```
 # What setup:router provisions (equivalent CLI form):
 /system scheduler add name=gcash-resolve interval=5m on-event={
-  :local ip [:resolve payments.gcash.com];
-  :if ([:len [/ip hotspot walled-garden ip find comment="gcash-auto"]] = 0) do={
-    /ip hotspot walled-garden ip add dst-address=$ip comment="gcash-auto"
-  } else={
-    /ip hotspot walled-garden ip set [find comment="gcash-auto"] dst-address=$ip
-  }
+  :do {
+    :local ip [:resolve payments.gcash.com];
+    :local seen false;
+    :foreach r in=[/ip hotspot walled-garden ip find comment="gcash-auto"] do={
+      :if ([:tostr [/ip hotspot walled-garden ip get $r dst-address]] = [:tostr $ip]) do={ :set seen true }
+    }
+    :if (!$seen) do={
+      /ip hotspot walled-garden ip add dst-address=$ip comment="gcash-auto"
+      :local rows [/ip hotspot walled-garden ip find comment="gcash-auto"];
+      :if ([:len $rows] > 4) do={ /ip hotspot walled-garden ip remove [:pick $rows 0] }
+    }
+  } on-error={}
 }
 
 # Confirm it's live and self-healing:
 /system scheduler print where name=gcash-resolve
 /ip hotspot walled-garden ip print where comment=gcash-auto
 ```
+
+**Upgrade an existing router.** `setup:router` skips a scheduler that already exists by name, so an
+old router keeps the old one-row script. To install the new script, remove the four schedulers, then
+re-run setup:
+
+```
+/system scheduler remove [find name="gcash-resolve"]
+/system scheduler remove [find name="gotyme-resolve"]
+/system scheduler remove [find name="seabank-resolve"]
+/system scheduler remove [find name="gcash-app-resolve"]
+```
+
+```
+bun run --filter radius-admin setup:router
+```
+
+Old single rows stay and count toward the 4. RouterOS v6 has no `/system scheduler run`. To run one
+now: `{ :local f [:parse [/system scheduler get [find name="gcash-app-resolve"] on-event]]; $f }`.
 
 The `gcash-auto` row is **not** managed by `--reconcile` (its tag isn't in the `veent-admin:*`
 family) — leave it to the scheduler to self-heal on its own ~5-minute cadence. Never hand-edit or
@@ -250,19 +275,25 @@ that resolves **directly** to the provider's own IP (all the Google hosts above)
 
 GoTyme's app checks itself against Licel at `aws-gate.licelus.com`, which **CNAMEs to an AWS ELB**.
 Same CNAME gap as GCash, same fix: a `gotyme-resolve` scheduler (`provisionGotymeResolveScheduler()`,
-called from `setup:router` right after `gcash-resolve`) that upserts one `walled-garden ip` row tagged
+called from `setup:router` right after `gcash-resolve`) that keeps up to 4 recent `walled-garden ip` rows tagged
 `comment="gotyme-auto"`. Without it, GoTyme login fails in-app with code `3103000`. Prefer
 `setup:router`; the CLI form below is for routers the app server can't reach.
 
 ```
 # What setup:router provisions (equivalent CLI form):
 /system scheduler add name=gotyme-resolve interval=5m on-event={
-  :local ip [:resolve aws-gate.licelus.com];
-  :if ([:len [/ip hotspot walled-garden ip find comment="gotyme-auto"]] = 0) do={
-    /ip hotspot walled-garden ip add dst-address=$ip comment="gotyme-auto"
-  } else={
-    /ip hotspot walled-garden ip set [find comment="gotyme-auto"] dst-address=$ip
-  }
+  :do {
+    :local ip [:resolve aws-gate.licelus.com];
+    :local seen false;
+    :foreach r in=[/ip hotspot walled-garden ip find comment="gotyme-auto"] do={
+      :if ([:tostr [/ip hotspot walled-garden ip get $r dst-address]] = [:tostr $ip]) do={ :set seen true }
+    }
+    :if (!$seen) do={
+      /ip hotspot walled-garden ip add dst-address=$ip comment="gotyme-auto"
+      :local rows [/ip hotspot walled-garden ip find comment="gotyme-auto"];
+      :if ([:len $rows] > 4) do={ /ip hotspot walled-garden ip remove [:pick $rows 0] }
+    }
+  } on-error={}
 }
 
 # Confirm it's live:
@@ -270,8 +301,9 @@ called from `setup:router` right after `gcash-resolve`) that upserts one `walled
 /ip hotspot walled-garden ip print where comment=gotyme-auto
 ```
 
-Known gap: the ELB answers with 3 A records but `:resolve` returns one, so only 1 of 3 IPs is open
-per 5-minute run. GoTyme login can fail intermittently until the next run.
+The ELB answers with 3 A records but `:resolve` returns one per run. The scheduler now keeps up to 4
+recent IPs, so after a few runs all rotating IPs are open. Remaining gap: the first run(s) after a
+new IP appears, where login can fail until the next run. A host with more than 4 live IPs will churn.
 
 ### `seabank-auto` — SeaBank's HTTPDNS host needs the same resolve-script
 
@@ -279,19 +311,25 @@ SeaBank's app first calls `httpdns.seabank.ph`, which **CNAMEs to Imperva**. The
 IPs (`api`/`m`/`sec`/`cs.seabank.ph`) over HTTPDNS, so the router never sees those lookups and
 `dst-host` rules can never match. All the API hosts share the same Imperva IP, so one IP row covers
 them. Fix: a `seabank-resolve` scheduler (`provisionSeabankResolveScheduler()`, called from
-`setup:router` right after `gotyme-resolve`) that upserts one `walled-garden ip` row tagged
+`setup:router` right after `gotyme-resolve`) that keeps up to 4 recent `walled-garden ip` rows tagged
 `comment="seabank-auto"`. Without it, SeaBank login fails in-app with error `-1200`. Prefer
 `setup:router`; the CLI form below is for routers the app server can't reach.
 
 ```
 # What setup:router provisions (equivalent CLI form):
 /system scheduler add name=seabank-resolve interval=5m on-event={
-  :local ip [:resolve httpdns.seabank.ph];
-  :if ([:len [/ip hotspot walled-garden ip find comment="seabank-auto"]] = 0) do={
-    /ip hotspot walled-garden ip add dst-address=$ip comment="seabank-auto"
-  } else={
-    /ip hotspot walled-garden ip set [find comment="seabank-auto"] dst-address=$ip
-  }
+  :do {
+    :local ip [:resolve httpdns.seabank.ph];
+    :local seen false;
+    :foreach r in=[/ip hotspot walled-garden ip find comment="seabank-auto"] do={
+      :if ([:tostr [/ip hotspot walled-garden ip get $r dst-address]] = [:tostr $ip]) do={ :set seen true }
+    }
+    :if (!$seen) do={
+      /ip hotspot walled-garden ip add dst-address=$ip comment="seabank-auto"
+      :local rows [/ip hotspot walled-garden ip find comment="seabank-auto"];
+      :if ([:len $rows] > 4) do={ /ip hotspot walled-garden ip remove [:pick $rows 0] }
+    }
+  } on-error={}
 }
 
 # Confirm it's live:
@@ -299,7 +337,7 @@ them. Fix: a `seabank-resolve` scheduler (`provisionSeabankResolveScheduler()`, 
 /ip hotspot walled-garden ip print where comment=seabank-auto
 ```
 
-Imperva answers with 1 A record, so the GoTyme 1-of-3 `:resolve` gap does not apply here.
+Imperva answers with 1 A record, so the rotating-IP gap noted for GoTyme is small here.
 
 ### `gcash-app-*-auto` — the GCash app's login, API and history hosts need the same resolve-script
 
@@ -308,7 +346,7 @@ Login, QR and send money need `login.mynt.xyz` (**CNAMEs to Imperva**) and `api.
 to Akamai edgekey**). Transaction history also needs `mdap.paas.mynt.xyz` (Imperva) plus
 `acm.mynt.xyz` / `customer-segment.mynt.xyz` (Imperva). v6 `dst-host` rules cannot follow those
 CNAMEs. Fix: a `gcash-app-resolve` scheduler (`provisionGcashAppResolveScheduler()`, called from
-`setup:router` right after `seabank-resolve`) that upserts five `walled-garden ip` rows:
+`setup:router` right after `seabank-resolve`) that keeps up to 4 recent `walled-garden ip` rows for each of five tags:
 `comment="gcash-app-login-auto"` (login.mynt.xyz), `comment="gcash-app-api-auto"` (api.mynt.xyz),
 `comment="gcash-app-mdap-auto"` (mdap.paas.mynt.xyz), `comment="gcash-app-acm-auto"` (acm.mynt.xyz)
 and `comment="gcash-app-segment-auto"` (customer-segment.mynt.xyz). Without it, GCash app login
@@ -319,43 +357,63 @@ kept. Prefer `bun run setup:router`; the manual equivalent is:
 ```
 /system scheduler add name=gcash-app-resolve interval=5m on-event={
   :do {
-    :local loginIp [:resolve login.mynt.xyz];
-    :if ([:len [/ip hotspot walled-garden ip find comment="gcash-app-login-auto"]] = 0) do={
-      /ip hotspot walled-garden ip add dst-address=$loginIp comment="gcash-app-login-auto"
-    } else={
-      /ip hotspot walled-garden ip set [find comment="gcash-app-login-auto"] dst-address=$loginIp
+    :local ip [:resolve login.mynt.xyz];
+    :local seen false;
+    :foreach r in=[/ip hotspot walled-garden ip find comment="gcash-app-login-auto"] do={
+      :if ([:tostr [/ip hotspot walled-garden ip get $r dst-address]] = [:tostr $ip]) do={ :set seen true }
+    }
+    :if (!$seen) do={
+      /ip hotspot walled-garden ip add dst-address=$ip comment="gcash-app-login-auto"
+      :local rows [/ip hotspot walled-garden ip find comment="gcash-app-login-auto"];
+      :if ([:len $rows] > 4) do={ /ip hotspot walled-garden ip remove [:pick $rows 0] }
     }
   } on-error={}
   :do {
-    :local apiIp [:resolve api.mynt.xyz];
-    :if ([:len [/ip hotspot walled-garden ip find comment="gcash-app-api-auto"]] = 0) do={
-      /ip hotspot walled-garden ip add dst-address=$apiIp comment="gcash-app-api-auto"
-    } else={
-      /ip hotspot walled-garden ip set [find comment="gcash-app-api-auto"] dst-address=$apiIp
+    :local ip [:resolve api.mynt.xyz];
+    :local seen false;
+    :foreach r in=[/ip hotspot walled-garden ip find comment="gcash-app-api-auto"] do={
+      :if ([:tostr [/ip hotspot walled-garden ip get $r dst-address]] = [:tostr $ip]) do={ :set seen true }
+    }
+    :if (!$seen) do={
+      /ip hotspot walled-garden ip add dst-address=$ip comment="gcash-app-api-auto"
+      :local rows [/ip hotspot walled-garden ip find comment="gcash-app-api-auto"];
+      :if ([:len $rows] > 4) do={ /ip hotspot walled-garden ip remove [:pick $rows 0] }
     }
   } on-error={}
   :do {
-    :local mdapIp [:resolve mdap.paas.mynt.xyz];
-    :if ([:len [/ip hotspot walled-garden ip find comment="gcash-app-mdap-auto"]] = 0) do={
-      /ip hotspot walled-garden ip add dst-address=$mdapIp comment="gcash-app-mdap-auto"
-    } else={
-      /ip hotspot walled-garden ip set [find comment="gcash-app-mdap-auto"] dst-address=$mdapIp
+    :local ip [:resolve mdap.paas.mynt.xyz];
+    :local seen false;
+    :foreach r in=[/ip hotspot walled-garden ip find comment="gcash-app-mdap-auto"] do={
+      :if ([:tostr [/ip hotspot walled-garden ip get $r dst-address]] = [:tostr $ip]) do={ :set seen true }
+    }
+    :if (!$seen) do={
+      /ip hotspot walled-garden ip add dst-address=$ip comment="gcash-app-mdap-auto"
+      :local rows [/ip hotspot walled-garden ip find comment="gcash-app-mdap-auto"];
+      :if ([:len $rows] > 4) do={ /ip hotspot walled-garden ip remove [:pick $rows 0] }
     }
   } on-error={}
   :do {
-    :local acmIp [:resolve acm.mynt.xyz];
-    :if ([:len [/ip hotspot walled-garden ip find comment="gcash-app-acm-auto"]] = 0) do={
-      /ip hotspot walled-garden ip add dst-address=$acmIp comment="gcash-app-acm-auto"
-    } else={
-      /ip hotspot walled-garden ip set [find comment="gcash-app-acm-auto"] dst-address=$acmIp
+    :local ip [:resolve acm.mynt.xyz];
+    :local seen false;
+    :foreach r in=[/ip hotspot walled-garden ip find comment="gcash-app-acm-auto"] do={
+      :if ([:tostr [/ip hotspot walled-garden ip get $r dst-address]] = [:tostr $ip]) do={ :set seen true }
+    }
+    :if (!$seen) do={
+      /ip hotspot walled-garden ip add dst-address=$ip comment="gcash-app-acm-auto"
+      :local rows [/ip hotspot walled-garden ip find comment="gcash-app-acm-auto"];
+      :if ([:len $rows] > 4) do={ /ip hotspot walled-garden ip remove [:pick $rows 0] }
     }
   } on-error={}
   :do {
-    :local segmentIp [:resolve customer-segment.mynt.xyz];
-    :if ([:len [/ip hotspot walled-garden ip find comment="gcash-app-segment-auto"]] = 0) do={
-      /ip hotspot walled-garden ip add dst-address=$segmentIp comment="gcash-app-segment-auto"
-    } else={
-      /ip hotspot walled-garden ip set [find comment="gcash-app-segment-auto"] dst-address=$segmentIp
+    :local ip [:resolve customer-segment.mynt.xyz];
+    :local seen false;
+    :foreach r in=[/ip hotspot walled-garden ip find comment="gcash-app-segment-auto"] do={
+      :if ([:tostr [/ip hotspot walled-garden ip get $r dst-address]] = [:tostr $ip]) do={ :set seen true }
+    }
+    :if (!$seen) do={
+      /ip hotspot walled-garden ip add dst-address=$ip comment="gcash-app-segment-auto"
+      :local rows [/ip hotspot walled-garden ip find comment="gcash-app-segment-auto"];
+      :if ([:len $rows] > 4) do={ /ip hotspot walled-garden ip remove [:pick $rows 0] }
     }
   } on-error={}
 }
@@ -365,14 +423,16 @@ kept. Prefer `bun run setup:router`; the manual equivalent is:
 /ip hotspot walled-garden ip print where comment~"gcash-app-"
 ```
 
-Each host is wrapped in `:do {} on-error={}`, so one failed lookup leaves that row unchanged and
+Each host is wrapped in `:do {} on-error={}`, so one failed lookup leaves its rows unchanged and
 does not stop the others. v6 has no `:onerror`.
 
 Other GCash app hosts seen in recon (`mobilegw.alipay.com`, `iclientgw-sea.alipay.com`,
 `gw.zamcs.com`, `mgs-region-gcash.alipayplus.com`) were proven NOT needed by on/off tests — do not add them.
 
-Residual: Akamai rotates edge IPs, so `api.mynt.xyz` can drift between 5-minute runs (same 1-IP
-limit as the GoTyme F3 gap).
+Residual: Akamai and Imperva rotate edge IPs (`acm.mynt.xyz` flips between 198.143.34.6 and
+45.223.201.6). The scheduler keeps the last 4 per host, so after a few runs all rotating IPs are
+open. Remaining gap: the first run(s) after a new IP appears (GCash app history failed on first
+open before this fix), and a host with more than 4 live IPs will churn.
 
 ### 3-D Secure / card ACS — per-deployment
 
@@ -414,7 +474,7 @@ nothing (no test payment needed; walk up to, but do NOT confirm, the pay screen)
    - **CNAMEs to a CDN** (e.g. `…edgekey.net` / `…akamaiedge.net` / any rotating CDN edge) → a
      `dst-host` rule can NOT match it (RouterOS v6 can't follow a CNAME chain). It needs a `:resolve`
      scheduler like `gcash-resolve` (see `provisionGcashResolveScheduler` and the `gcash-auto`
-     section above) that re-resolves the host every few minutes and upserts a `walled-garden ip` row.
+     section above) that re-resolves the host every few minutes and keeps its last 4 IPs as `walled-garden ip` rows.
 5. **Add → re-run `setup:router` → retest** the flow on the captive device. Repeat until the flow
    completes.
 

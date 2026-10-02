@@ -1114,24 +1114,30 @@ export async function provisionWalledGarden(
 }
 
 /**
- * The `gcash-resolve` scheduler's on-event script body — copied VERBATIM from the 29-07-26 live
- * diagnostic session (`payment-walled-garden-v6_REPORT_29-07-26.md`, §What Was Done bullet 1), which
- * proved it working live on the staging router. `payments.gcash.com` CNAMEs to an Akamai edge whose
- * IP rotates, and RouterOS v6 `dst-host` walled-garden matching cannot follow a CNAME chain — so this
- * self-healing script `:resolve`s the host every 5 minutes and upserts a single `walled-garden ip`
- * row (`comment="gcash-auto"`) with the fresh IP.
+ * The `gcash-resolve` scheduler's on-event script body — derived from the 29-07-26 live diagnostic
+ * session (`payment-walled-garden-v6_REPORT_29-07-26.md`, §What Was Done bullet 1), which proved the
+ * resolve approach working live on the staging router. `payments.gcash.com` CNAMEs to an Akamai edge
+ * whose IP rotates, and RouterOS v6 `dst-host` walled-garden matching cannot follow a CNAME chain — so
+ * this self-healing script `:resolve`s the host every 5 minutes and keeps the last 4 distinct resolved
+ * IPs as `walled-garden ip` rows (`comment="gcash-auto"`), removing the oldest when a 5th is added.
  *
  * SECURITY: this MUST stay a hardcoded, static string. Never templatize it from data structures (e.g.
  * looping over hosts) without a RouterOS-script-injection review first — no application data may ever
  * flow into a router-resident scheduled script. (validate-contract item-18 supplement, instruction E3.)
  */
 const GCASH_RESOLVE_ON_EVENT = `
-  :local ip [:resolve payments.gcash.com];
-  :if ([:len [/ip hotspot walled-garden ip find comment="gcash-auto"]] = 0) do={
-    /ip hotspot walled-garden ip add dst-address=$ip comment="gcash-auto"
-  } else={
-    /ip hotspot walled-garden ip set [find comment="gcash-auto"] dst-address=$ip
-  }
+  :do {
+    :local ip [:resolve payments.gcash.com];
+    :local seen false;
+    :foreach r in=[/ip hotspot walled-garden ip find comment="gcash-auto"] do={
+      :if ([:tostr [/ip hotspot walled-garden ip get $r dst-address]] = [:tostr $ip]) do={ :set seen true }
+    }
+    :if (!$seen) do={
+      /ip hotspot walled-garden ip add dst-address=$ip comment="gcash-auto"
+      :local rows [/ip hotspot walled-garden ip find comment="gcash-auto"];
+      :if ([:len $rows] > 4) do={ /ip hotspot walled-garden ip remove [:pick $rows 0] }
+    }
+  } on-error={}
 `;
 
 export interface GcashResolveSchedulerResult {
@@ -1141,8 +1147,8 @@ export interface GcashResolveSchedulerResult {
 /**
  * Idempotently provisions the `gcash-resolve` `/system scheduler` item (see GCASH_RESOLVE_ON_EVENT).
  * Matched by `name=gcash-resolve` (the scheduler-item idempotency key) — a re-run is a full no-op.
- * This is DISTINCT from the on-event body's own inner upsert key (`comment="gcash-auto"` on the
- * `walled-garden ip` row), which is unchanged from the live-proven script. Additive; does not touch
+ * This is DISTINCT from the on-event body's own inner row key (`comment="gcash-auto"` on the
+ * `walled-garden ip` rows, last 4 distinct IPs kept). Additive; does not touch
  * `provisionWalledGarden`.
  */
 export async function provisionGcashResolveScheduler(
@@ -1171,12 +1177,18 @@ export async function provisionGcashResolveScheduler(
  * flow into a router-resident scheduled script. (validate-contract item-18 supplement, instruction E3.)
  */
 const GOTYME_RESOLVE_ON_EVENT = `
-  :local ip [:resolve aws-gate.licelus.com];
-  :if ([:len [/ip hotspot walled-garden ip find comment="gotyme-auto"]] = 0) do={
-    /ip hotspot walled-garden ip add dst-address=$ip comment="gotyme-auto"
-  } else={
-    /ip hotspot walled-garden ip set [find comment="gotyme-auto"] dst-address=$ip
-  }
+  :do {
+    :local ip [:resolve aws-gate.licelus.com];
+    :local seen false;
+    :foreach r in=[/ip hotspot walled-garden ip find comment="gotyme-auto"] do={
+      :if ([:tostr [/ip hotspot walled-garden ip get $r dst-address]] = [:tostr $ip]) do={ :set seen true }
+    }
+    :if (!$seen) do={
+      /ip hotspot walled-garden ip add dst-address=$ip comment="gotyme-auto"
+      :local rows [/ip hotspot walled-garden ip find comment="gotyme-auto"];
+      :if ([:len $rows] > 4) do={ /ip hotspot walled-garden ip remove [:pick $rows 0] }
+    }
+  } on-error={}
 `;
 
 export interface GotymeResolveSchedulerResult {
@@ -1209,12 +1221,18 @@ export async function provisionGotymeResolveScheduler(
  * flow into a router-resident scheduled script. (validate-contract item-18 supplement, instruction E3.)
  */
 const SEABANK_RESOLVE_ON_EVENT = `
-  :local ip [:resolve httpdns.seabank.ph];
-  :if ([:len [/ip hotspot walled-garden ip find comment="seabank-auto"]] = 0) do={
-    /ip hotspot walled-garden ip add dst-address=$ip comment="seabank-auto"
-  } else={
-    /ip hotspot walled-garden ip set [find comment="seabank-auto"] dst-address=$ip
-  }
+  :do {
+    :local ip [:resolve httpdns.seabank.ph];
+    :local seen false;
+    :foreach r in=[/ip hotspot walled-garden ip find comment="seabank-auto"] do={
+      :if ([:tostr [/ip hotspot walled-garden ip get $r dst-address]] = [:tostr $ip]) do={ :set seen true }
+    }
+    :if (!$seen) do={
+      /ip hotspot walled-garden ip add dst-address=$ip comment="seabank-auto"
+      :local rows [/ip hotspot walled-garden ip find comment="seabank-auto"];
+      :if ([:len $rows] > 4) do={ /ip hotspot walled-garden ip remove [:pick $rows 0] }
+    }
+  } on-error={}
 `;
 
 export interface SeabankResolveSchedulerResult {
@@ -1248,43 +1266,63 @@ export async function provisionSeabankResolveScheduler(
  */
 const GCASH_APP_RESOLVE_ON_EVENT = `
   :do {
-    :local loginIp [:resolve login.mynt.xyz];
-    :if ([:len [/ip hotspot walled-garden ip find comment="gcash-app-login-auto"]] = 0) do={
-      /ip hotspot walled-garden ip add dst-address=$loginIp comment="gcash-app-login-auto"
-    } else={
-      /ip hotspot walled-garden ip set [find comment="gcash-app-login-auto"] dst-address=$loginIp
+    :local ip [:resolve login.mynt.xyz];
+    :local seen false;
+    :foreach r in=[/ip hotspot walled-garden ip find comment="gcash-app-login-auto"] do={
+      :if ([:tostr [/ip hotspot walled-garden ip get $r dst-address]] = [:tostr $ip]) do={ :set seen true }
+    }
+    :if (!$seen) do={
+      /ip hotspot walled-garden ip add dst-address=$ip comment="gcash-app-login-auto"
+      :local rows [/ip hotspot walled-garden ip find comment="gcash-app-login-auto"];
+      :if ([:len $rows] > 4) do={ /ip hotspot walled-garden ip remove [:pick $rows 0] }
     }
   } on-error={}
   :do {
-    :local apiIp [:resolve api.mynt.xyz];
-    :if ([:len [/ip hotspot walled-garden ip find comment="gcash-app-api-auto"]] = 0) do={
-      /ip hotspot walled-garden ip add dst-address=$apiIp comment="gcash-app-api-auto"
-    } else={
-      /ip hotspot walled-garden ip set [find comment="gcash-app-api-auto"] dst-address=$apiIp
+    :local ip [:resolve api.mynt.xyz];
+    :local seen false;
+    :foreach r in=[/ip hotspot walled-garden ip find comment="gcash-app-api-auto"] do={
+      :if ([:tostr [/ip hotspot walled-garden ip get $r dst-address]] = [:tostr $ip]) do={ :set seen true }
+    }
+    :if (!$seen) do={
+      /ip hotspot walled-garden ip add dst-address=$ip comment="gcash-app-api-auto"
+      :local rows [/ip hotspot walled-garden ip find comment="gcash-app-api-auto"];
+      :if ([:len $rows] > 4) do={ /ip hotspot walled-garden ip remove [:pick $rows 0] }
     }
   } on-error={}
   :do {
-    :local mdapIp [:resolve mdap.paas.mynt.xyz];
-    :if ([:len [/ip hotspot walled-garden ip find comment="gcash-app-mdap-auto"]] = 0) do={
-      /ip hotspot walled-garden ip add dst-address=$mdapIp comment="gcash-app-mdap-auto"
-    } else={
-      /ip hotspot walled-garden ip set [find comment="gcash-app-mdap-auto"] dst-address=$mdapIp
+    :local ip [:resolve mdap.paas.mynt.xyz];
+    :local seen false;
+    :foreach r in=[/ip hotspot walled-garden ip find comment="gcash-app-mdap-auto"] do={
+      :if ([:tostr [/ip hotspot walled-garden ip get $r dst-address]] = [:tostr $ip]) do={ :set seen true }
+    }
+    :if (!$seen) do={
+      /ip hotspot walled-garden ip add dst-address=$ip comment="gcash-app-mdap-auto"
+      :local rows [/ip hotspot walled-garden ip find comment="gcash-app-mdap-auto"];
+      :if ([:len $rows] > 4) do={ /ip hotspot walled-garden ip remove [:pick $rows 0] }
     }
   } on-error={}
   :do {
-    :local acmIp [:resolve acm.mynt.xyz];
-    :if ([:len [/ip hotspot walled-garden ip find comment="gcash-app-acm-auto"]] = 0) do={
-      /ip hotspot walled-garden ip add dst-address=$acmIp comment="gcash-app-acm-auto"
-    } else={
-      /ip hotspot walled-garden ip set [find comment="gcash-app-acm-auto"] dst-address=$acmIp
+    :local ip [:resolve acm.mynt.xyz];
+    :local seen false;
+    :foreach r in=[/ip hotspot walled-garden ip find comment="gcash-app-acm-auto"] do={
+      :if ([:tostr [/ip hotspot walled-garden ip get $r dst-address]] = [:tostr $ip]) do={ :set seen true }
+    }
+    :if (!$seen) do={
+      /ip hotspot walled-garden ip add dst-address=$ip comment="gcash-app-acm-auto"
+      :local rows [/ip hotspot walled-garden ip find comment="gcash-app-acm-auto"];
+      :if ([:len $rows] > 4) do={ /ip hotspot walled-garden ip remove [:pick $rows 0] }
     }
   } on-error={}
   :do {
-    :local segmentIp [:resolve customer-segment.mynt.xyz];
-    :if ([:len [/ip hotspot walled-garden ip find comment="gcash-app-segment-auto"]] = 0) do={
-      /ip hotspot walled-garden ip add dst-address=$segmentIp comment="gcash-app-segment-auto"
-    } else={
-      /ip hotspot walled-garden ip set [find comment="gcash-app-segment-auto"] dst-address=$segmentIp
+    :local ip [:resolve customer-segment.mynt.xyz];
+    :local seen false;
+    :foreach r in=[/ip hotspot walled-garden ip find comment="gcash-app-segment-auto"] do={
+      :if ([:tostr [/ip hotspot walled-garden ip get $r dst-address]] = [:tostr $ip]) do={ :set seen true }
+    }
+    :if (!$seen) do={
+      /ip hotspot walled-garden ip add dst-address=$ip comment="gcash-app-segment-auto"
+      :local rows [/ip hotspot walled-garden ip find comment="gcash-app-segment-auto"];
+      :if ([:len $rows] > 4) do={ /ip hotspot walled-garden ip remove [:pick $rows 0] }
     }
   } on-error={}
 `;
