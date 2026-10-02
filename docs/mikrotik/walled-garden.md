@@ -318,42 +318,55 @@ kept. Prefer `bun run setup:router`; the manual equivalent is:
 
 ```
 /system scheduler add name=gcash-app-resolve interval=5m on-event={
-  :local loginIp [:resolve login.mynt.xyz];
-  :if ([:len [/ip hotspot walled-garden ip find comment="gcash-app-login-auto"]] = 0) do={
-    /ip hotspot walled-garden ip add dst-address=$loginIp comment="gcash-app-login-auto"
-  } else={
-    /ip hotspot walled-garden ip set [find comment="gcash-app-login-auto"] dst-address=$loginIp
-  }
-  :local apiIp [:resolve api.mynt.xyz];
-  :if ([:len [/ip hotspot walled-garden ip find comment="gcash-app-api-auto"]] = 0) do={
-    /ip hotspot walled-garden ip add dst-address=$apiIp comment="gcash-app-api-auto"
-  } else={
-    /ip hotspot walled-garden ip set [find comment="gcash-app-api-auto"] dst-address=$apiIp
-  }
-  :local mdapIp [:resolve mdap.paas.mynt.xyz];
-  :if ([:len [/ip hotspot walled-garden ip find comment="gcash-app-mdap-auto"]] = 0) do={
-    /ip hotspot walled-garden ip add dst-address=$mdapIp comment="gcash-app-mdap-auto"
-  } else={
-    /ip hotspot walled-garden ip set [find comment="gcash-app-mdap-auto"] dst-address=$mdapIp
-  }
-  :local acmIp [:resolve acm.mynt.xyz];
-  :if ([:len [/ip hotspot walled-garden ip find comment="gcash-app-acm-auto"]] = 0) do={
-    /ip hotspot walled-garden ip add dst-address=$acmIp comment="gcash-app-acm-auto"
-  } else={
-    /ip hotspot walled-garden ip set [find comment="gcash-app-acm-auto"] dst-address=$acmIp
-  }
-  :local segmentIp [:resolve customer-segment.mynt.xyz];
-  :if ([:len [/ip hotspot walled-garden ip find comment="gcash-app-segment-auto"]] = 0) do={
-    /ip hotspot walled-garden ip add dst-address=$segmentIp comment="gcash-app-segment-auto"
-  } else={
-    /ip hotspot walled-garden ip set [find comment="gcash-app-segment-auto"] dst-address=$segmentIp
-  }
+  :do {
+    :local loginIp [:resolve login.mynt.xyz];
+    :if ([:len [/ip hotspot walled-garden ip find comment="gcash-app-login-auto"]] = 0) do={
+      /ip hotspot walled-garden ip add dst-address=$loginIp comment="gcash-app-login-auto"
+    } else={
+      /ip hotspot walled-garden ip set [find comment="gcash-app-login-auto"] dst-address=$loginIp
+    }
+  } on-error={}
+  :do {
+    :local apiIp [:resolve api.mynt.xyz];
+    :if ([:len [/ip hotspot walled-garden ip find comment="gcash-app-api-auto"]] = 0) do={
+      /ip hotspot walled-garden ip add dst-address=$apiIp comment="gcash-app-api-auto"
+    } else={
+      /ip hotspot walled-garden ip set [find comment="gcash-app-api-auto"] dst-address=$apiIp
+    }
+  } on-error={}
+  :do {
+    :local mdapIp [:resolve mdap.paas.mynt.xyz];
+    :if ([:len [/ip hotspot walled-garden ip find comment="gcash-app-mdap-auto"]] = 0) do={
+      /ip hotspot walled-garden ip add dst-address=$mdapIp comment="gcash-app-mdap-auto"
+    } else={
+      /ip hotspot walled-garden ip set [find comment="gcash-app-mdap-auto"] dst-address=$mdapIp
+    }
+  } on-error={}
+  :do {
+    :local acmIp [:resolve acm.mynt.xyz];
+    :if ([:len [/ip hotspot walled-garden ip find comment="gcash-app-acm-auto"]] = 0) do={
+      /ip hotspot walled-garden ip add dst-address=$acmIp comment="gcash-app-acm-auto"
+    } else={
+      /ip hotspot walled-garden ip set [find comment="gcash-app-acm-auto"] dst-address=$acmIp
+    }
+  } on-error={}
+  :do {
+    :local segmentIp [:resolve customer-segment.mynt.xyz];
+    :if ([:len [/ip hotspot walled-garden ip find comment="gcash-app-segment-auto"]] = 0) do={
+      /ip hotspot walled-garden ip add dst-address=$segmentIp comment="gcash-app-segment-auto"
+    } else={
+      /ip hotspot walled-garden ip set [find comment="gcash-app-segment-auto"] dst-address=$segmentIp
+    }
+  } on-error={}
 }
 
 # Confirm it's live:
 /system scheduler print where name=gcash-app-resolve
 /ip hotspot walled-garden ip print where comment~"gcash-app-"
 ```
+
+Each host is wrapped in `:do {} on-error={}`, so one failed lookup leaves that row unchanged and
+does not stop the others. v6 has no `:onerror`.
 
 Other GCash app hosts seen in recon (`mobilegw.alipay.com`, `iclientgw-sea.alipay.com`,
 `gw.zamcs.com`, `mgs-region-gcash.alipayplus.com`) were proven NOT needed by on/off tests — do not add them.
