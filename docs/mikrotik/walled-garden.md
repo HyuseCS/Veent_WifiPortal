@@ -27,12 +27,12 @@ reset, or provisioning a router the app server can't reach over the API.
 Every row on the walled garden is one of these. The first three are code-owned and provisioned by
 `setup:router` in a **load-bearing order — probe → payment → portal** (see [The 3-call split](#the-3-call-split-and-why-order-matters)):
 
-| Tag                   | Menu                                 | Rows                                                             | Provisioned by                                              |
-| --------------------- | ------------------------------------ | ---------------------------------------------------------------- | ----------------------------------------------------------- |
-| `veent-admin:probe`   | `walled-garden` (`action=deny`)      | OS captive-probe hosts (`PROBE_DENIES`)                          | `setup:router` call 1                                       |
-| `veent-admin:payment` | `walled-garden` (`action=allow`)     | payment-gateway hosts (`PAYMENT_HOSTS`)                          | `setup:router` call 2                                       |
-| `veent-admin:portal`  | `walled-garden` + `walled-garden ip` | admin/portal origin (`ORIGIN` + `ADMIN_WG_HOSTS`/`ADMIN_WG_IPS`) | `setup:router` call 3                                       |
-| `gcash-auto`          | `walled-garden ip`                   | one self-healing GCash edge IP                                   | the `gcash-resolve` scheduler (not `provisionWalledGarden`) |
+| Tag                          | Menu                                 | Rows                                                             | Provisioned by                                                                  |
+| ---------------------------- | ------------------------------------ | ---------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| `veent-admin:probe`          | `walled-garden` (`action=deny`)      | OS captive-probe hosts (`PROBE_DENIES`)                          | `setup:router` call 1                                                           |
+| `veent-admin:payment`        | `walled-garden` (`action=allow`)     | payment-gateway hosts (`PAYMENT_HOSTS`)                          | `setup:router` call 2                                                           |
+| `veent-admin:portal`         | `walled-garden` + `walled-garden ip` | admin/portal origin (`ORIGIN` + `ADMIN_WG_HOSTS`/`ADMIN_WG_IPS`) | `setup:router` call 3                                                           |
+| `gcash-auto` / `gotyme-auto` | `walled-garden ip`                   | one self-healing edge IP each (GCash; GoTyme Licel gate)         | the `gcash-resolve` / `gotyme-resolve` schedulers (not `provisionWalledGarden`) |
 
 A fifth, **transient** family appears only during a checkout: `veent-checkout:<epochMs>` — per-device
 reCAPTCHA allows scoped to the paying device's IP, opened and swept by the customer app (see
@@ -166,6 +166,10 @@ by enumerated `*.domain` forms.
 # 98-hit rule risks breaking checkout, so it stays. Tightening to exact subpaths needs a live capture
 # of which paths checkout uses (backlog candidate) — do NOT silently drop.
 /ip hotspot walled-garden add action=allow dst-host=*.googleapis.com comment=veent-admin:payment
+
+# GoTyme e-wallet (VERIFIED 02-10-26). Resolves directly, so a plain host rule works. GoTyme ALSO
+# needs the gotyme-resolve scheduler for its Licel gate — see the `gotyme-auto` section below.
+/ip hotspot walled-garden add action=allow dst-host=*.gotyme.com.ph comment=veent-admin:payment
 ```
 
 ### Why `*.google.com` / `*.gstatic.com` / `*.recaptcha.net` are NOT allowed here
@@ -242,6 +246,33 @@ Rule of thumb: a payment host that CNAMEs to a CDN (GCash → Akamai) needs this
 that resolves **directly** to the provider's own IP (all the Google hosts above) needs only a
 `dst-host` rule.
 
+### `gotyme-auto` — GoTyme's Licel gate needs the same resolve-script
+
+GoTyme's app checks itself against Licel at `aws-gate.licelus.com`, which **CNAMEs to an AWS ELB**.
+Same CNAME gap as GCash, same fix: a `gotyme-resolve` scheduler (`provisionGotymeResolveScheduler()`,
+called from `setup:router` right after `gcash-resolve`) that upserts one `walled-garden ip` row tagged
+`comment="gotyme-auto"`. Without it, GoTyme login fails in-app with code `3103000`. Prefer
+`setup:router`; the CLI form below is for routers the app server can't reach.
+
+```
+# What setup:router provisions (equivalent CLI form):
+/system scheduler add name=gotyme-resolve interval=5m on-event={
+  :local ip [:resolve aws-gate.licelus.com];
+  :if ([:len [/ip hotspot walled-garden ip find comment="gotyme-auto"]] = 0) do={
+    /ip hotspot walled-garden ip add dst-address=$ip comment="gotyme-auto"
+  } else={
+    /ip hotspot walled-garden ip set [find comment="gotyme-auto"] dst-address=$ip
+  }
+}
+
+# Confirm it's live:
+/system scheduler print where name=gotyme-resolve
+/ip hotspot walled-garden ip print where comment=gotyme-auto
+```
+
+Known gap: the ELB answers with 3 A records but `:resolve` returns one, so only 1 of 3 IPs is open
+per 5-minute run. GoTyme login can fail intermittently until the next run.
+
 ### 3-D Secure / card ACS — per-deployment
 
 Card payments may step up to the **issuing bank's** ACS domain, which can't be predicted in advance.
@@ -310,22 +341,24 @@ whitelist. This is a **WebView limitation, not a walled-garden gap** — do not 
 
 ## Candidate wallets/banks (UNVERIFIED — recon required)
 
-A curated shortlist of likely-useful wallets/banks for this audience. **Every row is UNVERIFIED** —
-the roots below are starting points from research, NOT confirmed working. For each: run the ₱0 recon
-protocol above, classify each host (direct vs CNAME-to-CDN), add, and get a live pass/fail before
-treating it as supported. Do NOT add any of these to `PAYMENT_HOSTS` until live-verified.
+A curated shortlist of likely-useful wallets/banks for this audience. **Every row is UNVERIFIED
+unless its Status says otherwise** — the roots below are starting points from research, NOT confirmed
+working. For each: run the ₱0 recon protocol above, classify each host (direct vs CNAME-to-CDN), add,
+and get a live pass/fail before treating it as supported. Do NOT add any of these to `PAYMENT_HOSTS`
+until live-verified.
 
-| App           | Candidate root(s)                                       | Status     |
-| ------------- | ------------------------------------------------------- | ---------- |
-| GoTyme        | `*.gotyme.com.ph`                                       | UNVERIFIED |
-| SeaBank       | `*.seabank.ph`, `*.seabank.com.ph`                      | UNVERIFIED |
-| GrabPay       | `*.grab.com`                                            | UNVERIFIED |
-| ShopeePay     | `*.shopeepay.ph`, `*.shopee.ph`                         | UNVERIFIED |
-| Coins.ph      | `*.coins.ph`                                            | UNVERIFIED |
-| BDO           | `*.bdo.com.ph`                                          | UNVERIFIED |
-| BPI           | `*.bpi.com.ph`                                          | UNVERIFIED |
-| Landbank      | `*.landbank.com`, `*.landbank.com.ph`, `lbpiaccess.com` | UNVERIFIED |
-| Security Bank | `*.securitybank.com`, `*.securitybank.com.ph`           | UNVERIFIED |
+| App           | Candidate root(s)                                                                  | Status     |
+| ------------- | ---------------------------------------------------------------------------------- | ---------- |
+| GoTyme        | `*.gotyme.com.ph` (dst-host) + `aws-gate.licelus.com` (`gotyme-resolve` scheduler) | VERIFIED   |
+| SeaBank       | `*.seabank.ph`, `*.seabank.com.ph`                                                 | UNVERIFIED |
+| GCash app     | `*.gcash.com` app hosts (web checkout already works via `gcash-resolve`)           | UNVERIFIED |
+| GrabPay       | `*.grab.com`                                                                       | UNVERIFIED |
+| ShopeePay     | `*.shopeepay.ph`, `*.shopee.ph`                                                    | UNVERIFIED |
+| Coins.ph      | `*.coins.ph`                                                                       | UNVERIFIED |
+| BDO           | `*.bdo.com.ph`                                                                     | UNVERIFIED |
+| BPI           | `*.bpi.com.ph`                                                                     | UNVERIFIED |
+| Landbank      | `*.landbank.com`, `*.landbank.com.ph`, `lbpiaccess.com`                            | UNVERIFIED |
+| Security Bank | `*.securitybank.com`, `*.securitybank.com.ph`                                      | UNVERIFIED |
 
 **On the 4 bank rows (BDO / BPI / Landbank / Security Bank):** these support QR Ph, but banking apps
 are especially likely to **cert-pin and/or detect captive networks** and refuse even with their

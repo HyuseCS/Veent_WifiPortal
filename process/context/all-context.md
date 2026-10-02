@@ -1,13 +1,19 @@
 # veent-wifiportal - All Context
 
-Last updated: 2026-09-22 (GoTyme walled-garden recon in-flight, NOT complete — first of the 9
-queued wallet/bank recon cycles; see `docs/mikrotik/walled-garden.md` candidate table. EXECUTE
-paused at HARD PAUSE #1, blocked on staging router/Winbox access to produce a live DNS-cache
-capture. Plan: `process/general-plans/active/gotyme-walled-garden-recon_22-09-26/
-gotyme-walled-garden-recon_PLAN_22-09-26.md`; standalone resume doc:
-`gotyme-walled-garden-recon_HANDOFF_22-09-26.md` in the same task folder. This supersedes the
-30-07-26 "`process/general-plans/active/` is now empty of plan folders" framing below —
-`active/` currently holds this one in-progress plan.)
+Last updated: 2026-10-02 (gotyme-walled-garden-recon closed and archived to
+`process/general-plans/completed/gotyme-walled-garden-recon_22-09-26/` — GoTyme is now VERIFIED, the
+first of the queued wallet/bank recon cycles; 9 candidates remain UNVERIFIED (incl. the GCash native app, added 02-10-26 — only GCash web checkout is covered today). Live-confirmed on a
+captive phone 02-10-26: login works (Code 3103000 gone), the user's QR shows, send-money works.
+Two walled-garden pieces: `*.gotyme.com.ph` added to `PAYMENT_HOSTS`
+(`apps/admin/scripts/walled-garden-config.ts`, direct `dst-host`), plus a new `gotyme-resolve`
+`/system scheduler` (`provisionGotymeResolveScheduler()` in
+`packages/core/src/integrations/network/mikrotik.ts`, 5-min, `:resolve aws-gate.licelus.com` ->
+`walled-garden ip` row `comment="gotyme-auto"`) because that host is CNAME/ELB-fronted — same pattern
+as `gcash-resolve`. Open residual (accepted): the Licel ELB returns 3 A records but RouterOS
+`:resolve` returns 1, so 1 of 3 IPs is open per run; login may fail intermittently — see backlog
+note `gotyme-followups_NOTE_02-10-26.md`. Known gap: `bun run --filter radius-admin check` does not
+typecheck `apps/admin/scripts/`. Source commits `ba8839c` + `1f14fd8`. This supersedes the 22-09-26
+"GoTyme in-flight / blocked" framing; `process/general-plans/active/` is empty of plan folders again.)
 
 Last updated: 2026-07-30 (plan-inventory + backlog reconciliation, session 2 — user-confirmed
 30-07-26 on staging: (a) deploy-VM portal reachability fixed, `10.210.54.133` now allowed in the
@@ -562,9 +568,11 @@ easy to find).
   payment methods = GCash + Maya only.** `docs/mikrotik/walled-garden.md` now also carries a "How
   to add a wallet/bank (₱0 recon protocol)" section (DNS-cache-flush → drive the flow on a captive
   device → classify direct-resolve vs CNAME-to-CDN → add → retest) and a curated
-  "Candidate wallets/banks (UNVERIFIED — recon required)" table (GoTyme, SeaBank, GrabPay,
-  ShopeePay, Coins.ph, BDO, BPI, Landbank, Security Bank) — read this before onboarding any new
-  wallet/bank; none of the 9 candidates are whitelisted in code yet.
+  "Candidate wallets/banks" table (GoTyme VERIFIED 02-10-26; SeaBank, GCash app, GrabPay, ShopeePay, Coins.ph,
+  BDO, BPI, Landbank, Security Bank still UNVERIFIED — recon required) — read this before onboarding
+  any new wallet/bank. GoTyme needs BOTH `*.gotyme.com.ph` in `PAYMENT_HOSTS` AND the `gotyme-resolve`
+  scheduler (`gotyme-auto` ip row, `aws-gate.licelus.com`); the 9 remaining candidates are not
+  whitelisted in code yet.
 - `packages/core` probe/setup scripts
 - `apps/admin/scripts/setup-router.ts`
 - `apps/admin/src/routes/api/network/`

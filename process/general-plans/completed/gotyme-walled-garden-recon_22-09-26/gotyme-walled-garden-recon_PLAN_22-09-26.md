@@ -8,10 +8,81 @@ feature: none
 # GoTyme Walled-Garden Recon — Implementation Plan
 
 **Date**: 22-09-26
-**Status**: Ready for VALIDATE
+**Status**: ✅ CODE DONE + LIVE-VERIFIED (02-10-26) — VERIFIED branch (Section 7) complete; archived 02-10-26
 **Complexity**: SIMPLE
 
-## Resume Point (22-09-26, mid-EXECUTE pause)
+## Execution Record (02-10-26) — VERIFIED
+
+Sections 0-5, 6 and 7 DONE. Terminal state: **VERIFIED**. Section 8 (KNOWN-DEAD) not run.
+
+- **Step 18 (dry-run):** skipped on purpose — `--dry-run` does not make provisioning or the
+  schedulers read-only (see Deviations #2). Preview was done by reading code.
+- **Step 19 (push):** run by the user on `10.210.0.1` (agent auto-mode blocked it). Output:
+  `*.gotyme.com.ph: added`, `scheduler gotyme-resolve: added`, `gcash-resolve: already present`,
+  every other row "already present", exit 0.
+- **Step 20 (router-side confirm, user):** `/ip hotspot walled-garden print where dst-host~"gotyme"`
+  shows `*.gotyme.com.ph` tagged `veent-admin:payment`. `/system scheduler print where
+  name=gotyme-resolve` shows the job (5m). After one manual run of its on-event,
+  `/ip hotspot walled-garden ip print where comment="gotyme-auto"` shows `18.195.191.226` (one of the 3
+  ELB IPs from the capture).
+- **Step 21 (live retest, user, captive phone, Private DNS off, mobile data off):** login works (Code
+  3103000 gone), the user's own QR shows, and send-money works over captive WiFi. Paying to self gives
+  in-app Code 4007045; the same code appears on mobile data (control), so it is a GoTyme rule (no
+  self-payment), NOT a network block.
+- **Step 23:** `docs/mikrotik/walled-garden.md` GoTyme row → `VERIFIED`, root cell now matches what
+  is provisioned (`*.gotyme.com.ph` dst-host + `aws-gate.licelus.com` via `gotyme-resolve`). Also, to
+  keep two doc statements true: the candidate-table intro now says "Every row is UNVERIFIED unless its
+  Status says otherwise", and the tag-family table's `gcash-auto` row now covers `gotyme-auto` /
+  `gotyme-resolve`.
+- **Step 24:** `PAYMENT_HOSTS` and the `gotyme-resolve` scheduler left as-is.
+- **Step 25 (gates re-run after doc edit):** collision guard 1/1 exit 0; `mikrotik.spec.ts` 24/24
+  exit 0; admin `check` 0 errors exit 0; direct `tsc` of `scripts/setup-router.ts` exit 0.
+- **Step 26:** branch diff vs `ea5712a` = plan set (`walled-garden-config.ts`, `setup-router.ts`,
+  `mikrotik.ts`, `mikrotik.spec.ts`, `walled-garden.md`) + `network/index.ts` (Deviation #1) + this
+  task folder's PLAN and DNS-CLASSIFICATION notes. No other files.
+
+**Residual risk (accepted, open):** the ELB behind `aws-gate.licelus.com` returns 3 A records but
+RouterOS `:resolve` returns 1, so `gotyme-resolve` opens 1 of 3 IPs per 5-min run. If GoTyme's
+attestation call lands on a different ELB IP between runs, login may fail intermittently (Code
+3103000). The retest passed, but one pass does not rule this out. If it recurs: compare
+`/ip hotspot walled-garden ip print where comment="gotyme-auto"` with
+`/ip dns cache print where name~"prod-gate"`.
+
+## Resume Point (02-10-26, paused before step 19 — SUPERSEDED by Execution Record above)
+
+Sections 1-4 DONE, Section 5 steps 17-18 DONE (18 deliberately not run — see Deviations).
+Section 1 input supplied by the user 02-10-26 (partial capture: login failed, Code 3103000).
+Classification note: `gotyme-walled-garden-recon_DNS-CLASSIFICATION_02-10-26.md` (this folder).
+
+- Added `*.gotyme.com.ph` to `PAYMENT_HOSTS` (direct `dst-host`).
+- Added `provisionGotymeResolveScheduler` (`gotyme-resolve`, 5m, `:resolve aws-gate.licelus.com` →
+  `walled-garden ip` row `comment="gotyme-auto"`), wired into `setup-router.ts`, re-exported, tested.
+- Gates green: collision guard 1/1; `mikrotik.spec.ts` 24/24 (21 → 24); admin `check` 0 errors;
+  direct `tsc` of `scripts/setup-router.ts` exit 0 (negative control red).
+- Step 17: `MIKROTIK_HOST=10.210.0.1` (matches the `parafibr.hotspot` static row in the capture);
+  api-ssl 8729 TCP-reachable from the dev box.
+
+**Exact resume action:** user confirms `10.210.0.1` is the staging router and approves the push →
+run step 19 (`bun run --filter radius-admin setup:router`, no flags) → Section 5 step 20.
+
+## Deviations (02-10-26)
+
+1. **Extra file:** `packages/core/src/integrations/network/index.ts` — re-exports
+   `provisionGotymeResolveScheduler` + `GotymeResolveSchedulerResult` so `setup-router.ts` can import
+   it from `@veent/core` (same as the gcash export). Required plumbing, same package. Step 26/31's
+   expected file set must include it.
+2. **Step 18 not run:** `--dry-run` in `setup-router.ts` only gates wipe / reconcile / restrict-api.
+   The 3 `provisionWalledGarden` calls and both scheduler calls write to the router on EVERY run,
+   dry-run or not. So `--reconcile --dry-run` is not a preview — it is a real additive push. The
+   preview was done by reading code instead (see closeout).
+3. **Gate 14 does not cover `apps/admin/scripts/`:** a deliberate wrong-arity call in
+   `setup-router.ts` still gave `check` 0 errors. Supplemented with a direct `tsc --noEmit` of
+   `scripts/setup-router.ts` (strict, bundler resolution, admin `@types/node`) — exit 0 clean, exit 2
+   on the negative control. Test-infra gap, not a code defect.
+4. **One extra spec case:** `mikrotik.spec.ts` gotyme block adds a 3rd case (coexists with
+   `gcash-resolve`, not matched as already present) beyond the 2-case gcash mirror.
+
+## Resume Point (22-09-26, mid-EXECUTE pause — SUPERSEDED by 02-10-26 above)
 
 EXECUTE started and ran Section 0 preflight only: confirmed no drift (`PAYMENT_HOSTS` has no
 GoTyme entries; `docs/mikrotik/walled-garden.md:320` doc row still reads
