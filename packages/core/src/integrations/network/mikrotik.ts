@@ -1241,6 +1241,50 @@ export async function provisionSeabankResolveScheduler(
 	}
 }
 
+/**
+ * SECURITY: this MUST stay a hardcoded, static string. Never templatize it from data structures (e.g.
+ * looping over hosts) without a RouterOS-script-injection review first — no application data may ever
+ * flow into a router-resident scheduled script. (validate-contract item-18 supplement, instruction E3.)
+ */
+const GCASH_APP_RESOLVE_ON_EVENT = `
+  :local loginIp [:resolve login.mynt.xyz];
+  :if ([:len [/ip hotspot walled-garden ip find comment="gcash-app-login-auto"]] = 0) do={
+    /ip hotspot walled-garden ip add dst-address=$loginIp comment="gcash-app-login-auto"
+  } else={
+    /ip hotspot walled-garden ip set [find comment="gcash-app-login-auto"] dst-address=$loginIp
+  }
+  :local apiIp [:resolve api.mynt.xyz];
+  :if ([:len [/ip hotspot walled-garden ip find comment="gcash-app-api-auto"]] = 0) do={
+    /ip hotspot walled-garden ip add dst-address=$apiIp comment="gcash-app-api-auto"
+  } else={
+    /ip hotspot walled-garden ip set [find comment="gcash-app-api-auto"] dst-address=$apiIp
+  }
+`;
+
+export interface GcashAppResolveSchedulerResult {
+	scheduler: { value: string; created: boolean };
+}
+
+export async function provisionGcashAppResolveScheduler(
+	config: MikrotikConfig
+): Promise<GcashAppResolveSchedulerResult> {
+	const conn = await openConn(config);
+	try {
+		const existing = await conn.write('/system/scheduler/print', ['?name=gcash-app-resolve']);
+		if (existing.length > 0) {
+			return { scheduler: { value: 'gcash-app-resolve', created: false } };
+		}
+		await conn.write('/system/scheduler/add', [
+			'=name=gcash-app-resolve',
+			'=interval=5m',
+			`=on-event=${GCASH_APP_RESOLVE_ON_EVENT}`
+		]);
+		return { scheduler: { value: 'gcash-app-resolve', created: true } };
+	} finally {
+		conn.close();
+	}
+}
+
 export interface ReconcileWalledGardenInput {
 	/** Desired host-allow set — MUST be the exact `hosts` array passed to `provisionWalledGarden` this
 	 * run (never a recomputed second set). Any code-owned host-allow row NOT in here is removed. */
