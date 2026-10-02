@@ -1351,6 +1351,106 @@ export async function provisionGcashAppResolveScheduler(
 	}
 }
 
+export interface WanDnsBlockResult {
+	rules: Array<{ value: string; created: boolean }>;
+}
+
+const WAN_DNS_BLOCK_COMMENT = 'block open DNS from WAN';
+
+export async function provisionWanDnsBlock(
+	config: MikrotikConfig,
+	wanInterface: string
+): Promise<WanDnsBlockResult> {
+	if (!/^[A-Za-z0-9._-]+$/.test(wanInterface)) {
+		throw new Error(`Invalid WAN interface name: ${JSON.stringify(wanInterface)}`);
+	}
+	const conn = await openConn(config);
+	try {
+		const existing = await conn.write('/ip/firewall/filter/print', [
+			`?comment=${WAN_DNS_BLOCK_COMMENT}`
+		]);
+		const rules: WanDnsBlockResult['rules'] = [];
+		for (const p of ['udp', 'tcp']) {
+			if (existing.some((r) => r.protocol === p && r['in-interface'] === wanInterface)) {
+				rules.push({ value: p, created: false });
+				continue;
+			}
+			await conn.write('/ip/firewall/filter/add', [
+				'=chain=input',
+				`=in-interface=${wanInterface}`,
+				`=protocol=${p}`,
+				'=dst-port=53',
+				'=action=drop',
+				`=comment=${WAN_DNS_BLOCK_COMMENT}`
+			]);
+			rules.push({ value: p, created: true });
+		}
+		return { rules };
+	} finally {
+		conn.close();
+	}
+}
+
+const RESOLVE_SCHEDULER_NAMES = [
+	'gcash-resolve',
+	'gotyme-resolve',
+	'seabank-resolve',
+	'gcash-app-resolve'
+];
+
+export async function findDisabledOwnedRows(
+	config: MikrotikConfig
+): Promise<Array<{ menu: string; label: string }>> {
+	const ownedWg = (r: Record<string, string>) =>
+		(r.comment ?? '').startsWith(ADMIN_BYPASS_TAG) || (r.comment ?? '').endsWith('-auto');
+	const menus: Array<{
+		path: string;
+		menu: string;
+		owned: (r: Record<string, string>) => boolean;
+		label: (r: Record<string, string>) => string;
+	}> = [
+		{
+			path: '/ip/hotspot/walled-garden',
+			menu: '/ip hotspot walled-garden',
+			owned: ownedWg,
+			label: (r) => `${r.comment} ${r['dst-host'] ?? r['dst-address']}`
+		},
+		{
+			path: '/ip/hotspot/walled-garden/ip',
+			menu: '/ip hotspot walled-garden ip',
+			owned: ownedWg,
+			label: (r) => `${r.comment} ${r['dst-host'] ?? r['dst-address']}`
+		},
+		{
+			path: '/system/scheduler',
+			menu: '/system scheduler',
+			owned: (r) => RESOLVE_SCHEDULER_NAMES.includes(r.name),
+			label: (r) => r.name
+		},
+		{
+			path: '/ip/firewall/filter',
+			menu: '/ip firewall filter',
+			owned: (r) => r.comment === WAN_DNS_BLOCK_COMMENT,
+			label: (r) => `${r.comment} ${r.protocol}`
+		}
+	];
+	const conn = await openConn(config);
+	try {
+		const found: Array<{ menu: string; label: string }> = [];
+		for (const m of menus) {
+			const rows = await conn.write(`${m.path}/print`);
+			for (const r of rows) {
+				if (r.disabled === 'true' && r.dynamic !== 'true' && m.owned(r)) {
+					found.push({ menu: m.menu, label: m.label(r) });
+				}
+			}
+		}
+		return found;
+	} finally {
+		conn.close();
+	}
+}
+
 export interface ReconcileWalledGardenInput {
 	/** Desired host-allow set — MUST be the exact `hosts` array passed to `provisionWalledGarden` this
 	 * run (never a recomputed second set). Any code-owned host-allow row NOT in here is removed. */

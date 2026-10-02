@@ -11,6 +11,7 @@
  *
  *   ADMIN_WG_HOSTS="admin.veent.lan,portal.veent.lan"   # comma-separated DNS names
  *   ADMIN_WG_IPS="10.5.50.1,10.5.50.0/24"               # comma-separated IPs/CIDRs
+ *   MIKROTIK_WAN_INTERFACE="vlan75"                     # drop DNS (udp+tcp 53) arriving on this interface
  *
  * Idempotent: entries we already created (matched by dst-host/dst-address) are
  * left in place, so re-running after an ORIGIN change just adds the new hole.
@@ -42,6 +43,8 @@ import {
 	provisionGotymeResolveScheduler,
 	provisionSeabankResolveScheduler,
 	provisionGcashAppResolveScheduler,
+	provisionWanDnsBlock,
+	findDisabledOwnedRows,
 	reconcileWalledGarden,
 	wipeWalledGarden,
 	restrictApiService,
@@ -69,6 +72,7 @@ const {
 	MIKROTIK_PORT,
 	MIKROTIK_TLS,
 	MIKROTIK_TLS_INSECURE,
+	MIKROTIK_WAN_INTERFACE,
 	ADMIN_WG_HOSTS,
 	ADMIN_WG_IPS
 } = process.env;
@@ -291,6 +295,25 @@ try {
 	process.exit(1);
 }
 
+if (!MIKROTIK_WAN_INTERFACE) {
+	console.warn('  WAN DNS block skipped: MIKROTIK_WAN_INTERFACE is not set');
+} else {
+	try {
+		const block = await provisionWanDnsBlock(config, MIKROTIK_WAN_INTERFACE);
+		for (const rule of block.rules) {
+			console.log(
+				`  firewall drop dns/${rule.value} on ${MIKROTIK_WAN_INTERFACE}: ${rule.created ? 'added' : 'already present'}`
+			);
+		}
+	} catch (err) {
+		console.error(
+			'\nFailed to provision the WAN DNS block:',
+			err instanceof Error ? err.message : err
+		);
+		process.exit(1);
+	}
+}
+
 // Opt-in prune: --reconcile removes ONLY code-owned (veent-admin-tagged, action=allow) walled-garden
 // rows no longer in the desired set — never un-tagged operator rows, the gcash-auto row, or the
 // PROBE_DENIES deny rows. Default (no flag) run never prunes; --dry-run prints without removing.
@@ -333,6 +356,28 @@ if (RECONCILE) {
 		console.error('\nFailed to reconcile walled garden:', err instanceof Error ? err.message : err);
 		process.exit(1);
 	}
+}
+
+try {
+	const disabled = await findDisabledOwnedRows(config);
+	if (disabled.length > 0) {
+		console.warn(`\nWARNING: ${disabled.length} code-owned router row(s) are DISABLED:`);
+		for (const r of disabled) console.warn(`  ${r.menu}: ${r.label}`);
+		const scopes: Record<string, string> = {
+			'/ip hotspot walled-garden': 'comment~"^veent-admin|-auto\\$"',
+			'/ip hotspot walled-garden ip': 'comment~"^veent-admin|-auto\\$"',
+			'/system scheduler': 'name~"^(gcash|gotyme|seabank|gcash-app)-resolve\\$"',
+			'/ip firewall filter': 'comment="block open DNS from WAN"'
+		};
+		for (const menu of new Set(disabled.map((r) => r.menu))) {
+			console.warn(`  fix: ${menu} enable [find disabled=yes ${scopes[menu]}]`);
+		}
+	}
+} catch (err) {
+	console.error(
+		'\nFailed to check for disabled router rows:',
+		err instanceof Error ? err.message : err
+	);
 }
 
 /**
