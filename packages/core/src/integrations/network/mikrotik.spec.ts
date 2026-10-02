@@ -8,6 +8,7 @@ import {
 	provisionSeabankResolveScheduler,
 	provisionGcashAppResolveScheduler,
 	provisionWanDnsBlock,
+	findDisabledOwnedRows,
 	reconcileWalledGarden,
 	wipeWalledGarden
 } from './mikrotik';
@@ -498,6 +499,62 @@ describe('provisionWanDnsBlock (block open DNS from WAN)', () => {
 		resetRouterTable();
 		await expect(provisionWanDnsBlock(mikrotikConfig, 'vlan75 =x')).rejects.toThrow();
 		expect(routerTable.filter).toHaveLength(0);
+	});
+});
+
+describe('findDisabledOwnedRows', () => {
+	it('returns disabled code-owned rows from all 4 menus with menu + label', async () => {
+		resetRouterTable();
+		routerTable.wg.push(
+			{ '.id': '*1', comment: 'veent-admin:payment', 'dst-host': '*.maya.ph', disabled: 'true' },
+			{ '.id': '*2', comment: 'veent-admin:portal', 'dst-host': 'ok.lan', disabled: 'false' }
+		);
+		routerTable.wgIp.push({
+			'.id': '*3',
+			comment: 'gcash-auto',
+			'dst-address': '1.2.3.4',
+			disabled: 'true'
+		});
+		routerTable.scheduler.push(
+			{ '.id': '*4', name: 'gotyme-resolve', disabled: 'true' },
+			{ '.id': '*5', name: 'gcash-resolve', disabled: 'false' }
+		);
+		routerTable.filter.push({
+			'.id': '*6',
+			comment: 'block open DNS from WAN',
+			protocol: 'udp',
+			disabled: 'true'
+		});
+		expect(await findDisabledOwnedRows(mikrotikConfig)).toEqual([
+			{ menu: '/ip hotspot walled-garden', label: 'veent-admin:payment *.maya.ph' },
+			{ menu: '/ip hotspot walled-garden ip', label: 'gcash-auto 1.2.3.4' },
+			{ menu: '/system scheduler', label: 'gotyme-resolve' },
+			{ menu: '/ip firewall filter', label: 'block open DNS from WAN udp' }
+		]);
+	});
+
+	it('ignores disabled rows the code does not own', async () => {
+		resetRouterTable();
+		routerTable.wg.push({
+			'.id': '*1',
+			comment: 'place hotspot rules here',
+			'dst-host': 'x',
+			disabled: 'true'
+		});
+		routerTable.scheduler.push({ '.id': '*2', name: 'other', disabled: 'true' });
+		expect(await findDisabledOwnedRows(mikrotikConfig)).toEqual([]);
+	});
+
+	it('ignores disabled dynamic rows', async () => {
+		resetRouterTable();
+		routerTable.wg.push({
+			'.id': '*1',
+			comment: 'veent-admin:payment',
+			'dst-host': '*.maya.ph',
+			disabled: 'true',
+			dynamic: 'true'
+		});
+		expect(await findDisabledOwnedRows(mikrotikConfig)).toEqual([]);
 	});
 });
 

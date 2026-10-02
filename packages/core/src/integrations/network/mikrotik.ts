@@ -1391,6 +1391,66 @@ export async function provisionWanDnsBlock(
 	}
 }
 
+const RESOLVE_SCHEDULER_NAMES = [
+	'gcash-resolve',
+	'gotyme-resolve',
+	'seabank-resolve',
+	'gcash-app-resolve'
+];
+
+export async function findDisabledOwnedRows(
+	config: MikrotikConfig
+): Promise<Array<{ menu: string; label: string }>> {
+	const ownedWg = (r: Record<string, string>) =>
+		(r.comment ?? '').startsWith(ADMIN_BYPASS_TAG) || (r.comment ?? '').endsWith('-auto');
+	const menus: Array<{
+		path: string;
+		menu: string;
+		owned: (r: Record<string, string>) => boolean;
+		label: (r: Record<string, string>) => string;
+	}> = [
+		{
+			path: '/ip/hotspot/walled-garden',
+			menu: '/ip hotspot walled-garden',
+			owned: ownedWg,
+			label: (r) => `${r.comment} ${r['dst-host'] ?? r['dst-address']}`
+		},
+		{
+			path: '/ip/hotspot/walled-garden/ip',
+			menu: '/ip hotspot walled-garden ip',
+			owned: ownedWg,
+			label: (r) => `${r.comment} ${r['dst-host'] ?? r['dst-address']}`
+		},
+		{
+			path: '/system/scheduler',
+			menu: '/system scheduler',
+			owned: (r) => RESOLVE_SCHEDULER_NAMES.includes(r.name),
+			label: (r) => r.name
+		},
+		{
+			path: '/ip/firewall/filter',
+			menu: '/ip firewall filter',
+			owned: (r) => r.comment === WAN_DNS_BLOCK_COMMENT,
+			label: (r) => `${r.comment} ${r.protocol}`
+		}
+	];
+	const conn = await openConn(config);
+	try {
+		const found: Array<{ menu: string; label: string }> = [];
+		for (const m of menus) {
+			const rows = await conn.write(`${m.path}/print`);
+			for (const r of rows) {
+				if (r.disabled === 'true' && r.dynamic !== 'true' && m.owned(r)) {
+					found.push({ menu: m.menu, label: m.label(r) });
+				}
+			}
+		}
+		return found;
+	} finally {
+		conn.close();
+	}
+}
+
 export interface ReconcileWalledGardenInput {
 	/** Desired host-allow set — MUST be the exact `hosts` array passed to `provisionWalledGarden` this
 	 * run (never a recomputed second set). Any code-owned host-allow row NOT in here is removed. */

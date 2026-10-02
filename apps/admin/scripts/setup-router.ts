@@ -44,6 +44,7 @@ import {
 	provisionSeabankResolveScheduler,
 	provisionGcashAppResolveScheduler,
 	provisionWanDnsBlock,
+	findDisabledOwnedRows,
 	reconcileWalledGarden,
 	wipeWalledGarden,
 	restrictApiService,
@@ -355,6 +356,28 @@ if (RECONCILE) {
 		console.error('\nFailed to reconcile walled garden:', err instanceof Error ? err.message : err);
 		process.exit(1);
 	}
+}
+
+try {
+	const disabled = await findDisabledOwnedRows(config);
+	if (disabled.length > 0) {
+		console.warn(`\nWARNING: ${disabled.length} code-owned router row(s) are DISABLED:`);
+		for (const r of disabled) console.warn(`  ${r.menu}: ${r.label}`);
+		const scopes: Record<string, string> = {
+			'/ip hotspot walled-garden': 'comment~"^veent-admin|-auto\\$"',
+			'/ip hotspot walled-garden ip': 'comment~"^veent-admin|-auto\\$"',
+			'/system scheduler': 'name~"-resolve\\$"',
+			'/ip firewall filter': 'comment="block open DNS from WAN"'
+		};
+		for (const menu of new Set(disabled.map((r) => r.menu))) {
+			console.warn(`  fix: ${menu} enable [find disabled=yes ${scopes[menu]}]`);
+		}
+	}
+} catch (err) {
+	console.error(
+		'\nFailed to check for disabled router rows:',
+		err instanceof Error ? err.message : err
+	);
 }
 
 /**

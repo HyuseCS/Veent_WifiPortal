@@ -13,6 +13,7 @@ export {
 	provisionSeabankResolveScheduler,
 	provisionGcashAppResolveScheduler,
 	provisionWanDnsBlock,
+	findDisabledOwnedRows,
 	reconcileWalledGarden,
 	wipeWalledGarden,
 	restrictApiService,
