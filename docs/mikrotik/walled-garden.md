@@ -166,6 +166,10 @@ by enumerated `*.domain` forms.
 # 98-hit rule risks breaking checkout, so it stays. Tightening to exact subpaths needs a live capture
 # of which paths checkout uses (backlog candidate) — do NOT silently drop.
 /ip hotspot walled-garden add action=allow dst-host=*.googleapis.com comment=veent-admin:payment
+
+# GoTyme e-wallet (VERIFIED 02-10-26). Resolves directly, so a plain host rule works. GoTyme ALSO
+# needs the gotyme-resolve scheduler for its Licel gate — see the `gotyme-auto` section below.
+/ip hotspot walled-garden add action=allow dst-host=*.gotyme.com.ph comment=veent-admin:payment
 ```
 
 ### Why `*.google.com` / `*.gstatic.com` / `*.recaptcha.net` are NOT allowed here
@@ -241,6 +245,33 @@ manually recreate it.
 Rule of thumb: a payment host that CNAMEs to a CDN (GCash → Akamai) needs this resolve-script; a host
 that resolves **directly** to the provider's own IP (all the Google hosts above) needs only a
 `dst-host` rule.
+
+### `gotyme-auto` — GoTyme's Licel gate needs the same resolve-script
+
+GoTyme's app checks itself against Licel at `aws-gate.licelus.com`, which **CNAMEs to an AWS ELB**.
+Same CNAME gap as GCash, same fix: a `gotyme-resolve` scheduler (`provisionGotymeResolveScheduler()`,
+called from `setup:router` right after `gcash-resolve`) that upserts one `walled-garden ip` row tagged
+`comment="gotyme-auto"`. Without it, GoTyme login fails in-app with code `3103000`. Prefer
+`setup:router`; the CLI form below is for routers the app server can't reach.
+
+```
+# What setup:router provisions (equivalent CLI form):
+/system scheduler add name=gotyme-resolve interval=5m on-event={
+  :local ip [:resolve aws-gate.licelus.com];
+  :if ([:len [/ip hotspot walled-garden ip find comment="gotyme-auto"]] = 0) do={
+    /ip hotspot walled-garden ip add dst-address=$ip comment="gotyme-auto"
+  } else={
+    /ip hotspot walled-garden ip set [find comment="gotyme-auto"] dst-address=$ip
+  }
+}
+
+# Confirm it's live:
+/system scheduler print where name=gotyme-resolve
+/ip hotspot walled-garden ip print where comment=gotyme-auto
+```
+
+Known gap: the ELB answers with 3 A records but `:resolve` returns one, so only 1 of 3 IPs is open
+per 5-minute run. GoTyme login can fail intermittently until the next run.
 
 ### 3-D Secure / card ACS — per-deployment
 
