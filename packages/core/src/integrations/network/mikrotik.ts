@@ -1351,6 +1351,46 @@ export async function provisionGcashAppResolveScheduler(
 	}
 }
 
+export interface WanDnsBlockResult {
+	rules: Array<{ value: string; created: boolean }>;
+}
+
+const WAN_DNS_BLOCK_COMMENT = 'block open DNS from WAN';
+
+export async function provisionWanDnsBlock(
+	config: MikrotikConfig,
+	wanInterface: string
+): Promise<WanDnsBlockResult> {
+	if (!/^[A-Za-z0-9._-]+$/.test(wanInterface)) {
+		throw new Error(`Invalid WAN interface name: ${JSON.stringify(wanInterface)}`);
+	}
+	const conn = await openConn(config);
+	try {
+		const existing = await conn.write('/ip/firewall/filter/print', [
+			`?comment=${WAN_DNS_BLOCK_COMMENT}`
+		]);
+		const rules: WanDnsBlockResult['rules'] = [];
+		for (const p of ['udp', 'tcp']) {
+			if (existing.some((r) => r.protocol === p && r['in-interface'] === wanInterface)) {
+				rules.push({ value: p, created: false });
+				continue;
+			}
+			await conn.write('/ip/firewall/filter/add', [
+				'=chain=input',
+				`=in-interface=${wanInterface}`,
+				`=protocol=${p}`,
+				'=dst-port=53',
+				'=action=drop',
+				`=comment=${WAN_DNS_BLOCK_COMMENT}`
+			]);
+			rules.push({ value: p, created: true });
+		}
+		return { rules };
+	} finally {
+		conn.close();
+	}
+}
+
 export interface ReconcileWalledGardenInput {
 	/** Desired host-allow set — MUST be the exact `hosts` array passed to `provisionWalledGarden` this
 	 * run (never a recomputed second set). Any code-owned host-allow row NOT in here is removed. */

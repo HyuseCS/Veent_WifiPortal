@@ -48,6 +48,11 @@ restriction can't break on a lease change.
   ```bash
   bun run --filter radius-admin setup:router
   ```
+- **Block open DNS from the internet.** Set `MIKROTIK_WAN_INTERFACE` (in `apps/admin/.env`) to the
+  router's internet-facing interface (e.g. `vlan75`). `setup:router` then adds two `input` drop rules
+  for udp and tcp port 53 on it (comment `block open DNS from WAN`). Why: the router has
+  `allow-remote-requests=yes` (guests use it as their resolver) and a public WAN IP, so without
+  these rules it was an open resolver used for DNS amplification. Blank skips the step.
 - **Edit the captive-portal login page** (`docs/mikrotik/login.html`) so its redirect points at the
   **production** portal URL, then upload it to the hotspot. This is the link between router and
   portal — guests can't reach the portal without it.

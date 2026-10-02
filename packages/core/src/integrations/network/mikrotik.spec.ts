@@ -7,6 +7,7 @@ import {
 	provisionGotymeResolveScheduler,
 	provisionSeabankResolveScheduler,
 	provisionGcashAppResolveScheduler,
+	provisionWanDnsBlock,
 	reconcileWalledGarden,
 	wipeWalledGarden
 } from './mikrotik';
@@ -21,16 +22,24 @@ const pingState = { inflight: 0, peak: 0 };
 // A growing in-memory router table for the scheduler + walled-garden provisioning/reconcile tests.
 // The mocked `write` dispatches by menu against this state; tests reset it before each case.
 type Row = Record<string, string>;
-const routerTable: { scheduler: Row[]; wg: Row[]; wgIp: Row[]; nextId: number } = {
+const routerTable: {
+	scheduler: Row[];
+	wg: Row[];
+	wgIp: Row[];
+	filter: Row[];
+	nextId: number;
+} = {
 	scheduler: [],
 	wg: [],
 	wgIp: [],
+	filter: [],
 	nextId: 1
 };
 function resetRouterTable() {
 	routerTable.scheduler = [];
 	routerTable.wg = [];
 	routerTable.wgIp = [];
+	routerTable.filter = [];
 	routerTable.nextId = 1;
 }
 function parseAdd(params: string[]): Row {
@@ -89,6 +98,11 @@ vi.mock('node-routeros', () => {
 					return [];
 				case '/ip/hotspot/walled-garden/ip/remove':
 					removeById(routerTable.wgIp, params);
+					return [];
+				case '/ip/firewall/filter/print':
+					return filterByQuery(routerTable.filter, params);
+				case '/ip/firewall/filter/add':
+					routerTable.filter.push(parseAdd(params));
 					return [];
 			}
 			if (menu !== '/ping') return [];
@@ -419,6 +433,71 @@ describe('provisionGcashAppResolveScheduler (GCash app mynt.xyz CNAME resolve-sc
 		const res = await provisionGcashAppResolveScheduler(mikrotikConfig);
 		expect(res.scheduler.created).toBe(true);
 		expect(routerTable.scheduler.map((s) => s.name)).toEqual(['gcash-resolve', 'gcash-app-resolve']);
+	});
+});
+
+describe('provisionWanDnsBlock (block open DNS from WAN)', () => {
+	const expectedRule = (protocol: string, iface = 'vlan75') => ({
+		chain: 'input',
+		'in-interface': iface,
+		protocol,
+		'dst-port': '53',
+		action: 'drop',
+		comment: 'block open DNS from WAN'
+	});
+
+	it('adds the udp and tcp drop rules on the first run', async () => {
+		resetRouterTable();
+		const res = await provisionWanDnsBlock(mikrotikConfig, 'vlan75');
+		expect(res.rules).toEqual([
+			{ value: 'udp', created: true },
+			{ value: 'tcp', created: true }
+		]);
+		expect(routerTable.filter).toHaveLength(2);
+		expect(routerTable.filter[0]).toMatchObject(expectedRule('udp'));
+		expect(routerTable.filter[1]).toMatchObject(expectedRule('tcp'));
+	});
+
+	it('a 2nd run is a full no-op', async () => {
+		resetRouterTable();
+		await provisionWanDnsBlock(mikrotikConfig, 'vlan75');
+		const second = await provisionWanDnsBlock(mikrotikConfig, 'vlan75');
+		expect(second.rules).toEqual([
+			{ value: 'udp', created: false },
+			{ value: 'tcp', created: false }
+		]);
+		expect(routerTable.filter).toHaveLength(2);
+	});
+
+	it('a same-comment rule on a different interface does not count', async () => {
+		resetRouterTable();
+		await provisionWanDnsBlock(mikrotikConfig, 'ether1');
+		const res = await provisionWanDnsBlock(mikrotikConfig, 'vlan75');
+		expect(res.rules).toEqual([
+			{ value: 'udp', created: true },
+			{ value: 'tcp', created: true }
+		]);
+		expect(routerTable.filter).toHaveLength(4);
+		expect(routerTable.filter[2]).toMatchObject(expectedRule('udp'));
+		expect(routerTable.filter[3]).toMatchObject(expectedRule('tcp'));
+	});
+
+	it('adds only the missing protocol when one rule already exists', async () => {
+		resetRouterTable();
+		routerTable.filter.push({ '.id': '*99', ...expectedRule('udp') });
+		const res = await provisionWanDnsBlock(mikrotikConfig, 'vlan75');
+		expect(res.rules).toEqual([
+			{ value: 'udp', created: false },
+			{ value: 'tcp', created: true }
+		]);
+		expect(routerTable.filter).toHaveLength(2);
+		expect(routerTable.filter[1]).toMatchObject(expectedRule('tcp'));
+	});
+
+	it('rejects an invalid interface name and writes nothing', async () => {
+		resetRouterTable();
+		await expect(provisionWanDnsBlock(mikrotikConfig, 'vlan75 =x')).rejects.toThrow();
+		expect(routerTable.filter).toHaveLength(0);
 	});
 });
 
