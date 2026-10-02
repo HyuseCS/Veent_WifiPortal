@@ -366,7 +366,7 @@ try {
 		const scopes: Record<string, string> = {
 			'/ip hotspot walled-garden': 'comment~"^veent-admin|-auto\\$"',
 			'/ip hotspot walled-garden ip': 'comment~"^veent-admin|-auto\\$"',
-			'/system scheduler': 'name~"-resolve\\$"',
+			'/system scheduler': 'name~"^(gcash|gotyme|seabank|gcash-app)-resolve\\$"',
 			'/ip firewall filter': 'comment="block open DNS from WAN"'
 		};
 		for (const menu of new Set(disabled.map((r) => r.menu))) {
