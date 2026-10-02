@@ -1259,6 +1259,24 @@ const GCASH_APP_RESOLVE_ON_EVENT = `
   } else={
     /ip hotspot walled-garden ip set [find comment="gcash-app-api-auto"] dst-address=$apiIp
   }
+  :local mdapIp [:resolve mdap.paas.mynt.xyz];
+  :if ([:len [/ip hotspot walled-garden ip find comment="gcash-app-mdap-auto"]] = 0) do={
+    /ip hotspot walled-garden ip add dst-address=$mdapIp comment="gcash-app-mdap-auto"
+  } else={
+    /ip hotspot walled-garden ip set [find comment="gcash-app-mdap-auto"] dst-address=$mdapIp
+  }
+  :local acmIp [:resolve acm.mynt.xyz];
+  :if ([:len [/ip hotspot walled-garden ip find comment="gcash-app-acm-auto"]] = 0) do={
+    /ip hotspot walled-garden ip add dst-address=$acmIp comment="gcash-app-acm-auto"
+  } else={
+    /ip hotspot walled-garden ip set [find comment="gcash-app-acm-auto"] dst-address=$acmIp
+  }
+  :local segmentIp [:resolve customer-segment.mynt.xyz];
+  :if ([:len [/ip hotspot walled-garden ip find comment="gcash-app-segment-auto"]] = 0) do={
+    /ip hotspot walled-garden ip add dst-address=$segmentIp comment="gcash-app-segment-auto"
+  } else={
+    /ip hotspot walled-garden ip set [find comment="gcash-app-segment-auto"] dst-address=$segmentIp
+  }
 `;
 
 export interface GcashAppResolveSchedulerResult {
