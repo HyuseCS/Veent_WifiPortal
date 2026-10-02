@@ -32,7 +32,7 @@ Every row on the walled garden is one of these. The first three are code-owned a
 | `veent-admin:probe`          | `walled-garden` (`action=deny`)      | OS captive-probe hosts (`PROBE_DENIES`)                          | `setup:router` call 1                                                           |
 | `veent-admin:payment`        | `walled-garden` (`action=allow`)     | payment-gateway hosts (`PAYMENT_HOSTS`)                          | `setup:router` call 2                                                           |
 | `veent-admin:portal`         | `walled-garden` + `walled-garden ip` | admin/portal origin (`ORIGIN` + `ADMIN_WG_HOSTS`/`ADMIN_WG_IPS`) | `setup:router` call 3                                                           |
-| `gcash-auto` / `gotyme-auto` | `walled-garden ip`                   | one self-healing edge IP each (GCash; GoTyme Licel gate)         | the `gcash-resolve` / `gotyme-resolve` schedulers (not `provisionWalledGarden`) |
+| `gcash-auto` / `gotyme-auto` / `seabank-auto` | `walled-garden ip` | one self-healing edge IP each (GCash; GoTyme Licel gate; SeaBank HTTPDNS) | the `gcash-resolve` / `gotyme-resolve` / `seabank-resolve` schedulers (not `provisionWalledGarden`) |
 
 A fifth, **transient** family appears only during a checkout: `veent-checkout:<epochMs>` — per-device
 reCAPTCHA allows scoped to the paying device's IP, opened and swept by the customer app (see
@@ -273,6 +273,34 @@ called from `setup:router` right after `gcash-resolve`) that upserts one `walled
 Known gap: the ELB answers with 3 A records but `:resolve` returns one, so only 1 of 3 IPs is open
 per 5-minute run. GoTyme login can fail intermittently until the next run.
 
+### `seabank-auto` — SeaBank's HTTPDNS host needs the same resolve-script
+
+SeaBank's app first calls `httpdns.seabank.ph`, which **CNAMEs to Imperva**. The app then gets its API
+IPs (`api`/`m`/`sec`/`cs.seabank.ph`) over HTTPDNS, so the router never sees those lookups and
+`dst-host` rules can never match. All the API hosts share the same Imperva IP, so one IP row covers
+them. Fix: a `seabank-resolve` scheduler (`provisionSeabankResolveScheduler()`, called from
+`setup:router` right after `gotyme-resolve`) that upserts one `walled-garden ip` row tagged
+`comment="seabank-auto"`. Without it, SeaBank login fails in-app with error `-1200`. Prefer
+`setup:router`; the CLI form below is for routers the app server can't reach.
+
+```
+# What setup:router provisions (equivalent CLI form):
+/system scheduler add name=seabank-resolve interval=5m on-event={
+  :local ip [:resolve httpdns.seabank.ph];
+  :if ([:len [/ip hotspot walled-garden ip find comment="seabank-auto"]] = 0) do={
+    /ip hotspot walled-garden ip add dst-address=$ip comment="seabank-auto"
+  } else={
+    /ip hotspot walled-garden ip set [find comment="seabank-auto"] dst-address=$ip
+  }
+}
+
+# Confirm it's live:
+/system scheduler print where name=seabank-resolve
+/ip hotspot walled-garden ip print where comment=seabank-auto
+```
+
+Imperva answers with 1 A record, so the GoTyme 1-of-3 `:resolve` gap does not apply here.
+
 ### 3-D Secure / card ACS — per-deployment
 
 Card payments may step up to the **issuing bank's** ACS domain, which can't be predicted in advance.
@@ -350,7 +378,7 @@ until live-verified.
 | App           | Candidate root(s)                                                                  | Status     |
 | ------------- | ---------------------------------------------------------------------------------- | ---------- |
 | GoTyme        | `*.gotyme.com.ph` (dst-host) + `aws-gate.licelus.com` (`gotyme-resolve` scheduler) | VERIFIED   |
-| SeaBank       | `*.seabank.ph`, `*.seabank.com.ph`                                                 | UNVERIFIED |
+| SeaBank       | `httpdns.seabank.ph` (`seabank-resolve` scheduler only, no dst-host rule)         | VERIFIED   |
 | GCash app     | `*.gcash.com` app hosts (web checkout already works via `gcash-resolve`)           | UNVERIFIED |
 | GrabPay       | `*.grab.com`                                                                       | UNVERIFIED |
 | ShopeePay     | `*.shopeepay.ph`, `*.shopee.ph`                                                    | UNVERIFIED |

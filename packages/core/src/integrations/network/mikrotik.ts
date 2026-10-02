@@ -1203,6 +1203,44 @@ export async function provisionGotymeResolveScheduler(
 	}
 }
 
+/**
+ * SECURITY: this MUST stay a hardcoded, static string. Never templatize it from data structures (e.g.
+ * looping over hosts) without a RouterOS-script-injection review first — no application data may ever
+ * flow into a router-resident scheduled script. (validate-contract item-18 supplement, instruction E3.)
+ */
+const SEABANK_RESOLVE_ON_EVENT = `
+  :local ip [:resolve httpdns.seabank.ph];
+  :if ([:len [/ip hotspot walled-garden ip find comment="seabank-auto"]] = 0) do={
+    /ip hotspot walled-garden ip add dst-address=$ip comment="seabank-auto"
+  } else={
+    /ip hotspot walled-garden ip set [find comment="seabank-auto"] dst-address=$ip
+  }
+`;
+
+export interface SeabankResolveSchedulerResult {
+	scheduler: { value: string; created: boolean };
+}
+
+export async function provisionSeabankResolveScheduler(
+	config: MikrotikConfig
+): Promise<SeabankResolveSchedulerResult> {
+	const conn = await openConn(config);
+	try {
+		const existing = await conn.write('/system/scheduler/print', ['?name=seabank-resolve']);
+		if (existing.length > 0) {
+			return { scheduler: { value: 'seabank-resolve', created: false } };
+		}
+		await conn.write('/system/scheduler/add', [
+			'=name=seabank-resolve',
+			'=interval=5m',
+			`=on-event=${SEABANK_RESOLVE_ON_EVENT}`
+		]);
+		return { scheduler: { value: 'seabank-resolve', created: true } };
+	} finally {
+		conn.close();
+	}
+}
+
 export interface ReconcileWalledGardenInput {
 	/** Desired host-allow set — MUST be the exact `hosts` array passed to `provisionWalledGarden` this
 	 * run (never a recomputed second set). Any code-owned host-allow row NOT in here is removed. */

@@ -40,6 +40,7 @@ import {
 	provisionWalledGarden,
 	provisionGcashResolveScheduler,
 	provisionGotymeResolveScheduler,
+	provisionSeabankResolveScheduler,
 	reconcileWalledGarden,
 	wipeWalledGarden,
 	restrictApiService,
@@ -258,6 +259,19 @@ try {
 } catch (err) {
 	console.error(
 		'\nFailed to provision the gotyme-resolve scheduler:',
+		err instanceof Error ? err.message : err
+	);
+	process.exit(1);
+}
+
+try {
+	const sched = await provisionSeabankResolveScheduler(config);
+	console.log(
+		`  scheduler ${sched.scheduler.value}: ${sched.scheduler.created ? 'added' : 'already present'}`
+	);
+} catch (err) {
+	console.error(
+		'\nFailed to provision the seabank-resolve scheduler:',
 		err instanceof Error ? err.message : err
 	);
 	process.exit(1);
