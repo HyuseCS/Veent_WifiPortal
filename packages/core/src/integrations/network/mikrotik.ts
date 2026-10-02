@@ -1165,6 +1165,44 @@ export async function provisionGcashResolveScheduler(
 	}
 }
 
+/**
+ * SECURITY: this MUST stay a hardcoded, static string. Never templatize it from data structures (e.g.
+ * looping over hosts) without a RouterOS-script-injection review first — no application data may ever
+ * flow into a router-resident scheduled script. (validate-contract item-18 supplement, instruction E3.)
+ */
+const GOTYME_RESOLVE_ON_EVENT = `
+  :local ip [:resolve aws-gate.licelus.com];
+  :if ([:len [/ip hotspot walled-garden ip find comment="gotyme-auto"]] = 0) do={
+    /ip hotspot walled-garden ip add dst-address=$ip comment="gotyme-auto"
+  } else={
+    /ip hotspot walled-garden ip set [find comment="gotyme-auto"] dst-address=$ip
+  }
+`;
+
+export interface GotymeResolveSchedulerResult {
+	scheduler: { value: string; created: boolean };
+}
+
+export async function provisionGotymeResolveScheduler(
+	config: MikrotikConfig
+): Promise<GotymeResolveSchedulerResult> {
+	const conn = await openConn(config);
+	try {
+		const existing = await conn.write('/system/scheduler/print', ['?name=gotyme-resolve']);
+		if (existing.length > 0) {
+			return { scheduler: { value: 'gotyme-resolve', created: false } };
+		}
+		await conn.write('/system/scheduler/add', [
+			'=name=gotyme-resolve',
+			'=interval=5m',
+			`=on-event=${GOTYME_RESOLVE_ON_EVENT}`
+		]);
+		return { scheduler: { value: 'gotyme-resolve', created: true } };
+	} finally {
+		conn.close();
+	}
+}
+
 export interface ReconcileWalledGardenInput {
 	/** Desired host-allow set — MUST be the exact `hosts` array passed to `provisionWalledGarden` this
 	 * run (never a recomputed second set). Any code-owned host-allow row NOT in here is removed. */

@@ -11,7 +11,41 @@ feature: none
 **Status**: Ready for VALIDATE
 **Complexity**: SIMPLE
 
-## Resume Point (22-09-26, mid-EXECUTE pause)
+## Resume Point (02-10-26, paused before step 19 — awaiting push approval)
+
+Sections 1-4 DONE, Section 5 steps 17-18 DONE (18 deliberately not run — see Deviations).
+Section 1 input supplied by the user 02-10-26 (partial capture: login failed, Code 3103000).
+Classification note: `gotyme-walled-garden-recon_DNS-CLASSIFICATION_02-10-26.md` (this folder).
+
+- Added `*.gotyme.com.ph` to `PAYMENT_HOSTS` (direct `dst-host`).
+- Added `provisionGotymeResolveScheduler` (`gotyme-resolve`, 5m, `:resolve aws-gate.licelus.com` →
+  `walled-garden ip` row `comment="gotyme-auto"`), wired into `setup-router.ts`, re-exported, tested.
+- Gates green: collision guard 1/1; `mikrotik.spec.ts` 24/24 (21 → 24); admin `check` 0 errors;
+  direct `tsc` of `scripts/setup-router.ts` exit 0 (negative control red).
+- Step 17: `MIKROTIK_HOST=10.210.0.1` (matches the `parafibr.hotspot` static row in the capture);
+  api-ssl 8729 TCP-reachable from the dev box.
+
+**Exact resume action:** user confirms `10.210.0.1` is the staging router and approves the push →
+run step 19 (`bun run --filter radius-admin setup:router`, no flags) → Section 5 step 20.
+
+## Deviations (02-10-26)
+
+1. **Extra file:** `packages/core/src/integrations/network/index.ts` — re-exports
+   `provisionGotymeResolveScheduler` + `GotymeResolveSchedulerResult` so `setup-router.ts` can import
+   it from `@veent/core` (same as the gcash export). Required plumbing, same package. Step 26/31's
+   expected file set must include it.
+2. **Step 18 not run:** `--dry-run` in `setup-router.ts` only gates wipe / reconcile / restrict-api.
+   The 3 `provisionWalledGarden` calls and both scheduler calls write to the router on EVERY run,
+   dry-run or not. So `--reconcile --dry-run` is not a preview — it is a real additive push. The
+   preview was done by reading code instead (see closeout).
+3. **Gate 14 does not cover `apps/admin/scripts/`:** a deliberate wrong-arity call in
+   `setup-router.ts` still gave `check` 0 errors. Supplemented with a direct `tsc --noEmit` of
+   `scripts/setup-router.ts` (strict, bundler resolution, admin `@types/node`) — exit 0 clean, exit 2
+   on the negative control. Test-infra gap, not a code defect.
+4. **One extra spec case:** `mikrotik.spec.ts` gotyme block adds a 3rd case (coexists with
+   `gcash-resolve`, not matched as already present) beyond the 2-case gcash mirror.
+
+## Resume Point (22-09-26, mid-EXECUTE pause — SUPERSEDED by 02-10-26 above)
 
 EXECUTE started and ran Section 0 preflight only: confirmed no drift (`PAYMENT_HOSTS` has no
 GoTyme entries; `docs/mikrotik/walled-garden.md:320` doc row still reads

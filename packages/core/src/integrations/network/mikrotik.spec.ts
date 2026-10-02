@@ -4,6 +4,7 @@ import {
 	connectHardened,
 	createMikrotikController,
 	provisionGcashResolveScheduler,
+	provisionGotymeResolveScheduler,
 	reconcileWalledGarden,
 	wipeWalledGarden
 } from './mikrotik';
@@ -231,6 +232,44 @@ describe('provisionGcashResolveScheduler (item 18 — gcash CNAME resolve-script
 		resetRouterTable();
 		await provisionGcashResolveScheduler(mikrotikConfig);
 		expect(routerTable.scheduler[0]['on-event']).toBe(EXPECTED_GCASH_ON_EVENT);
+	});
+});
+
+const EXPECTED_GOTYME_ON_EVENT = `
+  :local ip [:resolve aws-gate.licelus.com];
+  :if ([:len [/ip hotspot walled-garden ip find comment="gotyme-auto"]] = 0) do={
+    /ip hotspot walled-garden ip add dst-address=$ip comment="gotyme-auto"
+  } else={
+    /ip hotspot walled-garden ip set [find comment="gotyme-auto"] dst-address=$ip
+  }
+`;
+
+describe('provisionGotymeResolveScheduler (GoTyme Licel attestation CNAME resolve-script)', () => {
+	it('adds the gotyme-resolve scheduler once; a 2nd call is a full no-op (matched by name)', async () => {
+		resetRouterTable();
+		const first = await provisionGotymeResolveScheduler(mikrotikConfig);
+		expect(first.scheduler).toEqual({ value: 'gotyme-resolve', created: true });
+		expect(routerTable.scheduler).toHaveLength(1);
+		expect(routerTable.scheduler[0].name).toBe('gotyme-resolve');
+		expect(routerTable.scheduler[0].interval).toBe('5m');
+
+		const second = await provisionGotymeResolveScheduler(mikrotikConfig);
+		expect(second.scheduler).toEqual({ value: 'gotyme-resolve', created: false });
+		expect(routerTable.scheduler).toHaveLength(1);
+	});
+
+	it('sends the on-event body verbatim', async () => {
+		resetRouterTable();
+		await provisionGotymeResolveScheduler(mikrotikConfig);
+		expect(routerTable.scheduler[0]['on-event']).toBe(EXPECTED_GOTYME_ON_EVENT);
+	});
+
+	it('coexists with gcash-resolve without matching it as already present', async () => {
+		resetRouterTable();
+		await provisionGcashResolveScheduler(mikrotikConfig);
+		const res = await provisionGotymeResolveScheduler(mikrotikConfig);
+		expect(res.scheduler.created).toBe(true);
+		expect(routerTable.scheduler.map((s) => s.name)).toEqual(['gcash-resolve', 'gotyme-resolve']);
 	});
 });
 
