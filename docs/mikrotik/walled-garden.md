@@ -320,6 +320,7 @@ until live-verified.
 | ------------- | ---------------------------------------------------------------------------------- | ---------- |
 | GoTyme        | `*.gotyme.com.ph` (dst-host) + `aws-gate.licelus.com` (`gotyme-resolve` scheduler) | VERIFIED   |
 | SeaBank       | `*.seabank.ph`, `*.seabank.com.ph`                                                 | UNVERIFIED |
+| GCash app     | `*.gcash.com` app hosts (web checkout already works via `gcash-resolve`)           | UNVERIFIED |
 | GrabPay       | `*.grab.com`                                                                       | UNVERIFIED |
 | ShopeePay     | `*.shopeepay.ph`, `*.shopee.ph`                                                    | UNVERIFIED |
 | Coins.ph      | `*.coins.ph`                                                                       | UNVERIFIED |

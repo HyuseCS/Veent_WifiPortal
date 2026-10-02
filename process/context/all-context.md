@@ -2,7 +2,7 @@
 
 Last updated: 2026-10-02 (gotyme-walled-garden-recon closed and archived to
 `process/general-plans/completed/gotyme-walled-garden-recon_22-09-26/` — GoTyme is now VERIFIED, the
-first of the 9 queued wallet/bank recon cycles; 8 candidates remain UNVERIFIED. Live-confirmed on a
+first of the queued wallet/bank recon cycles; 9 candidates remain UNVERIFIED (incl. the GCash native app, added 02-10-26 — only GCash web checkout is covered today). Live-confirmed on a
 captive phone 02-10-26: login works (Code 3103000 gone), the user's QR shows, send-money works.
 Two walled-garden pieces: `*.gotyme.com.ph` added to `PAYMENT_HOSTS`
 (`apps/admin/scripts/walled-garden-config.ts`, direct `dst-host`), plus a new `gotyme-resolve`
@@ -568,10 +568,10 @@ easy to find).
   payment methods = GCash + Maya only.** `docs/mikrotik/walled-garden.md` now also carries a "How
   to add a wallet/bank (₱0 recon protocol)" section (DNS-cache-flush → drive the flow on a captive
   device → classify direct-resolve vs CNAME-to-CDN → add → retest) and a curated
-  "Candidate wallets/banks" table (GoTyme VERIFIED 02-10-26; SeaBank, GrabPay, ShopeePay, Coins.ph,
+  "Candidate wallets/banks" table (GoTyme VERIFIED 02-10-26; SeaBank, GCash app, GrabPay, ShopeePay, Coins.ph,
   BDO, BPI, Landbank, Security Bank still UNVERIFIED — recon required) — read this before onboarding
   any new wallet/bank. GoTyme needs BOTH `*.gotyme.com.ph` in `PAYMENT_HOSTS` AND the `gotyme-resolve`
-  scheduler (`gotyme-auto` ip row, `aws-gate.licelus.com`); the 8 remaining candidates are not
+  scheduler (`gotyme-auto` ip row, `aws-gate.licelus.com`); the 9 remaining candidates are not
   whitelisted in code yet.
 - `packages/core` probe/setup scripts
 - `apps/admin/scripts/setup-router.ts`
