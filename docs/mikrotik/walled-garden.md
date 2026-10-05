@@ -513,6 +513,7 @@ until live-verified.
 | GoTyme        | `*.gotyme.com.ph` (dst-host) + `aws-gate.licelus.com` (`gotyme-resolve` scheduler) | VERIFIED   |
 | SeaBank       | `httpdns.seabank.ph` (`seabank-resolve` scheduler only, no dst-host rule)         | VERIFIED   |
 | GCash app     | `login`/`api`/`mdap`/`acm`/`customer-segment` `.mynt.xyz` (`gcash-app-resolve` scheduler) | VERIFIED   |
+| Maya app      | none — fails pre-auth even with all traffic open for the device; works after portal login | FAILED     |
 | GrabPay       | `*.grab.com`                                                                       | UNVERIFIED |
 | ShopeePay     | `*.shopeepay.ph`, `*.shopee.ph`                                                    | UNVERIFIED |
 | Coins.ph      | `*.coins.ph`                                                                       | UNVERIFIED |
@@ -520,6 +521,15 @@ until live-verified.
 | BPI           | `*.bpi.com.ph`                                                                     | UNVERIFIED |
 | Landbank      | `*.landbank.com`, `*.landbank.com.ph`, `lbpiaccess.com`                            | UNVERIFIED |
 | Security Bank | `*.securitybank.com`, `*.securitybank.com.ph`                                      | UNVERIFIED |
+
+**On the Maya app row (recon 2026-10-05):** the app shows "Slow or no Internet connection" at login
+while the device is captive. It still failed with a per-device `walled-garden ip` rule that opened all
+traffic for the test phone (`src-address=<phone>`, no port). It logged in at once when the phone was
+`ip-binding type=bypassed` and Android cleared "Sign in to network". Likely cause: the app reads
+Android's captive/no-internet network state, which `PROBE_DENIES` keeps on purpose until the guest logs
+in. No host allow can fix this. Hosts seen: `glimpse.voyagerapis.com` (CNAME to AWS API Gateway, IPs
+change about every minute), `api.paymaya.com` (CloudFront), `analytics.appdome.com`. Maya **web
+checkout** is not affected.
 
 **On the 4 bank rows (BDO / BPI / Landbank / Security Bank):** these support QR Ph, but banking apps
 are especially likely to **cert-pin and/or detect captive networks** and refuse even with their
