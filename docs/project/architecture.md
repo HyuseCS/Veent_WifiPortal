@@ -12,13 +12,13 @@ Veent WiFi Portal is a MikroTik captive WiFi portal business.
 
 Monorepo. Package manager: bun workspaces (`apps/*`, `packages/*`).
 
-| Package | Path | Purpose |
-| --- | --- | --- |
-| veent-customer | `apps/customer/` | Captive portal. Guest phone-OTP login, top-ups (Maya), free and paid time grants, SMS OTP. |
-| radius-admin | `apps/admin/` | Staff dashboard. Networks/APs, finance, incident management (issues), staff and 2FA, Sentry views. |
-| veent-locator | `apps/locator/` | Public read-only Leaflet map of hotspots. No auth. |
-| @veent/core | `packages/core/` | Shared business services, integration providers (network, payments, email), Sentry helpers, business-rule constants. |
-| @veent/db | `packages/db/` | The only Drizzle/Postgres schema. One migration authority for all apps. |
+| Package        | Path             | Purpose                                                                                                              |
+| -------------- | ---------------- | -------------------------------------------------------------------------------------------------------------------- |
+| veent-customer | `apps/customer/` | Captive portal. Guest phone-OTP login, top-ups (Maya), free and paid time grants, SMS OTP.                           |
+| radius-admin   | `apps/admin/`    | Staff dashboard. Networks/APs, finance, incident management (issues), staff and 2FA, Sentry views.                   |
+| veent-locator  | `apps/locator/`  | Public read-only Leaflet map of hotspots. No auth.                                                                   |
+| @veent/core    | `packages/core/` | Shared business services, integration providers (network, payments, email), Sentry helpers, business-rule constants. |
+| @veent/db      | `packages/db/`   | The only Drizzle/Postgres schema. One migration authority for all apps.                                              |
 
 ## Repo structure
 
@@ -62,20 +62,20 @@ Trap: `dev-cron.ts` uses one global 1-minute interval. `otp/sweep-delivery` is m
 
 Versions from `bun.lock`.
 
-| Area | Choice |
-| --- | --- |
-| Runtime | bun 1.3.14 in CI (no `engines` or `.nvmrc` pin) |
-| Framework | `@sveltejs/kit` 2.65.1, `svelte` 5.56.3, `vite` 8.0.16 |
-| Svelte mode | Runes forced project-wide (`compilerOptions.runes` predicate in each `vite.config.ts`) |
-| Styling | `tailwindcss` 4.3.1 with `@tailwindcss/vite`, plus `@tailwindcss/typography` |
-| Database | `drizzle-orm` 0.45.2, `postgres` (postgres.js) 3.4.9, `drizzle-kit` 0.31.10 (packages/db only) |
-| Auth | `better-auth` 1.4.22, `@better-auth/cli` |
-| Observability | `@sentry/sveltekit` 10.62.0 (all apps), `@sentry/core` (packages/core) |
-| UI libs | `lucide-svelte` 1.0.1 (admin), `leaflet` 1.9.4 (admin, locator), `leaflet.markercluster` (admin) |
-| Integrations | `node-routeros` 1.6.9, `resend` 6.12.4, `uqr` 0.1.3 (admin 2FA QR). Maya is hand-rolled HTTP, no SDK. |
-| Testing | `vitest` 4.1.9, `@playwright/test` 1.61.0, `@vitest/browser-playwright`, `vitest-browser-svelte`, `@electric-sql/pglite` 0.2.17 |
-| Lint and format | `eslint` 10.5.0 (flat config), `eslint-plugin-svelte`, `prettier` 3.8.4 (svelte and tailwind plugins) |
-| Types | `typescript` 6.0.3, `svelte-check` |
+| Area            | Choice                                                                                                                          |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| Runtime         | bun 1.3.14 in CI (no `engines` or `.nvmrc` pin)                                                                                 |
+| Framework       | `@sveltejs/kit` 2.65.1, `svelte` 5.56.3, `vite` 8.0.16                                                                          |
+| Svelte mode     | Runes forced project-wide (`compilerOptions.runes` predicate in each `vite.config.ts`)                                          |
+| Styling         | `tailwindcss` 4.3.1 with `@tailwindcss/vite`, plus `@tailwindcss/typography`                                                    |
+| Database        | `drizzle-orm` 0.45.2, `postgres` (postgres.js) 3.4.9, `drizzle-kit` 0.31.10 (packages/db only)                                  |
+| Auth            | `better-auth` 1.4.22, `@better-auth/cli`                                                                                        |
+| Observability   | `@sentry/sveltekit` 10.62.0 (all apps), `@sentry/core` (packages/core)                                                          |
+| UI libs         | `lucide-svelte` 1.0.1 (admin), `leaflet` 1.9.4 (admin, locator), `leaflet.markercluster` (admin)                                |
+| Integrations    | `node-routeros` 1.6.9, `resend` 6.12.4, `uqr` 0.1.3 (admin 2FA QR). Maya is hand-rolled HTTP, no SDK.                           |
+| Testing         | `vitest` 4.1.9, `@playwright/test` 1.61.0, `@vitest/browser-playwright`, `vitest-browser-svelte`, `@electric-sql/pglite` 0.2.17 |
+| Lint and format | `eslint` 10.5.0 (flat config), `eslint-plugin-svelte`, `prettier` 3.8.4 (svelte and tailwind plugins)                           |
+| Types           | `typescript` 6.0.3, `svelte-check`                                                                                              |
 
 ## Key code patterns
 

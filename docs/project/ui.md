@@ -2,11 +2,11 @@
 
 ## Where UI code lives
 
-| App | Location | Notes |
-| --- | --- | --- |
-| Admin | `apps/admin/src/lib/components/{ui,feature,layout}/` | The only managed design-system library. |
+| App      | Location                                                                | Notes                                        |
+| -------- | ----------------------------------------------------------------------- | -------------------------------------------- |
+| Admin    | `apps/admin/src/lib/components/{ui,feature,layout}/`                    | The only managed design-system library.      |
 | Customer | `apps/customer/src/lib/dashboard/` and `apps/customer/src/lib/*.svelte` | Flat. No `ui/`, `feature/`, `layout/` split. |
-| Locator | `apps/locator/src/` | Thin Leaflet map. No component library. |
+| Locator  | `apps/locator/src/`                                                     | Thin Leaflet map. No component library.      |
 
 Do not import across apps. Customer and locator must not use admin's `ui/`. When you build customer UI, copy patterns from a component in the same app (for example `dashboard/FreeTimeCard.svelte`). Nothing imports across app `src/lib` roots today. Keep it so.
 

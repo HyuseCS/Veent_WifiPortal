@@ -13,12 +13,12 @@ All apps set `expect: { requireAssertions: true }`. A test with no assertion fai
 
 Which to use:
 
-| Need | Use |
-| --- | --- |
-| Server logic, route handlers, `lib/server/*`, validation, rate limits | Vitest server project (default) |
-| Component behavior in a real browser | Vitest client project (no example exists yet) |
-| Real navigation, auth/2FA redirects, admin governance flows | Playwright e2e (admin only) |
-| Shared services in `packages/core` | `packages/core` Vitest |
+| Need                                                                  | Use                                           |
+| --------------------------------------------------------------------- | --------------------------------------------- |
+| Server logic, route handlers, `lib/server/*`, validation, rate limits | Vitest server project (default)               |
+| Component behavior in a real browser                                  | Vitest client project (no example exists yet) |
+| Real navigation, auth/2FA redirects, admin governance flows           | Playwright e2e (admin only)                   |
+| Shared services in `packages/core`                                    | `packages/core` Vitest                        |
 
 Order to run: narrowest unit test, then wider unit and integration tests, then e2e only if the UI is the thing under test.
 
@@ -26,12 +26,12 @@ Order to run: narrowest unit test, then wider unit and integration tests, then e
 
 Root:
 
-| Command | What it does |
-| --- | --- |
-| `bun run test` | `bun run --filter './apps/*' --filter '@veent/core' test`. Does not include `packages/db`. |
-| `bun run check` | `svelte-check` per app. Does not include `packages/core` or `packages/db`. |
-| `bun run lint` | `prettier --check . && eslint .` |
-| `bun run format` | `prettier --write .` |
+| Command          | What it does                                                                               |
+| ---------------- | ------------------------------------------------------------------------------------------ |
+| `bun run test`   | `bun run --filter './apps/*' --filter '@veent/core' test`. Does not include `packages/db`. |
+| `bun run check`  | `svelte-check` per app. Does not include `packages/core` or `packages/db`.                 |
+| `bun run lint`   | `prettier --check . && eslint .`                                                           |
+| `bun run format` | `prettier --write .`                                                                       |
 
 Per app: `bun run test` (`vitest run --passWithNoTests`), `bun run test:unit` (watch), `bun run test:e2e` (`playwright test`), `bun run check`. `packages/core`: `bun run test` (`vitest run`).
 

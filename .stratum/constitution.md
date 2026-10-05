@@ -3,10 +3,12 @@
 ## Core Principles
 
 ### I. Admin Scope First
+
 Agent work stays in `apps/admin/` and the code it depends on (`packages/core/`, `packages/db/`,
 admin scripts and docs). Work in `apps/customer/` or `apps/locator/` only when the user asks for it.
 
 ### II. One Schema, One Migration Source
+
 - All tables live in `packages/db/src/schema/`. Only `packages/db` generates and runs migrations.
 - Every schema change gets a generated migration file in `packages/db/drizzle/`, committed with the
   change.
@@ -14,6 +16,7 @@ admin scripts and docs). Work in `apps/customer/` or `apps/locator/` only when t
   apply the new DDL directly, but still commit the generated migration.
 
 ### III. Auth Isolation (NON-NEGOTIABLE)
+
 - Customer and admin use two separate better-auth instances: cookie prefix `veent-portal` and
   cookie prefix `radius-admin`, each with its own `BETTER_AUTH_SECRET` and its own schema builder
   output. Never share, merge, or cross-wire them.
@@ -21,6 +24,7 @@ admin scripts and docs). Work in `apps/customer/` or `apps/locator/` only when t
   `@veent/db` and `@veent/core`.
 
 ### IV. Money and Access Paths Are High Risk
+
 - Payments (Maya, GCash through Maya checkout), credit and points math, WiFi time grants, webhooks,
   auth, staff permissions and secrets are high risk.
 - Credits are added only after the payment webhook is confirmed again with the provider API. Never
@@ -31,6 +35,7 @@ admin scripts and docs). Work in `apps/customer/` or `apps/locator/` only when t
   never use `TUNNEL_ORIGIN`. That origin is only for server-to-server webhooks.
 
 ### V. Captive Portal and Router Changes Are Verified Live
+
 - The walled garden is code-owned. It is changed through `setup:router`
   (`apps/admin/scripts/setup-router.ts`, `apps/admin/scripts/walled-garden-config.ts`) and never
   by hand-only router edits that are not recorded in code. `docs/mikrotik/walled-garden.md` is the
@@ -43,6 +48,7 @@ admin scripts and docs). Work in `apps/customer/` or `apps/locator/` only when t
   fallback-resolved MAC is not a verified binding.
 
 ### VI. Simplicity
+
 - Write the minimum code that solves the task. No speculative abstractions, configuration, or
   features. Reuse existing patterns and constants.
 - Do not add comments that explain or narrate the code. The reason goes in the commit message.

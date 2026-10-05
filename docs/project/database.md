@@ -4,16 +4,16 @@
 
 ## Schema files (`packages/db/src/schema/`)
 
-| File | Tables |
-| --- | --- |
-| `index.ts` | Barrel. Every table must be exported here or `drizzle-kit` cannot see it. |
-| `admin.ts` | `admin_role`, `admin_profile`, `router_model`, `network_health`, `admin_bypass_device` |
-| `admin-two-factor.ts` | `admin_two_factor` (see `auth.md`) |
-| `admin-owner-change.ts` | `admin_owner_change_request`, `admin_owner_change_approval` |
-| `admin-issue.ts` | `admin_issue`, `admin_issue_assignee` |
-| `admin-issue-event.ts` | `admin_issue_event`, `admin_notification_read` |
-| `customer.ts` | `customer_profile`, `packages`, `credit_ledger`, `points_ledger`, `payment_transactions`, `payment_checkouts`, `network_sessions`, `rate_limits`, `faqs`, `app_settings`, `customer_otp_delivery_log` |
-| `_auth-factory.ts`, `auth-admin.ts`, `auth-customer.ts` | Auth tables (see `auth.md`) |
+| File                                                    | Tables                                                                                                                                                                                                |
+| ------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `index.ts`                                              | Barrel. Every table must be exported here or `drizzle-kit` cannot see it.                                                                                                                             |
+| `admin.ts`                                              | `admin_role`, `admin_profile`, `router_model`, `network_health`, `admin_bypass_device`                                                                                                                |
+| `admin-two-factor.ts`                                   | `admin_two_factor` (see `auth.md`)                                                                                                                                                                    |
+| `admin-owner-change.ts`                                 | `admin_owner_change_request`, `admin_owner_change_approval`                                                                                                                                           |
+| `admin-issue.ts`                                        | `admin_issue`, `admin_issue_assignee`                                                                                                                                                                 |
+| `admin-issue-event.ts`                                  | `admin_issue_event`, `admin_notification_read`                                                                                                                                                        |
+| `customer.ts`                                           | `customer_profile`, `packages`, `credit_ledger`, `points_ledger`, `payment_transactions`, `payment_checkouts`, `network_sessions`, `rate_limits`, `faqs`, `app_settings`, `customer_otp_delivery_log` |
+| `_auth-factory.ts`, `auth-admin.ts`, `auth-customer.ts` | Auth tables (see `auth.md`)                                                                                                                                                                           |
 
 Other files:
 
@@ -28,14 +28,14 @@ Migrations: 53 files, `0000` to `0052`. The newest is `0052_pink_maginty.sql`. C
 
 ## Commands (run from repo root)
 
-| Command | What it does |
-| --- | --- |
-| `bun run db:start` | `docker compose up`. Starts local Postgres. |
-| `bun run db:push` | `drizzle-kit push`. Pushes the schema, no migration file. This is how the local dev DB stays in sync. |
-| `bun run db:generate` | `drizzle-kit generate`. Writes a migration file from the schema diff. |
-| `bun run db:migrate` | `drizzle-kit migrate`. Replays the migration chain. Fails on the local dev DB (see below). |
-| `bun run db:studio` | `drizzle-kit studio`. Browser DB explorer. |
-| `bun run db:seed` | `bun run src/seed.ts` in `@veent/db`. |
+| Command                 | What it does                                                                                                   |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `bun run db:start`      | `docker compose up`. Starts local Postgres.                                                                    |
+| `bun run db:push`       | `drizzle-kit push`. Pushes the schema, no migration file. This is how the local dev DB stays in sync.          |
+| `bun run db:generate`   | `drizzle-kit generate`. Writes a migration file from the schema diff.                                          |
+| `bun run db:migrate`    | `drizzle-kit migrate`. Replays the migration chain. Fails on the local dev DB (see below).                     |
+| `bun run db:studio`     | `drizzle-kit studio`. Browser DB explorer.                                                                     |
+| `bun run db:seed`       | `bun run src/seed.ts` in `@veent/db`.                                                                          |
 | `bun run db:idempotent` | `bun scripts/idempotent-migrations.ts`. Rewrites `packages/db/drizzle/*.sql` to be idempotent. Safe to re-run. |
 
 All `db:*` scripts except `db:idempotent` run `bun run --filter @veent/db <script>`.

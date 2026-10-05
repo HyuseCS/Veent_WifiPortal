@@ -23,11 +23,11 @@ Canonical reference: **`docs/mikrotik/walled-garden.md`**. Read it first for any
 
 **Three tagged groups.** `setup:router` runs `provisionWalledGarden()` and creates three groups in order:
 
-| Tag | Source | Content |
-| --- | --- | --- |
-| `veent-admin:probe` | `PROBE_DENIES` | Captive-probe deny rows. Created first so denies sit above the allows. |
-| `veent-admin:payment` | `PAYMENT_HOSTS` | Payment allow hosts. |
-| `veent-admin:portal` | `ADMIN_WG_HOSTS`, `ADMIN_WG_IPS`, `ORIGIN`, `PORTAL_LAN_IPS` | Admin and portal origin allows. |
+| Tag                   | Source                                                       | Content                                                                |
+| --------------------- | ------------------------------------------------------------ | ---------------------------------------------------------------------- |
+| `veent-admin:probe`   | `PROBE_DENIES`                                               | Captive-probe deny rows. Created first so denies sit above the allows. |
+| `veent-admin:payment` | `PAYMENT_HOSTS`                                              | Payment allow hosts.                                                   |
+| `veent-admin:portal`  | `ADMIN_WG_HOSTS`, `ADMIN_WG_IPS`, `ORIGIN`, `PORTAL_LAN_IPS` | Admin and portal origin allows.                                        |
 
 Config lives in `apps/admin/scripts/walled-garden-config.ts`. `PORTAL_LAN_IPS` lists the LAN IPs that must always be reachable pre-auth (dev box and deploy VM, for example `10.210.54.133`). Edit it when a box's LAN IP changes.
 
@@ -37,13 +37,13 @@ Scheduler-maintained rows use a different tag family. No provisioning or reconci
 
 **`setup:router` flags.**
 
-| Flag | Effect |
-| --- | --- |
-| (none) | Additive only. |
-| `--reconcile [--dry-run]` | Removes only rows that carry the code's tag, are `allow`, and are not in the desired set. Never touches un-tagged manual rows, scheduler rows, or deny rows. |
-| `--wipe [--dry-run]` | Clears every static row from both walled-garden menus, then rebuilds. |
-| `--wipe-only [--dry-run]` | Clears both menus and stops. Takes precedence over `--wipe` and `--reconcile`. |
-| `--restrict-api [--disable-plain-api] [--dry-run]` | Locks api-ssl to this IP. See `docs/deploy/` router docs. |
+| Flag                                               | Effect                                                                                                                                                       |
+| -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| (none)                                             | Additive only.                                                                                                                                               |
+| `--reconcile [--dry-run]`                          | Removes only rows that carry the code's tag, are `allow`, and are not in the desired set. Never touches un-tagged manual rows, scheduler rows, or deny rows. |
+| `--wipe [--dry-run]`                               | Clears every static row from both walled-garden menus, then rebuilds.                                                                                        |
+| `--wipe-only [--dry-run]`                          | Clears both menus and stops. Takes precedence over `--wipe` and `--reconcile`.                                                                               |
+| `--restrict-api [--disable-plain-api] [--dry-run]` | Locks api-ssl to this IP. See `docs/deploy/` router docs.                                                                                                    |
 
 `wipeWalledGarden()` is not tag-scoped. It skips dynamic (`dynamic=true`) auto-shadow rows, which RouterOS does not allow to be removed. It does not touch the resolve schedulers. They re-add their rows within 5 minutes.
 
@@ -56,11 +56,11 @@ If the CDN returns several A records but `:resolve` returns one, one IP is open 
 
 **Resolve schedulers** (all in `packages/core/src/integrations/network/mikrotik.ts`):
 
-| Scheduler | Resolves | Row comment |
-| --- | --- | --- |
-| `gcash-resolve` | `payments.gcash.com` (CNAME to Akamai) | `gcash-auto` |
-| `gotyme-resolve` | `aws-gate.licelus.com` (ELB-fronted) | `gotyme-auto` |
-| `seabank-resolve` | `httpdns.seabank.ph` | `seabank-auto` |
+| Scheduler           | Resolves                                                      | Row comment        |
+| ------------------- | ------------------------------------------------------------- | ------------------ |
+| `gcash-resolve`     | `payments.gcash.com` (CNAME to Akamai)                        | `gcash-auto`       |
+| `gotyme-resolve`    | `aws-gate.licelus.com` (ELB-fronted)                          | `gotyme-auto`      |
+| `seabank-resolve`   | `httpdns.seabank.ph`                                          | `seabank-auto`     |
 | `gcash-app-resolve` | `login`, `api`, `mdap`, `acm`, `customer-segment` `.mynt.xyz` | `gcash-app-*-auto` |
 
 Each `provision*ResolveScheduler()` is idempotent. It matches by scheduler `name`. The `gcash-auto` row keeps the last 4 distinct resolved IPs. Background: `process/general-plans/completed/payment-walled-garden-v6_29-07-26/` (GCash diagnosis; it replaced a DoH/DoT block that was never built).
@@ -83,14 +83,14 @@ Live GCash web checkout goes through Maya's hosted checkout, not PayMongo.
 
 **Wallet and bank status** (adding a new one: follow the recon protocol in `docs/mikrotik/walled-garden.md`):
 
-| Wallet or bank | Status |
-| --- | --- |
-| GCash web checkout, Maya web checkout | Live |
-| GoTyme | Verified (needs both the `*.gotyme.com.ph` host rule and the `gotyme-resolve` scheduler) |
-| SeaBank | Verified (scheduler only, no host rule) |
-| GCash app | Verified (`gcash-app-resolve` scheduler) |
-| Maya app | Failed. It breaks pre-auth even with all traffic open. It works after portal login. |
-| GrabPay, ShopeePay, Coins.ph, BDO, BPI, Landbank, Security Bank | Unverified. Not whitelisted. Banks may pin certificates or detect captive portals. |
+| Wallet or bank                                                  | Status                                                                                   |
+| --------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| GCash web checkout, Maya web checkout                           | Live                                                                                     |
+| GoTyme                                                          | Verified (needs both the `*.gotyme.com.ph` host rule and the `gotyme-resolve` scheduler) |
+| SeaBank                                                         | Verified (scheduler only, no host rule)                                                  |
+| GCash app                                                       | Verified (`gcash-app-resolve` scheduler)                                                 |
+| Maya app                                                        | Failed. It breaks pre-auth even with all traffic open. It works after portal login.      |
+| GrabPay, ShopeePay, Coins.ph, BDO, BPI, Landbank, Security Bank | Unverified. Not whitelisted. Banks may pin certificates or detect captive portals.       |
 
 Known gap: `bun run --filter radius-admin check` does not typecheck `apps/admin/scripts/`.
 

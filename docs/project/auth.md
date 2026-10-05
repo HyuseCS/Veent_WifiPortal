@@ -2,13 +2,13 @@
 
 Two separate better-auth instances. They never share anything.
 
-| | Admin | Customer |
-| --- | --- | --- |
-| File | `apps/admin/src/lib/server/auth.ts` | `apps/customer/src/lib/server/auth.ts` |
-| Cookie prefix | `radius-admin` | `veent-portal` |
-| Tables | `admin_*` | `customer_*` |
-| Secret | its own `BETTER_AUTH_SECRET` | its own `BETTER_AUTH_SECRET` |
-| Login | Email and password plus mandatory TOTP 2FA | Phone OTP only |
+|               | Admin                                      | Customer                               |
+| ------------- | ------------------------------------------ | -------------------------------------- |
+| File          | `apps/admin/src/lib/server/auth.ts`        | `apps/customer/src/lib/server/auth.ts` |
+| Cookie prefix | `radius-admin`                             | `veent-portal`                         |
+| Tables        | `admin_*`                                  | `customer_*`                           |
+| Secret        | its own `BETTER_AUTH_SECRET`               | its own `BETTER_AUTH_SECRET`           |
+| Login         | Email and password plus mandatory TOTP 2FA | Phone OTP only                         |
 
 ## Isolation rule
 
