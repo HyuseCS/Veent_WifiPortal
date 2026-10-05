@@ -5,3 +5,4 @@
 .agents/**  linguist-vendored
 .claude/**  linguist-vendored
 .gemini/**  linguist-vendored
+graphify-out/graph.json merge=graphify
