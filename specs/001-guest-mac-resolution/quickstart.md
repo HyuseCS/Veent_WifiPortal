@@ -37,6 +37,10 @@ Expected: the lease shows `mac-address=2E:47:8F:2D:35:8F` and a `src-mac-address
 exact field key and value. If the key is not `src-mac-address`, or its value is not
 `F4:B7:8D:A6:80:88`, stop: P2's relay rule (research R2) needs a new plan.
 
+P1-1b. On the live router, time a full lease print over the API (the read the relay guard makes),
+for example from a machine on the router API network with the app's credentials. Record the time
+in `notes.md`. If it is near or above 2.5 s, the relay-read timeout is raised in task T022.
+
 P1-2. On the VM, check out `fix/olt-relay-mac-resolution` at the P1 commit.
 
 P1-3. On the VM only, make the one-line local edit in
@@ -54,7 +58,7 @@ P1-5. On the VM:
 ```
 
 Expected: one `[mac-diag]` line per resolution, each with a `source`. Every line whose MAC ends
-`80:88` names a source. Record the findings in `notes.md` (task T014).
+`80:88` names a source. Record the findings in `notes.md` (task T015).
 
 ## P2: guard and fix
 
@@ -93,4 +97,11 @@ On the router:
 
 Expected: no row with `F4:B7:8D:A6:80:88`.
 
-P2-4. After FR-016 removal, on the VM: `grep -c '\[mac-diag\]'` on new log output returns 0 (SC-005).
+P2-4. API key proof (negative check). In a fresh browser on the test phone (no site data), open
+`/dashboard?mac=F4-B7-8D-A6-80-88`.
+
+Expected: the dashboard and the `[mac-diag]` lines do not use `80:88`, and neither the
+`veent_portal` nor the `veent_device` cookie holds it. This proves the guard reads the real
+`src-mac-address` key through the API.
+
+P2-5. After FR-016 removal, on the VM: `grep -c '\[mac-diag\]'` on new log output returns 0 (SC-005).

@@ -44,7 +44,8 @@ All findings are from the code on branch `fix/olt-relay-mac-resolution` (off `st
 - Today `listDhcpLeases` (`mikrotik.ts:834`) does NOT expose `src-mac-address`. It maps only
   `mac-address`, `address`, `host-name`, `agent-circuit-id`, `status`.
 - Not verified: the field key `src-mac-address` on the live RouterOS v6 router, and that its value on
-  relayed leases is `F4:B7:8D:A6:80:88`. P1 checks it live (tasks T013). Same pattern as the
+  relayed leases is `F4:B7:8D:A6:80:88`. The 2026-10-06 CLI print proves the field and value (T012).
+  The API key is proven live by the negative check in T029 (quickstart P2-4). Same pattern as the
   unverified `DHCP_OPTION82_CIRCUIT_KEY` (`mikrotik.ts:75`).
 - Alternatives: config list of relay MACs (rejected by FR-006); per-IP check inside
   `resolveMacByIp` only (does not cover saved cookies or the account row).
@@ -58,7 +59,10 @@ All findings are from the code on branch `fix/olt-relay-mac-resolution` (off `st
 - Rationale: relay MACs change almost never. A stale set is harmless (a relay MAC never becomes a
   guest MAC). Worst case is one 2.5 s stall per 5 minutes during a router outage. The health cron's
   lease read runs in a different job, so it cannot feed this cache.
-- FR-015: with an empty set every saved MAC passes. The router lookup already needs the router.
+- FR-015 (fail open, keep the last set): on a read error or timeout the last loaded set is used.
+  With no set loaded, every MAC passes, the router lookup result included.
+- The 2.5 s timeout is not measured for a full lease print. Task T013 times it on the live router.
+  If needed, T022 raises the timeout.
 
 ## R4. Where the router-lookup guard goes (FR-008)
 
@@ -66,7 +70,8 @@ All findings are from the code on branch `fix/olt-relay-mac-resolution` (off `st
   result returns null at once (no retry, not cached).
 - Rationale: one guard covers all three tables and both apps. The ARP table is the table known to
   hold the relay MAC, and it is the last table, so "stop" and "try the next table" give the same
-  result. Spec acceptance 2 only needs "do not return".
+  result. Accepted: a relay MAC from the hotspot host table returns null without trying the lease
+  table, and a `macByIpCache` entry made before the set loads can be served for up to 5 min. Spec acceptance 2 only needs "do not return".
 
 ## R5. Admin bypass guard (FR-013)
 

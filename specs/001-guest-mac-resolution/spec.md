@@ -46,8 +46,9 @@ phone, and read the logs. The story is done when one source is named for the rel
 **Acceptance Scenarios**:
 
 1. **Given** the diagnostic log is on, **When** the app resolves a MAC for any request, **Then**
-   it writes exactly one line with the source name, the masked MAC (last two octets) and the full
-   client IP.
+   it writes exactly one line with the source name, the masked MAC (last two octets) and the client
+   IP. The full IP shows only on the staged VM, through a local uncommitted edit. The committed code
+   masks it (FR-016a).
 2. **Given** the MAC came from the router lookup, **When** the line is written, **Then** it names
    the router table that matched (hotspot host, lease, or ARP).
 3. **Given** the test phone loads the dashboard and checkout through the OLT, **When** the
@@ -92,7 +93,7 @@ the correct access point on the payment record.
 - No source gives a valid MAC after the relay MAC is rejected: the app behaves as it does today
   with no MAC (no device detected). It does not fall back to the relay MAC.
 - The router is not reachable when the relay MAC list is built: the app must not crash. The router
-  lookup gives no MAC. Saved MACs pass unchecked; grants need the router too, so none act (FR-015).
+  lookup works as today. MACs are checked against the last loaded relay set, or pass unchecked if none was loaded (FR-015).
 - A relay MAC changes or a new relay is added: detection is automatic from current leases, so no
   config change is needed.
 - Two guests behind the same relay: each must resolve to its own MAC or to no MAC. They must never
@@ -107,11 +108,13 @@ the correct access point on the payment record.
 Story 1 (diagnostic, temporary):
 
 - **FR-001**: Each MAC resolution MUST write one log line with the source name. Source names:
-  `redirect`, `portal-cookie`, `device-cookie`, `account`, `last-session`, and for the router
-  lookup `hotspot-host`, `lease` or `arp`.
+  `redirect`, `portal-cookie`, `device-cookie`, `account`, `last-session`, for the router
+  lookup `hotspot-host`, `lease` or `arp`, `router-cache` when the 60 s IP cache answers, and
+  `none` when no source matched (FR-004).
 - **FR-002**: The log line MUST mask the MAC as today (only the last two octets visible).
-- **FR-003**: The log line MUST show the full raw client IP. This is allowed only because the
-  staged VM has no real users now.
+- **FR-003**: The log line MUST show the full raw client IP on the staged VM. This is allowed only
+  because the staged VM has no real users now. The full IP comes from a local uncommitted edit on
+  the VM. The committed code masks it (FR-016a).
 - **FR-004**: A resolution that finds no MAC MUST also write a line that says no source matched.
 - **FR-005**: The operator MUST run one phone test through the OLT and record the named source in
   this feature's notes.
@@ -134,9 +137,9 @@ Story 2 (guard and fix):
 - **FR-013**: The admin-device bypass MUST NOT match a relay MAC.
 - **FR-014**: The source named in Story 1 MUST be fixed so the guest's real MAC is found. The exact
   fix depends on Story 1's finding and is confirmed with the user after Story 1.
-- **FR-015**: If the relay MAC list cannot be read from the router, the request MUST NOT fail. The
-  router lookup then returns no MAC (it already needs the router). Saved MACs then pass unchecked.
-  This is safe: grants and checkout attribution also need the router, so they cannot act on them.
+- **FR-015**: Fail open, keep the last relay set. If the relay MAC list cannot be read from the
+  router, the app uses the last loaded set if it has one. Else MACs pass unchecked. The request
+  never fails.
 - **FR-016**: When Story 2 ships, the diagnostic log MUST be removed or MUST mask the IP again.
 - **FR-016a**: The full-IP diagnostic log MUST NOT be merged to `staging` or deployed where real
   users connect. It lives only on the feature branch and the staged VM.
@@ -165,7 +168,8 @@ Story 2 (guard and fix):
 - **SC-001**: After one phone test, the logs name exactly one source (or a clear set of sources)
   for every relay-MAC result.
 - **SC-002**: Unit tests show, for each of the 8 sources, that a relay MAC is never returned,
-  never saved, and ignored when already saved. 0 failures.
+  never saved, and ignored when already saved. The 3 router tables (`hotspot-host`, `lease`, `arp`)
+  are tested through `resolveDeviceMac`. 0 failures.
 - **SC-003**: On the staged VM, the test phone through `OAP3000G-FC6G` gets its real MAC (ends
   `35:8F`) on 100% of dashboard and checkout loads in the live test (at least 4 loads each).
 - **SC-004**: In the same test, checkout uses the device circuit ID path (`via: 'device-circuit-id'`)
