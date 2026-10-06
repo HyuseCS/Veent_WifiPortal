@@ -41,12 +41,20 @@ P1-1b. On the live router, time a full lease print over the API (the read the re
 for example from a machine on the router API network with the app's credentials. Record the time
 in `notes.md`. If it is near or above 2.5 s, the relay-read timeout is raised in task T022.
 
-P1-2. On the VM, check out `fix/olt-relay-mac-resolution` at the P1 commit.
+P1-2. On the VM, undo the #115 test edit (`git checkout -- apps/customer/src/lib/server/network-location.ts`),
+then fetch and check out `fix/olt-relay-mac-resolution` at the P1 commit. If GitHub HTTPS is blocked
+on the VM, bring the branch over with a `git bundle` from the dev box.
 
 P1-3. On the VM only, make the one-line local edit in
-`packages/core/src/integrations/network/types.ts` (`logMacSource`) so `ip` prints raw. The exact
-`sed` command is added here by task T011. Never commit this edit. `git status` on the VM shows it as
-modified. Build and restart the app the way the VM runs it.
+`packages/core/src/integrations/network/types.ts` (`logMacSource`) so `ip` prints raw. Never commit
+this edit. `git status` on the VM shows it as modified. Then build and restart:
+
+```sh
+sed -i 's/^\(\s*\)ip: !ip ? null : v4 .*$/\1ip/' packages/core/src/integrations/network/types.ts
+git diff --stat   # types.ts | 2 +- (plus the VM's own compose.prod.yaml edit)
+sudo docker compose -f compose.prod.yaml build customer admin
+sudo docker compose -f compose.prod.yaml up -d customer admin
+```
 
 P1-4. On the test phone, clear site data, join the guest WiFi through `OAP3000G-FC6G`, sign in. Load
 the dashboard 4 times and the top-up checkout page 4 times.
@@ -54,7 +62,7 @@ the dashboard 4 times and the top-up checkout page 4 times.
 P1-5. On the VM:
 
 ```sh
-<app log command> | grep '\[mac-diag\]'
+sudo docker compose -f compose.prod.yaml logs customer admin --since 15m 2>&1 | grep '\[mac-diag\]'
 ```
 
 Expected: one `[mac-diag]` line per resolution, each with a `source`. Every line whose MAC ends
