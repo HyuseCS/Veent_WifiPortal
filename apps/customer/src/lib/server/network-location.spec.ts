@@ -53,15 +53,21 @@ vi.mock('$lib/server/portal', () => ({
 }));
 vi.mock('@veent/core', async (importOriginal) => {
 	const actual = await importOriginal<typeof import('@veent/core')>();
-	return { ...actual, captureHandled: vi.fn(), resolveNetworkIdByApName: vi.fn() };
+	return {
+		...actual,
+		captureHandled: vi.fn(),
+		resolveNetworkIdByApName: vi.fn(),
+		logMacSource: vi.fn()
+	};
 });
 
 import { resolveMacTrusted, resolveMacForUser, resolveCheckoutLocation } from './network-location';
 import { getPortalContext, getDeviceMac } from '$lib/server/portal';
-import { captureHandled, resolveNetworkIdByApName } from '@veent/core';
+import { network } from '$lib/server/network';
+import { captureHandled, resolveNetworkIdByApName, logMacSource } from '@veent/core';
 
 const SERVER_MAC = 'AA:BB:CC:DD:EE:01';
-const evt = { getClientAddress: () => '10.0.0.5' } as never;
+const evt = { getClientAddress: () => '10.0.0.5', url: new URL('http://portal/') } as never;
 
 describe('resolveMacTrusted — server-authoritative MAC + tamper tripwire (M-1/L-1)', () => {
 	beforeEach(() => {
@@ -96,7 +102,7 @@ describe('resolveMacTrusted — server-authoritative MAC + tamper tripwire (M-1/
  * known-gap — network_sessions/customer_profile don't cache the circuit-id string today).
  */
 describe('resolveCheckoutLocation — durable circuit-id per fallback tier (AC1)', () => {
-	const locEvt = { getClientAddress: () => '10.0.0.5' } as never;
+	const locEvt = { getClientAddress: () => '10.0.0.5', url: new URL('http://portal/') } as never;
 	beforeEach(() => {
 		vi.clearAllMocks();
 		resetDb();
@@ -168,7 +174,7 @@ describe('resolveCheckoutLocation — durable circuit-id per fallback tier (AC1)
  * `maya-checkout-ap-attribution-interface-not-physical`.
  */
 describe('resolveCheckoutLocation — circuit-id beats interface-name (physical AP)', () => {
-	const locEvt = { getClientAddress: () => '10.0.0.5' } as never;
+	const locEvt = { getClientAddress: () => '10.0.0.5', url: new URL('http://portal/') } as never;
 	const CID = 'OLT-9 xpon 0/1/0/4:16.3.70';
 	beforeEach(() => {
 		vi.clearAllMocks();
@@ -225,7 +231,7 @@ describe('resolveCheckoutLocation — circuit-id beats interface-name (physical 
  * (device-cookie) MAC must never overwrite a populated durable `last_known_mac` (AC1, AC2, AC5).
  */
 describe('resolveMacForUser — live/fallback provenance + no-entrench (AC1/AC2/AC5)', () => {
-	const provEvt = { getClientAddress: () => '10.0.0.5' } as never;
+	const provEvt = { getClientAddress: () => '10.0.0.5', url: new URL('http://portal/') } as never;
 	beforeEach(() => {
 		vi.clearAllMocks();
 		resetDb();
@@ -265,5 +271,83 @@ describe('resolveMacForUser — live/fallback provenance + no-entrench (AC1/AC2/
 		expect(updateCalls.length).toBe(1);
 		expect(updateCalls[0].set).toEqual({ lastKnownMac: SERVER_MAC });
 		expect(whereHas(updateCalls[0].where, '<>')).toBe(true); // `or(isNull, ne(...))`
+	});
+});
+
+describe('resolveMacForUser - [mac-diag] source log (FR-001, FR-004)', () => {
+	const diagEvt = (qs = '') =>
+		({ getClientAddress: () => '10.0.0.5', url: new URL(`http://portal/${qs}`) }) as never;
+	beforeEach(() => {
+		vi.clearAllMocks();
+		resetDb();
+	});
+
+	it('redirect: portal MAC with ?mac= in the URL', async () => {
+		(getPortalContext as ReturnType<typeof vi.fn>).mockReturnValue({ mac: SERVER_MAC });
+		await resolveMacForUser(diagEvt('?mac=AA-BB-CC-DD-EE-01'), 'u1');
+		expect(logMacSource).toHaveBeenCalledTimes(1);
+		expect(logMacSource).toHaveBeenCalledWith('redirect', SERVER_MAC, '10.0.0.5');
+	});
+
+	it('portal-cookie: portal MAC without ?mac=', async () => {
+		(getPortalContext as ReturnType<typeof vi.fn>).mockReturnValue({ mac: SERVER_MAC });
+		await resolveMacForUser(diagEvt(), 'u1');
+		expect(logMacSource).toHaveBeenCalledTimes(1);
+		expect(logMacSource).toHaveBeenCalledWith('portal-cookie', SERVER_MAC, '10.0.0.5');
+	});
+
+	it('device-cookie', async () => {
+		(getPortalContext as ReturnType<typeof vi.fn>).mockReturnValue({});
+		(getDeviceMac as ReturnType<typeof vi.fn>).mockReturnValue('CC:CC:CC:CC:CC:CC');
+		await resolveMacForUser(diagEvt(), 'u1');
+		expect(logMacSource).toHaveBeenCalledTimes(1);
+		expect(logMacSource).toHaveBeenCalledWith('device-cookie', 'CC:CC:CC:CC:CC:CC', '10.0.0.5');
+	});
+
+	it('account', async () => {
+		(getPortalContext as ReturnType<typeof vi.fn>).mockReturnValue({});
+		(getDeviceMac as ReturnType<typeof vi.fn>).mockReturnValue(undefined);
+		selectQueue.push([{ mac: 'DD:DD:DD:DD:DD:DD' }]); // accountMac
+		await resolveMacForUser(diagEvt(), 'u1');
+		expect(logMacSource).toHaveBeenCalledTimes(1);
+		expect(logMacSource).toHaveBeenCalledWith('account', 'DD:DD:DD:DD:DD:DD', '10.0.0.5');
+	});
+
+	it('last-session', async () => {
+		(getPortalContext as ReturnType<typeof vi.fn>).mockReturnValue({});
+		(getDeviceMac as ReturnType<typeof vi.fn>).mockReturnValue(undefined);
+		selectQueue.push([]); // accountMac
+		selectQueue.push([{ mac: 'EE:EE:EE:EE:EE:EE' }]); // lastKnownMac
+		await resolveMacForUser(diagEvt(), 'u1');
+		expect(logMacSource).toHaveBeenCalledTimes(1);
+		expect(logMacSource).toHaveBeenCalledWith('last-session', 'EE:EE:EE:EE:EE:EE', '10.0.0.5');
+	});
+
+	it('none', async () => {
+		(getPortalContext as ReturnType<typeof vi.fn>).mockReturnValue({});
+		(getDeviceMac as ReturnType<typeof vi.fn>).mockReturnValue(undefined);
+		selectQueue.push([]); // accountMac
+		selectQueue.push([]); // lastKnownMac
+		await resolveMacForUser(diagEvt(), 'u1');
+		expect(logMacSource).toHaveBeenCalledTimes(1);
+		expect(logMacSource).toHaveBeenCalledWith('none', null, '10.0.0.5');
+	});
+
+	it('router hit: no customer-side call', async () => {
+		(getPortalContext as ReturnType<typeof vi.fn>).mockReturnValue({});
+		(getDeviceMac as ReturnType<typeof vi.fn>).mockReturnValue(undefined);
+		const resolveMacByIp = vi.fn().mockResolvedValue('AB:AB:AB:AB:AB:AB');
+		Object.assign(network, { resolveMacByIp });
+		try {
+			const r = await resolveMacForUser(
+				{ getClientAddress: () => '10.99.1.7', url: new URL('http://portal/') } as never,
+				'u1'
+			);
+			expect(r).toEqual({ mac: 'AB:AB:AB:AB:AB:AB', live: true });
+			expect(resolveMacByIp).toHaveBeenCalled();
+			expect(logMacSource).not.toHaveBeenCalled();
+		} finally {
+			delete (network as unknown as Record<string, unknown>).resolveMacByIp;
+		}
 	});
 });
