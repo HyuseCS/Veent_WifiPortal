@@ -231,7 +231,7 @@ function logResolved(via: string, detail: Record<string, unknown>, networkId: nu
  *   1. the AP name the captive portal handed us (router-supplied `ap` param). MikroTik's
  *      hotspot does NOT send this by default — to use this most-reliable path, customize the
  *      hotspot login redirect to append `?ap=$(interface-name)`.
- *   2. the device MAC (portal cookie or IP→MAC) → its current AP via the controller,
+ *   2. the device MAC (`resolveMacForUser`) → its circuit-id AP, else its current AP via the controller,
  *   3. the buyer's most recent active session's AP,
  *   4. the AP the account was last granted on (customer_profile.last_network_id),
  *   5. (dev only) the first seeded network_health row, so the Finance-by-location flow is
@@ -321,7 +321,7 @@ export async function resolveCheckoutLocation(
 	apNameSnapshot: string | null;
 }> {
 	const ctx = getPortalContext(event);
-	const mac = await resolveMac(event);
+	const { mac } = await resolveMacForUser(event, userId);
 
 	// Highest priority: the device's own Option 82 circuit-id → the PHYSICAL AP row. This is the same
 	// durable signal the grant path trusts (`resolveCircuitIdForMac`). On a shared hotspot bridge that
