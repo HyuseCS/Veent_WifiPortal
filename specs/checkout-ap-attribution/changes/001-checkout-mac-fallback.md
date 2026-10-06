@@ -20,13 +20,13 @@ Live evidence (2026-10-06): newest payment*checkouts row has network_id=4, ap_ci
 
 ## Files
 
-- apps/customer/src/lib/server/network-location.ts - in `resolveCheckoutLocation`, replace `const mac = await resolveMac(event);` with `const { mac } = await resolveMacForUser(event, userId);`. Update the doc comment tier 2 ("portal cookie or IP→MAC" to add the per-user fallbacks).
+- apps/customer/src/lib/server/network-location.ts - in `resolveCheckoutLocation`, replace `const mac = await resolveMac(event);` with `const { mac } = await resolveMacForUser(event, userId);`. JSDoc tier 2 (line 2 of the tier list) now reads "the device MAC (`resolveMacForUser`) → its circuit-id AP, else its current AP via the controller".
 
 ## Tests (written first, must fail before the build)
 
 - apps/customer/src/lib/server/network-location.spec.ts - new `it` in "circuit-id beats interface-name (physical AP)": `getPortalContext` returns `{}`, `getDeviceMac` returns undefined, IP→MAC null. Queue: `[{ mac }]` (accountMac), then `[{ circuitId: CID }]` (resolveCircuitIdForMac cache), then `[{ id: 4, name: 'OAP3000G-FC6G', displayName: null }]` (apRowForCircuitId). Expect `{ networkId: 4, apCircuitId: CID, apNameSnapshot: 'OAP3000G-FC6G' }`, `resolveNetworkIdByApName` not called, and the `via: 'device-circuit-id'` log (spy on `console.info`). Fails now because `resolveMac` returns null and the tier is skipped. - `cd /home/hyuse/Desktop/VeentApps/veent_wifiportal/apps/customer && bunx vitest run src/lib/server/network-location.spec.ts`
-- Same file, second new `it`: no cookie, device-cookie MAC, `lastKnownMac` path (accountMac empty, session MAC present) reaches the circuit-id tier. Optional if the first covers it. Keep only if cheap.
-- Same file, existing tests that use `getPortalContext` returning `{}` with no MAC (tier 3 active-session, fully unresolved, ~lines 136-151): `resolveMacForUser` now consumes two extra `selectQueue` reads (accountMac, lastKnownMac) before the active-session query. Push two `[]` first in those tests. This is a queue fix, not a behavior change. These tests turn red after the build if not fixed.
+- Same file, second new `it`: no cookie, device-cookie MAC, `lastKnownMac` path (accountMac empty, session MAC present) reaches the circuit-id tier. Skipped on purpose: the first test covers the circuit-id path.
+- Same file, existing tests: the three tier-1 (ap-param) tests, the tier 3 active-session test, and the fully-unresolved test (~lines 105-155). Each now has `resolveMacForUser` consume two extra `selectQueue` reads (accountMac, lastKnownMac) before the first existing query. Two `[]` pushes (accountMac, lastKnownMac) were added first in each. This is a queue fix, not a behavior change.
 
 Gates after build: `bun run check`, `bunx prettier --check .`, `bunx eslint .`, `bun run test`. Live check on the staged VM phone: one top-up, then the newest payment_checkouts row has `ap_circuit_id` and `ap_name_snapshot` set, and the log shows `via: 'device-circuit-id'`.
 
