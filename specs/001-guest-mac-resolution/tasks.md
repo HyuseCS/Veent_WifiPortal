@@ -48,12 +48,12 @@ None. US1 and US2 share no new code except files edited in order below.
 - [x] T007 [US1] In `packages/core/src/integrations/network/mikrotik.ts` `resolveMacByIp` (`:554`), call `logMacSource` on each of the three matches with `hotspot-host`, `lease`, `arp` and the stripped IP. Makes T003 pass.
 - [x] T008 [US1] In `packages/core/src/services/adminAccess.ts` `resolveDeviceMac`, call `logMacSource('router-cache', …)` on the fresh cache hit (`:119`) and the stale fallback (`:144`). Makes T004 pass.
 - [x] T009 [US1] In `apps/customer/src/lib/server/network-location.ts`: `resolveMac` logs `redirect` when `event.url.searchParams.has('mac')`, else `portal-cookie`, on a portal hit; `resolveMacForUser` logs `device-cookie`, `account`, `last-session` or `none` at each return. IP = `event.getClientAddress().replace(/^::ffff:/, '')`. Depends on T001. Makes T005 pass.
-- [X] T010 [US1] Run `bun run check`, `bunx prettier --check .`, `bunx eslint .`, `bun run test`, `bun run build`. Commit T002-T009 paths (`test` + `feat` or one `chore(diag)` commit).
+- [x] T010 [US1] Run `bun run check`, `bunx prettier --check .`, `bunx eslint .`, `bun run test`, `bun run build`. Commit T002-T009 paths (`test` + `feat` or one `chore(diag)` commit).
 - [x] T011 [US1] Write the exact one-line VM edit (a `sed -i` on `packages/core/src/integrations/network/types.ts` that makes `logMacSource` print the raw IP) into `specs/001-guest-mac-resolution/quickstart.md` step P1-3. Prove it on a scratch copy in the session scratchpad: `diff` shows one changed line. Commit `quickstart.md`.
 - [ ] T012 [US1] (user) quickstart P1-1: router lease, ARP, host prints for `10.210.44.159`. Confirms the `src-mac-address` field and value in the CLI (done by the 2026-10-06 CLI print). The API key is proven live by the negative check in T029.
 - [ ] T013 [US1] (user) FR-015: quickstart P1-1b. On the live router, time a full `/ip dhcp-server lease print` over the API (the read `dropRelayMac` makes) and record the time in `specs/001-guest-mac-resolution/notes.md`. If it is near or above 2.5 s, raise the relay-read timeout in T022 to about 2x the measured time. Must be done before T021 and T022.
-- [ ] T014 [US1] (user) quickstart P1-2, P1-3: VM checkout plus the local full-IP edit, build, restart.
-- [ ] T015 [US1] (user runs, agent reads logs) quickstart P1-4, P1-5: 4 dashboard and 4 checkout loads. Write `specs/001-guest-mac-resolution/notes.md` with: the named source(s) for every `80:88` line (FR-005, SC-001), the router facts from T012, and the proposed FR-014 fix. Log lines copied into notes keep only the test phone IP. Commit `notes.md`.
+- [x] T014 [US1] (user) quickstart P1-2, P1-3: VM checkout plus the local full-IP edit, build, restart.
+- [x] T015 [US1] (user runs, agent reads logs) quickstart P1-4, P1-5: 4 dashboard and 4 checkout loads. Write `specs/001-guest-mac-resolution/notes.md` with: the named source(s) for every `80:88` line (FR-005, SC-001), the router facts from T012, and the proposed FR-014 fix. Log lines copied into notes keep only the test phone IP. Commit `notes.md`.
 
 **Checkpoint**: the user confirms the FR-014 fix and that the `src-mac-address` rule holds. If the rule does not hold, stop and re-plan US2.
 
@@ -81,8 +81,8 @@ None. US1 and US2 share no new code except files edited in order below.
 - [ ] T024 [P] [US2] FR-011: make `capturePortalContext` in `apps/customer/src/lib/server/portal.ts` async; skip both cookie writes when `dropRelayMac(network, ctx.mac)` is `null`. `await` it in `apps/customer/src/hooks.server.ts:63`. Depends on T022. Makes T019 pass.
 - [ ] T025 [P] [US2] FR-009: in `apps/customer/src/routes/login/+page.server.ts:43` and in the `sendOTP` hook in `apps/customer/src/lib/server/auth.ts:97`, pass the MAC through `dropRelayMac(network, …)` (`?? undefined`). Depends on T022. Makes T020 pass.
 - [ ] T026 [US2] Run all gates plus admin e2e (`bun run test:e2e` in `apps/admin/`). Commit T016-T025 paths.
-- [ ] T027 [US2] FR-014 failing test. **PLACEHOLDER: filled after the T015 checkpoint.** File and assertion come from `notes.md` and the user's confirmed fix.
-- [ ] T028 [US2] FR-014 fix. **PLACEHOLDER: filled after the T015 checkpoint.** Makes T027 pass. Gates, commit.
+- [x] T027 [US2] FR-014 failing test. **PLACEHOLDER: filled after the T015 checkpoint.** File and assertion come from `notes.md` and the user's confirmed fix. **Closed 2026-10-06: not needed. P1 named no source (see notes.md); the US2 guard covers every source.**
+- [x] T028 [US2] FR-014 fix. **PLACEHOLDER: filled after the T015 checkpoint.** Makes T027 pass. Gates, commit. **Closed 2026-10-06: not needed (see T027).**
 - [ ] T029 [US2] (user, agent reads logs and DB) quickstart P2-1 to P2-4: VM drops the local edit and pulls; 4 dashboard loads, 4 checkout loads, one payment; admin sign-in bypass check; live negative check P2-4 (`/dashboard?mac=F4-B7-8D-A6-80-88` in a fresh browser). Record evidence (SC-003, SC-004, FR-013, API key proof) in `specs/001-guest-mac-resolution/notes.md`. Needs T001. Commit `notes.md`.
 
 **Checkpoint**: SC-002, SC-003, SC-004 met.

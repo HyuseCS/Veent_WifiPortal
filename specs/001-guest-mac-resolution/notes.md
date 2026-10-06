@@ -40,3 +40,13 @@ SC-004 met; GH #97 closed with this evidence.
 
 - Where `80:88` entered the portal cookie is not proven. Most likely an earlier `?mac=` redirect
   carried the relay MAC, or an older cookie survived. The P2 guard covers every source either way.
+
+## Reproduction attempt and checkpoint, 2026-10-06
+
+- About 10 rounds on the Pixel: captive page path, Chrome path (`http://neverssl.com` redirect),
+  Wi-Fi off/on without forgetting, and 5+ minute idle returns. No `80:88` in `[mac-diag]`.
+- A Chrome redirect read on the phone carried the real MAC:
+  `?mac=2E:47:8F:2D:35:8F&ip=10.210.44.159&…&ssid=$(ssid)` (`$(ssid)` is not filled by the router;
+  unrelated).
+- Decision (user): build P2 now. FR-014 has no named source, so no source fix is made; the relay-MAC
+  guard covers every source. T027 and T028 are closed as not needed.
