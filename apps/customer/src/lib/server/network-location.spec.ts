@@ -105,6 +105,8 @@ describe('resolveCheckoutLocation — durable circuit-id per fallback tier (AC1)
 	it('tier 1 (ap-param): resolves networkId, circuit-id, AND the frozen name snapshot (display_name wins)', async () => {
 		(getPortalContext as ReturnType<typeof vi.fn>).mockReturnValue({ ap: 'iface-1' });
 		(resolveNetworkIdByApName as ReturnType<typeof vi.fn>).mockResolvedValue(7);
+		selectQueue.push([]); // accountMac
+		selectQueue.push([]); // lastKnownMac
 		// apAttributionForNetworkId's single network_health lookup returns circuit-id + name + displayName.
 		selectQueue.push([
 			{ apCircuitId: 'OLT-9 xpon 0/1/0/4', name: 'AP-Pabayo', displayName: 'Front Desk' }
@@ -120,6 +122,8 @@ describe('resolveCheckoutLocation — durable circuit-id per fallback tier (AC1)
 	it('tier 1 falls back to name when no display_name override is set', async () => {
 		(getPortalContext as ReturnType<typeof vi.fn>).mockReturnValue({ ap: 'iface-1' });
 		(resolveNetworkIdByApName as ReturnType<typeof vi.fn>).mockResolvedValue(7);
+		selectQueue.push([]); // accountMac
+		selectQueue.push([]); // lastKnownMac
 		selectQueue.push([{ apCircuitId: 'CID', name: 'AP-Pabayo', displayName: null }]);
 		const loc = await resolveCheckoutLocation(locEvt, 'u1');
 		expect(loc).toEqual({ networkId: 7, apCircuitId: 'CID', apNameSnapshot: 'AP-Pabayo' });
@@ -128,6 +132,8 @@ describe('resolveCheckoutLocation — durable circuit-id per fallback tier (AC1)
 	it('tier 1 with a network_health row carrying no circuit-id/name → networkId set, others null', async () => {
 		(getPortalContext as ReturnType<typeof vi.fn>).mockReturnValue({ ap: 'iface-1' });
 		(resolveNetworkIdByApName as ReturnType<typeof vi.fn>).mockResolvedValue(7);
+		selectQueue.push([]); // accountMac
+		selectQueue.push([]); // lastKnownMac
 		selectQueue.push([{ apCircuitId: null, name: null, displayName: null }]);
 		const loc = await resolveCheckoutLocation(locEvt, 'u1');
 		expect(loc).toEqual({ networkId: 7, apCircuitId: null, apNameSnapshot: null });
@@ -136,6 +142,8 @@ describe('resolveCheckoutLocation — durable circuit-id per fallback tier (AC1)
 	it('tier 3 (active-session): networkId resolved, circuit-id + snapshot null (known-gap fallback)', async () => {
 		// No ap param, no MAC (network stub has no resolveMacByIp) → falls to the active-session query.
 		(getPortalContext as ReturnType<typeof vi.fn>).mockReturnValue({});
+		selectQueue.push([]); // accountMac
+		selectQueue.push([]); // lastKnownMac
 		selectQueue.push([{ networkId: 5 }]); // active network_sessions row
 		const loc = await resolveCheckoutLocation(locEvt, 'u1');
 		expect(loc).toEqual({ networkId: 5, apCircuitId: null, apNameSnapshot: null });
@@ -143,6 +151,8 @@ describe('resolveCheckoutLocation — durable circuit-id per fallback tier (AC1)
 
 	it('fully unresolved (dev=false): all null, attribution-miss captured', async () => {
 		(getPortalContext as ReturnType<typeof vi.fn>).mockReturnValue({});
+		selectQueue.push([]); // accountMac
+		selectQueue.push([]); // lastKnownMac
 		selectQueue.push([]); // active-session: none
 		selectQueue.push([]); // last-known profile: none
 		const loc = await resolveCheckoutLocation(locEvt, 'u1');
@@ -177,6 +187,23 @@ describe('resolveCheckoutLocation — circuit-id beats interface-name (physical 
 		expect(loc).toEqual({ networkId: 14, apCircuitId: CID, apNameSnapshot: 'AP-PABAYO' });
 		// ap-param path never reached — the shared bridge must NOT win over the device's circuit-id.
 		expect(resolveNetworkIdByApName).not.toHaveBeenCalled();
+	});
+
+	it('NAT-hidden device: account MAC feeds the circuit-id tier → physical AP, no ?ap= lookup', async () => {
+		(getPortalContext as ReturnType<typeof vi.fn>).mockReturnValue({});
+		(getDeviceMac as ReturnType<typeof vi.fn>).mockReturnValue(undefined);
+		const info = vi.spyOn(console, 'info').mockImplementation(() => {});
+		selectQueue.push([{ mac: 'AA:BB:CC:DD:EE:01' }]); // accountMac
+		selectQueue.push([{ circuitId: CID }]); // resolveCircuitIdForMac cache hit
+		selectQueue.push([{ id: 4, name: 'OAP3000G-FC6G', displayName: null }]); // apRowForCircuitId
+		const loc = await resolveCheckoutLocation(locEvt, 'u1');
+		expect(loc).toEqual({ networkId: 4, apCircuitId: CID, apNameSnapshot: 'OAP3000G-FC6G' });
+		expect(resolveNetworkIdByApName).not.toHaveBeenCalled();
+		expect(info).toHaveBeenCalledWith(
+			'[topup] AP resolved',
+			expect.objectContaining({ via: 'device-circuit-id' })
+		);
+		info.mockRestore();
 	});
 
 	it('falls back to the ?ap= tier when the device has no resolvable circuit-id', async () => {
