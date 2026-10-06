@@ -19,7 +19,7 @@ description: 'Tasks for guest MAC resolution behind the OLT relay (GH #114)'
 
 ## Phase 1: Setup
 
-- [ ] T001 After the user merges PR #115 into `staging` on GitHub: `git fetch origin` then `git merge origin/staging` into `fix/olt-relay-mac-resolution` (no rebase). Brings in the #115 changes to `apps/customer/src/lib/server/network-location.ts` and `apps/customer/src/lib/server/network-location.spec.ts`. Run `bun run test` after the merge. Must be done before T009, T018 and the P1 deploy (T014).
+- [X] T001 After the user merges PR #115 into `staging` on GitHub: `git fetch origin` then `git merge origin/staging` into `fix/olt-relay-mac-resolution` (no rebase). Brings in the #115 changes to `apps/customer/src/lib/server/network-location.ts` and `apps/customer/src/lib/server/network-location.spec.ts`. Run `bun run test` after the merge. Must be done before T009, T018 and the P1 deploy (T014).
 
 ---
 
