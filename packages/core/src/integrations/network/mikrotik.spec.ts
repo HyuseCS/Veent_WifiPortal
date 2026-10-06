@@ -28,12 +28,18 @@ const routerTable: {
 	wg: Row[];
 	wgIp: Row[];
 	filter: Row[];
+	host: Row[];
+	lease: Row[];
+	arp: Row[];
 	nextId: number;
 } = {
 	scheduler: [],
 	wg: [],
 	wgIp: [],
 	filter: [],
+	host: [],
+	lease: [],
+	arp: [],
 	nextId: 1
 };
 function resetRouterTable() {
@@ -41,6 +47,9 @@ function resetRouterTable() {
 	routerTable.wg = [];
 	routerTable.wgIp = [];
 	routerTable.filter = [];
+	routerTable.host = [];
+	routerTable.lease = [];
+	routerTable.arp = [];
 	routerTable.nextId = 1;
 }
 function parseAdd(params: string[]): Row {
@@ -105,6 +114,12 @@ vi.mock('node-routeros', () => {
 				case '/ip/firewall/filter/add':
 					routerTable.filter.push(parseAdd(params));
 					return [];
+				case '/ip/hotspot/host/print':
+					return filterByQuery(routerTable.host, params);
+				case '/ip/dhcp-server/lease/print':
+					return filterByQuery(routerTable.lease, params);
+				case '/ip/arp/print':
+					return filterByQuery(routerTable.arp, params);
 			}
 			if (menu !== '/ping') return [];
 			const address = (params.find((p) => p.startsWith('=address=')) ?? '').slice(
@@ -433,7 +448,10 @@ describe('provisionGcashAppResolveScheduler (GCash app mynt.xyz CNAME resolve-sc
 		await provisionGcashResolveScheduler(mikrotikConfig);
 		const res = await provisionGcashAppResolveScheduler(mikrotikConfig);
 		expect(res.scheduler.created).toBe(true);
-		expect(routerTable.scheduler.map((s) => s.name)).toEqual(['gcash-resolve', 'gcash-app-resolve']);
+		expect(routerTable.scheduler.map((s) => s.name)).toEqual([
+			'gcash-resolve',
+			'gcash-app-resolve'
+		]);
 	});
 });
 
@@ -773,5 +791,35 @@ describe('wipeWalledGarden (walled-garden-wipe — scripted hard-reset teardown)
 		expect(res.dryRun).toBe(true);
 		expect(routerTable.wg).toHaveLength(5); // nothing actually deleted on either menu
 		expect(routerTable.wgIp).toHaveLength(1);
+	});
+});
+
+describe('resolveMacByIp [mac-diag] source log', () => {
+	const ip = '10.210.44.159';
+	const mac = 'F4:B7:8D:A6:80:88';
+	const diag = (spy: ReturnType<typeof vi.spyOn>) =>
+		spy.mock.calls.filter((c: unknown[]) => c[0] === '[mac-diag]');
+
+	it.each([
+		['host', 'hotspot-host'],
+		['lease', 'lease'],
+		['arp', 'arp']
+	] as const)('logs source %s for a match in that table', async (table, source) => {
+		resetRouterTable();
+		routerTable[table] = [{ address: ip, 'mac-address': mac }];
+		const info = vi.spyOn(console, 'info').mockImplementation(() => {});
+		expect(await controllerForPing().resolveMacByIp!(ip)).toBe(mac);
+		expect(diag(info)).toEqual([
+			['[mac-diag]', { source, mac: '**:**:**:**:80:88', ip: '10.210.*.*' }]
+		]);
+		info.mockRestore();
+	});
+
+	it('logs nothing on a full miss', async () => {
+		resetRouterTable();
+		const info = vi.spyOn(console, 'info').mockImplementation(() => {});
+		expect(await controllerForPing().resolveMacByIp!(ip)).toBeNull();
+		expect(diag(info)).toEqual([]);
+		info.mockRestore();
 	});
 });

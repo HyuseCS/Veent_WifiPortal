@@ -19,6 +19,15 @@ export class RouterUnreachableError extends Error {
 	}
 }
 
+export function logMacSource(source: string, mac: string | null, ip: string | null): void {
+	const v4 = ip?.match(/^(\d{1,3})\.(\d{1,3})\.\d{1,3}\.\d{1,3}$/);
+	console.info('[mac-diag]', {
+		source,
+		mac: mac ? mac.replace(/^(?:[0-9A-Fa-f]{2}:){4}/, '**:**:**:**:') : null,
+		ip: !ip ? null : v4 ? `${v4[1]}.${v4[2]}.*.*` : ip.replace(/[^:]+(?=:[^:]*$)/, '*')
+	});
+}
+
 /** Reject if `p` doesn't settle within `ms` — bounds a single router call's wall time. */
 export function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
 	return new Promise<T>((resolve, reject) => {

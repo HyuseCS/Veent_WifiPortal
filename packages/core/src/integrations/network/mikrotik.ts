@@ -10,7 +10,7 @@ import type {
 	HotspotActiveEntry,
 	RevokeScope
 } from './types';
-import { withTimeout } from './types';
+import { logMacSource, withTimeout } from './types';
 
 export interface MikrotikConfig {
 	host: string;
@@ -564,17 +564,25 @@ export function createMikrotikController(config: MikrotikConfig): NetworkControl
 				// fall back to the ARP table for statically-bound or non-hotspot LAN IPs.
 				const hosts = await conn.write('/ip/hotspot/host/print', [`?address=${ip}`]);
 				const fromHost = hosts.find((r) => r['mac-address'])?.['mac-address'];
-				if (fromHost) return fromHost.toUpperCase();
+				if (fromHost) {
+					logMacSource('hotspot-host', fromHost.toUpperCase(), ip);
+					return fromHost.toUpperCase();
+				}
 
 				// DHCP lease is the most reliable IP→MAC for a DHCP client (survives ARP
 				// aging and hotspot host-table churn).
 				const lease = await conn.write('/ip/dhcp-server/lease/print', [`?address=${ip}`]);
 				const fromLease = lease.find((r) => r['mac-address'])?.['mac-address'];
-				if (fromLease) return fromLease.toUpperCase();
+				if (fromLease) {
+					logMacSource('lease', fromLease.toUpperCase(), ip);
+					return fromLease.toUpperCase();
+				}
 
 				const arp = await conn.write('/ip/arp/print', [`?address=${ip}`]);
 				const fromArp = arp.find((r) => r['mac-address'])?.['mac-address'];
-				return fromArp ? fromArp.toUpperCase() : null;
+				if (!fromArp) return null;
+				logMacSource('arp', fromArp.toUpperCase(), ip);
+				return fromArp.toUpperCase();
 			});
 		},
 

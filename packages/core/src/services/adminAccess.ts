@@ -1,6 +1,6 @@
 import type { DB } from '@veent/db';
 import { ADMIN_BYPASS_TAG, type NetworkController } from '../integrations/network';
-import { withTimeout } from '../integrations/network/types';
+import { logMacSource, withTimeout } from '../integrations/network/types';
 import { hasLiveAccessForMac } from './sessions';
 
 /**
@@ -116,7 +116,10 @@ export async function resolveDeviceMac(
 	const ip = ipAddress.replace(/^::ffff:/, '');
 	const now = Date.now();
 	const cached = macByIpCache.get(ip);
-	if (cached && now - cached.at < MAC_CACHE_TTL_MS) return cached.mac;
+	if (cached && now - cached.at < MAC_CACHE_TTL_MS) {
+		logMacSource('router-cache', cached.mac, ip);
+		return cached.mac;
+	}
 	// Retry the live lookup: a transient timeout OR a momentary empty host table (device
 	// mid-reconnect) both clear on a second try, so a single flake no longer costs the grant.
 	let sawError = false;
@@ -141,6 +144,9 @@ export async function resolveDeviceMac(
 	// Every attempt missed. On a persistent error, last-known beats a false "can't detect device",
 	// but only within a bounded window: past MAC_CACHE_STALE_MAX_MS the DHCP lease may have moved this
 	// IP to a different device, so a stale MAC is worse than null. A clean not-found returns null.
-	if (sawError && cached && now - cached.at < MAC_CACHE_STALE_MAX_MS) return cached.mac;
+	if (sawError && cached && now - cached.at < MAC_CACHE_STALE_MAX_MS) {
+		logMacSource('router-cache', cached.mac, ip);
+		return cached.mac;
+	}
 	return null;
 }
