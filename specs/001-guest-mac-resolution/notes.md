@@ -50,3 +50,9 @@ SC-004 met; GH #97 closed with this evidence.
   unrelated).
 - Decision (user): build P2 now. FR-014 has no named source, so no source fix is made; the relay-MAC
   guard covers every source. T027 and T028 are closed as not needed.
+
+## T013: relay-list read time, 2026-10-06
+
+Full `/ip/dhcp-server/lease/print` over the API from the VM admin container (node-routeros), 3 runs:
+13 leases in 90 ms, 48 ms, 45 ms. The API key `src-mac-address` returns `F4:B7:8D:A6:80:88`. The
+2.5 s relay-read timeout stays.
