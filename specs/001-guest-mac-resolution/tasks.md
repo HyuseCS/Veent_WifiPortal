@@ -92,7 +92,7 @@ None. US1 and US2 share no new code except files edited in order below.
 ## Phase 5: Polish
 
 - [X] T030 FR-016, SC-005: remove `logMacSource` and every call: `packages/core/src/integrations/network/types.ts`, `packages/core/src/integrations/network/mikrotik.ts`, `packages/core/src/services/adminAccess.ts`, `apps/customer/src/lib/server/network-location.ts`. Delete `packages/core/src/integrations/network/types.spec.ts`. Remove the P1 tests from T003, T004, T005 in `mikrotik.spec.ts`, `adminAccess.spec.ts`, `network-location.spec.ts`. `grep -rn "mac-diag\|logMacSource" apps packages --exclude-dir=node_modules` returns nothing. Gates, commit.
-- [ ] T031 SC-006: run all gates and admin e2e on the final tree. User runs quickstart P2-5 on the VM. Hand off for the PR.
+- [x] T031 SC-006: run all gates and admin e2e on the final tree. User runs quickstart P2-5 on the VM. Hand off for the PR.
 
 ---
 

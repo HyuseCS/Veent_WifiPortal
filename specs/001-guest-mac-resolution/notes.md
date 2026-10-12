@@ -110,3 +110,11 @@ Same lease print about 34 min after the F2 print. Lease time is 1 h, so renewals
 `agent-circuit-id="OLT-9 xpon 0/1/0/4:16.3.70"`. No relayed lease without a circuit-id, so the
 Option 82 rule (cc9e475) needs no fallback. Limit: the print cannot show whether RouterOS keeps an
 old circuit-id value on a renewal.
+
+## T031: final gates and P2-5, 2026-10-12
+
+- Local gates on 7fac722: check 0 errors (3 apps); unit tests core 141, customer 159, admin 167,
+  locator 6; build (all apps); admin e2e 23/23 (throwaway `radius_admin_test` DB). Dummy env values
+  in the shell only, no `.env` file.
+- VM at 7fac722 (bundle, build, restart). Test phone loaded the dashboard; it shows `··2D:35:8F`.
+  `logs customer admin --since 10m | grep -c '\[mac-diag\]'` returns `0` (SC-005).
