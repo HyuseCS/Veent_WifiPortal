@@ -36,9 +36,9 @@ chain was broken:
    instead of the phone. An exemption existed (`comment=no-nat-admin-port`) but was pinned to a
    **stale app-box IP**.
    → **Fix (router):** point the exemption at the app box's current IP:
-   `/ip firewall nat set [find comment="no-nat-admin-port"] dst-address=<app-box-ip>`
+   `/ip firewall nat set [find comment="no-nat-admin-vm"] dst-address=<app-box-ip>`
    Current VM rule (added by hand 2026-10-12, placed before `masquerade hotspot network`). The old
-   `no-nat-admin-port` rule still points at the old dev box `10.210.62.191:5174`:
+   `no-nat-admin-port` rule (dev box `10.210.62.191:5174`) was removed 2026-10-12:
    `/ip firewall nat add chain=srcnat action=accept protocol=tcp dst-address=10.210.54.133 dst-port=3002 comment="no-nat-admin-vm"`
 
 3. **Admin `.env` pointed at a dead router address.** `MIKROTIK_HOST="10.0.0.1"` — unroutable from
@@ -73,10 +73,9 @@ got into this mess — three different stale IPs for one box). To stop the churn
 
 1. **Pin the lease static:** `/ip dhcp-server lease make-static [find address="<app-box-ip>"]`.
 2. Keep `ORIGIN`, the `no-nat-admin-vm` exemption (current VM rule, `10.210.54.133:3002`), and the
-   walled-garden IP allow all pointed at that one pinned IP. `no-nat-admin-port` is the old dev-box
-   rule (`10.210.62.191:5174`) and is separate. If the dev box is in use, keep it pointed too.
+   walled-garden IP allow all pointed at that one pinned IP.
 3. Delete stale references left from previous IPs (old walled-garden `veent-admin` allow, old
-   `no-nat-admin-vm` or `no-nat-admin-port` exemption dst).
+   `no-nat-admin-vm` exemption dst).
 
 > **MAC randomization:** the device MAC seen here was locally-administered (randomized, e.g.
 > `2E:E3:…`). If the phone rotates its private MAC, the `veent-admin` binding (keyed to the old MAC)
