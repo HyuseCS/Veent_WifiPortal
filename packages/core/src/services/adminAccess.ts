@@ -168,9 +168,10 @@ async function loadRelayMacs(network: NetworkController): Promise<void> {
 			RESOLVE_TIMEOUT_MS,
 			'listDhcpLeases'
 		);
-		relayMacs = new Set(
-			leases.flatMap((l) => (l.srcMac && l.srcMac !== l.mac ? [l.srcMac.toUpperCase()] : []))
+		const fresh = new Set(
+			leases.flatMap((l) => (l.srcMac && l.srcMac !== l.mac ? [l.srcMac] : []))
 		);
+		if (fresh.size) relayMacs = fresh;
 	} catch {
 		return;
 	}

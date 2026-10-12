@@ -60,22 +60,8 @@ describe('relay MAC guard', () => {
 		const { dropRelayMac } = await load();
 		const network = {
 			listDhcpLeases: vi.fn().mockResolvedValue([
-				{
-					mac: real,
-					address: '10.0.0.1',
-					hostname: null,
-					agentCircuitId: null,
-					status: '',
-					srcMac: real
-				},
-				{
-					mac: relay,
-					address: '10.0.0.2',
-					hostname: null,
-					agentCircuitId: null,
-					status: '',
-					srcMac: null
-				}
+				{ ...relayedLeases()[0], srcMac: real },
+				{ ...relayedLeases()[0], mac: relay, srcMac: null }
 			])
 		} as never;
 		expect(await dropRelayMac(network, real)).toBe(real);
@@ -139,6 +125,18 @@ describe('relay MAC guard', () => {
 			.fn()
 			.mockResolvedValueOnce(relayedLeases())
 			.mockRejectedValue(new Error('router down'));
+		const network = { listDhcpLeases } as never;
+		expect(await dropRelayMac(network, relay)).toBeNull();
+		now += 6 * 60_000;
+		expect(await dropRelayMac(network, relay)).toBeNull();
+		expect(listDhcpLeases).toHaveBeenCalledTimes(2);
+	});
+
+	it('keeps the last set when a later read has no relayed lease', async () => {
+		let now = 15_000_000;
+		vi.spyOn(Date, 'now').mockImplementation(() => now);
+		const { dropRelayMac } = await load();
+		const listDhcpLeases = vi.fn().mockResolvedValueOnce(relayedLeases()).mockResolvedValue([]);
 		const network = { listDhcpLeases } as never;
 		expect(await dropRelayMac(network, relay)).toBeNull();
 		now += 6 * 60_000;
