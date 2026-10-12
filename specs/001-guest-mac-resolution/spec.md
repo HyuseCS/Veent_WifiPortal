@@ -83,7 +83,7 @@ the correct access point on the payment record.
    MAC, **Then** a relay MAC never matches and never grants the bypass.
 6. **Given** the test phone pays through `OAP3000G-FC6G`, **When** checkout runs, **Then** the
    payment record has the phone's access point, not the bridge.
-7. **Given** the source fix from Story 1's finding is in, **When** the test phone loads the
+7. **Given** the relay-MAC guard is in, **When** the test phone loads the
    dashboard and checkout, **Then** both show the real MAC (ends `35:8F`).
 
 ---
@@ -136,8 +136,9 @@ Story 2 (guard and fix):
 - **FR-012**: Saved relay MACs (cookies, the one account row) MUST be ignored when read. No manual
   database cleanup.
 - **FR-013**: The admin-device bypass MUST NOT match a relay MAC.
-- **FR-014**: The source named in Story 1 MUST be fixed so the guest's real MAC is found. The exact
-  fix depends on Story 1's finding and is confirmed with the user after Story 1.
+- **FR-014**: The guest's real MAC MUST be found whatever the source. Story 1 named no source (10
+  reproduction rounds, notes.md). The user decided on no source fix. The all-source guard
+  (`dropRelayMac`, FR-010 to FR-013) meets this.
 - **FR-015**: Fail open, keep the last relay set. If the relay MAC list cannot be read from the
   router, the app uses the last loaded set if it has one. Else MACs pass unchecked. The request
   never fails.
@@ -188,7 +189,9 @@ Story 2 (guard and fix):
 - No relay MAC is ever a real guest device MAC.
 - GH #97's checkout fix (PR #115, checkout uses `resolveMacForUser`) is merged or merged together
   with this work. SC-004 needs it.
-- Only one account row holds a relay MAC today. It is left in place and ignored (FR-012).
+- One account row held a relay MAC. A live resolution overwrote it with the real MAC (`35:8F`,
+  notes.md), so no row holds the relay MAC after P1. FR-012 still ignores any saved relay MAC when
+  read.
 - The `?mac=` value stays client-influenceable and a fallback MAC is not a verified binding. This
   feature does not change those rules.
 - Out of scope: changing router config, the walled garden, or the OLT. Locator app.

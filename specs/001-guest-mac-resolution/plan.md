@@ -17,8 +17,8 @@ P2 adds one core guard, `dropRelayMac`. It reads relay MACs from the DHCP lease 
 `src-mac-address` that differs from the lease MAC, on leases with an Option 82 circuit-id), caches them for 5 minutes, and drops a relay MAC
 to "no MAC". The guard sits at the existing chokepoints: core `resolveDeviceMac` and
 `grantAdminAccess`, customer `resolveMac` / `resolveMacForUser`, `capturePortalContext`, and the login
-action. Then the source named in P1 is fixed (FR-014, placeholder until P1 ends) and the diagnostic
-is removed.
+action. P1 named no source, so no source fix is made. The guard meets FR-014 for every source. Then the
+diagnostic is removed.
 
 ## Technical Context
 

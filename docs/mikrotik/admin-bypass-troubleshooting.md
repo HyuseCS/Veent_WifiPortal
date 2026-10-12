@@ -72,10 +72,11 @@ drifts, the masquerade exemption, `ORIGIN`, and the walled-garden allow all go s
 got into this mess — three different stale IPs for one box). To stop the churn:
 
 1. **Pin the lease static:** `/ip dhcp-server lease make-static [find address="<app-box-ip>"]`.
-2. Keep `ORIGIN`, the `no-nat-admin-port` exemption, and the walled-garden IP allow all pointed at
-   that one pinned IP.
+2. Keep `ORIGIN`, the `no-nat-admin-vm` exemption (current VM rule, `10.210.54.133:3002`), and the
+   walled-garden IP allow all pointed at that one pinned IP. `no-nat-admin-port` is the old dev-box
+   rule (`10.210.62.191:5174`) and is separate. If the dev box is in use, keep it pointed too.
 3. Delete stale references left from previous IPs (old walled-garden `veent-admin` allow, old
-   exemption dst).
+   `no-nat-admin-vm` or `no-nat-admin-port` exemption dst).
 
 > **MAC randomization:** the device MAC seen here was locally-administered (randomized, e.g.
 > `2E:E3:…`). If the phone rotates its private MAC, the `veent-admin` binding (keyed to the old MAC)

@@ -63,7 +63,7 @@ None. US1 and US2 share no new code except files edited in order below.
 
 **Goal**: no path returns, saves or grants on a relay MAC; the named source is fixed.
 
-**Independent Test**: unit tests T016-T020 and T027 green; quickstart P2 on the VM.
+**Independent Test**: unit tests T016-T020 green; quickstart P2 on the VM.
 
 ### Tests for User Story 2 (write first, run, see them fail)
 
@@ -118,7 +118,7 @@ US2 build after T022: T023 (network-location.ts), T024 (portal.ts + hooks.server
 
 1. MVP is US1 (T001-T015): it gives the source. Nothing in US2's FR-014 is written before it.
 2. US2 guard (T016-T026) does not depend on the finding. It can be built while the user schedules the phone test.
-3. FR-014 (T027, T028), live test (T029), diag removal (T030), final gates (T031).
+3. FR-014 (T027, T028: closed, no source fix; the guard meets it), live test (T029), diag removal (T030), final gates (T031).
 
 ## Out of Scope
 

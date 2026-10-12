@@ -101,7 +101,7 @@ P2-4, fresh Firefox private window on the guest Wi-Fi, `/dashboard?mac=F4-B7-8D-
 - #2 `AP-Pabayo` (`OAP3000G-FC6G`), #6 `HyuseTP`, #7 `Pixel-6a`: `src-mac-address=F4:B7:8D:A6:80:88`,
   each with `agent-circuit-id="OLT-9 xpon 0/1/0/4:16.3.70"`.
 - #3 `RADServer-Headend` (the VM, `10.210.54.133`, `00:15:5D:DD:79:05`):
-  `src-mac-address=9C:E3:74:DC:4F:4A`, no `agent-circuit-id`. This is the VM host's NIC, not a relay,
+  `src-mac-address=02:00:00:00:00:B2`, no `agent-circuit-id`. This is the VM host's NIC, not a relay,
   but the current rule (`srcMac && srcMac !== mac`) puts it in the relay set.
 - The other rows print no `src-mac-address`.
 
