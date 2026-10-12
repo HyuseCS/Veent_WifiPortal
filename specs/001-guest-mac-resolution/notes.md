@@ -56,3 +56,48 @@ SC-004 met; GH #97 closed with this evidence.
 Full `/ip/dhcp-server/lease/print` over the API from the VM admin container (node-routeros), 3 runs:
 13 leases in 90 ms, 48 ms, 45 ms. The API key `src-mac-address` returns `F4:B7:8D:A6:80:88`. The
 2.5 s relay-read timeout stays.
+
+## T029: P2 live test, 2026-10-12 (VM at 9333699, no local edits)
+
+P2-2, test phone through `OAP3000G-FC6G`: dashboard and checkout loads, one real payment. Pass.
+
+- 15 `[mac-diag]` lines (sources `redirect` and `account`). Every MAC ends `35:8F`, none `80:88`
+  (SC-003).
+- `[topup] AP resolved { via: 'device-circuit-id', circuitId: 'OLT-9 xpon 0/1/0/4:16.3.70',
+  networkId: 4 }`, then `[webhook] paid { credited: true }` (SC-004).
+- Latest `payment_checkouts` row: `OLT-9 xpon 0/1/0/4:16.3.70`, `OAP3000G-FC6G` (SC-004).
+
+P2-3, admin sign-in with 2FA from the test phone through `OAP3000G-FC6G`. Pass (FR-013).
+
+- First try: `admin bypass skipped — no MAC for client ip=10.210.0.1`. The router NAT exemption
+  `no-nat-admin-port` pointed at the old dev box (`10.210.62.191:5174`), so hotspot masquerade hid
+  the client IP. Fix (router, user): new rule `no-nat-admin-vm`, `chain=srcnat action=accept
+  protocol=tcp dst-address=10.210.54.133 dst-port=3002`, placed before `masquerade hotspot network`.
+  The old rule is kept.
+- Second try: `admin bypass granted: ip=10.210.41.240 mac=2E:47:8F:2D:35:8F`.
+- `admin_bypass_device`: one row, MAC `2E:47:8F:2D:35:8F`.
+- `/ip hotspot ip-binding print where comment~"veent-admin"`: one bypassed row,
+  `2E:47:8F:2D:35:8F`. No row with `F4:B7:8D:A6:80:88`.
+
+P2-4, fresh Firefox private window on the guest Wi-Fi, `/dashboard?mac=F4-B7-8D-A6-80-88`.
+
+- `[mac-diag]`: `hotspot-host` then `router-cache`, both `**:35:8F`. No `redirect` line, so the
+  relay MAC from `?mac=` was dropped and the router IP lookup gave the real MAC. This proves the guard
+  reads `src-mac-address` through the live API.
+- Dashboard device list: "This device" shows `··2D:35:8F`, no row shows `··A6:80:88`. Pass.
+- Cookie check not done: the test ran on the phone, which has no simple cookie view. Covered by
+  `portal.spec.ts` (a relay `?mac=` sets no cookie) and by the missing `redirect` source above.
+- Open: the customer app saw the real client IP here (the router lookup hit), but in P1 it always
+  saw `10.210.0.1`. The new `no-nat-admin-vm` rule covers port 3002 only. Not explained yet.
+
+## F2 (US2 review): which leases carry `src-mac-address`, 2026-10-12
+
+`/ip dhcp-server lease print detail where src-mac-address!=""` gave 8 rows. The ones where
+`src-mac-address` differs from `mac-address`:
+
+- #2 `AP-Pabayo` (`OAP3000G-FC6G`), #6 `HyuseTP`, #7 `Pixel-6a`: `src-mac-address=F4:B7:8D:A6:80:88`,
+  each with `agent-circuit-id="OLT-9 xpon 0/1/0/4:16.3.70"`.
+- #3 `RADServer-Headend` (the VM, `10.210.54.133`, `00:15:5D:DD:79:05`):
+  `src-mac-address=9C:E3:74:DC:4F:4A`, no `agent-circuit-id`. This is the VM host's NIC, not a relay,
+  but the current rule (`srcMac && srcMac !== mac`) puts it in the relay set.
+- The other rows print no `src-mac-address`.
