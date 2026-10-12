@@ -1,5 +1,12 @@
 import { fail, type ActionFailure, type RequestEvent } from '@sveltejs/kit';
-import { getStaffStatus, STAFF_STATUS, grantAdminAccess, resolveDeviceMac } from '@veent/core';
+import {
+	getStaffStatus,
+	STAFF_STATUS,
+	grantAdminAccess,
+	resolveDeviceMac,
+	maskIp,
+	maskMac
+} from '@veent/core';
 import { auth } from '$lib/server/auth';
 import { db } from '$lib/server/db';
 import { network } from '$lib/server/network';
@@ -60,12 +67,12 @@ export async function finishStaffSignIn(
 				// the 4h window forward and logout can revoke, both without re-doing the flaky lookup /
 				// getClientAddress().
 				if (sessionToken) await rememberAdminDevice(sessionToken, mac);
-				log.info(`admin bypass granted: ip=${ip} mac=${mac}`);
+				log.info(`admin bypass granted: ip=${maskIp(ip)} mac=${maskMac(mac)}`);
 			} else {
 				// Not an error (device may be off-hotspot / on cellular) — but the IP the server saw is
 				// the whole diagnostic: if it isn't the device's hotspot LAN IP (proxy/NAT), the router
 				// can't map it and no veent-admin binding is written. console-only (not Sentry).
-				log.warn(`admin bypass skipped — no MAC for client ip=${ip}`);
+				log.warn(`admin bypass skipped — no MAC for client ip=${maskIp(ip)}`);
 			}
 		} catch (err) {
 			log.error('device internet grant on sign-in failed:', err);
