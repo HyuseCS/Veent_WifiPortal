@@ -1,6 +1,11 @@
 import type { RequestEvent } from '@sveltejs/kit';
 import { eq } from 'drizzle-orm';
-import { grantAdminAccess, revokeAdminAccess, ADMIN_BYPASS_TTL_MINUTES } from '@veent/core';
+import {
+	grantAdminAccess,
+	revokeAdminAccess,
+	ADMIN_BYPASS_TTL_MINUTES,
+	maskMac
+} from '@veent/core';
 import { adminBypassDevice } from '@veent/db';
 import { db } from '$lib/server/db';
 import { network } from '$lib/server/network';
@@ -87,7 +92,7 @@ export async function revokeAdminBypass(event: RequestEvent): Promise<void> {
 		const mac = await macForSession(token);
 		if (mac) {
 			await revokeAdminAccess(network, mac);
-			log.info(`admin bypass revoked on logout: mac=${mac}`);
+			log.info(`admin bypass revoked on logout: mac=${maskMac(mac)}`);
 		} else {
 			// No stored device for this session — nothing was granted (capture missed) or it was
 			// already revoked. The binding, if any, then ages out at the 4h TTL.
