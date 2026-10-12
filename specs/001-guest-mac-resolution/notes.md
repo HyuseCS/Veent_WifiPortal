@@ -101,3 +101,12 @@ P2-4, fresh Firefox private window on the guest Wi-Fi, `/dashboard?mac=F4-B7-8D-
   `src-mac-address=9C:E3:74:DC:4F:4A`, no `agent-circuit-id`. This is the VM host's NIC, not a relay,
   but the current rule (`srcMac && srcMac !== mac`) puts it in the relay set.
 - The other rows print no `src-mac-address`.
+
+## R1 (second US2 review): circuit-id after renewal, 2026-10-12
+
+Same lease print about 34 min after the F2 print. Lease time is 1 h, so renewals come about every
+30 min. All 3 OLT leases renewed between the prints (last-seen: #2 14m02s -> 17m38s, #6 13m26s ->
+17m03s, #7 25m40s -> 6m47s) and each still has `src-mac-address=F4:B7:8D:A6:80:88` plus
+`agent-circuit-id="OLT-9 xpon 0/1/0/4:16.3.70"`. No relayed lease without a circuit-id, so the
+Option 82 rule (cc9e475) needs no fallback. Limit: the print cannot show whether RouterOS keeps an
+old circuit-id value on a renewal.
