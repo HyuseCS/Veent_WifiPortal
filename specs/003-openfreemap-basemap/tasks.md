@@ -38,7 +38,7 @@ plan's security note.
 
 ## Phase 1: Setup
 
-- [ ] T001 Add `"maplibre-gl": "6.7.0"` and `"@maplibre/maplibre-gl-leaflet": "0.1.4"` (exact, no caret) to `dependencies` in `apps/admin/package.json` and `apps/locator/package.json`, run the install at the repo root with the CI and Dockerfile bun version: `bunx bun@1.3.14 install` (local bun is 1.4.3; `.github/workflows/ci.yml:14` and `Dockerfile:18` pin 1.3.14), then `bunx bun@1.3.14 install --frozen-lockfile` must exit 0. Commit both `package.json` files with `bun.lock`.
+- [X] T001 Add `"maplibre-gl": "6.7.0"` and `"@maplibre/maplibre-gl-leaflet": "0.1.4"` (exact, no caret) to `dependencies` in `apps/admin/package.json` and `apps/locator/package.json`, run the install at the repo root with the CI and Dockerfile bun version: `bunx bun@1.3.14 install` (local bun is 1.4.3; `.github/workflows/ci.yml:14` and `Dockerfile:18` pin 1.3.14), then `bunx bun@1.3.14 install --frozen-lockfile` must exit 0. Commit both `package.json` files with `bun.lock`.
 
 ## Phase 2: Foundational
 
