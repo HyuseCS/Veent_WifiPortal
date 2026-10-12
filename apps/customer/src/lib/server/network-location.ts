@@ -9,8 +9,7 @@ import {
 	resolveNetworkIdByApName,
 	resolveCircuitIdForMac,
 	captureHandled,
-	dropRelayMac,
-	logMacSource
+	dropRelayMac
 } from '@veent/core';
 import { db } from '$lib/server/db';
 import { network } from '$lib/server/network';
@@ -29,10 +28,6 @@ function maskIp(ip: string | null | undefined): string | null {
 	return v4 ? `${v4[1]}.${v4[2]}.*.*` : ip.replace(/[^:]+(?=:[^:]*$)/, '*'); // v4: keep /16; else mask tail
 }
 
-function clientIp(event: RequestEvent): string {
-	return event.getClientAddress().replace(/^::ffff:/, '');
-}
-
 /**
  * Resolve the device MAC. The captive-portal redirect (`?mac=`) is preferred, but the OS
  * captive popup (CNA) is a separate browser with its own cookie jar — so the stashed MAC
@@ -43,20 +38,13 @@ function clientIp(event: RequestEvent): string {
  */
 export async function resolveMac(event: RequestEvent): Promise<string | null> {
 	const fromPortal = await dropRelayMac(network, getPortalContext(event)?.mac);
-	if (fromPortal) {
-		logMacSource(
-			event.url.searchParams.has('mac') ? 'redirect' : 'portal-cookie',
-			fromPortal,
-			clientIp(event)
-		);
-		return fromPortal;
-	}
+	if (fromPortal) return fromPortal;
 	// The dev placeholder is ONLY safe with the stub controller, whose grant() just logs.
 	// When a real router is configured (NETWORK_CONTROLLER=mikrotik) — e.g. dev-testing
 	// through an actual hotspot — fall through to the real IP→MAC lookup.
 	if (dev && env.NETWORK_CONTROLLER !== 'mikrotik') return '02:00:00:00:00:01';
 	try {
-		const ip = clientIp(event);
+		const ip = event.getClientAddress().replace(/^::ffff:/, '');
 		const mac = await resolveDeviceMac(network, ip);
 		// Cache a fresh IP→MAC result in the portal cookie so the next load in this
 		// browser survives a transient IP change (cellular flip) without re-resolving.
@@ -164,19 +152,13 @@ export async function resolveMacForUser(
 	const device = await dropRelayMac(network, getDeviceMac(event));
 	if (device) {
 		await seedAccountMac(userId, device);
-		logMacSource('device-cookie', device, clientIp(event));
 		return { mac: device, live: false };
 	}
 	// Last resort: the durable account MAC — covers a buyer seen earlier but with no session row yet
 	// (e.g. topped up before ever binding a device) — then the most-recent session's MAC.
 	const account = await dropRelayMac(network, await accountMac(userId));
-	if (account) {
-		logMacSource('account', account, clientIp(event));
-		return { mac: account, live: false };
-	}
-	const last = await dropRelayMac(network, await lastKnownMac(userId));
-	logMacSource(last ? 'last-session' : 'none', last, clientIp(event));
-	return { mac: last, live: false };
+	if (account) return { mac: account, live: false };
+	return { mac: await dropRelayMac(network, await lastKnownMac(userId)), live: false };
 }
 
 /** Read the durable per-account MAC (`customer_profile.last_known_mac`). */

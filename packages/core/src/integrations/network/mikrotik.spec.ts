@@ -794,36 +794,6 @@ describe('wipeWalledGarden (walled-garden-wipe — scripted hard-reset teardown)
 	});
 });
 
-describe('resolveMacByIp [mac-diag] source log', () => {
-	const ip = '10.210.44.159';
-	const mac = 'F4:B7:8D:A6:80:88';
-	const diag = (spy: ReturnType<typeof vi.spyOn>) =>
-		spy.mock.calls.filter((c: unknown[]) => c[0] === '[mac-diag]');
-
-	it.each([
-		['host', 'hotspot-host'],
-		['lease', 'lease'],
-		['arp', 'arp']
-	] as const)('logs source %s for a match in that table', async (table, source) => {
-		resetRouterTable();
-		routerTable[table] = [{ address: ip, 'mac-address': mac }];
-		const info = vi.spyOn(console, 'info').mockImplementation(() => {});
-		expect(await controllerForPing().resolveMacByIp!(ip)).toBe(mac);
-		expect(diag(info)).toEqual([
-			['[mac-diag]', { source, mac: '**:**:**:**:80:88', ip: '10.210.*.*' }]
-		]);
-		info.mockRestore();
-	});
-
-	it('logs nothing on a full miss', async () => {
-		resetRouterTable();
-		const info = vi.spyOn(console, 'info').mockImplementation(() => {});
-		expect(await controllerForPing().resolveMacByIp!(ip)).toBeNull();
-		expect(diag(info)).toEqual([]);
-		info.mockRestore();
-	});
-});
-
 describe('relay MAC guard (router tables)', () => {
 	const relay = 'F4:B7:8D:A6:80:88';
 	const relayedLease = {
