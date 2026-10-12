@@ -11,34 +11,34 @@
 Settled decisions for this feature are D2, D4, D5, D7 and D8 in `.stratum/decisions.md`. This spec does
 not reopen them.
 
-## User Scenarios & Testing *(mandatory)*
+## User Scenarios & Testing _(mandatory)_
 
 ### User Story 1 - Admin maps show a basemap again (Priority: P1)
 
-An operator opens an admin page with a map: the coverage map, the location picker in the access
-point form, or the network map. Today the background map does not load, because the old basemap
+An operator opens an admin page with a map: the coverage map (`/networks`) or the network map
+(`/map`). The unused location picker component (`MapPicker.svelte`, no page shows it) gets the same
+basemap change so no old-provider code is left (D11). Today the background map does not load, because the old basemap
 provider now needs an API key. After this change, the operator sees a working street map under the
 access point pins, coverage domes and links, in light mode and in dark mode. When the operator
 switches the theme, the basemap changes to match, and the pins, view and selection stay as they are.
 
 **Why this priority**: Operators use these maps every day to place and manage access points. With
-no basemap, a pin has no street context, and the location picker cannot be used to place a new
-access point with confidence.
+no basemap, a pin has no street context, and a new access point cannot be placed with confidence.
 
-**Independent Test**: Open each of the three admin map screens in a browser, in light mode and in
+**Independent Test**: Open each of the two admin map screens in a browser, in light mode and in
 dark mode. Each shows street detail under the overlays, shows the new attribution, and makes no
 request to the old provider.
 
 **Acceptance Scenarios**:
 
-1. **Given** an operator is signed in to admin in light mode, **When** they open the coverage map,
-   the location picker or the network map, **Then** a light street basemap shows under all
+1. **Given** an operator is signed in to admin in light mode, **When** they open the coverage map
+   or the network map, **Then** a light street basemap shows under all
    overlays within the screen's normal load time.
 2. **Given** an admin map is open in light mode, **When** the operator switches to dark mode,
    **Then** the basemap changes to a dark style with no page reload, and the map keeps its center,
    zoom, pins, domes, popups and selection.
-3. **Given** the location picker is open, **When** the operator clicks a point on the basemap,
-   **Then** the picked coordinates are set exactly as before this change.
+3. **Given** the network map is open, **When** the operator double-clicks a point on the basemap
+   to drop a pin, **Then** the pin's coordinates are set exactly as before this change.
 4. **Given** the network map shows coverage domes and pins, **When** the basemap has loaded,
    **Then** the domes, pins and popups draw above the basemap, never under it.
 5. **Given** any admin map is open, **When** the operator looks at the attribution corner,
@@ -120,11 +120,11 @@ entry was added for this feature.
 - **Guest cookies or identity**: requests the locator sends to the provider carry no guest
   cookies, referrer or forwarded client address.
 
-## Requirements *(mandatory)*
+## Requirements _(mandatory)_
 
 ### Functional Requirements
 
-- **FR-001**: All admin maps (coverage map, location picker, network map) MUST show the OpenFreeMap
+- **FR-001**: All admin maps (coverage map, network map, and the unused location picker component) MUST show the OpenFreeMap
   light basemap in light mode and the OpenFreeMap dark basemap in dark mode.
 - **FR-002**: The locator map MUST show the same light and dark OpenFreeMap basemaps, following the
   locator's own theme setting.
@@ -157,12 +157,12 @@ entry was added for this feature.
 - **FR-015**: The feature MUST NOT need an API key, a new environment variable or a `.env.example`
   change.
 
-## Success Criteria *(mandatory)*
+## Success Criteria _(mandatory)_
 
 ### Measurable Outcomes
 
-- **SC-001**: On each of the 3 admin map screens and the locator, the basemap shows in light mode
-  and in dark mode: 8 of 8 screen and theme pairs pass in an agent browser pass and a human check.
+- **SC-001**: On each of the 2 admin map screens and the locator, the basemap shows in light mode
+  and in dark mode: 6 of 6 screen and theme pairs pass in an agent browser pass and a human check.
 - **SC-002**: A network log of a full session on each map screen (open, pan, zoom from street to
   country scale, theme switch) shows 0 requests to the old provider.
 - **SC-003**: A network log of a locator session shows 0 map requests (style, map data, relief
