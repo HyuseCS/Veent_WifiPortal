@@ -178,7 +178,7 @@ Tasks that touch an external service, a public endpoint or guest data: T012, T01
    cache by default.
 5. Availability: no server store (D8). Each request holds at most one tile body (largest vector tile
    is well under 1 MB) for at most 8 s. The user asked for a rate limit on `/map/*` (Validate F9).
-   Which limiter is open decision D12; the key analysis is research R14. The VM already serves the
+   D12 = B: an in-memory fixed-window counter in `mapProxy.ts`, 429 when over (research R14). The VM already serves the
    locator publicly; this adds no new amplification beyond one upstream fetch per guest request.
 6. Logging: map paths reveal where a guest looks. They are kept out of Sentry traces (server and
    browser) and are not logged (D10).
@@ -316,8 +316,9 @@ Inspect also reported F10 to F15 (low, routed here) and F16, F17 (not routed her
 - F7 fixed: T012 case 8 asserts the outgoing headers equal exactly `{ accept: '*/*' }`.
 - F8 fixed: T001 runs the install with bun 1.3.14 (`bunx bun@1.3.14`, checked to run on this
   machine) and proves `--frozen-lockfile` passes.
-- F9 changed (user): add a rate limit to `/map/*`. Open decision D12 (which limiter). Key analysis
-  in research R14. No task is written until D12 is answered.
+- F9 changed (user): add a rate limit to `/map/*`. D12 = B (user): in-memory fixed-window counter,
+  not `consumeRateLimit` (one DB row lock per tile request, and it pulls the core barrel into the
+  locator). Key analysis in research R14. Tasks T026, T027; live router check T028 before merge.
 - F10 fixed: dependency list in tasks.md (T005 after T002 to T004, T013 and T015 after T011 and
   T012).
 - F11 fixed: spec US1 AS1 points at SC-001, US3 AS1 at SC-001 and SC-004.

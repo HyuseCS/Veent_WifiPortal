@@ -13,7 +13,7 @@ task. Run unit tests with `bunx vitest run <file>` from the app dir, never `bun 
 **Security**: Tasks marked `SEC` touch a public endpoint, an external service or guest data. See the
 plan's security note.
 
-**Open**: D12 (which rate limiter for `/map/*`, Validate F9, research R14). No rate-limit task is written until it is answered. D11 = A: `MapPicker.svelte` (no importer) gets the same swap, verified by check and build only.
+**D12 = B** (user): in-memory fixed-window counter in `mapProxy.ts`, key client IP, 429 when over (research R14; tasks T026, T027). The live router check for the key is T028, before merge. D11 = A: `MapPicker.svelte` (no importer) gets the same swap, verified by check and build only.
 
 ## FR to test map
 
@@ -104,6 +104,8 @@ the locator's own address.
 - [ ] T017 [P] [US2] SEC (D10). In `apps/locator/src/hooks.server.ts`: requests with `event.url.pathname.startsWith('/map/')` skip `Sentry.sentryHandle()` and still get `securityHeaders`. In `apps/locator/src/hooks.client.ts`: `Sentry.browserTracingIntegration({ shouldCreateSpanForRequest: (u) => !new URL(u, location.href).pathname.startsWith('/map/') })`, and in the same `Sentry.init` a `beforeBreadcrumb` that returns `null` when `breadcrumb.data?.url` resolves (against `location.href`) to a path starting with `/map/` (Validate F6). No unit test (hook wiring needs Sentry and `$env`; the user accepted this, Validate F4); checked in T023.
 - [ ] T018 [US2] Locator gates, from `apps/locator`: `bunx vitest run` (all pass), `bun run check`, `bun run build`, `find build -name '*maplibre-gl-worker*'` prints a file. Then `specs/003-openfreemap-basemap/quickstart.md` section 4 curl checks against the dev server the user started. Commit T011 to T017 paths.
 - [ ] T019 [US2] Agent browser pass for the locator rows of `specs/003-openfreemap-basemap/quickstart.md` section 5: light, dark, live flip with view and open popup kept (FR-003 locator; the locator has only an empty Playwright scaffold), zero map requests off the locator host (SC-003), relief at zoom 3, repeat open from cache (US2 AS4), rapid flip, no WebGL with pan and zoom and zero page errors. Provider down (FR-013, Validate F5): `page.route('**/map/**', (r) => r.abort())`, reload, pins and the list show and work. Record the `/map/` request count and the 10 s peak from the pan and zoom step (research R14, input for D12). Record results here.
+- [ ] T026 [US2] SEC (D12). In `apps/locator/src/lib/server/mapProxy.test.ts`, add cases for `overMapLimit(ip, now)`: calls up to `MAP_LIMIT` in one 10 s window return false; the next returns true; a different IP is counted on its own; a call at window start + 10 s returns false again. Add a route case: `GET` returns 429 with `cache-control: no-store` and `retry-after: 10` when over, and makes no upstream request. Show the cases fail.
+- [ ] T027 [US2] SEC (D12). In `mapProxy.ts`: export `MAP_LIMIT` (the number from research R14, set after T019) and `overMapLimit(ip, now = Date.now())`, a fixed 10 s window over a module `Map<string, number>` that is cleared when the window rolls over. In `routes/map/[...path]/+server.ts`: `GET` reads `getClientAddress()` with `::ffff:` stripped, returns 429 (`cache-control: no-store`, `retry-after: 10`, empty body) when `overMapLimit` is true, else `proxyMap(url, request)`. Add a `// ponytail:` note: per-process memory, resets on restart, one bucket for the whole hotspot (research R14). T026 cases pass; rerun T018 gates. Commit T026 and T027 paths.
 
 **Checkpoint**: US2 done. Works on any address the locator is opened from.
 
@@ -125,6 +127,7 @@ the locator's own address.
 
 - [ ] T023 Review checks: (1) `git diff --name-only origin/staging...HEAD` lists no `.env*`, `compose*.yaml`, `Dockerfile`, `apps/admin/scripts/walled-garden-config.ts` or `apps/customer/` path (FR-015, SC-006); (2) `git diff origin/staging...HEAD -- apps | grep -n '^+.*\$env'` prints nothing (FR-015); (3) `grep -n 'console\.' apps/locator/src/lib/server/mapProxy.ts 'apps/locator/src/routes/map/[...path]/+server.ts'` prints nothing, and T017's two hooks exclude `/map/` (D10); (4) `git diff origin/staging...HEAD | grep -n '^+\s*//'` shows no new narrating comments (only `ponytail:` markers and header updates).
 - [ ] T024 Repo gates from the root: `bun run check`, `bun run test`, `bun run build`, `bunx eslint $(git diff --name-only origin/staging...HEAD -- apps)` and `bunx prettier --check $(git diff --name-only origin/staging...HEAD -- apps specs/003-openfreemap-basemap)`.
+- [ ] T028 User, before merge, on the radius network (constitution V, Validate F9): run `/ip firewall nat print where action=masquerade` and `/ip firewall nat print where action=accept`. Confirm `10.210.0.0/18` is masqueraded and no exemption covers locator port 3003. Paste the output here. If guests are not masqueraded, the key is per guest: recheck `MAP_LIMIT` against research R14 before merge.
 - [ ] T025 User: human check, `specs/003-openfreemap-basemap/quickstart.md` section 6 (SC-001). Record the ticks here.
 
 ---
@@ -133,9 +136,9 @@ the locator's own address.
 
 - T001 blocks everything.
 - US1: T002 and T003 in parallel, then T004 (same file as T003). T005 needs T001 and T002 to T004. T006 and T007 in parallel after T005. T008 after T005. T009 after T002 to T008. T010 after T009.
-- US2: T011 and T012 in parallel. T013 after T011 and T012. T014 after T013. T015 after T011 and T012, in parallel with T013. T016 after T015. T017 any time after T001. T018 after T011 to T017. T019 after T018.
-- US3: T020 before T021. T021 after T018. T022 after T021.
-- Polish: T023 and T024 after US1 and US2. T025 after T010 and T019.
+- US2: T011 and T012 in parallel. T013 after T011 and T012. T014 after T013. T015 after T011 and T012, in parallel with T013. T016 after T015. T017 any time after T001. T018 after T011 to T017. T019 after T018. T026 after T019. T027 after T026.
+- US3: T020 before T021. T021 after T027. T022 after T021.
+- Polish: T023 and T024 after US1 and US2. T025 after T010 and T019. T028 any time before merge; it does not block the build.
 - US1 and US2 share no file, so they can run in parallel after T001.
 
 ## Parallel examples

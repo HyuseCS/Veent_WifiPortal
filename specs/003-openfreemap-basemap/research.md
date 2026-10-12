@@ -162,8 +162,10 @@ adapter-node 5.5.6, playwright-core 1.61.0).
 
 ## R14. Rate limit key for `/map/*` (Validate F9)
 
-- The user asked for a rate limit on the locator pass-through. Which limiter is open decision D12.
-  This item holds for any limiter.
+- The user asked for a rate limit on the locator pass-through. D12 = B (user): an in-memory
+  fixed-window counter in `mapProxy.ts`, not `consumeRateLimit`
+  (`packages/core/src/services/rateLimit.ts`), which takes one DB transaction with a row lock per
+  call, all on one row here, and pulls the `@veent/core` barrel that the locator avoids.
 - Key: the client address (`event.getClientAddress()`, with `::ffff:` stripped, as `clientIp` in
   `apps/admin/src/lib/server/rateLimit.ts:14`). On the hotspot this is one address for every guest:
   the router masquerades `src-address=10.210.0.0/18` and the only exemption is
