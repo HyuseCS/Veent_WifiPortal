@@ -1,4 +1,6 @@
 import type { RequestEvent } from '@sveltejs/kit';
+import { dropRelayMac } from '@veent/core';
+import { network } from '$lib/server/network';
 
 /**
  * Captive-portal entry context (device MAC + router callback) capture.
@@ -81,9 +83,9 @@ function fromParams(sp: URLSearchParams): PortalContext | null {
 }
 
 /** Capture portal context from the query string into a cookie (no-op if absent). */
-export function capturePortalContext(event: RequestEvent): void {
+export async function capturePortalContext(event: RequestEvent): Promise<void> {
 	const ctx = fromParams(event.url.searchParams);
-	if (!ctx) return;
+	if (!ctx || !(await dropRelayMac(network, ctx.mac))) return;
 	event.cookies.set(PORTAL_COOKIE, JSON.stringify(ctx), {
 		path: '/',
 		httpOnly: true,
