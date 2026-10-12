@@ -229,3 +229,60 @@ apps keep separate copies, matching the existing `map.ts` comment and constituti
 ## Complexity Tracking
 
 None.
+
+## Validate
+
+Date: 2026-10-12. Verdict: CONDITIONAL
+
+| Check                     | Verdict | Findings       |
+| ------------------------- | ------- | -------------- |
+| 1. Setup and dependencies | CONCERN | F8             |
+| 2. Test coverage per FR   | CONCERN | F1, F4, F5, F7 |
+| 3. Breaking changes       | PASS    | none           |
+| 4. Security and privacy   | CONCERN | F2, F3, F6, F9 |
+
+Verified against the code: the VM is a `walled-garden ip` row with only `action=accept` and
+`dst-address` (`packages/core/src/integrations/network/mikrotik.ts:1104-1108`, `PORTAL_LAN_IPS` in
+`apps/admin/scripts/walled-garden-config.ts:113-116`). adapter-node uses `ORIGIN` for `event.url`
+(`handler.js:101`), and the `Host` header reaches the `Request`. The Sentry SvelteKit server SDK
+turns off incoming request spans, and its sampler drops HTTP client spans that have no parent, so
+skipping `sentryHandle` keeps `/map/` paths out of server traces. A plain Vite 8.0.16 SSR build of
+`maplibre-gl-worker.mjs?worker&url` exits 0 and emits a worker asset (SvelteKit build still
+unproven, T009/T018 gate it). Headless Chromium 1228 (Playwright 1.61.0) has WebGL2 with
+default args. The removed exports have 4 callers, all tasked (T006, T007, T008, T016).
+
+F1. plan.md:85, tasks.md:64, tasks.md:102 Catching an `addTo` throw does not make no-WebGL safe.
+Leaflet `_layerAdd` binds the bridge's `move`/`zoom*`/`resize` handlers before `onAdd`. maplibre
+6.7.0 throws `GPUInitializationError` in the `Map` constructor, so `_glMap` stays unset and every
+pan or zoom then throws in `_update`/`_transformGL`. quickstart.md:134-135 checks load only. ->
+In `add`, return a no-op when `document.createElement('canvas').getContext('webgl2')` is null,
+before creating the layer. Extend quickstart section 5 edge 3 to pan and zoom with no page errors.
+F2. data-model.md:40-46, plan.md:131-136, tasks.md:92 The rewrite checks only `sprite`, `glyphs`,
+`sources.*.url`, `sources.*.tiles[]`, `tiles[]`. A GeoJSON `sources.*.data` URL or a video
+`sources.*.urls[]` on a new host would reach guests unchecked, against D10. -> Also refuse (502)
+any string under `sources.*` that starts with a scheme or `//` and is not on
+`https://tiles.openfreemap.org/`. Add a T012 case 7 entry with a GeoJSON `data` on another host.
+F3. plan.md:137-141, quickstart.md:48-65, quickstart.md:151-177 FR-009 on the public HTTPS origin
+is not checked. If the proxy in front of the public locator rewrites `Host` or does not send
+`x-forwarded-proto: https`, the style holds internal or `http://` URLs and the public map is blank
+(mixed content). -> User input: how the public origin reaches the VM. Add a post-deploy step to
+T022: `curl -s https://<public origin>/map/styles/dark | grep -o '"sprite":"[^"]*"'` must start
+with `https://<public origin>/map/`.
+F4. tasks.md:104, tasks.md:126 T017 (D10 hooks) has no test that can fail. T023 only reads the
+code. -> Add `apps/locator/src/hooks.server.test.ts` before T017: mock `@sentry/sveltekit`, expect
+`sentryHandle`'s handler not called for `/map/x` and called for `/`. Or the user accepts review-only.
+F5. plan.md:31-33, tasks.md:24, tasks.md:106, quickstart.md:132-133 Locator FR-003, FR-004 and
+FR-013 ("page keeps working") rely on the manual pass. The provider-down edge case runs on admin
+only. -> Add to T019: `page.route('**/map/**', (r) => r.abort())`, reload, the pins and the list
+work. Manual-only FR-003 and FR-004 for the locator are accepted.
+F6. plan.md:145-146 `shouldCreateSpanForRequest` stops spans, not breadcrumbs. Browser fetch
+breadcrumbs for main-thread `/map/` requests (style, sprite, glyphs, relief tiles) go out with any
+later error event. -> In T017, add `beforeBreadcrumb` in `hooks.client.ts` that drops breadcrumbs
+whose `data.url` path starts with `/map/`.
+F7. tasks.md:93 T012 case 8 checks that a list of headers is absent. -> Assert the outgoing headers
+equal exactly `{ accept: '*/*' }`, so `forwarded`, `x-forwarded-host` or `cf-connecting-ip` also fail it.
+F8. tasks.md:41 Local bun is 1.4.3. CI (`.github/workflows/ci.yml:14`) and the Dockerfile
+(`Dockerfile:18`) use 1.3.14 with `--frozen-lockfile`. -> Run T001 with bun 1.3.14, or confirm
+that the CI install step passes on the PR before T009.
+F9. plan.md:169-171 Public `/map/*` has no body-size cap and no rate limit (accepted in the plan).
+-> No change unless the user wants a 502 when upstream `content-length` is over 2 MB.
