@@ -848,7 +848,8 @@ export function createMikrotikController(config: MikrotikConfig): NetworkControl
 						address: r.address ?? '',
 						hostname,
 						agentCircuitId,
-						status: r.status ?? ''
+						status: r.status ?? '',
+						srcMac: r['src-mac-address'] ? r['src-mac-address'].toUpperCase() : null
 					};
 				});
 			});

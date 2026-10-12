@@ -11,6 +11,8 @@ import {
 import { enforceOtpSendLimit, RateLimitError, retryAfterMessage } from '$lib/server/otpRateLimit';
 import { clientIp } from '$lib/server/rateLimit';
 import { getDeviceMac, getPortalContext } from '$lib/server/portal';
+import { network } from '$lib/server/network';
+import { dropRelayMac } from '@veent/core';
 
 export const load: PageServerLoad = (event) => {
 	if (event.locals.user) {
@@ -40,7 +42,10 @@ export const actions: Actions = {
 		// number can't be spammed and operator credits can't be drained. Fall back to the
 		// device cookie so a second account (whose portal cookie is gone) still carries the
 		// MAC into the pending cookie → the grant after verify can target this device.
-		const mac = getPortalContext(event)?.mac ?? getDeviceMac(event) ?? undefined;
+		const mac =
+			(await dropRelayMac(network, getPortalContext(event)?.mac)) ??
+			(await dropRelayMac(network, getDeviceMac(event))) ??
+			undefined;
 		try {
 			await enforceOtpSendLimit(phone, mac, clientIp(event));
 		} catch (error) {
