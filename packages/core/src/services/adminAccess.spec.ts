@@ -35,7 +35,7 @@ describe('relay MAC guard', () => {
 
 	it('a lease with srcMac equal to mac, srcMac null, or no circuit-id adds nothing', async () => {
 		const { dropRelayMac } = await load();
-		const hostNic = '9C:E3:74:DC:4F:4A';
+		const hostNic = '02:00:00:00:00:B2';
 		const network = {
 			listDhcpLeases: vi.fn().mockResolvedValue([
 				{ ...relayedLeases()[0], srcMac: real },
@@ -136,6 +136,43 @@ describe('relay MAC guard', () => {
 		expect(resolveMacByIp).toHaveBeenCalledTimes(1);
 		expect(await resolveDeviceMac(network, ip)).toBeNull();
 		expect(resolveMacByIp).toHaveBeenCalledTimes(2);
+	});
+
+	it('resolveDeviceMac cache hit does not return a MAC that became a relay MAC', async () => {
+		let now = 20_000_000;
+		vi.spyOn(Date, 'now').mockImplementation(() => now);
+		const { resolveDeviceMac, dropRelayMac } = await load();
+		const listDhcpLeases = vi.fn().mockResolvedValueOnce([]).mockResolvedValue(relayedLeases());
+		const network = { resolveMacByIp: vi.fn().mockResolvedValue(relay), listDhcpLeases } as never;
+		const ip = '10.99.8.32';
+		await dropRelayMac(network, real);
+		now += 4.5 * 60_000;
+		expect(await resolveDeviceMac(network, ip)).toBe(relay);
+		now += 42_000;
+		await dropRelayMac(network, real);
+		expect(listDhcpLeases).toHaveBeenCalledTimes(2);
+		expect(await resolveDeviceMac(network, ip)).toBeNull();
+	});
+
+	it('resolveDeviceMac stale fallback does not return a MAC that became a relay MAC', async () => {
+		let now = 25_000_000;
+		vi.spyOn(Date, 'now').mockImplementation(() => now);
+		const { resolveDeviceMac, dropRelayMac } = await load();
+		const listDhcpLeases = vi.fn().mockResolvedValueOnce([]).mockResolvedValue(relayedLeases());
+		const resolveMacByIp = vi
+			.fn()
+			.mockResolvedValueOnce(relay)
+			.mockRejectedValue(new Error('down'));
+		const network = { resolveMacByIp, listDhcpLeases } as never;
+		const ip = '10.99.8.33';
+		await dropRelayMac(network, real);
+		now += 4.5 * 60_000;
+		expect(await resolveDeviceMac(network, ip)).toBe(relay);
+		now += 42_000;
+		await dropRelayMac(network, real);
+		now += 90_000;
+		expect(await resolveDeviceMac(network, ip)).toBeNull();
+		expect(resolveMacByIp).toHaveBeenCalledTimes(4);
 	});
 
 	it('grantAdminAccess skips a relay MAC and grants a real one', async () => {
