@@ -9,6 +9,7 @@ import {
 	resolveNetworkIdByApName,
 	resolveCircuitIdForMac,
 	captureHandled,
+	dropRelayMac,
 	logMacSource
 } from '@veent/core';
 import { db } from '$lib/server/db';
@@ -41,7 +42,7 @@ function clientIp(event: RequestEvent): string {
  * checkout location resolver below.
  */
 export async function resolveMac(event: RequestEvent): Promise<string | null> {
-	const fromPortal = getPortalContext(event)?.mac;
+	const fromPortal = await dropRelayMac(network, getPortalContext(event)?.mac);
 	if (fromPortal) {
 		logMacSource(
 			event.url.searchParams.has('mac') ? 'redirect' : 'portal-cookie',
@@ -160,7 +161,7 @@ export async function resolveMacForUser(
 	// are empty (docs/problems/second-account-mac-not-captured.md). Seed it onto the new account so
 	// subsequent cross-browser hops (e.g. the Maya return) have the durable per-user signal too —
 	// but only when the account has NO durable MAC yet (a fallback must not entrench over live truth).
-	const device = getDeviceMac(event);
+	const device = await dropRelayMac(network, getDeviceMac(event));
 	if (device) {
 		await seedAccountMac(userId, device);
 		logMacSource('device-cookie', device, clientIp(event));
@@ -168,12 +169,12 @@ export async function resolveMacForUser(
 	}
 	// Last resort: the durable account MAC — covers a buyer seen earlier but with no session row yet
 	// (e.g. topped up before ever binding a device) — then the most-recent session's MAC.
-	const account = await accountMac(userId);
+	const account = await dropRelayMac(network, await accountMac(userId));
 	if (account) {
 		logMacSource('account', account, clientIp(event));
 		return { mac: account, live: false };
 	}
-	const last = await lastKnownMac(userId);
+	const last = await dropRelayMac(network, await lastKnownMac(userId));
 	logMacSource(last ? 'last-session' : 'none', last, clientIp(event));
 	return { mac: last, live: false };
 }

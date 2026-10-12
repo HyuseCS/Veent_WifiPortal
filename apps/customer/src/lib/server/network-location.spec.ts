@@ -45,7 +45,20 @@ vi.mock('$lib/server/db', () => {
 		}
 	};
 });
-vi.mock('$lib/server/network', () => ({ network: {} }));
+vi.mock('$lib/server/network', () => ({
+	network: {
+		listDhcpLeases: vi.fn(async () => [
+			{
+				mac: '2E:47:8F:2D:35:8F',
+				address: '10.210.44.159',
+				hostname: null,
+				agentCircuitId: null,
+				status: 'bound',
+				srcMac: 'F4:B7:8D:A6:80:88'
+			}
+		])
+	}
+}));
 vi.mock('$lib/server/portal', () => ({
 	getPortalContext: vi.fn(),
 	getDeviceMac: vi.fn(),
@@ -57,14 +70,20 @@ vi.mock('@veent/core', async (importOriginal) => {
 		...actual,
 		captureHandled: vi.fn(),
 		resolveNetworkIdByApName: vi.fn(),
+		resolveCircuitIdForMac: vi.fn(actual.resolveCircuitIdForMac),
 		logMacSource: vi.fn()
 	};
 });
 
 import { resolveMacTrusted, resolveMacForUser, resolveCheckoutLocation } from './network-location';
-import { getPortalContext, getDeviceMac } from '$lib/server/portal';
+import { getPortalContext, getDeviceMac, persistResolvedMac } from '$lib/server/portal';
 import { network } from '$lib/server/network';
-import { captureHandled, resolveNetworkIdByApName, logMacSource } from '@veent/core';
+import {
+	captureHandled,
+	resolveNetworkIdByApName,
+	resolveCircuitIdForMac,
+	logMacSource
+} from '@veent/core';
 
 const SERVER_MAC = 'AA:BB:CC:DD:EE:01';
 const evt = { getClientAddress: () => '10.0.0.5', url: new URL('http://portal/') } as never;
@@ -349,5 +368,76 @@ describe('resolveMacForUser - [mac-diag] source log (FR-001, FR-004)', () => {
 		} finally {
 			delete (network as unknown as Record<string, unknown>).resolveMacByIp;
 		}
+	});
+});
+
+describe('relay MAC guard in MAC resolution (FR-009 to FR-012, FR-016b)', () => {
+	const RELAY = 'F4:B7:8D:A6:80:88';
+	const REAL = 'AA:BB:CC:DD:EE:07';
+	const relEvt = (ip: string, qs = '') =>
+		({ getClientAddress: () => ip, url: new URL(`http://portal/${qs}`) }) as never;
+	const noRelayWrites = () =>
+		expect(updateCalls.filter((c) => JSON.stringify(c.set).includes(RELAY))).toEqual([]);
+	beforeEach(() => {
+		vi.clearAllMocks();
+		resetDb();
+		(getDeviceMac as ReturnType<typeof vi.fn>).mockReturnValue(undefined);
+	});
+
+	it.each([
+		['?mac= redirect', '?mac=F4-B7-8D-A6-80-88', '10.99.5.1'],
+		['portal cookie', '', '10.99.5.2']
+	])('relay MAC from the %s is skipped and the router is asked', async (_n, qs, ip) => {
+		(getPortalContext as ReturnType<typeof vi.fn>).mockReturnValue({ mac: RELAY });
+		const resolveMacByIp = vi.fn().mockResolvedValue(REAL);
+		Object.assign(network, { resolveMacByIp });
+		try {
+			const r = await resolveMacForUser(relEvt(ip, qs), 'u1');
+			expect(r).toEqual({ mac: REAL, live: true });
+			expect(resolveMacByIp).toHaveBeenCalled();
+			expect(persistResolvedMac).not.toHaveBeenCalledWith(expect.anything(), RELAY);
+			noRelayWrites();
+		} finally {
+			delete (network as unknown as Record<string, unknown>).resolveMacByIp;
+		}
+	});
+
+	it('relay device cookie is skipped, not seeded, and the account MAC is used', async () => {
+		(getPortalContext as ReturnType<typeof vi.fn>).mockReturnValue({});
+		(getDeviceMac as ReturnType<typeof vi.fn>).mockReturnValue(RELAY);
+		selectQueue.push([{ mac: REAL }]); // accountMac
+		const r = await resolveMacForUser(relEvt('10.99.5.3'), 'u1');
+		expect(r).toEqual({ mac: REAL, live: false });
+		expect(updateCalls).toEqual([]);
+	});
+
+	it('relay account MAC falls to last-session', async () => {
+		(getPortalContext as ReturnType<typeof vi.fn>).mockReturnValue({});
+		selectQueue.push([{ mac: RELAY }]); // accountMac
+		selectQueue.push([{ mac: REAL }]); // lastKnownMac
+		const r = await resolveMacForUser(relEvt('10.99.5.4'), 'u1');
+		expect(r).toEqual({ mac: REAL, live: false });
+		noRelayWrites();
+	});
+
+	it('relay last-session gives null', async () => {
+		(getPortalContext as ReturnType<typeof vi.fn>).mockReturnValue({});
+		selectQueue.push([]); // accountMac
+		selectQueue.push([{ mac: RELAY }]); // lastKnownMac
+		const r = await resolveMacForUser(relEvt('10.99.5.5'), 'u1');
+		expect(r).toEqual({ mac: null, live: false });
+		noRelayWrites();
+	});
+
+	it('resolveCheckoutLocation with only relay sources never asks for a circuit-id and uses the fallback tiers', async () => {
+		(getPortalContext as ReturnType<typeof vi.fn>).mockReturnValue({ mac: RELAY });
+		(getDeviceMac as ReturnType<typeof vi.fn>).mockReturnValue(RELAY);
+		selectQueue.push([{ mac: RELAY }]); // accountMac
+		selectQueue.push([{ mac: RELAY }]); // lastKnownMac
+		selectQueue.push([{ networkId: 5 }]); // active network_sessions row
+		const loc = await resolveCheckoutLocation(relEvt('10.99.5.6'), 'u1');
+		expect(resolveCircuitIdForMac).not.toHaveBeenCalled();
+		expect(loc).toEqual({ networkId: 5, apCircuitId: null, apNameSnapshot: null });
+		noRelayWrites();
 	});
 });

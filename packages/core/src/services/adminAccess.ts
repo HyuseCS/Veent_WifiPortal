@@ -36,6 +36,7 @@ export async function grantAdminAccess(
 	network: NetworkController,
 	macAddress: string
 ): Promise<void> {
+	if (!(await dropRelayMac(network, macAddress))) return;
 	await network.grant({ macAddress, durationMinutes: 0, tag: ADMIN_BYPASS_TAG });
 }
 
@@ -132,6 +133,7 @@ export async function resolveDeviceMac(
 				'resolveMacByIp'
 			);
 			if (mac) {
+				if (!(await dropRelayMac(network, mac))) return null;
 				macByIpCache.set(ip, { mac, at: now });
 				return mac;
 			}
@@ -149,4 +151,39 @@ export async function resolveDeviceMac(
 		return cached.mac;
 	}
 	return null;
+}
+
+const RELAY_SET_TTL_MS = 5 * 60_000;
+let relayMacs = new Set<string>();
+let relayLoadedAt = -Infinity;
+let relayRead: Promise<void> | null = null;
+
+async function loadRelayMacs(network: NetworkController): Promise<void> {
+	// ponytail: a failed read also waits 5 min to retry, so a down router costs one 2.5 s wait per 5 min
+	relayLoadedAt = Date.now();
+	if (!network.listDhcpLeases) return;
+	try {
+		const leases = await withTimeout(
+			network.listDhcpLeases(),
+			RESOLVE_TIMEOUT_MS,
+			'listDhcpLeases'
+		);
+		relayMacs = new Set(
+			leases.flatMap((l) => (l.srcMac && l.srcMac !== l.mac ? [l.srcMac.toUpperCase()] : []))
+		);
+	} catch {
+		return;
+	}
+}
+
+export async function dropRelayMac(
+	network: NetworkController,
+	mac: string | null | undefined
+): Promise<string | null> {
+	if (!mac) return null;
+	if (relayRead || Date.now() - relayLoadedAt >= RELAY_SET_TTL_MS) {
+		relayRead ??= loadRelayMacs(network).finally(() => (relayRead = null));
+		await relayRead;
+	}
+	return relayMacs.has(mac.toUpperCase()) ? null : mac;
 }

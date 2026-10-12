@@ -823,3 +823,44 @@ describe('resolveMacByIp [mac-diag] source log', () => {
 		info.mockRestore();
 	});
 });
+
+describe('relay MAC guard (router tables)', () => {
+	const relay = 'F4:B7:8D:A6:80:88';
+	const relayedLease = {
+		address: '10.210.44.159',
+		'mac-address': '2E:47:8F:2D:35:8F',
+		'src-mac-address': relay
+	};
+
+	it('listDhcpLeases maps src-mac-address UPPERCASED, empty or absent to null', async () => {
+		resetRouterTable();
+		routerTable.lease = [
+			{
+				address: '10.0.0.1',
+				'mac-address': 'AA:AA:AA:AA:AA:01',
+				'src-mac-address': 'f4:b7:8d:a6:80:88'
+			},
+			{ address: '10.0.0.2', 'mac-address': 'AA:AA:AA:AA:AA:02', 'src-mac-address': '' },
+			{ address: '10.0.0.3', 'mac-address': 'AA:AA:AA:AA:AA:03' }
+		];
+		const leases = await controllerForPing().listDhcpLeases!();
+		expect(leases.map((l) => l.srcMac)).toEqual([relay, null, null]);
+	});
+
+	it.each([
+		['host', '10.99.1.1'],
+		['lease', '10.99.1.2'],
+		['arp', '10.99.1.3']
+	] as const)(
+		'resolveDeviceMac returns null for a relay MAC from the %s table',
+		async (table, ip) => {
+			vi.resetModules();
+			const { resolveDeviceMac } = await import('../../services/adminAccess');
+			resetRouterTable();
+			routerTable.lease = [relayedLease];
+			if (table === 'lease') routerTable.lease.push({ address: ip, 'mac-address': relay });
+			else routerTable[table] = [{ address: ip, 'mac-address': relay }];
+			expect(await resolveDeviceMac(controllerForPing(), ip)).toBeNull();
+		}
+	);
+});
