@@ -169,7 +169,7 @@ async function loadRelayMacs(network: NetworkController): Promise<void> {
 			'listDhcpLeases'
 		);
 		const fresh = new Set(
-			leases.flatMap((l) => (l.srcMac && l.srcMac !== l.mac ? [l.srcMac] : []))
+			leases.flatMap((l) => (l.srcMac && l.agentCircuitId && l.srcMac !== l.mac ? [l.srcMac] : []))
 		);
 		if (fresh.size) relayMacs = fresh;
 	} catch {

@@ -829,7 +829,8 @@ describe('relay MAC guard (router tables)', () => {
 	const relayedLease = {
 		address: '10.210.44.159',
 		'mac-address': '2E:47:8F:2D:35:8F',
-		'src-mac-address': relay
+		'src-mac-address': relay,
+		'agent-circuit-id': 'OLT-9 xpon 0/1/0/4:16.3.70'
 	};
 
 	it('listDhcpLeases maps src-mac-address UPPERCASED, empty or absent to null', async () => {

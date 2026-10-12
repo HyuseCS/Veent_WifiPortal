@@ -7,7 +7,7 @@ vi.mock('$lib/server/network', () => ({
 				mac: '2E:47:8F:2D:35:8F',
 				address: '10.210.44.159',
 				hostname: null,
-				agentCircuitId: null,
+				agentCircuitId: 'OLT-9 xpon 0/1/0/4:16.3.70',
 				status: 'bound',
 				srcMac: 'F4:B7:8D:A6:80:88'
 			}

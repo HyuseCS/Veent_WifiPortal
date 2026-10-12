@@ -40,7 +40,7 @@ describe('relay MAC guard', () => {
 			mac: real,
 			address: '10.210.44.159',
 			hostname: null,
-			agentCircuitId: null,
+			agentCircuitId: 'OLT-9 xpon 0/1/0/4:16.3.70',
 			status: 'bound',
 			srcMac: relay
 		}
@@ -56,16 +56,19 @@ describe('relay MAC guard', () => {
 		expect(await dropRelayMac(network, null)).toBeNull();
 	});
 
-	it('a lease with srcMac equal to mac or null adds nothing', async () => {
+	it('a lease with srcMac equal to mac, srcMac null, or no circuit-id adds nothing', async () => {
 		const { dropRelayMac } = await load();
+		const hostNic = '9C:E3:74:DC:4F:4A';
 		const network = {
 			listDhcpLeases: vi.fn().mockResolvedValue([
 				{ ...relayedLeases()[0], srcMac: real },
-				{ ...relayedLeases()[0], mac: relay, srcMac: null }
+				{ ...relayedLeases()[0], mac: relay, srcMac: null },
+				{ ...relayedLeases()[0], mac: '00:15:5D:DD:79:05', srcMac: hostNic, agentCircuitId: null }
 			])
 		} as never;
 		expect(await dropRelayMac(network, real)).toBe(real);
 		expect(await dropRelayMac(network, relay)).toBe(relay);
+		expect(await dropRelayMac(network, hostNic)).toBe(hostNic);
 	});
 
 	it('reads listDhcpLeases once per 5 min', async () => {
