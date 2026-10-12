@@ -30,7 +30,9 @@ export async function dropRelayMac(
 
 - Each `DhcpLeaseEntry` may carry `srcMac` (RouterOS `src-mac-address`, uppercased, empty → null).
 
-## `logMacSource(source, mac, ip)` (P1, temporary, removed in P2 by FR-016)
+## `logMacSource(source, mac, ip)` (P1, temporary, REMOVED in T030, 51453be, FR-016)
+
+Historical. This helper no longer exists.
 
 File: `packages/core/src/integrations/network/types.ts`
 

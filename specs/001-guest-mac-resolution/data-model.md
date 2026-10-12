@@ -15,9 +15,12 @@ Optional so existing lease fixtures and the stub (`stub.ts`, returns `[]`) need 
 ## Relay MAC set (in memory, `packages/core/src/services/adminAccess.ts`)
 
 - Value: `Set<string>` of UPPERCASED MACs.
-- Rule: `srcMac` of every lease where `srcMac` is not null and `srcMac !== mac`.
+- Rule: `srcMac` of every lease where `srcMac` is set, `agentCircuitId` is set (Option 82) and
+  `srcMac !== mac`. Without the circuit-id test, the VM host NIC (a lease with `src-mac-address` and no
+  circuit-id, notes.md "F2") would count as a relay.
 - Lifetime: rebuilt at most every 5 minutes. One in-flight read is shared.
-- Failure: read error, timeout (2.5 s), or no `listDhcpLeases` → keep the last set (empty at boot).
+- Failure: read error, timeout (2.5 s), no `listDhcpLeases`, or a successful read with no relayed
+  lease → keep the last set (empty at boot).
   Never throws.
 
 ## MAC source (log label, temporary, P1 only)

@@ -6,12 +6,15 @@
 
 ## Summary
 
-P1 adds one temporary `[mac-diag]` log line per MAC resolution, through one core helper. The
+P1 added one temporary `[mac-diag]` log line per MAC resolution, through one core helper. The
 committed helper masks the IP. The staged VM gets a one-line uncommitted edit that prints the raw IP.
-One phone test names the source of the relay MAC.
+One phone test names the source of the relay MAC. The log is removed in T030.
+
+Dev and e2e: the stub controller returns no leases, so the relay guard is a no-op there. Unit tests and
+the live P2 test are the guard coverage (research R8).
 
 P2 adds one core guard, `dropRelayMac`. It reads relay MACs from the DHCP lease table (lease
-`src-mac-address` that differs from the lease MAC), caches them for 5 minutes, and drops a relay MAC
+`src-mac-address` that differs from the lease MAC, on leases with an Option 82 circuit-id), caches them for 5 minutes, and drops a relay MAC
 to "no MAC". The guard sits at the existing chokepoints: core `resolveDeviceMac` and
 `grantAdminAccess`, customer `resolveMac` / `resolveMacForUser`, `capturePortalContext`, and the login
 action. Then the source named in P1 is fixed (FR-014, placeholder until P1 ends) and the diagnostic

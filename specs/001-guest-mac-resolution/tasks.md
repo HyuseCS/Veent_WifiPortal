@@ -51,7 +51,7 @@ None. US1 and US2 share no new code except files edited in order below.
 - [x] T010 [US1] Run `bun run check`, `bunx prettier --check .`, `bunx eslint .`, `bun run test`, `bun run build`. Commit T002-T009 paths (`test` + `feat` or one `chore(diag)` commit).
 - [x] T011 [US1] Write the exact one-line VM edit (a `sed -i` on `packages/core/src/integrations/network/types.ts` that makes `logMacSource` print the raw IP) into `specs/001-guest-mac-resolution/quickstart.md` step P1-3. Prove it on a scratch copy in the session scratchpad: `diff` shows one changed line. Commit `quickstart.md`.
 - [x] T012 [US1] (user) quickstart P1-1: router lease, ARP, host prints for `10.210.44.159`. Confirms the `src-mac-address` field and value in the CLI (done by the 2026-10-06 CLI print). The API key is proven live by the negative check in T029.
-- [X] T013 [US1] (user) FR-015: quickstart P1-1b. On the live router, time a full `/ip dhcp-server lease print` over the API (the read `dropRelayMac` makes) and record the time in `specs/001-guest-mac-resolution/notes.md`. If it is near or above 2.5 s, raise the relay-read timeout in T022 to about 2x the measured time. Must be done before T021 and T022.
+- [x] T013 [US1] (user) FR-015: quickstart P1-1b. On the live router, time a full `/ip dhcp-server lease print` over the API (the read `dropRelayMac` makes) and record the time in `specs/001-guest-mac-resolution/notes.md`. If it is near or above 2.5 s, raise the relay-read timeout in T022 to about 2x the measured time. Must be done before T021 and T022.
 - [x] T014 [US1] (user) quickstart P1-2, P1-3: VM checkout plus the local full-IP edit, build, restart.
 - [x] T015 [US1] (user runs, agent reads logs) quickstart P1-4, P1-5: 4 dashboard and 4 checkout loads. Write `specs/001-guest-mac-resolution/notes.md` with: the named source(s) for every `80:88` line (FR-005, SC-001), the router facts from T012, and the proposed FR-014 fix. Log lines copied into notes keep only the test phone IP. Commit `notes.md`.
 
@@ -91,7 +91,7 @@ None. US1 and US2 share no new code except files edited in order below.
 
 ## Phase 5: Polish
 
-- [X] T030 FR-016, SC-005: remove `logMacSource` and every call: `packages/core/src/integrations/network/types.ts`, `packages/core/src/integrations/network/mikrotik.ts`, `packages/core/src/services/adminAccess.ts`, `apps/customer/src/lib/server/network-location.ts`. Delete `packages/core/src/integrations/network/types.spec.ts`. Remove the P1 tests from T003, T004, T005 in `mikrotik.spec.ts`, `adminAccess.spec.ts`, `network-location.spec.ts`. `grep -rn "mac-diag\|logMacSource" apps packages --exclude-dir=node_modules` returns nothing. Gates, commit.
+- [x] T030 FR-016, SC-005: remove `logMacSource` and every call: `packages/core/src/integrations/network/types.ts`, `packages/core/src/integrations/network/mikrotik.ts`, `packages/core/src/services/adminAccess.ts`, `apps/customer/src/lib/server/network-location.ts`. Delete `packages/core/src/integrations/network/types.spec.ts`. Remove the P1 tests from T003, T004, T005 in `mikrotik.spec.ts`, `adminAccess.spec.ts`, `network-location.spec.ts`. `grep -rn "mac-diag\|logMacSource" apps packages --exclude-dir=node_modules` returns nothing. Gates, commit.
 - [x] T031 SC-006: run all gates and admin e2e on the final tree. User runs quickstart P2-5 on the VM. Hand off for the PR.
 
 ---

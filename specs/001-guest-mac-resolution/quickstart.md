@@ -70,11 +70,17 @@ Expected: one `[mac-diag]` line per resolution, each with a `source`. Every line
 
 ## P2: guard and fix
 
-P2-1. On the VM, drop the local edit, then update:
+P2-1. On the VM, drop the local edit, then update. The VM cannot reach GitHub, so move the code with
+a git bundle. The repo is owned by root, so use `sudo git`.
 
 ```sh
-git checkout -- packages/core/src/integrations/network/types.ts
-git pull
+# dev box
+git bundle create /tmp/mac.bundle 99f9fc9..HEAD
+scp /tmp/mac.bundle <vm>:/tmp/
+# VM
+sudo git checkout -- packages/core/src/integrations/network/types.ts
+sudo git fetch /tmp/mac.bundle HEAD
+sudo git merge --ff-only FETCH_HEAD
 ```
 
 Build and restart.
@@ -112,4 +118,4 @@ Expected: the dashboard and the `[mac-diag]` lines do not use `80:88`, and neith
 `veent_portal` nor the `veent_device` cookie holds it. This proves the guard reads the real
 `src-mac-address` key through the API.
 
-P2-5. After FR-016 removal, on the VM: `grep -c '\[mac-diag\]'` on new log output returns 0 (SC-005).
+P2-5. After FR-016 removal (T030), with real traffic since the restart, on the VM: `grep -c '\[mac-diag\]'` on new log output returns 0 (SC-005).

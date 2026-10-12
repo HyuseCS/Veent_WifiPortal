@@ -36,11 +36,14 @@ All findings are from the code on branch `fix/olt-relay-mac-resolution` (off `st
 
 ## R2. Relay MAC detection (FR-006)
 
-- Decision: a relay MAC is `srcMac` of any lease where `srcMac` is set and differs from the lease
-  `mac`. Read from `listDhcpLeases`. Add `srcMac?: string | null` to `DhcpLeaseEntry`, mapped from the
+- Decision: a relay MAC is `srcMac` of any lease where `srcMac` is set, `agentCircuitId` is set (DHCP
+  Option 82) and `srcMac` differs from the lease `mac`. Read from `listDhcpLeases`. Add `srcMac?: string | null` to `DhcpLeaseEntry`, mapped from the
   RouterOS lease field `src-mac-address` (uppercased, empty to null).
 - Rationale: on a relayed lease the DHCP packet comes from the relay, so the source MAC is the relay
   and `mac-address` is the client. On a direct (bridged) lease both are equal. No config list.
+- Why the circuit-id test: the 2026-10-12 lease print (notes.md "F2") showed the VM's own lease with
+  `src-mac-address` = the VM host NIC and no circuit-id. `srcMac !== mac` alone put that NIC in the
+  relay set. FR-006 still holds: "relayed" means "carries an Option 82 circuit-id".
 - Today `listDhcpLeases` (`mikrotik.ts:834`) does NOT expose `src-mac-address`. It maps only
   `mac-address`, `address`, `host-name`, `agent-circuit-id`, `status`.
 - Not verified: the field key `src-mac-address` on the live RouterOS v6 router, and that its value on
@@ -54,12 +57,14 @@ All findings are from the code on branch `fix/olt-relay-mac-resolution` (off `st
 
 - Decision: one module-level cache in `adminAccess.ts`, refreshed at most every 5 minutes. The
   in-flight promise is cached so parallel requests share one lease read. The read is bounded with
-  the existing `withTimeout` (2.5 s). On error or a controller without `listDhcpLeases`, keep the
+  the existing `withTimeout` (2.5 s). On error, timeout, a controller without `listDhcpLeases`, or a successful read that finds no
+  relayed lease, keep the
   last set (empty at boot) and wait for the next TTL.
 - Rationale: relay MACs change almost never. A stale set is harmless (a relay MAC never becomes a
   guest MAC). Worst case is one 2.5 s stall per 5 minutes during a router outage. The health cron's
   lease read runs in a different job, so it cannot feed this cache.
-- FR-015 (fail open, keep the last set): on a read error or timeout the last loaded set is used.
+- FR-015 (fail open, keep the last set): on a read error or timeout the last loaded set is used. A successful read with no relayed lease
+  also keeps the last set (`if (fresh.size) relayMacs = fresh`, `adminAccess.ts:168`).
   With no set loaded, every MAC passes, the router lookup result included.
 - The 2.5 s timeout is not measured for a full lease print. Task T013 times it on the live router.
   If needed, T022 raises the timeout.
@@ -80,6 +85,8 @@ All findings are from the code on branch `fix/olt-relay-mac-resolution` (off `st
 
 ## R6. Diagnostic log for P1 (FR-001 to FR-004)
 
+Temporary. Removed in T030 (51453be, FR-016); no `[mac-diag]` code remains.
+
 - Decision: one temporary core helper `logMacSource(source, mac, ip)` in
   `packages/core/src/integrations/network/types.ts` (exported through `@veent/core`). It writes
   `console.info('[mac-diag]', { source, mac, ip })`, MAC masked to the last two octets.
@@ -96,6 +103,12 @@ All findings are from the code on branch `fix/olt-relay-mac-resolution` (off `st
   writes no `none` line. Task T001 merges PR #115 (through `staging`) before the P1 deploy, so
   checkout goes through `resolveMacForUser` and the gap is gone.
 - Admin sign-in miss already logs `admin bypass skipped — no MAC for client ip=...`.
+
+## R8. Dev and e2e coverage of the relay guard
+
+The stub controller (`packages/core/src/integrations/network/stub.ts`) returns no leases, so the relay
+set stays empty and the guard is a no-op in dev and in admin e2e. Guard coverage comes from the unit
+tests and the live P2 test only.
 
 ## R7. Keeping the full-IP log off staging (FR-003, FR-016a)
 

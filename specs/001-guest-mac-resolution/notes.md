@@ -64,7 +64,7 @@ P2-2, test phone through `OAP3000G-FC6G`: dashboard and checkout loads, one real
 - 15 `[mac-diag]` lines (sources `redirect` and `account`). Every MAC ends `35:8F`, none `80:88`
   (SC-003).
 - `[topup] AP resolved { via: 'device-circuit-id', circuitId: 'OLT-9 xpon 0/1/0/4:16.3.70',
-  networkId: 4 }`, then `[webhook] paid { credited: true }` (SC-004).
+networkId: 4 }`, then `[webhook] paid { credited: true }` (SC-004).
 - Latest `payment_checkouts` row: `OLT-9 xpon 0/1/0/4:16.3.70`, `OAP3000G-FC6G` (SC-004).
 
 P2-3, admin sign-in with 2FA from the test phone through `OAP3000G-FC6G`. Pass (FR-013).
@@ -72,7 +72,7 @@ P2-3, admin sign-in with 2FA from the test phone through `OAP3000G-FC6G`. Pass (
 - First try: `admin bypass skipped — no MAC for client ip=10.210.0.1`. The router NAT exemption
   `no-nat-admin-port` pointed at the old dev box (`10.210.62.191:5174`), so hotspot masquerade hid
   the client IP. Fix (router, user): new rule `no-nat-admin-vm`, `chain=srcnat action=accept
-  protocol=tcp dst-address=10.210.54.133 dst-port=3002`, placed before `masquerade hotspot network`.
+protocol=tcp dst-address=10.210.54.133 dst-port=3002`, placed before `masquerade hotspot network`.
   The old rule is kept.
 - Second try: `admin bypass granted: ip=10.210.41.240 mac=2E:47:8F:2D:35:8F`.
 - `admin_bypass_device`: one row, MAC `2E:47:8F:2D:35:8F`.
@@ -89,6 +89,9 @@ P2-4, fresh Firefox private window on the guest Wi-Fi, `/dashboard?mac=F4-B7-8D-
   `portal.spec.ts` (a relay `?mac=` sets no cookie) and by the missing `redirect` source above.
 - Open: the customer app saw the real client IP here (the router lookup hit), but in P1 it always
   saw `10.210.0.1`. The new `no-nat-admin-vm` rule covers port 3002 only. Not explained yet.
+  Hypothesis, not confirmed: during P2-4 the phone still had the admin bypass from P2-3
+  (ip-binding type=bypassed), so its traffic likely skipped the hotspot path. The P2-4 result does not
+  depend on it: no `redirect` source line means the relay `?mac=` was dropped.
 
 ## F2 (US2 review): which leases carry `src-mac-address`, 2026-10-12
 

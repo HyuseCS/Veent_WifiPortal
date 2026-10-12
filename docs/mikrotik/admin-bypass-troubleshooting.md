@@ -37,6 +37,9 @@ chain was broken:
    **stale app-box IP**.
    → **Fix (router):** point the exemption at the app box's current IP:
    `/ip firewall nat set [find comment="no-nat-admin-port"] dst-address=<app-box-ip>`
+   Current VM rule (added by hand 2026-10-12, placed before `masquerade hotspot network`). The old
+   `no-nat-admin-port` rule still points at the old dev box `10.210.62.191:5174`:
+   `/ip firewall nat add chain=srcnat action=accept protocol=tcp dst-address=10.210.54.133 dst-port=3002 comment="no-nat-admin-vm"`
 
 3. **Admin `.env` pointed at a dead router address.** `MIKROTIK_HOST="10.0.0.1"` — unroutable from
    the app box — so **every** router call timed out (→ `resolveMacByIp` caught the timeout and

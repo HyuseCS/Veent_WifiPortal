@@ -121,7 +121,8 @@ Story 1 (diagnostic, temporary):
 
 Story 2 (guard and fix):
 
-- **FR-006**: A MAC MUST count as a relay MAC when it is the source MAC on any relayed DHCP lease.
+- **FR-006**: A MAC MUST count as a relay MAC when it is the source MAC on any relayed DHCP lease. "Relayed" means the lease carries an Option 82
+  circuit-id (`agent-circuit-id`).
   No config list.
 - **FR-007**: The shared guard MUST live in the shared core code, so the customer app and the
   admin app (admin-device bypass included) both use it.
