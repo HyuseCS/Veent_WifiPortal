@@ -27,7 +27,11 @@ if (dsn) {
 		integrations: [
 			Sentry.browserTracingIntegration({ shouldCreateSpanForRequest: (u) => !isMapUrl(u) })
 		],
-		beforeBreadcrumb: (b) => (typeof b.data?.url === 'string' && isMapUrl(b.data.url) ? null : b)
+		beforeBreadcrumb: (b) =>
+			(typeof b.data?.url === 'string' && isMapUrl(b.data.url)) ||
+			(b.category === 'console' && b.message?.includes('/map/'))
+				? null
+				: b
 	});
 }
 
