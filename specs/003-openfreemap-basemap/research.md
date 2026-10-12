@@ -45,6 +45,10 @@ adapter-node 5.5.6, playwright-core 1.61.0).
 - Alternatives: `event.url.origin` (rejected: works on one address only, fails FR-009). Unset
   `ORIGIN` and set adapter-node `HOST_HEADER`/`PROTOCOL_HEADER` (rejected: compose and env change,
   FR-015). Path-only URLs in the style (rejected: R3).
+- Open (Validate F3, deferred by the user): how the public origin (for example `radius.veent.io`)
+  reaches the VM is not known. If the proxy in front of it rewrites `Host` or does not send
+  `x-forwarded-proto: https`, the public style holds internal or `http://` URLs. This needs a talk
+  with devops. It blocks only the production deploy check on the public origin, not the build.
 
 ## R3. Relative URLs in a maplibre style
 
@@ -115,7 +119,8 @@ adapter-node 5.5.6, playwright-core 1.61.0).
 - Decision: no router change.
 - Rationale: `PORTAL_LAN_IPS` includes `10.210.54.133` (`apps/admin/scripts/walled-garden-config.ts:115`).
   It is provisioned as a `/ip hotspot walled-garden ip` row, which is `dst-address` only, all
-  protocols and ports (`packages/core/src/integrations/network/mikrotik.ts:1026`). Port 3003 is
+  protocols and ports (comment at `packages/core/src/integrations/network/mikrotik.ts:1027`, `add`
+  call with only `action=accept` and `dst-address` at `:1104-1108`). Port 3003 is
   therefore open before login. The live phone test confirms it (constitution V).
 
 ## R10. Logging of map paths (D10)
@@ -154,3 +159,23 @@ adapter-node 5.5.6, playwright-core 1.61.0).
   (`CoverageMap`) and `/map` (`NetworkMap`). D11 = A: MapPicker gets the same swap (T008), verified
   by check and build only. The spec now counts 2 admin screens and 6 screen and theme pairs
   (SC-001), and US1 AS3 uses NetworkMap's double-click pin drop (T004).
+
+## R14. Rate limit key for `/map/*` (Validate F9)
+
+- The user asked for a rate limit on the locator pass-through. Which limiter is open decision D12.
+  This item holds for any limiter.
+- Key: the client address (`event.getClientAddress()`, with `::ffff:` stripped, as `clientIp` in
+  `apps/admin/src/lib/server/rateLimit.ts:14`). On the hotspot this is one address for every guest:
+  the router masquerades `src-address=10.210.0.0/18` and the only exemption is
+  `no-nat-admin-vm` for port 3002 (`docs/mikrotik/admin-bypass-troubleshooting.md:33-42`). Port 3003
+  has no exemption, so the locator sees the gateway (`10.210.0.1`) for all hotspot guests. This is
+  read from the docs, not from a live `/ip firewall nat print` (constitution V asks for a live check
+  of router data). The public path has no `ADDRESS_HEADER` for the locator (`compose.prod.yaml:87-98`),
+  so all public traffic shares the proxy's address too (F3 open).
+- So in practice the key gives one bucket for the whole hotspot. The limit is a cap on the total
+  map load from the hotspot, not a per-guest cap. A per-guest key would need a router NAT change,
+  which is out of scope.
+- Limit: set from a measurement, not a guess. T019 counts the `/map/` requests in one single-client
+  session (pan, then zoom from street level to zoom 3 and back, quickstart section 5 step 5) and the
+  peak requests in any 10 s. The limit is that peak, times the expected number of guests on the
+  map at once, times 2 as margin. The number is written here after T019.

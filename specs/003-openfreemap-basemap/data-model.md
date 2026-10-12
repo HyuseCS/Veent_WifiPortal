@@ -42,8 +42,13 @@ TileJSON: `tiles[]`.
 
 Each value must start with `https://tiles.openfreemap.org/`. It becomes `<origin>/map/<rest>`.
 Placeholders such as `{z}`, `{fontstack}` and `{range}` stay as they are. Any other value in these
-fields refuses the whole response with 502. All other fields (attribution, description, layers)
-are passed through unchanged.
+fields refuses the whole response with 502.
+
+Also, every other string, or string in an array, directly under a `sources.*` object (for example
+GeoJSON `data`, video or image `urls[]`) that is an absolute URL (starts with a scheme or `//`)
+follows the same rule: a provider URL is rewritten, any other host refuses the response with 502.
+
+All other fields (attribution, description, layers) are passed through unchanged.
 
 ## Request origin
 

@@ -99,7 +99,7 @@ Use the agent's Playwright Chromium. Log every request (`page.on('request')`) fo
 Set the theme before load with `localStorage.setItem('radius-admin-theme', 'light')` (admin) or
 `'radius-locator-theme'` (locator), then reload.
 
-Screens (3 screens, 6 screen and theme pairs, SC-001): admin `http://localhost:5173/networks`
+Screens (3 screens, 6 screen and theme pairs, SC-001): admin `http://localhost:5174/networks`
 (CoverageMap) and `/map` (NetworkMap), locator `http://localhost:5172/`. `MapPicker.svelte` is on no
 screen (D11) and is not part of this pass.
 (Use the admin dev URL the user's server prints if the port differs.)
@@ -122,6 +122,8 @@ After the session:
 - Locator: zero requests to any host other than `localhost:5172` for map parts (style, `planet`,
   tiles, `natural_earth`, fonts, sprites). Zero to `tiles.openfreemap.org` or `cartocdn`. Relief
   requests (`/map/natural_earth/...`) appear at zoom 3 or lower and return 200.
+- Locator request count (research R14, input for D12): from the step 5 pan and zoom in one
+  session, record the total `/map/` requests and the highest count in any 10 s.
 - Locator repeat open: reload the page. Tile, font and sprite requests are served from the browser
   cache (DevTools "(disk cache)" or CDP `Network.requestServedFromCache`), not from the server.
 
@@ -131,8 +133,11 @@ Edge cases:
    shows and there is one canvas.
 2. Provider down, admin: `page.route('**/tiles.openfreemap.org/**', (r) => r.abort())`, reload. The
    page loads, pins and controls work, the basemap area is blank, no error page.
+   Locator: `page.route('**/map/**', (r) => r.abort())`, reload. Pins and the list show and work,
+   the basemap area is blank, no error page (FR-013 page half).
 3. No WebGL: launch Chromium with `--disable-webgl --disable-3d-apis`, open the locator and one admin
-   map. Pins, list and controls show. No error page.
+   map, with `page.on('pageerror')` recording. Pins, list and controls show. Pan, then zoom in and
+   out. No error page and zero `pageerror` events.
 4. Admin `/map`: double-click an empty map point. A new pin and the pin panel appear, as before.
 
 ## 6. Human check (SC-001)

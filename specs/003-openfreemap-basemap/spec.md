@@ -8,7 +8,7 @@
 
 **Input**: User description: "GitHub issue #118. Replace the CARTO basemap tiles (CARTO now needs an API key) in the admin app and the locator app with OpenFreeMap."
 
-Settled decisions for this feature are D2, D4, D5, D7 and D8 in `.stratum/decisions.md`. This spec does
+Settled decisions for this feature are D2, D4, D5, D7, D8, D10 and D11 in `.stratum/decisions.md`. This spec does
 not reopen them.
 
 ## User Scenarios & Testing _(mandatory)_
@@ -33,7 +33,7 @@ request to the old provider.
 
 1. **Given** an operator is signed in to admin in light mode, **When** they open the coverage map
    or the network map, **Then** a light street basemap shows under all
-   overlays within the screen's normal load time.
+   overlays (measured by SC-001).
 2. **Given** an admin map is open in light mode, **When** the operator switches to dark mode,
    **Then** the basemap changes to a dark style with no page reload, and the map keeps its center,
    zoom, pins, domes, popups and selection.
@@ -93,7 +93,8 @@ entry was added for this feature.
 **Acceptance Scenarios**:
 
 1. **Given** a real phone on the hotspot before login, **When** the guest opens the locator,
-   **Then** the basemap and the pins show, at the same quality as after login.
+   **Then** the basemap and the pins show in both themes, as after login (SC-001), within the
+   times in SC-004.
 2. **Given** the locator was opened at its pre-login address, **When** the map loads its style and
    map data, **Then** every address inside them points at that same pre-login address, so no
    request goes to a host the router blocks.

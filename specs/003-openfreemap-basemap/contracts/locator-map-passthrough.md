@@ -16,23 +16,24 @@ the public origin, `http://localhost:5172` in dev).
 
 `GET https://tiles.openfreemap.org/<path>`
 
-- Headers: `accept: */*` only. No cookie, referer, `x-forwarded-for`, user agent or client IP.
+- Headers: exactly `{ accept: '*/*' }`, nothing else. No cookie, referer, `x-forwarded-*`,
+  `forwarded`, `cf-connecting-ip`, user agent or client IP.
 - `redirect: 'error'`.
 - `signal: AbortSignal.timeout(8000)` for fetch and body.
 - Global `fetch`, not SvelteKit `event.fetch`.
 
 ## Responses
 
-| Case                                                                       | Status                                                       | Body                     | Headers set by the route                                                 |
-| -------------------------------------------------------------------------- | ------------------------------------------------------------ | ------------------------ | ------------------------------------------------------------------------ |
-| Path matches, upstream 200, no rewrite                                     | 200                                                          | Upstream bytes (decoded) | `content-type` from rule, `cache-control` from rule                      |
-| Path matches, upstream 200, rewrite rule, all fetched URLs on the provider | 200                                                          | JSON with rewritten URLs | `content-type: application/json`, `cache-control: public, max-age=86400` |
-| Rewrite rule, a fetched-URL field on another host or not a string          | 502                                                          | empty                    | `cache-control: no-store`                                                |
-| Path does not match                                                        | 404                                                          | empty                    | none; no upstream request is made                                        |
-| Upstream 404                                                               | 404                                                          | empty                    | `cache-control: no-store`                                                |
-| Upstream other non-2xx, network error, redirect, bad JSON                  | 502                                                          | empty                    | `cache-control: no-store`                                                |
-| Timeout (8 s)                                                              | 504                                                          | empty                    | `cache-control: no-store`                                                |
-| Method other than GET or HEAD                                              | 405 (SvelteKit) or 403 (SvelteKit CSRF check for form posts) | SvelteKit default        | no upstream request is made                                              |
+| Case                                                                                                    | Status                                                       | Body                     | Headers set by the route                                                 |
+| ------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ | ------------------------ | ------------------------------------------------------------------------ |
+| Path matches, upstream 200, no rewrite                                                                  | 200                                                          | Upstream bytes (decoded) | `content-type` from rule, `cache-control` from rule                      |
+| Path matches, upstream 200, rewrite rule, all fetched URLs on the provider                              | 200                                                          | JSON with rewritten URLs | `content-type: application/json`, `cache-control: public, max-age=86400` |
+| Rewrite rule, a fetched-URL field or an absolute URL under `sources.*` on another host, or not a string | 502                                                          | empty                    | `cache-control: no-store`                                                |
+| Path does not match                                                                                     | 404                                                          | empty                    | none; no upstream request is made                                        |
+| Upstream 404                                                                                            | 404                                                          | empty                    | `cache-control: no-store`                                                |
+| Upstream other non-2xx, network error, redirect, bad JSON                                               | 502                                                          | empty                    | `cache-control: no-store`                                                |
+| Timeout (8 s)                                                                                           | 504                                                          | empty                    | `cache-control: no-store`                                                |
+| Method other than GET or HEAD                                                                           | 405 (SvelteKit) or 403 (SvelteKit CSRF check for form posts) | SvelteKit default        | no upstream request is made                                              |
 
 Never forwarded from upstream: `content-encoding`, `content-length`, `set-cookie`, `etag`, any other
 header. `hooks.server.ts` adds its usual security headers (`X-Content-Type-Options: nosniff`,
@@ -41,4 +42,4 @@ header. `hooks.server.ts` adds its usual security headers (`X-Content-Type-Optio
 ## Not logged
 
 No `console.*` in the route. `/map/` requests skip `Sentry.sentryHandle()` (server) and create no
-browser tracing span (client).
+browser tracing span and no breadcrumb (client).

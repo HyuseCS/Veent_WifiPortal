@@ -29,8 +29,9 @@ leaflet ^1.9.3). Admin also keeps `leaflet.markercluster`.
 
 **Testing**: Vitest 4 `server` project (node) for unit tests, run with `bunx vitest run <file>`
 from the app dir. Admin Playwright e2e (`bun run test:e2e` in `apps/admin`, own preview server and
-throwaway DB). Locator has no e2e harness, so its browser behaviour is checked by the agent
-browser pass and the human check (quickstart).
+throwaway DB). The locator has only an empty Playwright scaffold (`apps/locator/playwright.config.ts`,
+no tests, no DB seed, not run in CI), so its browser behaviour is checked by the agent browser pass
+and the human check (quickstart).
 
 **Target Platform**: Admin in desktop browsers. Locator in phone browsers, including a phone on the
 hotspot before login. Locator server: Node 22 container on VM `10.210.54.133`, port 3003.
@@ -49,19 +50,19 @@ paths (D10).
 
 _GATE: checked before Phase 0 and again after Phase 1._
 
-| Rule                                                     | Status                     | Note                                                                                                                                                                                                                                               |
-| -------------------------------------------------------- | -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| I. Admin scope first                                     | Pass                       | Locator work is in scope because issue #118 names it (spec Assumptions). No customer-app change.                                                                                                                                                   |
-| II. One schema                                           | Pass                       | No schema change.                                                                                                                                                                                                                                  |
-| III. Auth isolation                                      | Pass                       | No auth code touched. No cross-app import: each app gets its own copy of the basemap helper, as `apps/locator/src/lib/map.ts` already does.                                                                                                        |
-| IV. High-risk paths                                      | Pass                       | No payment, credit, grant, webhook, auth or permission code. The new public route is an external-service call: tests first (T012) and a security note below.                                                                                       |
-| V. Captive portal verified live                          | Pass, with a required gate | No walled-garden, probe or RouterOS change. The VM IP is a `walled-garden ip` row (all protocols, `packages/core/src/integrations/network/mikrotik.ts:1026`), so port 3003 is open before login. Live pre-login phone test is still a task (T022). |
-| VI. Simplicity                                           | Pass                       | One helper per app replaces three copies of tile-layer plus observer code. No server cache, no config, no new env.                                                                                                                                 |
-| bun only                                                 | Pass                       | `bun install`, `bunx vitest`, `bun run`.                                                                                                                                                                                                           |
-| Env via `$env/dynamic/*`                                 | Pass                       | No env read added.                                                                                                                                                                                                                                 |
-| Test first                                               | Pass                       | Every FR has a failing test task before its build task (tasks.md). FR-014 is a live test by nature.                                                                                                                                                |
-| Browser-visible change needs agent pass plus human check | Pass                       | Quickstart sections 3 and 4.                                                                                                                                                                                                                       |
-| Agents do not start dev servers                          | Pass                       | Quickstart asks the user to start the locator dev server. The admin e2e harness starts its own preview server, as it does today.                                                                                                                   |
+| Rule                                                     | Status                     | Note                                                                                                                                                                                                                                                                                      |
+| -------------------------------------------------------- | -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| I. Admin scope first                                     | Pass                       | Locator work is in scope because issue #118 names it (spec Assumptions). No customer-app change.                                                                                                                                                                                          |
+| II. One schema                                           | Pass                       | No schema change.                                                                                                                                                                                                                                                                         |
+| III. Auth isolation                                      | Pass                       | No auth code touched. No cross-app import: each app gets its own copy of the basemap helper, as `apps/locator/src/lib/map.ts` already does.                                                                                                                                               |
+| IV. High-risk paths                                      | Pass                       | No payment, credit, grant, webhook, auth or permission code. The new public route is an external-service call: tests first (T012) and a security note below.                                                                                                                              |
+| V. Captive portal verified live                          | Pass, with a required gate | No walled-garden, probe or RouterOS change. The VM IP is a `walled-garden ip` row (all protocols: comment at `packages/core/src/integrations/network/mikrotik.ts:1027`, `add` call at `:1104-1108`), so port 3003 is open before login. Live pre-login phone test is still a task (T022). |
+| VI. Simplicity                                           | Pass                       | One helper per app replaces three copies of tile-layer plus observer code. No server cache, no config, no new env.                                                                                                                                                                        |
+| bun only                                                 | Pass                       | `bun install`, `bunx vitest`, `bun run`.                                                                                                                                                                                                                                                  |
+| Env via `$env/dynamic/*`                                 | Pass                       | No env read added.                                                                                                                                                                                                                                                                        |
+| Test first                                               | Pass                       | Every FR has a failing test task before its build task (tasks.md). FR-014 is a live test by nature.                                                                                                                                                                                       |
+| Browser-visible change needs agent pass plus human check | Pass                       | Quickstart sections 3 and 4.                                                                                                                                                                                                                                                              |
+| Agents do not start dev servers                          | Pass                       | Quickstart asks the user to start the locator dev server. The admin e2e harness starts its own preview server, as it does today.                                                                                                                                                          |
 
 Post-design re-check: no change. Complexity Tracking is empty.
 
@@ -82,7 +83,11 @@ Post-design re-check: no change. Complexity Tracking is empty.
      `L.maplibreGL({ style: styleUrl(theme), attributionControl: { customAttribution: BASEMAP_ATTRIBUTION } })`,
      adds it to the map, and starts a `data-theme` MutationObserver that calls
      `layer.getMaplibreMap().setStyle(styleUrl(theme))`. `cleanup` disconnects the observer.
-     If `addTo` throws (no WebGL), `add` returns a no-op cleanup so pins and controls still work.
+     No WebGL2: `add` first runs `document.createElement('canvas').getContext('webgl2')`. When it
+     is `null`, `add` returns a no-op cleanup and creates no layer, so pins and controls still work.
+     The check must come before the layer exists: Leaflet binds the bridge's `move`/`zoom*`/`resize`
+     handlers before `onAdd`, and maplibre 6.7.0 throws in its `Map` constructor, so a caught
+     `addTo` throw leaves handlers that throw on every pan and zoom (Validate F1).
 2. Each map (`CoverageMap.svelte`, `networkMap.controller.ts`, and the unused `MapPicker.svelte`, D11)
    removes its `L.tileLayer` and its observer, sets `maxZoom: 19` on `L.map(...)` (it lived on the
    removed tile layer; without it Leaflet zoom is unbounded), and calls
@@ -132,7 +137,10 @@ Post-design re-check: no change. Complexity Tracking is empty.
      `sprite` (string, or array of `{ url }`), `glyphs`, `sources.*.url`, `sources.*.tiles[]`,
      `tiles[]`. A value starting with `https://tiles.openfreemap.org/` becomes
      `${origin}/map/` plus the rest. Any other value in those fields: 502, nothing served (D10,
-     degrade, never leak). Attribution and description strings are not touched (they hold links,
+     degrade, never leak). Every other string, or string in an array, directly under a
+     `sources.*` object (for example GeoJSON `data`, video or image `urls[]`) that is an absolute
+     URL (starts with a scheme or `//`) gets the same rule: provider URL rewritten, any other host
+     502 (Validate F2). Attribution and description strings are not touched (they hold links,
      not fetched URLs).
    - Origin (FR-009): `Host` request header if it matches
      `^(?:[A-Za-z0-9.-]+|\[[0-9A-Fa-f:]+\])(?::\d{1,5})?$`, scheme `https` when
@@ -143,7 +151,9 @@ Post-design re-check: no change. Complexity Tracking is empty.
    - `apps/locator/src/hooks.server.ts`: requests whose path starts with `/map/` skip
      `Sentry.sentryHandle()`; `securityHeaders` still runs.
    - `apps/locator/src/hooks.client.ts`: `Sentry.browserTracingIntegration({ shouldCreateSpanForRequest })`
-     returns false for same-origin `/map/` URLs.
+     returns false for same-origin `/map/` URLs, and a `beforeBreadcrumb` drops breadcrumbs whose
+     `data.url` path starts with `/map/` (spans and breadcrumbs are separate, Validate F6).
+     `sentryOptions` sets no `beforeBreadcrumb`, so nothing is overridden.
    - The route has no `console.*` call.
 
 ### Security note
@@ -167,8 +177,9 @@ Tasks that touch an external service, a public endpoint or guest data: T012, T01
    Shared caches key on host, and the style path has no file extension, which Cloudflare does not
    cache by default.
 5. Availability: no server store (D8). Each request holds at most one tile body (largest vector tile
-   is well under 1 MB) for at most 8 s. No rate limit is added. The VM already serves the locator
-   publicly; this adds no new amplification beyond one upstream fetch per guest request.
+   is well under 1 MB) for at most 8 s. The user asked for a rate limit on `/map/*` (Validate F9).
+   Which limiter is open decision D12; the key analysis is research R14. The VM already serves the
+   locator publicly; this adds no new amplification beyond one upstream fetch per guest request.
 6. Logging: map paths reveal where a guest looks. They are kept out of Sentry traces (server and
    browser) and are not logged (D10).
 7. Admin: operator browsers contact `tiles.openfreemap.org` directly (D7, accepted exposure). No CSP
@@ -286,3 +297,32 @@ F8. tasks.md:41 Local bun is 1.4.3. CI (`.github/workflows/ci.yml:14`) and the D
 that the CI install step passes on the PR before T009.
 F9. plan.md:169-171 Public `/map/*` has no body-size cap and no rate limit (accepted in the plan).
 -> No change unless the user wants a 502 when upstream `content-length` is over 2 MB.
+
+### Resolved (2026-10-12)
+
+Inspect also reported F10 to F15 (low, routed here) and F16, F17 (not routed here). Status:
+
+- F1 fixed: WebGL2 probe before the layer is created (Design, admin item 1; T005, T015). Quickstart
+  section 5 edge 3 now pans and zooms and expects zero page errors.
+- F2 fixed: absolute URLs anywhere directly under `sources.*` follow the provider-or-502 rule
+  (Design, locator item 3; data-model.md; contract; T012 case 7; T013).
+- F3 deferred (user): how the public origin (for example `radius.veent.io`) reaches the VM needs a
+  talk with devops. No post-deploy curl task is added now. Open item: it blocks only the production
+  deploy check of FR-009 on the public origin, not the build (research R2).
+- F4 accepted (user): no test for the Sentry hook skip for now. T023 review stays the check.
+- F5 fixed: T019 aborts `**/map/**`, reloads, and checks pins and the list (quickstart section 5
+  edge 2).
+- F6 fixed: `beforeBreadcrumb` in `hooks.client.ts` (Design, locator item 4; T017).
+- F7 fixed: T012 case 8 asserts the outgoing headers equal exactly `{ accept: '*/*' }`.
+- F8 fixed: T001 runs the install with bun 1.3.14 (`bunx bun@1.3.14`, checked to run on this
+  machine) and proves `--frozen-lockfile` passes.
+- F9 changed (user): add a rate limit to `/map/*`. Open decision D12 (which limiter). Key analysis
+  in research R14. No task is written until D12 is answered.
+- F10 fixed: dependency list in tasks.md (T005 after T002 to T004, T013 and T015 after T011 and
+  T012).
+- F11 fixed: spec US1 AS1 points at SC-001, US3 AS1 at SC-001 and SC-004.
+- F12 fixed: admin dev port is 5174 (`apps/admin/package.json` `vite dev --port 5174`).
+- F13 fixed: the locator's empty Playwright scaffold is named (Technical Context, tasks.md).
+- F14 fixed: citations now `mikrotik.ts:1027` and `:1104-1108` (Constitution Check, research R9).
+- F15 fixed: spec lists D10 and D11.
+- F16, F17: not routed to plan, not changed.

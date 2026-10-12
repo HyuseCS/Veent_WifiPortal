@@ -13,32 +13,32 @@ task. Run unit tests with `bunx vitest run <file>` from the app dir, never `bun 
 **Security**: Tasks marked `SEC` touch a public endpoint, an external service or guest data. See the
 plan's security note.
 
-**Open**: none. D11 = A: `MapPicker.svelte` (no importer) gets the same swap, verified by check and build only.
+**Open**: D12 (which rate limiter for `/map/*`, Validate F9, research R14). No rate-limit task is written until it is answered. D11 = A: `MapPicker.svelte` (no importer) gets the same swap, verified by check and build only.
 
 ## FR to test map
 
-| FR                                          | Test task                                                 | Build task               |
-| ------------------------------------------- | --------------------------------------------------------- | ------------------------ |
-| FR-001 admin light/dark                     | T002, T003                                                | T005, T006, T007, T008   |
-| FR-002 locator light/dark                   | T011                                                      | T015, T016               |
-| FR-003 live theme switch                    | T003 (admin), T019 browser pass (locator, no e2e harness) | T005, T015               |
-| FR-004 overlays above basemap               | T003                                                      | T006, T007, T016         |
-| FR-005 no CARTO requests                    | T002, T011 (source guard), T003 (network)                 | T005 to T008, T015, T016 |
-| FR-006 attribution                          | T002, T011, T003                                          | T005, T015               |
-| FR-007 admin direct to OpenFreeMap          | T002, T003                                                | T005                     |
-| FR-008 locator delivers all parts           | T011, T012                                                | T013, T014, T015         |
-| FR-009 URLs point at the used address       | T012                                                      | T013                     |
-| FR-010 allow-list, read methods only        | T012                                                      | T013, T014               |
-| FR-011 no guest headers upstream            | T012                                                      | T013                     |
-| FR-012 no store, cache headers              | T012                                                      | T013                     |
-| FR-013 bounded error time                   | T012                                                      | T013                     |
-| FR-014 pre-login on a real phone            | T022 (live)                                               | T013 to T016             |
-| FR-015 no key, env or `.env.example` change | T023                                                      | none                     |
-| US1 AS3 double-click pin drop unchanged     | T004                                                      | T007                     |
+| FR                                          | Test task                                                                 | Build task               |
+| ------------------------------------------- | ------------------------------------------------------------------------- | ------------------------ |
+| FR-001 admin light/dark                     | T002, T003                                                                | T005, T006, T007, T008   |
+| FR-002 locator light/dark                   | T011                                                                      | T015, T016               |
+| FR-003 live theme switch                    | T003 (admin), T019 browser pass (locator, empty Playwright scaffold only) | T005, T015               |
+| FR-004 overlays above basemap               | T003                                                                      | T006, T007, T016         |
+| FR-005 no CARTO requests                    | T002, T011 (source guard), T003 (network)                                 | T005 to T008, T015, T016 |
+| FR-006 attribution                          | T002, T011, T003                                                          | T005, T015               |
+| FR-007 admin direct to OpenFreeMap          | T002, T003                                                                | T005                     |
+| FR-008 locator delivers all parts           | T011, T012                                                                | T013, T014, T015         |
+| FR-009 URLs point at the used address       | T012                                                                      | T013                     |
+| FR-010 allow-list, read methods only        | T012                                                                      | T013, T014               |
+| FR-011 no guest headers upstream            | T012                                                                      | T013                     |
+| FR-012 no store, cache headers              | T012                                                                      | T013                     |
+| FR-013 bounded error time                   | T012 (server), T019 (page keeps working)                                  | T013                     |
+| FR-014 pre-login on a real phone            | T022 (live)                                                               | T013 to T016             |
+| FR-015 no key, env or `.env.example` change | T023                                                                      | none                     |
+| US1 AS3 double-click pin drop unchanged     | T004                                                                      | T007                     |
 
 ## Phase 1: Setup
 
-- [ ] T001 Add `"maplibre-gl": "6.7.0"` and `"@maplibre/maplibre-gl-leaflet": "0.1.4"` (exact, no caret) to `dependencies` in `apps/admin/package.json` and `apps/locator/package.json`, run `bun install` at the repo root, and commit both `package.json` files with `bun.lock` (CI uses `--frozen-lockfile`).
+- [ ] T001 Add `"maplibre-gl": "6.7.0"` and `"@maplibre/maplibre-gl-leaflet": "0.1.4"` (exact, no caret) to `dependencies` in `apps/admin/package.json` and `apps/locator/package.json`, run the install at the repo root with the CI and Dockerfile bun version: `bunx bun@1.3.14 install` (local bun is 1.4.3; `.github/workflows/ci.yml:14` and `Dockerfile:18` pin 1.3.14), then `bunx bun@1.3.14 install --frozen-lockfile` must exit 0. Commit both `package.json` files with `bun.lock`.
 
 ## Phase 2: Foundational
 
@@ -61,7 +61,7 @@ themes, switch live, and never call CARTO. The unused `MapPicker.svelte` gets th
 
 ### Build
 
-- [ ] T005 [US1] In `apps/admin/src/lib/map.ts`: keep `FALLBACK_CENTER`; remove `TILE_SUBDOMAINS`, `TILE_ATTRIBUTION`, `tileUrl`; add `BASEMAP_ATTRIBUTION` (exact string from data-model.md), `styleUrl(theme: string | undefined)` and `loadBasemap()` as in plan.md "Admin maps" item 1 (one `Promise.all` of the bridge, `maplibre-gl` and `maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url`; `setWorkerUrl` before `addTo`; returns `add(L, map) => cleanup`; `add` catches an `addTo` throw and returns a no-op; the observer watches `data-theme` and calls `getMaplibreMap().setStyle(styleUrl(...))`). Update the file's header comment so it no longer names CARTO. T002 unit cases for `styleUrl` and attribution pass (the source guard still fails until T007 removes the CARTO comment in the controller).
+- [ ] T005 [US1] In `apps/admin/src/lib/map.ts`: keep `FALLBACK_CENTER`; remove `TILE_SUBDOMAINS`, `TILE_ATTRIBUTION`, `tileUrl`; add `BASEMAP_ATTRIBUTION` (exact string from data-model.md), `styleUrl(theme: string | undefined)` and `loadBasemap()` as in plan.md "Admin maps" item 1 (one `Promise.all` of the bridge, `maplibre-gl` and `maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url`; `setWorkerUrl` before `addTo`; returns `add(L, map) => cleanup`; `add` first checks `document.createElement('canvas').getContext('webgl2')` and returns a no-op cleanup without creating the layer when it is `null` (no try/catch around `addTo`, Validate F1); the observer watches `data-theme` and calls `getMaplibreMap().setStyle(styleUrl(...))`). Update the file's header comment so it no longer names CARTO. T002 unit cases for `styleUrl` and attribution pass (the source guard still fails until T007 removes the CARTO comment in the controller).
 - [ ] T006 [P] [US1] In `apps/admin/src/lib/components/feature/CoverageMap.svelte`: drop the `tile` variable, `L.tileLayer(...)` and its observer; add `maxZoom: 19` to the `L.map(...)` options; after `renderMarkers()` call `loadBasemap().then((add) => { if (!cancelled) stop = add(L, m); })`; cleanup runs `stop?.()` then `map?.remove()`. Import only `FALLBACK_CENTER` and `loadBasemap` from `$lib/map`.
 - [ ] T007 [P] [US1] In `apps/admin/src/lib/networkMap.controller.ts`: replace the tile layer and `tileObs` with `private stopBasemap?: () => void`, set by `loadBasemap().then((add) => { if (!this.cancelled) this.stopBasemap = add(L, map); })` after the panes exist; add `maxZoom: 19` to `L.map(...)`; `destroy()` calls `this.stopBasemap?.()` before `this.map?.remove()`; update the import from `$lib/map`. Keep the `domes` pane and everything else as is.
 - [ ] T008 [US1] In `apps/admin/src/lib/components/feature/MapPicker.svelte`, make the same swap as T006: drop `L.tileLayer(...)` and its observer, add `maxZoom: 19` to `L.map(...)`, call `loadBasemap().then((add) => { if (!cancelled) stop = add(L, map); })` after the map exists, run `stop?.()` in the existing `cleanup` before `map.remove()`, import only `FALLBACK_CENTER` and `loadBasemap` from `$lib/map`. Not shown on any screen (D11), so no browser test: verified by T002's source guard and T009's `bun run check` and `bun run build`.
@@ -89,21 +89,21 @@ the locator's own address.
   4. Route module `apps/locator/src/routes/map/[...path]/+server.ts` exports exactly `['GET']` (FR-010 read only; SvelteKit then returns 405 for other methods).
   5. Rewrite with `Host: 10.210.54.133:3003`: style `sprite`, `glyphs`, `sources.openmaptiles.url`, `sources.ne2_shaded.tiles[0]` all start `http://10.210.54.133:3003/map/` with the provider path and placeholders kept; TileJSON `tiles[0]` becomes `http://10.210.54.133:3003/map/planet/20261004_113936_pt/{z}/{x}/{y}.pbf`; TileJSON `attribution` with its three provider links is unchanged; sprite as an array of `{ id, url }` is rewritten too (FR-009).
   6. `x-forwarded-proto: https` gives `https://<host>/map/...`; invalid Host values `evil.com/x`, `a"b`, `x@y` fall back to the URL origin (FR-009).
-  7. Foreign host refused, 502: `glyphs` on `https://other.example/...`; a source `url` on `https://tiles.openfreemap.org.evil.com/planet`; TileJSON `tiles[0]` on another host; upstream body not valid JSON (D10).
-  8. Outbound request: the incoming request carries `cookie`, `referer`, `x-forwarded-for`, `x-real-ip`, `user-agent`, `authorization`; the fetch `init.headers` holds none of them, and `init.redirect === 'error'` (FR-011).
+  7. Foreign host refused, 502: `glyphs` on `https://other.example/...`; a source `url` on `https://tiles.openfreemap.org.evil.com/planet`; TileJSON `tiles[0]` on another host; a GeoJSON source `{ type: 'geojson', data: 'https://other.example/a.geojson' }`; a video source with `urls: ['//other.example/v.mp4']`; upstream body not valid JSON (D10, Validate F2). A GeoJSON source whose `data` is `https://tiles.openfreemap.org/x.geojson` is rewritten to `http://<host>/map/x.geojson`.
+  8. Outbound request: the incoming request carries `cookie`, `referer`, `x-forwarded-for`, `x-real-ip`, `forwarded`, `cf-connecting-ip`, `user-agent`, `authorization`; the fetch `init.headers` deep-equals exactly `{ accept: '*/*' }`, and `init.redirect === 'error'` (FR-011, Validate F7).
   9. Response headers: `cache-control` is `public, max-age=86400` for the style and TileJSON and `public, max-age=31536000, immutable` for tile, relief, font and sprite paths; `content-type` comes from the rule even when the stub sends `text/html`; the stub's `content-encoding`, `content-length`, `set-cookie` and `etag` are absent (FR-012).
   10. Errors: `vi.spyOn(AbortSignal, 'timeout')` is called with a value of 10000 or less and its signal is the `init.signal` passed to fetch; fetch rejecting with `new DOMException('x', 'TimeoutError')` gives 504; rejecting with `TypeError` gives 502; upstream 404 gives 404; upstream 500 gives 502; every error response has `cache-control: no-store` (FR-013).
       Run `cd apps/locator && bunx vitest run src/lib/server/mapProxy.test.ts`: must fail (module missing).
 
 ### Build
 
-- [ ] T013 [US2] SEC. Create `apps/locator/src/lib/server/mapProxy.ts`: `UPSTREAM = 'https://tiles.openfreemap.org/'`; the rules table exactly as in data-model.md (pattern, type, cache, rewrite); origin per data-model.md "Request origin"; rewrite of the listed fields only, returning 502 on any non-provider value; `proxyMap(url, request)` per contracts/locator-map-passthrough.md (path = `url.pathname` after `/map/`, global `fetch(UPSTREAM + path, { headers: { accept: '*/*' }, redirect: 'error', signal: AbortSignal.timeout(8000) })`, `arrayBuffer()` body, fresh headers only, 404/502/504 with `no-store`). No `console.*`. Add a `// ponytail:` note on the buffered, uncompressed body (research R7). T012 cases 1 to 3 and 5 to 10 pass.
+- [ ] T013 [US2] SEC. Create `apps/locator/src/lib/server/mapProxy.ts`: `UPSTREAM = 'https://tiles.openfreemap.org/'`; the rules table exactly as in data-model.md (pattern, type, cache, rewrite); origin per data-model.md "Request origin"; rewrite of the listed fields plus every absolute-URL string directly under `sources.*` (data-model.md "Rewritten fields"), returning 502 on any non-provider value; `proxyMap(url, request)` per contracts/locator-map-passthrough.md (path = `url.pathname` after `/map/`, global `fetch(UPSTREAM + path, { headers: { accept: '*/*' }, redirect: 'error', signal: AbortSignal.timeout(8000) })`, `arrayBuffer()` body, fresh headers only, 404/502/504 with `no-store`). No `console.*`. Add a `// ponytail:` note on the buffered, uncompressed body (research R7). T012 cases 1 to 3 and 5 to 10 pass.
 - [ ] T014 [US2] SEC. Create `apps/locator/src/routes/map/[...path]/+server.ts` exporting only `GET: RequestHandler = ({ url, request }) => proxyMap(url, request)`. T012 case 4 passes.
-- [ ] T015 [P] [US2] In `apps/locator/src/lib/map.ts`: keep `FALLBACK_CENTER`; replace `TILE_SUBDOMAINS`, `TILE_ATTRIBUTION`, `tileUrl` with `BASEMAP_ATTRIBUTION`, `styleUrl(theme, origin)` and `loadBasemap()` (same as T005, but `add` uses `styleUrl(document.documentElement.dataset.theme, location.origin)`). Update the header comment so it no longer names CARTO. T011 unit cases for `styleUrl` and attribution pass.
+- [ ] T015 [P] [US2] In `apps/locator/src/lib/map.ts`: keep `FALLBACK_CENTER`; replace `TILE_SUBDOMAINS`, `TILE_ATTRIBUTION`, `tileUrl` with `BASEMAP_ATTRIBUTION`, `styleUrl(theme, origin)` and `loadBasemap()` (same as T005, WebGL2 check before the layer included, but `add` uses `styleUrl(document.documentElement.dataset.theme, location.origin)`). Update the header comment so it no longer names CARTO. T011 unit cases for `styleUrl` and attribution pass.
 - [ ] T016 [US2] In `apps/locator/src/routes/+page.svelte`: drop `themeObs`, `L.tileLayer(...)` and its observer; add `maxZoom: 19` to `L.map(...)`; after the markers are added call `loadBasemap().then((add) => { if (!cancelled) stopBasemap = add(L, mapInstance!); })`; cleanup runs `stopBasemap?.()` before `mapInstance?.remove()`; update the comments that name CARTO and the import. T011 source guard passes.
-- [ ] T017 [P] [US2] SEC (D10). In `apps/locator/src/hooks.server.ts`: requests with `event.url.pathname.startsWith('/map/')` skip `Sentry.sentryHandle()` and still get `securityHeaders`. In `apps/locator/src/hooks.client.ts`: `Sentry.browserTracingIntegration({ shouldCreateSpanForRequest: (u) => !new URL(u, location.href).pathname.startsWith('/map/') })`. No unit test (hook wiring needs Sentry and `$env`); checked in T023.
+- [ ] T017 [P] [US2] SEC (D10). In `apps/locator/src/hooks.server.ts`: requests with `event.url.pathname.startsWith('/map/')` skip `Sentry.sentryHandle()` and still get `securityHeaders`. In `apps/locator/src/hooks.client.ts`: `Sentry.browserTracingIntegration({ shouldCreateSpanForRequest: (u) => !new URL(u, location.href).pathname.startsWith('/map/') })`, and in the same `Sentry.init` a `beforeBreadcrumb` that returns `null` when `breadcrumb.data?.url` resolves (against `location.href`) to a path starting with `/map/` (Validate F6). No unit test (hook wiring needs Sentry and `$env`; the user accepted this, Validate F4); checked in T023.
 - [ ] T018 [US2] Locator gates, from `apps/locator`: `bunx vitest run` (all pass), `bun run check`, `bun run build`, `find build -name '*maplibre-gl-worker*'` prints a file. Then `specs/003-openfreemap-basemap/quickstart.md` section 4 curl checks against the dev server the user started. Commit T011 to T017 paths.
-- [ ] T019 [US2] Agent browser pass for the locator rows of `specs/003-openfreemap-basemap/quickstart.md` section 5: light, dark, live flip with view and open popup kept (FR-003 locator, no e2e harness exists), zero map requests off the locator host (SC-003), relief at zoom 3, repeat open from cache (US2 AS4), rapid flip, no WebGL. Record results here.
+- [ ] T019 [US2] Agent browser pass for the locator rows of `specs/003-openfreemap-basemap/quickstart.md` section 5: light, dark, live flip with view and open popup kept (FR-003 locator; the locator has only an empty Playwright scaffold), zero map requests off the locator host (SC-003), relief at zoom 3, repeat open from cache (US2 AS4), rapid flip, no WebGL with pan and zoom and zero page errors. Provider down (FR-013, Validate F5): `page.route('**/map/**', (r) => r.abort())`, reload, pins and the list show and work. Record the `/map/` request count and the 10 s peak from the pan and zoom step (research R14, input for D12). Record results here.
 
 **Checkpoint**: US2 done. Works on any address the locator is opened from.
 
@@ -132,8 +132,8 @@ the locator's own address.
 ## Dependencies and execution order
 
 - T001 blocks everything.
-- US1: T002 and T003 in parallel, then T004 (same file as T003). T005 needs T001. T006 and T007 in parallel after T005. T008 after T005. T009 after T002 to T008. T010 after T009.
-- US2: T011 and T012 in parallel. T013 after T012. T014 after T013. T015 in parallel with T013. T016 after T015. T017 any time after T001. T018 after T011 to T017. T019 after T018.
+- US1: T002 and T003 in parallel, then T004 (same file as T003). T005 needs T001 and T002 to T004. T006 and T007 in parallel after T005. T008 after T005. T009 after T002 to T008. T010 after T009.
+- US2: T011 and T012 in parallel. T013 after T011 and T012. T014 after T013. T015 after T011 and T012, in parallel with T013. T016 after T015. T017 any time after T001. T018 after T011 to T017. T019 after T018.
 - US3: T020 before T021. T021 after T018. T022 after T021.
 - Polish: T023 and T024 after US1 and US2. T025 after T010 and T019.
 - US1 and US2 share no file, so they can run in parallel after T001.
