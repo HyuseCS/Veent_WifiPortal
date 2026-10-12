@@ -7,6 +7,6 @@ export function maskMac(mac: string | null | undefined): string | null {
 }
 export function maskIp(ip: string | null | undefined): string | null {
 	if (!ip) return ip ?? null;
-	const v4 = ip.replace(/^::ffff:/, '').match(/^(\d{1,3})\.(\d{1,3})\.\d{1,3}\.\d{1,3}$/);
-	return v4 ? `${v4[1]}.${v4[2]}.*.*` : ip.replace(/[^:]+$/, '*'); // v4: keep /16; else mask tail
+	const v4 = ip.replace(/^::ffff:/i, '').match(/^(\d{1,3})\.(\d{1,3})\.\d{1,3}\.\d{1,3}$/);
+	return v4 ? `${v4[1]}.${v4[2]}.*.*` : ip.replace(/[^:]+(?=:*$)/, '*'); // v4: keep /16; else mask tail
 }
