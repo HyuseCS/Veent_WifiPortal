@@ -8,7 +8,8 @@ import {
 	resolveDeviceMac,
 	resolveNetworkIdByApName,
 	resolveCircuitIdForMac,
-	captureHandled
+	captureHandled,
+	dropRelayMac
 } from '@veent/core';
 import { db } from '$lib/server/db';
 import { network } from '$lib/server/network';
@@ -36,7 +37,7 @@ function maskIp(ip: string | null | undefined): string | null {
  * checkout location resolver below.
  */
 export async function resolveMac(event: RequestEvent): Promise<string | null> {
-	const fromPortal = getPortalContext(event)?.mac;
+	const fromPortal = await dropRelayMac(network, getPortalContext(event)?.mac);
 	if (fromPortal) return fromPortal;
 	// The dev placeholder is ONLY safe with the stub controller, whose grant() just logs.
 	// When a real router is configured (NETWORK_CONTROLLER=mikrotik) — e.g. dev-testing
@@ -148,14 +149,16 @@ export async function resolveMacForUser(
 	// are empty (docs/problems/second-account-mac-not-captured.md). Seed it onto the new account so
 	// subsequent cross-browser hops (e.g. the Maya return) have the durable per-user signal too —
 	// but only when the account has NO durable MAC yet (a fallback must not entrench over live truth).
-	const device = getDeviceMac(event);
+	const device = await dropRelayMac(network, getDeviceMac(event));
 	if (device) {
 		await seedAccountMac(userId, device);
 		return { mac: device, live: false };
 	}
 	// Last resort: the durable account MAC — covers a buyer seen earlier but with no session row yet
 	// (e.g. topped up before ever binding a device) — then the most-recent session's MAC.
-	return { mac: (await accountMac(userId)) ?? (await lastKnownMac(userId)), live: false };
+	const account = await dropRelayMac(network, await accountMac(userId));
+	if (account) return { mac: account, live: false };
+	return { mac: await dropRelayMac(network, await lastKnownMac(userId)), live: false };
 }
 
 /** Read the durable per-account MAC (`customer_profile.last_known_mac`). */

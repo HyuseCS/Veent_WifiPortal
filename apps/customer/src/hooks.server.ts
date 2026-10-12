@@ -60,7 +60,7 @@ const handleBetterAuth: Handle = async ({ event, resolve }) => {
 
 	// Stash the device MAC / callback from the captive-portal redirect before the
 	// auth flow's redirects drop the query string.
-	capturePortalContext(event);
+	await capturePortalContext(event);
 
 	const session = await auth.api.getSession({ headers: event.request.headers });
 

@@ -28,12 +28,18 @@ const routerTable: {
 	wg: Row[];
 	wgIp: Row[];
 	filter: Row[];
+	host: Row[];
+	lease: Row[];
+	arp: Row[];
 	nextId: number;
 } = {
 	scheduler: [],
 	wg: [],
 	wgIp: [],
 	filter: [],
+	host: [],
+	lease: [],
+	arp: [],
 	nextId: 1
 };
 function resetRouterTable() {
@@ -41,6 +47,9 @@ function resetRouterTable() {
 	routerTable.wg = [];
 	routerTable.wgIp = [];
 	routerTable.filter = [];
+	routerTable.host = [];
+	routerTable.lease = [];
+	routerTable.arp = [];
 	routerTable.nextId = 1;
 }
 function parseAdd(params: string[]): Row {
@@ -105,6 +114,12 @@ vi.mock('node-routeros', () => {
 				case '/ip/firewall/filter/add':
 					routerTable.filter.push(parseAdd(params));
 					return [];
+				case '/ip/hotspot/host/print':
+					return filterByQuery(routerTable.host, params);
+				case '/ip/dhcp-server/lease/print':
+					return filterByQuery(routerTable.lease, params);
+				case '/ip/arp/print':
+					return filterByQuery(routerTable.arp, params);
 			}
 			if (menu !== '/ping') return [];
 			const address = (params.find((p) => p.startsWith('=address=')) ?? '').slice(
@@ -433,7 +448,10 @@ describe('provisionGcashAppResolveScheduler (GCash app mynt.xyz CNAME resolve-sc
 		await provisionGcashResolveScheduler(mikrotikConfig);
 		const res = await provisionGcashAppResolveScheduler(mikrotikConfig);
 		expect(res.scheduler.created).toBe(true);
-		expect(routerTable.scheduler.map((s) => s.name)).toEqual(['gcash-resolve', 'gcash-app-resolve']);
+		expect(routerTable.scheduler.map((s) => s.name)).toEqual([
+			'gcash-resolve',
+			'gcash-app-resolve'
+		]);
 	});
 });
 
@@ -774,4 +792,46 @@ describe('wipeWalledGarden (walled-garden-wipe — scripted hard-reset teardown)
 		expect(routerTable.wg).toHaveLength(5); // nothing actually deleted on either menu
 		expect(routerTable.wgIp).toHaveLength(1);
 	});
+});
+
+describe('relay MAC guard (router tables)', () => {
+	const relay = 'F4:B7:8D:A6:80:88';
+	const relayedLease = {
+		address: '10.210.44.159',
+		'mac-address': '2E:47:8F:2D:35:8F',
+		'src-mac-address': relay,
+		'agent-circuit-id': 'OLT-9 xpon 0/1/0/4:16.3.70'
+	};
+
+	it('listDhcpLeases maps src-mac-address UPPERCASED, empty or absent to null', async () => {
+		resetRouterTable();
+		routerTable.lease = [
+			{
+				address: '10.0.0.1',
+				'mac-address': 'AA:AA:AA:AA:AA:01',
+				'src-mac-address': 'f4:b7:8d:a6:80:88'
+			},
+			{ address: '10.0.0.2', 'mac-address': 'AA:AA:AA:AA:AA:02', 'src-mac-address': '' },
+			{ address: '10.0.0.3', 'mac-address': 'AA:AA:AA:AA:AA:03' }
+		];
+		const leases = await controllerForPing().listDhcpLeases!();
+		expect(leases.map((l) => l.srcMac)).toEqual([relay, null, null]);
+	});
+
+	it.each([
+		['host', '10.99.1.1'],
+		['lease', '10.99.1.2'],
+		['arp', '10.99.1.3']
+	] as const)(
+		'resolveDeviceMac returns null for a relay MAC from the %s table',
+		async (table, ip) => {
+			vi.resetModules();
+			const { resolveDeviceMac } = await import('../../services/adminAccess');
+			resetRouterTable();
+			routerTable.lease = [relayedLease];
+			if (table === 'lease') routerTable.lease.push({ address: ip, 'mac-address': relay });
+			else routerTable[table] = [{ address: ip, 'mac-address': relay }];
+			expect(await resolveDeviceMac(controllerForPing(), ip)).toBeNull();
+		}
+	);
 });
