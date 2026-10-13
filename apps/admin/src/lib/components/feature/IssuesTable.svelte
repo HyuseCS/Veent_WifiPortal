@@ -10,10 +10,10 @@
 	import Trash2 from 'lucide-svelte/icons/trash-2';
 	import TriangleAlert from 'lucide-svelte/icons/triangle-alert';
 	import X from 'lucide-svelte/icons/x';
-	import type { Component } from 'svelte';
+	import { untrack, type Component } from 'svelte';
 	import { SvelteSet } from 'svelte/reactivity';
 	import { enhance } from '$app/forms';
-	import { goto } from '$app/navigation';
+	import { afterNavigate, goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import {
 		Button,
@@ -31,17 +31,25 @@
 	// route enforces manager access — this component is only rendered when canManage.
 	let {
 		issues,
+		total,
+		page,
+		pageCount,
+		q,
 		onedit,
 		onnew
 	}: {
 		issues: AdminIssueRow[];
+		total: number;
+		page: number;
+		pageCount: number;
+		q: string;
 		onedit: (issue: AdminIssueRow) => void;
 		onnew: () => void;
 	} = $props();
 
 	const icon = (c: unknown) => c as Component;
 
-	let query = $state('');
+	let query = $state(untrack(() => q));
 	let confirmingId = $state<number | null>(null); // delete confirm
 	const expanded = new SvelteSet<number>(); // rows showing full detail (reactive on mutation)
 
@@ -86,17 +94,27 @@
 		goto(resolve(`/issues/${id}`));
 	}
 
-	const filtered = $derived.by(() => {
-		const q = query.trim().toLowerCase();
-		if (!q) return issues;
-		return issues.filter((i) =>
-			`${i.title} ${i.description ?? ''} ${i.networkName ?? ''} ${i.assignees
-				.map((a) => a.name)
-				.join(' ')}`
-				.toLowerCase()
-				.includes(q)
-		);
+	afterNavigate(({ type }) => {
+		if (type !== 'goto') query = q;
 	});
+
+	$effect(() => {
+		if (query === q) return;
+		const params = new URLSearchParams(query ? { q: query } : {});
+		const t = setTimeout(() => {
+			// eslint-disable-next-line svelte/no-navigation-without-resolve
+			goto(`${resolve('/issues')}${params.size ? `?${params}` : ''}`, {
+				replaceState: true,
+				keepFocus: true,
+				noScroll: true
+			});
+		}, 300);
+		return () => clearTimeout(t);
+	});
+
+	const pageQuery = (n: number) => new URLSearchParams({ ...(q ? { q } : {}), page: String(n) });
+	// ponytail: 25 mirrors ISSUES_PAGE_SIZE, which lives in a $lib/server module the client cannot import
+	const first = $derived(total ? (page - 1) * 25 + 1 : 0);
 
 	const headers = ['Issue', 'Access point', 'Priority', 'Status', 'Assignees', 'Due', 'Actions'];
 
@@ -138,7 +156,7 @@
 		</tr>
 	{/snippet}
 
-	{#each filtered as issue (issue.id)}
+	{#each issues as issue (issue.id)}
 		<!-- Row-wide click opens the incident (see openIssue); the title <a> is the keyboard path. -->
 		<tr
 			class="cursor-pointer align-top hover:bg-surface"
@@ -293,13 +311,13 @@
 		{/if}
 	{/each}
 
-	{#if filtered.length === 0}
+	{#if issues.length === 0}
 		<tr>
 			<td colspan={headers.length} class="tc-full p-0">
 				<EmptyState
-					icon={icon(query ? Search : ClipboardList)}
-					title={query ? 'No incidents match' : 'No incidents yet'}
-					description={query
+					icon={icon(q ? Search : ClipboardList)}
+					title={q ? 'No incidents match' : 'No incidents yet'}
+					description={q
 						? 'Try a different search term.'
 						: 'Create the first incident to start tracking.'}
 					compact
@@ -309,8 +327,27 @@
 	{/if}
 
 	{#snippet footer()}
-		<p class="px-4 py-3 text-xs text-muted">
-			Showing {filtered.length} of {issues.length} incidents
-		</p>
+		<div class="flex items-center gap-3 px-4 py-3 text-xs text-muted">
+			<p>Showing {first}-{first ? first + issues.length - 1 : 0} of {total} incidents</p>
+			<nav aria-label="Pagination" class="ml-auto flex items-center gap-1">
+				{#if page > 1}
+					<a
+						href="{resolve('/issues')}?{pageQuery(page - 1)}"
+						class="rounded px-2 py-1 font-medium text-ink hover:bg-surface hover:text-brand"
+						>Previous</a
+					>
+				{:else}
+					<span class="px-2 py-1 opacity-50" aria-disabled="true">Previous</span>
+				{/if}
+				{#if page < pageCount}
+					<a
+						href="{resolve('/issues')}?{pageQuery(page + 1)}"
+						class="rounded px-2 py-1 font-medium text-ink hover:bg-surface hover:text-brand">Next</a
+					>
+				{:else}
+					<span class="px-2 py-1 opacity-50" aria-disabled="true">Next</span>
+				{/if}
+			</nav>
+		</div>
 	{/snippet}
 </Table>
