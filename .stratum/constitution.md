@@ -46,6 +46,9 @@ admin scripts and docs). Work in `apps/customer/` or `apps/locator/` only when t
   onboarding end to end on a real captive device.
 - The `?mac=` query value is client-influenceable. Never treat it as server-authoritative. A
   fallback-resolved MAC is not a verified binding.
+- A detection rule built on router data (DHCP leases, ARP, hotspot hosts, Option 82) MUST be checked
+  against live router output, for example a live lease print, before it ships. Rationale: on #114
+  the first relay rule matched the VM host NIC, which only a live lease print showed.
 
 ### VI. Simplicity
 
@@ -78,6 +81,9 @@ admin scripts and docs). Work in `apps/customer/` or `apps/locator/` only when t
   (`bun run test:e2e` in `apps/admin/`) for admin flows. Run the gates that cover the changed code before a task is
   done.
 - Browser-visible changes need an agent browser pass and a human check before they are done.
+- A verify step that expects a count of 0 counts only after real traffic since the restart, and it
+  MUST be paired with a positive case that shows the check can find the thing. Rationale: on #114 a
+  quiet log gave 0 while the logging code was still there.
 - Git:
   - Commit each finished, verified task at once, with exact paths. Never `git add -A` or `git add .`.
   - Use conventional-commit prefixes (`feat`, `fix`, `docs`, `chore`, `refactor`, `test`).
@@ -99,4 +105,4 @@ principle, MINOR for a new or materially expanded rule, PATCH for wording. Plans
 changes against these principles. A plan that breaks one must say why in its Complexity Tracking
 section.
 
-**Version**: 1.0.0 | **Ratified**: 2026-10-05 | **Last Amended**: 2026-10-05
+**Version**: 1.1.0 | **Ratified**: 2026-10-05 | **Last Amended**: 2026-10-12
