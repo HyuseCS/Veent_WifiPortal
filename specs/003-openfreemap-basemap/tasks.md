@@ -137,7 +137,8 @@ the locator's own address.
 - [x] T024 Repo gates from the root: `bun run check`, `bun run test`, `bun run build`, `bunx eslint $(git diff --name-only origin/staging...HEAD -- apps)` and `bunx prettier --check $(git diff --name-only origin/staging...HEAD -- apps specs/003-openfreemap-basemap)`.
 - [x] T028 User, before merge, on the radius network (constitution V, Validate F9): run `/ip firewall nat print where action=masquerade` and `/ip firewall nat print where action=accept`. Confirm `10.210.0.0/18` is masqueraded and no exemption covers locator port 3003. Paste the output here. If guests are not masqueraded, the key is per guest: recheck `MAP_LIMIT` against research R14 before merge.
   - Skipped (D13, 2026-10-13): the user dropped the `/map/*` rate limit. No code was written.
-- [ ] T025 User: human check, `specs/003-openfreemap-basemap/quickstart.md` section 6 (SC-001). Record the ticks here.
+- [x] T025 User: human check, `specs/003-openfreemap-basemap/quickstart.md` section 6 (SC-001). Record the ticks here.
+  - Result (2026-10-13, user, on the deployed VM after the admin rebuild): all 3 screens in light and dark, and the theme flip keeps view, pins and popup. All 9 ticks in quickstart section 6.
 
 ---
 

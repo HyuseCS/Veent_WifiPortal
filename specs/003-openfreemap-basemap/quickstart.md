@@ -145,9 +145,9 @@ The user looks at each pair and ticks it:
 
 | Screen                         | Light | Dark | Theme flip keeps view, pins, popup |
 | ------------------------------ | ----- | ---- | ---------------------------------- |
-| Admin `/networks` coverage map | [ ]   | [ ]  | [ ]                                |
-| Admin `/map` network map       | [ ]   | [ ]  | [ ]                                |
-| Locator `/`                    | [ ]   | [ ]  | [ ]                                |
+| Admin `/networks` coverage map | [x]   | [x]  | [x]                                |
+| Admin `/map` network map       | [x]   | [x]  | [x]                                |
+| Locator `/`                    | [x]   | [x]  | [x]                                |
 
 Also: pins and domes sit above the map, attribution credits OpenFreeMap, OpenMapTiles and
 OpenStreetMap, the light map is paler than before (accepted).
