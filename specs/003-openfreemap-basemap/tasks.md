@@ -126,7 +126,8 @@ the locator's own address.
   - Result (2026-10-13, router terminal, before deploy): `/ip hotspot walled-garden print count-only` = 46, `/ip hotspot walled-garden ip print count-only` = 19.
 - [x] T021 [US3] User: deploy this branch's locator to VM `10.210.54.133` with the current manual docker deploy (`specs/003-openfreemap-basemap/quickstart.md` section 7 step 2).
   - Result (2026-10-13): PR #121 merged to `staging` (`4d83f75`). The VM could not reach GitHub (`git fetch`: connection reset by peer), so the commits went over as a git bundle (`54c0e7e..origin/staging`) and were fast-forwarded on the VM. `build locator` and `up -d locator` OK. `curl http://10.210.54.133:3003/map/styles/positron` gives `"sprite":"http://10.210.54.133:3003/map/sprites/ofm_f384/ofm"`, so the VM reaches `tiles.openfreemap.org`.
-- [ ] T022 [US3] User with agent guidance: live phone test, `specs/003-openfreemap-basemap/quickstart.md` section 7 steps 3 to 11 (FR-014, SC-004, SC-006). Record the times and pass or fail here.
+- [x] T022 [US3] User with agent guidance: live phone test, `specs/003-openfreemap-basemap/quickstart.md` section 7 steps 3 to 11 (FR-014, SC-004, SC-006). Record the times and pass or fail here.
+  - Result (2026-10-13, user's phone on hotspot1, not signed in): basemap shows and pins work; times not noted. Router: phone `10.210.41.87` (flag H, not authorized), `/ip hotspot active print` empty, no connections from the phone to `104.26.*` or `172.67.*`, walled-garden counts 46 and 19 (equal to T020, SC-006 pass). Theme flip first failed SC-007: the map changed only after about 5 s or a refresh. Cause: every new TLS handshake from the VM to OpenFreeMap's `104.26.*`/`172.67.*` stalls about 4.4 s on the ISP path, and Node fetch drops idle connections after 4 s (issue #123). Fixed by PR #122 (`e5911db`, 60 s keep-alive undici Agent), deployed by git bundle; user re-tested on the phone: flip works.
 
 ---
 
