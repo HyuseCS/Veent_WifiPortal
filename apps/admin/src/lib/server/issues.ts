@@ -6,7 +6,7 @@
  * View mappers derive StatusBadge tones here (the load/query layer), same as the other
  * admin tables — the Svelte side never re-derives tone from raw status.
  */
-import { and, eq, inArray, desc } from 'drizzle-orm';
+import { and, eq, inArray, desc, sql, or, ilike, exists, count } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import {
 	type DB,
@@ -201,10 +201,46 @@ async function hydrate(db: DB, rows: (typeof adminIssue.$inferSelect)[]): Promis
 	return sortRows(rows.map((r) => mapRow(r, assignees.get(r.id) ?? [])));
 }
 
-/** All issues (manager view). */
-export async function listIssues(db: DB): Promise<AdminIssueRow[]> {
-	const rows = await db.select().from(adminIssue).orderBy(desc(adminIssue.createdAt));
-	return hydrate(db, rows);
+export const ISSUES_PAGE_SIZE = 25;
+
+export async function listIssuesPage(
+	db: DB,
+	{ page, q = '' }: { page: number; q?: string }
+): Promise<{ issues: AdminIssueRow[]; total: number; page: number; pageCount: number }> {
+	const text = q.trim().slice(0, 100);
+	const pattern = `%${text.replace(/[\\%_]/g, '\\$&')}%`;
+	const where = text
+		? or(
+				ilike(adminIssue.title, pattern),
+				ilike(adminIssue.description, pattern),
+				ilike(adminIssue.networkName, pattern),
+				exists(
+					db
+						.select({ one: sql`1` })
+						.from(adminIssueAssignee)
+						.innerJoin(adminUser, eq(adminUser.id, adminIssueAssignee.adminUserId))
+						.where(
+							and(eq(adminIssueAssignee.issueId, adminIssue.id), ilike(adminUser.name, pattern))
+						)
+				)
+			)
+		: undefined;
+	const [{ total }] = await db.select({ total: count() }).from(adminIssue).where(where);
+	const pageCount = Math.max(1, Math.ceil(total / ISSUES_PAGE_SIZE));
+	const current = Math.min(Number.isInteger(page) && page >= 1 ? page : 1, pageCount);
+	const rows = await db
+		.select()
+		.from(adminIssue)
+		.where(where)
+		.orderBy(
+			sql`case ${adminIssue.status} when 'open' then 0 when 'in_progress' then 1 else 2 end`,
+			sql`case ${adminIssue.priority} when 'high' then 0 when 'medium' then 1 else 2 end`,
+			desc(adminIssue.createdAt),
+			desc(adminIssue.id)
+		)
+		.limit(ISSUES_PAGE_SIZE)
+		.offset((current - 1) * ISSUES_PAGE_SIZE);
+	return { issues: await hydrate(db, rows), total, page: current, pageCount };
 }
 
 /** One issue by id, fully hydrated (badges + assignees). Null if it doesn't exist. Backs the

@@ -23,7 +23,15 @@
 
 {#if data.canManage}
 	<div class="flex h-full flex-col gap-5">
-		<IssuesTable issues={data.issues} onnew={openNew} onedit={openEdit} />
+		<IssuesTable
+			issues={data.issues}
+			total={data.total}
+			page={data.page}
+			pageCount={data.pageCount}
+			q={data.q}
+			onnew={openNew}
+			onedit={openEdit}
+		/>
 	</div>
 	<IssueForm
 		bind:open={formOpen}

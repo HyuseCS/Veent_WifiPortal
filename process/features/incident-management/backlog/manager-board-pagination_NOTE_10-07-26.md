@@ -13,7 +13,11 @@ feature: incident-management
 
 **Update 22-07-26:** Option 2 (fetch event history on expand instead of eager-loading it) shipped —
 see `process/features/incident-management/completed/manager-board-lazy-events_22-07-26/`. Only
-Option 1 (row pagination of `listIssues()`) remains open below.
+Option 1 (row pagination of `listIssues()`) remained open.
+
+**Update 13-10-26:** Option 1 (row pagination) shipped in commit 7b62fe2 as `listIssuesPage` (25 rows per
+page, search in SQL, `?page=&q=` in the URL). Change plan:
+`specs/004-issues-board-pagination/changes/001-issues-board-pagination.md`. Nothing remains open.
 
 **Origin:** deferred scope item from `ims-audit-remediation_10-07-26` (see plan `## Backlog` and
 Phase 5 item 28), audit finding L3. Phase 5 shipped a ceiling comment on the manager branch of the
@@ -27,7 +31,7 @@ volume but will not scale as incident count grows.
 
 ## Fix options
 
-1. Paginate the manager board load (cursor or offset-based). **Still open.**
+1. Paginate the manager board load (cursor or offset-based). **Shipped 13-10-26** (commit 7b62fe2, offset-based).
 2. ~~Move event-history fetching to the existing `/issues/[id]/detail` endpoint, loaded on
    expand/click rather than eagerly for every row.~~ **Shipped 22-07-26** — see
    `process/features/incident-management/completed/manager-board-lazy-events_22-07-26/`.
