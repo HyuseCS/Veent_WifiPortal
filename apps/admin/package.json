@@ -21,6 +21,7 @@
 		"auth:schema": "better-auth generate --config src/lib/server/auth.ts --output ../../packages/db/src/schema/auth-admin.generated.ts --yes"
 	},
 	"dependencies": {
+		"@maplibre/maplibre-gl-leaflet": "0.1.4",
 		"@sentry/sveltekit": "^10.62.0",
 		"@veent/core": "workspace:*",
 		"@veent/db": "workspace:*",
@@ -29,6 +30,7 @@
 		"leaflet": "^1.9.4",
 		"leaflet.markercluster": "^1.5.3",
 		"lucide-svelte": "^1.0.1",
+		"maplibre-gl": "6.7.0",
 		"postgres": "^3.4.9",
 		"uqr": "^0.1.3"
 	},

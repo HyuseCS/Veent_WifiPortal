@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import 'leaflet/dist/leaflet.css';
-	import { FALLBACK_CENTER, tileUrl, TILE_SUBDOMAINS, TILE_ATTRIBUTION } from '$lib/map';
+	import { FALLBACK_CENTER, loadBasemap } from '$lib/map';
 
 	// Embeddable coordinate picker: click the map (or drag the pin) to set lat/lng.
 	// Both are two-way so the parent reads the chosen spot. Mount this only while
@@ -27,26 +27,22 @@
 	onMount(() => {
 		let cancelled = false;
 		let cleanup: (() => void) | undefined;
+		let stop: (() => void) | undefined;
 
 		(async () => {
 			const L = (await import('leaflet')).default;
 			if (cancelled) return;
 
 			const seeded = lat != null && lng != null;
-			const map = L.map(mapEl, { zoomControl: false, scrollWheelZoom: false }).setView(
-				seeded ? [lat as number, lng as number] : FALLBACK_CENTER,
-				seeded ? 16 : 12
-			);
+			const map = L.map(mapEl, {
+				zoomControl: false,
+				scrollWheelZoom: false,
+				maxZoom: 19
+			}).setView(seeded ? [lat as number, lng as number] : FALLBACK_CENTER, seeded ? 16 : 12);
 			L.control.zoom({ position: 'bottomright' }).addTo(map);
-			const tileLayer = L.tileLayer(tileUrl(), {
-				maxZoom: 19,
-				subdomains: TILE_SUBDOMAINS,
-				attribution: TILE_ATTRIBUTION
-			}).addTo(map);
-
-			// Swap tiles live when the admin toggles light/dark.
-			const obs = new MutationObserver(() => tileLayer.setUrl(tileUrl()));
-			obs.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+			loadBasemap().then((add) => {
+				if (!cancelled) stop = add(L, map);
+			});
 
 			const pinIcon = (L: typeof import('leaflet')) =>
 				L.divIcon({
@@ -93,7 +89,7 @@
 			}
 
 			cleanup = () => {
-				obs.disconnect();
+				stop?.();
 				map.remove();
 			};
 		})();
