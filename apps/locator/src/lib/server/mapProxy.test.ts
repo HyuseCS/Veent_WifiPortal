@@ -1,3 +1,4 @@
+import { Agent } from 'undici';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { proxyMap } from './mapProxy';
 
@@ -220,6 +221,15 @@ describe('outbound request', () => {
 		const init = fetchMock.mock.calls[0][1] as RequestInit;
 		expect(init.headers).toEqual({ accept: '*/*' });
 		expect(init.redirect).toBe('error');
+	});
+
+	it('reuses one keep-alive agent for every upstream call', async () => {
+		const fetchMock = stub();
+		await call('styles/positron');
+		await call('styles/dark');
+		const [a, b] = fetchMock.mock.calls.map((c) => (c[1] as { dispatcher?: unknown }).dispatcher);
+		expect(a).toBeInstanceOf(Agent);
+		expect(b).toBe(a);
 	});
 });
 

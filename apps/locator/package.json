@@ -20,7 +20,8 @@
 		"@veent/db": "workspace:*",
 		"drizzle-orm": "^0.45.2",
 		"leaflet": "^1.9.4",
-		"maplibre-gl": "6.7.0"
+		"maplibre-gl": "6.7.0",
+		"undici": "6.29.0"
 	},
 	"devDependencies": {
 		"@playwright/test": "^1.60.0",
