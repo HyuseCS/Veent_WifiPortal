@@ -2,7 +2,7 @@
 	import { onMount } from 'svelte';
 	import 'leaflet/dist/leaflet.css';
 	import type { NetworkAp } from '$lib/types';
-	import { FALLBACK_CENTER, tileUrl, TILE_SUBDOMAINS, TILE_ATTRIBUTION } from '$lib/map';
+	import { FALLBACK_CENTER, loadBasemap } from '$lib/map';
 
 	// Read-only coverage map of every placed access point, status-coloured. Clicking a
 	// pin (or selecting a card on the page) focuses that AP. Pins/centre derive purely
@@ -57,7 +57,6 @@
 
 	let L: typeof import('leaflet') | undefined;
 	let map: import('leaflet').Map | undefined;
-	let tile: import('leaflet').TileLayer | undefined;
 	const markers: Record<string, import('leaflet').Marker> = {};
 	let ready = $state(false);
 
@@ -116,37 +115,31 @@
 
 	onMount(() => {
 		let cancelled = false;
-		let cleanup: (() => void) | undefined;
+		let stop: (() => void) | undefined;
 
 		(async () => {
 			const mod = await import('leaflet');
 			if (cancelled) return;
 			L = mod.default;
 
-			const m = L.map(mapEl, { zoomControl: false, scrollWheelZoom: false }).setView(
-				FALLBACK_CENTER,
-				15
-			);
+			const m = L.map(mapEl, {
+				zoomControl: false,
+				scrollWheelZoom: false,
+				maxZoom: 19
+			}).setView(FALLBACK_CENTER, 15);
 			L.control.zoom({ position: 'bottomright' }).addTo(m);
 			map = m;
-			tile = L.tileLayer(tileUrl(), {
-				maxZoom: 19,
-				subdomains: TILE_SUBDOMAINS,
-				attribution: TILE_ATTRIBUTION
-			}).addTo(m);
 			renderMarkers();
+			loadBasemap().then((add) => {
+				if (!cancelled) stop = add(mod.default, m);
+			});
 			ready = true;
 			setTimeout(() => m.invalidateSize(), 200);
-
-			// Swap tiles live when the admin toggles light/dark.
-			const obs = new MutationObserver(() => tile?.setUrl(tileUrl()));
-			obs.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
-			cleanup = () => obs.disconnect();
 		})();
 
 		return () => {
 			cancelled = true;
-			cleanup?.();
+			stop?.();
 			map?.remove();
 		};
 	});

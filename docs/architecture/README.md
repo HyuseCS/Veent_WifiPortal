@@ -34,5 +34,5 @@ Every open question has an ID (`Q-<code><n>`, e.g. `Q-WG1`) in `SYSTEM.md` and i
 _Open questions_ tab. Answer one by editing its entry in `data.mjs` from a string to
 `{ q: '…', r: '… (date)' }`, then rebuild.
 
-Durable project knowledge still lives in `process/context/` — this folder is the picture, not
+Durable project knowledge lives in `docs/project/` — this folder is the picture, not
 the replacement.

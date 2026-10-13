@@ -42,7 +42,12 @@ const securityHeaders: Handle = async ({ event, resolve }) => {
 };
 
 // sentryHandle FIRST so it wraps the request transaction; security headers set on the way out.
-export const handle = sequence(Sentry.sentryHandle(), securityHeaders);
+const sentry = Sentry.sentryHandle();
+export const handle = sequence(
+	({ event, resolve }) =>
+		event.url.pathname.startsWith('/map/') ? resolve(event) : sentry({ event, resolve }),
+	securityHeaders
+);
 
 // Report server-side (load/render) errors to Sentry, then fall through to SvelteKit's default.
 export const handleError = Sentry.handleErrorWithSentry();

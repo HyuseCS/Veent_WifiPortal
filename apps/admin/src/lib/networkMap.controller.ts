@@ -1,7 +1,7 @@
 import type { NetworkAp } from '$lib/types';
 import { rangeFor, type RouterModel } from '$lib/router-models';
 import { HEAD_ICON, LOCATE_ICON, LAYERS_ICON, escapeHtml } from '$lib/networkMap';
-import { FALLBACK_CENTER, tileUrl, TILE_SUBDOMAINS, TILE_ATTRIBUTION } from '$lib/map';
+import { FALLBACK_CENTER, loadBasemap } from '$lib/map';
 
 /**
  * Imperative Leaflet wrapper for NetworkMap.svelte. Owns the map instance, the marker /
@@ -71,7 +71,7 @@ export class NetworkMapController {
 	>();
 	// Guards against a stray map-click firing right after a marker drag.
 	private suppressClick = false;
-	private tileObs?: MutationObserver;
+	private stopBasemap?: () => void;
 	private cancelled = false;
 	private cb!: ControllerCallbacks;
 
@@ -88,7 +88,8 @@ export class NetworkMapController {
 		const map = L.map(el, {
 			attributionControl: true,
 			zoomControl: false,
-			doubleClickZoom: false
+			doubleClickZoom: false,
+			maxZoom: 19
 		}).setView(FALLBACK_CENTER, 11);
 		// Dome pane sits above tiles (200) but below markers (600) — default zIndex 400.
 		map.createPane('domes');
@@ -140,16 +141,8 @@ export class NetworkMapController {
 		});
 		new CoverageToggle({ position: 'bottomright' }).addTo(map);
 
-		// CARTO basemap, themed to the admin's light/dark mode (mirrors CoverageMap).
-		const tileLayer = L.tileLayer(tileUrl(), {
-			maxZoom: 19,
-			subdomains: TILE_SUBDOMAINS,
-			attribution: TILE_ATTRIBUTION
-		}).addTo(map);
-		this.tileObs = new MutationObserver(() => tileLayer.setUrl(tileUrl()));
-		this.tileObs.observe(document.documentElement, {
-			attributes: true,
-			attributeFilter: ['data-theme']
+		loadBasemap().then((add) => {
+			if (!this.cancelled) this.stopBasemap = add(L, map);
 		});
 
 		this.markerGroup = L.featureGroup().addTo(map);
@@ -169,7 +162,7 @@ export class NetworkMapController {
 
 	destroy() {
 		this.cancelled = true;
-		this.tileObs?.disconnect();
+		this.stopBasemap?.();
 		this.map?.remove();
 	}
 

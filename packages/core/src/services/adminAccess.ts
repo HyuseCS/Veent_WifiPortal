@@ -36,6 +36,7 @@ export async function grantAdminAccess(
 	network: NetworkController,
 	macAddress: string
 ): Promise<void> {
+	if (!(await dropRelayMac(network, macAddress))) return;
 	await network.grant({ macAddress, durationMinutes: 0, tag: ADMIN_BYPASS_TAG });
 }
 
@@ -116,7 +117,7 @@ export async function resolveDeviceMac(
 	const ip = ipAddress.replace(/^::ffff:/, '');
 	const now = Date.now();
 	const cached = macByIpCache.get(ip);
-	if (cached && now - cached.at < MAC_CACHE_TTL_MS) return cached.mac;
+	if (cached && now - cached.at < MAC_CACHE_TTL_MS) return dropRelayMac(network, cached.mac);
 	// Retry the live lookup: a transient timeout OR a momentary empty host table (device
 	// mid-reconnect) both clear on a second try, so a single flake no longer costs the grant.
 	let sawError = false;
@@ -129,6 +130,7 @@ export async function resolveDeviceMac(
 				'resolveMacByIp'
 			);
 			if (mac) {
+				if (!(await dropRelayMac(network, mac))) return null;
 				macByIpCache.set(ip, { mac, at: now });
 				return mac;
 			}
@@ -141,6 +143,43 @@ export async function resolveDeviceMac(
 	// Every attempt missed. On a persistent error, last-known beats a false "can't detect device",
 	// but only within a bounded window: past MAC_CACHE_STALE_MAX_MS the DHCP lease may have moved this
 	// IP to a different device, so a stale MAC is worse than null. A clean not-found returns null.
-	if (sawError && cached && now - cached.at < MAC_CACHE_STALE_MAX_MS) return cached.mac;
+	if (sawError && cached && now - cached.at < MAC_CACHE_STALE_MAX_MS)
+		return dropRelayMac(network, cached.mac);
 	return null;
+}
+
+const RELAY_SET_TTL_MS = 5 * 60_000;
+let relayMacs = new Set<string>();
+let relayLoadedAt = -Infinity;
+let relayRead: Promise<void> | null = null;
+
+async function loadRelayMacs(network: NetworkController): Promise<void> {
+	// ponytail: a failed read also waits 5 min to retry, so a down router costs one 2.5 s wait per 5 min
+	relayLoadedAt = Date.now();
+	if (!network.listDhcpLeases) return;
+	try {
+		const leases = await withTimeout(
+			network.listDhcpLeases(),
+			RESOLVE_TIMEOUT_MS,
+			'listDhcpLeases'
+		);
+		const fresh = new Set(
+			leases.flatMap((l) => (l.srcMac && l.agentCircuitId && l.srcMac !== l.mac ? [l.srcMac] : []))
+		);
+		if (fresh.size) relayMacs = fresh;
+	} catch {
+		return;
+	}
+}
+
+export async function dropRelayMac(
+	network: NetworkController,
+	mac: string | null | undefined
+): Promise<string | null> {
+	if (!mac) return null;
+	if (relayRead || Date.now() - relayLoadedAt >= RELAY_SET_TTL_MS) {
+		relayRead ??= loadRelayMacs(network).finally(() => (relayRead = null));
+		await relayRead;
+	}
+	return relayMacs.has(mac.toUpperCase()) ? null : mac;
 }

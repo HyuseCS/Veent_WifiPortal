@@ -8,6 +8,8 @@ import { sentryOptions, nonEmptyEnv } from '@veent/core/observability';
 // Sentry (browser). Fail-open: no PUBLIC_SENTRY_DSN → no init → the locator runs normally. Captures
 // client-side errors + browser performance (page loads, navigations). Same PII scrubbing as the
 // server via sentryOptions. Only PUBLIC_ env is readable here — the DSN is public by design.
+const isMapUrl = (u: string) => new URL(u, location.href).pathname.startsWith('/map/');
+
 const dsn = env.PUBLIC_SENTRY_DSN;
 if (dsn) {
 	// Browser trace sampling is env-tunable so prod sampling can change without a rebuild; a
@@ -22,7 +24,14 @@ if (dsn) {
 			release: nonEmptyEnv(env.PUBLIC_SENTRY_RELEASE),
 			tracesSampleRate: dev ? 1.0 : Number.isFinite(rate) ? rate : 0.2
 		}),
-		integrations: [Sentry.browserTracingIntegration()]
+		integrations: [
+			Sentry.browserTracingIntegration({ shouldCreateSpanForRequest: (u) => !isMapUrl(u) })
+		],
+		beforeBreadcrumb: (b) =>
+			(typeof b.data?.url === 'string' && isMapUrl(b.data.url)) ||
+			(b.category === 'console' && b.message?.includes('/map/'))
+				? null
+				: b
 	});
 }
 

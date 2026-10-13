@@ -9,5 +9,3 @@ bun.lockb
 /static/
 drizzle/
 
-# Generated
-process/context/generated-skills-catalog.json

@@ -10,7 +10,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
  * token directly — a faithful-enough stand-in for drizzle without a real database.
  */
 
-const { store } = vi.hoisted(() => ({ store: new Map<string, string>() }));
+const { store, logInfo } = vi.hoisted(() => ({
+	store: new Map<string, string>(),
+	logInfo: vi.fn()
+}));
 
 vi.mock('drizzle-orm', () => ({ eq: (_col: unknown, val: string) => val }));
 vi.mock('@veent/db', () => ({ adminBypassDevice: { sessionToken: {}, mac: {} } }));
@@ -41,12 +44,14 @@ vi.mock('$lib/server/db', () => ({
 }));
 vi.mock('$lib/server/network', () => ({ network: {} }));
 vi.mock('$lib/server/logger', () => ({
-	logger: () => ({ error: vi.fn(), info: vi.fn(), warn: vi.fn() })
+	logger: () => ({ error: vi.fn(), info: logInfo, warn: vi.fn() })
 }));
 vi.mock('@veent/core', () => ({
 	grantAdminAccess: vi.fn().mockResolvedValue(undefined),
 	revokeAdminAccess: vi.fn().mockResolvedValue(undefined),
-	ADMIN_BYPASS_TTL_MINUTES: 240
+	ADMIN_BYPASS_TTL_MINUTES: 240,
+	maskMac: (mac: string | null | undefined) =>
+		mac ? mac.replace(/^(?:[0-9A-Fa-f]{2}:){4}/, '**:**:**:**:') : null
 }));
 
 import { rememberAdminDevice, refreshAdminBypass, revokeAdminBypass } from './adminBypass';
@@ -100,6 +105,14 @@ describe('revokeAdminBypass', () => {
 		await revokeAdminBypass(fakeEvent('sess-out'));
 		expect(revokeAdminAccess).toHaveBeenCalledWith({}, 'AA:BB:CC:DD:EE:04');
 		expect(store.has('sess-out')).toBe(false);
+	});
+
+	it('logs only the masked MAC on revoke', async () => {
+		await rememberAdminDevice('sess-mask', 'AA:BB:CC:DD:35:8F');
+		await revokeAdminBypass(fakeEvent('sess-mask'));
+		const msg = logInfo.mock.calls.map((c) => String(c[0])).join('\n');
+		expect(msg).toContain('**:**:**:**:35:8F');
+		expect(msg).not.toContain('AA:BB:CC:DD');
 	});
 
 	it('two sessions revoke independently', async () => {

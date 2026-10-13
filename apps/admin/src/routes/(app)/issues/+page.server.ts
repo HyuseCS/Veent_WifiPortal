@@ -6,7 +6,7 @@ import { parseDueDate } from '$lib/server/formValidation';
 import { rateLimit } from '$lib/server/rateLimit';
 import { listStaff, listNetworkHealth } from '$lib/server/queries';
 import {
-	listIssues,
+	listIssuesPage,
 	listIssuesForAssignee,
 	listOpenPool,
 	isAssignee,
@@ -42,8 +42,9 @@ export const load: PageServerLoad = async (event) => {
 		// page, so managers get the unresolved-issue list for its picker. getIssues() degrades to []
 		// internally (never throws), so a Sentry outage just empties the picker.
 		const sentryConfigured = isSentryConfigured();
-		const [issues, staff, networks, sentry] = await Promise.all([
-			listIssues(db),
+		const q = event.url.searchParams.get('q') ?? '';
+		const [board, staff, networks, sentry] = await Promise.all([
+			listIssuesPage(db, { page: Number(event.url.searchParams.get('page')), q }),
 			listStaff(db),
 			listNetworkHealth(db),
 			sentryConfigured ? getSentryIssues() : Promise.resolve(null)
@@ -51,7 +52,8 @@ export const load: PageServerLoad = async (event) => {
 		return {
 			canManage,
 			currentUserId: user.id,
-			issues,
+			...board,
+			q,
 			// Managers work the full board (which already lists the pool as "Open"); no separate pool feed.
 			pool: [] as AdminIssueRow[],
 			assignableStaff: staff
@@ -80,7 +82,11 @@ export const load: PageServerLoad = async (event) => {
 		assignableStaff: [] as { id: string; name: string; roleLabel: string }[],
 		networks: networks.map((n) => ({ id: n.id, name: n.name })),
 		sentryConfigured: false,
-		sentryIssues: [] as SentryIssue[]
+		sentryIssues: [] as SentryIssue[],
+		total: issues.length,
+		page: 1,
+		pageCount: 1,
+		q: ''
 	};
 };
 

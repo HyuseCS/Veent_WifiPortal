@@ -45,7 +45,20 @@ vi.mock('$lib/server/db', () => {
 		}
 	};
 });
-vi.mock('$lib/server/network', () => ({ network: {} }));
+vi.mock('$lib/server/network', () => ({
+	network: {
+		listDhcpLeases: vi.fn(async () => [
+			{
+				mac: '2E:47:8F:2D:35:8F',
+				address: '10.210.44.159',
+				hostname: null,
+				agentCircuitId: 'OLT-9 xpon 0/1/0/4:16.3.70',
+				status: 'bound',
+				srcMac: 'F4:B7:8D:A6:80:88'
+			}
+		])
+	}
+}));
 vi.mock('$lib/server/portal', () => ({
 	getPortalContext: vi.fn(),
 	getDeviceMac: vi.fn(),
@@ -53,12 +66,18 @@ vi.mock('$lib/server/portal', () => ({
 }));
 vi.mock('@veent/core', async (importOriginal) => {
 	const actual = await importOriginal<typeof import('@veent/core')>();
-	return { ...actual, captureHandled: vi.fn(), resolveNetworkIdByApName: vi.fn() };
+	return {
+		...actual,
+		captureHandled: vi.fn(),
+		resolveNetworkIdByApName: vi.fn(),
+		resolveCircuitIdForMac: vi.fn(actual.resolveCircuitIdForMac)
+	};
 });
 
 import { resolveMacTrusted, resolveMacForUser, resolveCheckoutLocation } from './network-location';
-import { getPortalContext, getDeviceMac } from '$lib/server/portal';
-import { captureHandled, resolveNetworkIdByApName } from '@veent/core';
+import { getPortalContext, getDeviceMac, persistResolvedMac } from '$lib/server/portal';
+import { network } from '$lib/server/network';
+import { captureHandled, resolveNetworkIdByApName, resolveCircuitIdForMac } from '@veent/core';
 
 const SERVER_MAC = 'AA:BB:CC:DD:EE:01';
 const evt = { getClientAddress: () => '10.0.0.5' } as never;
@@ -105,6 +124,8 @@ describe('resolveCheckoutLocation — durable circuit-id per fallback tier (AC1)
 	it('tier 1 (ap-param): resolves networkId, circuit-id, AND the frozen name snapshot (display_name wins)', async () => {
 		(getPortalContext as ReturnType<typeof vi.fn>).mockReturnValue({ ap: 'iface-1' });
 		(resolveNetworkIdByApName as ReturnType<typeof vi.fn>).mockResolvedValue(7);
+		selectQueue.push([]); // accountMac
+		selectQueue.push([]); // lastKnownMac
 		// apAttributionForNetworkId's single network_health lookup returns circuit-id + name + displayName.
 		selectQueue.push([
 			{ apCircuitId: 'OLT-9 xpon 0/1/0/4', name: 'AP-Pabayo', displayName: 'Front Desk' }
@@ -120,6 +141,8 @@ describe('resolveCheckoutLocation — durable circuit-id per fallback tier (AC1)
 	it('tier 1 falls back to name when no display_name override is set', async () => {
 		(getPortalContext as ReturnType<typeof vi.fn>).mockReturnValue({ ap: 'iface-1' });
 		(resolveNetworkIdByApName as ReturnType<typeof vi.fn>).mockResolvedValue(7);
+		selectQueue.push([]); // accountMac
+		selectQueue.push([]); // lastKnownMac
 		selectQueue.push([{ apCircuitId: 'CID', name: 'AP-Pabayo', displayName: null }]);
 		const loc = await resolveCheckoutLocation(locEvt, 'u1');
 		expect(loc).toEqual({ networkId: 7, apCircuitId: 'CID', apNameSnapshot: 'AP-Pabayo' });
@@ -128,6 +151,8 @@ describe('resolveCheckoutLocation — durable circuit-id per fallback tier (AC1)
 	it('tier 1 with a network_health row carrying no circuit-id/name → networkId set, others null', async () => {
 		(getPortalContext as ReturnType<typeof vi.fn>).mockReturnValue({ ap: 'iface-1' });
 		(resolveNetworkIdByApName as ReturnType<typeof vi.fn>).mockResolvedValue(7);
+		selectQueue.push([]); // accountMac
+		selectQueue.push([]); // lastKnownMac
 		selectQueue.push([{ apCircuitId: null, name: null, displayName: null }]);
 		const loc = await resolveCheckoutLocation(locEvt, 'u1');
 		expect(loc).toEqual({ networkId: 7, apCircuitId: null, apNameSnapshot: null });
@@ -136,6 +161,8 @@ describe('resolveCheckoutLocation — durable circuit-id per fallback tier (AC1)
 	it('tier 3 (active-session): networkId resolved, circuit-id + snapshot null (known-gap fallback)', async () => {
 		// No ap param, no MAC (network stub has no resolveMacByIp) → falls to the active-session query.
 		(getPortalContext as ReturnType<typeof vi.fn>).mockReturnValue({});
+		selectQueue.push([]); // accountMac
+		selectQueue.push([]); // lastKnownMac
 		selectQueue.push([{ networkId: 5 }]); // active network_sessions row
 		const loc = await resolveCheckoutLocation(locEvt, 'u1');
 		expect(loc).toEqual({ networkId: 5, apCircuitId: null, apNameSnapshot: null });
@@ -143,6 +170,8 @@ describe('resolveCheckoutLocation — durable circuit-id per fallback tier (AC1)
 
 	it('fully unresolved (dev=false): all null, attribution-miss captured', async () => {
 		(getPortalContext as ReturnType<typeof vi.fn>).mockReturnValue({});
+		selectQueue.push([]); // accountMac
+		selectQueue.push([]); // lastKnownMac
 		selectQueue.push([]); // active-session: none
 		selectQueue.push([]); // last-known profile: none
 		const loc = await resolveCheckoutLocation(locEvt, 'u1');
@@ -177,6 +206,23 @@ describe('resolveCheckoutLocation — circuit-id beats interface-name (physical 
 		expect(loc).toEqual({ networkId: 14, apCircuitId: CID, apNameSnapshot: 'AP-PABAYO' });
 		// ap-param path never reached — the shared bridge must NOT win over the device's circuit-id.
 		expect(resolveNetworkIdByApName).not.toHaveBeenCalled();
+	});
+
+	it('NAT-hidden device: account MAC feeds the circuit-id tier → physical AP, no ?ap= lookup', async () => {
+		(getPortalContext as ReturnType<typeof vi.fn>).mockReturnValue({});
+		(getDeviceMac as ReturnType<typeof vi.fn>).mockReturnValue(undefined);
+		const info = vi.spyOn(console, 'info').mockImplementation(() => {});
+		selectQueue.push([{ mac: 'AA:BB:CC:DD:EE:01' }]); // accountMac
+		selectQueue.push([{ circuitId: CID }]); // resolveCircuitIdForMac cache hit
+		selectQueue.push([{ id: 4, name: 'OAP3000G-FC6G', displayName: null }]); // apRowForCircuitId
+		const loc = await resolveCheckoutLocation(locEvt, 'u1');
+		expect(loc).toEqual({ networkId: 4, apCircuitId: CID, apNameSnapshot: 'OAP3000G-FC6G' });
+		expect(resolveNetworkIdByApName).not.toHaveBeenCalled();
+		expect(info).toHaveBeenCalledWith(
+			'[topup] AP resolved',
+			expect.objectContaining({ via: 'device-circuit-id' })
+		);
+		info.mockRestore();
 	});
 
 	it('falls back to the ?ap= tier when the device has no resolvable circuit-id', async () => {
@@ -238,5 +284,76 @@ describe('resolveMacForUser — live/fallback provenance + no-entrench (AC1/AC2/
 		expect(updateCalls.length).toBe(1);
 		expect(updateCalls[0].set).toEqual({ lastKnownMac: SERVER_MAC });
 		expect(whereHas(updateCalls[0].where, '<>')).toBe(true); // `or(isNull, ne(...))`
+	});
+});
+
+describe('relay MAC guard in MAC resolution (FR-009 to FR-012, FR-016b)', () => {
+	const RELAY = 'F4:B7:8D:A6:80:88';
+	const REAL = 'AA:BB:CC:DD:EE:07';
+	const relEvt = (ip: string, qs = '') =>
+		({ getClientAddress: () => ip, url: new URL(`http://portal/${qs}`) }) as never;
+	const noRelayWrites = () =>
+		expect(updateCalls.filter((c) => JSON.stringify(c.set).includes(RELAY))).toEqual([]);
+	beforeEach(() => {
+		vi.clearAllMocks();
+		resetDb();
+		(getDeviceMac as ReturnType<typeof vi.fn>).mockReturnValue(undefined);
+	});
+
+	it.each([
+		['?mac= redirect', '?mac=F4-B7-8D-A6-80-88', '10.99.5.1'],
+		['portal cookie', '', '10.99.5.2']
+	])('relay MAC from the %s is skipped and the router is asked', async (_n, qs, ip) => {
+		(getPortalContext as ReturnType<typeof vi.fn>).mockReturnValue({ mac: RELAY });
+		const resolveMacByIp = vi.fn().mockResolvedValue(REAL);
+		Object.assign(network, { resolveMacByIp });
+		try {
+			const r = await resolveMacForUser(relEvt(ip, qs), 'u1');
+			expect(r).toEqual({ mac: REAL, live: true });
+			expect(resolveMacByIp).toHaveBeenCalled();
+			expect(persistResolvedMac).not.toHaveBeenCalledWith(expect.anything(), RELAY);
+			noRelayWrites();
+		} finally {
+			delete (network as unknown as Record<string, unknown>).resolveMacByIp;
+		}
+	});
+
+	it('relay device cookie is skipped, not seeded, and the account MAC is used', async () => {
+		(getPortalContext as ReturnType<typeof vi.fn>).mockReturnValue({});
+		(getDeviceMac as ReturnType<typeof vi.fn>).mockReturnValue(RELAY);
+		selectQueue.push([{ mac: REAL }]); // accountMac
+		const r = await resolveMacForUser(relEvt('10.99.5.3'), 'u1');
+		expect(r).toEqual({ mac: REAL, live: false });
+		expect(updateCalls).toEqual([]);
+	});
+
+	it('relay account MAC falls to last-session', async () => {
+		(getPortalContext as ReturnType<typeof vi.fn>).mockReturnValue({});
+		selectQueue.push([{ mac: RELAY }]); // accountMac
+		selectQueue.push([{ mac: REAL }]); // lastKnownMac
+		const r = await resolveMacForUser(relEvt('10.99.5.4'), 'u1');
+		expect(r).toEqual({ mac: REAL, live: false });
+		noRelayWrites();
+	});
+
+	it('relay last-session gives null', async () => {
+		(getPortalContext as ReturnType<typeof vi.fn>).mockReturnValue({});
+		selectQueue.push([]); // accountMac
+		selectQueue.push([{ mac: RELAY }]); // lastKnownMac
+		const r = await resolveMacForUser(relEvt('10.99.5.5'), 'u1');
+		expect(r).toEqual({ mac: null, live: false });
+		noRelayWrites();
+	});
+
+	it('resolveCheckoutLocation with only relay sources never asks for a circuit-id and uses the fallback tiers', async () => {
+		(getPortalContext as ReturnType<typeof vi.fn>).mockReturnValue({ mac: RELAY });
+		(getDeviceMac as ReturnType<typeof vi.fn>).mockReturnValue(RELAY);
+		selectQueue.push([{ mac: RELAY }]); // accountMac
+		selectQueue.push([{ mac: RELAY }]); // lastKnownMac
+		selectQueue.push([{ networkId: 5 }]); // active network_sessions row
+		const loc = await resolveCheckoutLocation(relEvt('10.99.5.6'), 'u1');
+		expect(resolveCircuitIdForMac).not.toHaveBeenCalled();
+		expect(loc).toEqual({ networkId: 5, apCircuitId: null, apNameSnapshot: null });
+		noRelayWrites();
 	});
 });

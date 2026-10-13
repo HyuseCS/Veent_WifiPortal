@@ -3,7 +3,7 @@
 	import { browser } from '$app/environment';
 	import 'leaflet/dist/leaflet.css';
 	import Icon from '$lib/Icon.svelte';
-	import { FALLBACK_CENTER, TILE_SUBDOMAINS, TILE_ATTRIBUTION, tileUrl } from '$lib/map';
+	import { FALLBACK_CENTER, loadBasemap } from '$lib/map';
 	import { groupByCluster } from '$lib/clusters';
 	import type { PageData } from './$types';
 
@@ -81,9 +81,7 @@
 	// only reads them inside event handlers, never in the render path.
 	let mapInstance: import('leaflet').Map | undefined;
 	const markersById: Record<number, import('leaflet').Marker> = {};
-
-	// Re-tiles the basemap when data-theme flips (toggle or pre-paint). Disconnected on unmount.
-	let themeObs: MutationObserver | undefined;
+	let stopBasemap: (() => void) | undefined;
 
 	/** Pan + zoom to a location and open its popup. */
 	function selectLocation(loc: Loc) {
@@ -111,10 +109,11 @@
 			if (cancelled) return;
 
 			// Default zoom control sits top-left, under the sidebar — move it bottom-right.
-			mapInstance = L.map(mapEl, { attributionControl: true, zoomControl: false }).setView(
-				FALLBACK_CENTER,
-				11
-			);
+			mapInstance = L.map(mapEl, {
+				attributionControl: true,
+				zoomControl: false,
+				maxZoom: 19
+			}).setView(FALLBACK_CENTER, 11);
 			L.control.zoom({ position: 'bottomright' }).addTo(mapInstance);
 
 			// Recenter on the visitor's location. Added after zoom so it stacks just below it
@@ -145,19 +144,6 @@
 			});
 			new Recenter({ position: 'bottomright' }).addTo(mapInstance);
 
-			// CARTO basemap (Voyager / Dark Matter, matching admin), themed to the current data-theme;
-			// re-tiles live when the theme toggle flips the attribute.
-			const tileLayer = L.tileLayer(tileUrl(), {
-				maxZoom: 19,
-				subdomains: TILE_SUBDOMAINS,
-				attribution: TILE_ATTRIBUTION
-			}).addTo(mapInstance);
-			themeObs = new MutationObserver(() => tileLayer.setUrl(tileUrl()));
-			themeObs.observe(document.documentElement, {
-				attributes: true,
-				attributeFilter: ['data-theme']
-			});
-
 			// Individual teardrop pins (no proximity clustering) — matches admin's map; the cluster
 			// grouping lives in the sidebar instead. featureGroup so getBounds() works for fit-to-all.
 			const markerGroup = L.featureGroup().addTo(mapInstance);
@@ -186,6 +172,10 @@
 					.addTo(markerGroup);
 			}
 
+			loadBasemap().then((add) => {
+				if (!cancelled) stopBasemap = add(L, mapInstance!);
+			});
+
 			// Centre priority: the user's own location, then any plotted APs, then the
 			// Metro Manila fallback already set above. Geolocation is async and needs the
 			// user's permission, so the fallback shows immediately and we recentre on grant.
@@ -212,7 +202,7 @@
 
 		return () => {
 			cancelled = true;
-			themeObs?.disconnect();
+			stopBasemap?.();
 			mapInstance?.remove();
 		};
 	});

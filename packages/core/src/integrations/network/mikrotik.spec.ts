@@ -4,6 +4,11 @@ import {
 	connectHardened,
 	createMikrotikController,
 	provisionGcashResolveScheduler,
+	provisionGotymeResolveScheduler,
+	provisionSeabankResolveScheduler,
+	provisionGcashAppResolveScheduler,
+	provisionWanDnsBlock,
+	findDisabledOwnedRows,
 	reconcileWalledGarden,
 	wipeWalledGarden
 } from './mikrotik';
@@ -18,16 +23,33 @@ const pingState = { inflight: 0, peak: 0 };
 // A growing in-memory router table for the scheduler + walled-garden provisioning/reconcile tests.
 // The mocked `write` dispatches by menu against this state; tests reset it before each case.
 type Row = Record<string, string>;
-const routerTable: { scheduler: Row[]; wg: Row[]; wgIp: Row[]; nextId: number } = {
+const routerTable: {
+	scheduler: Row[];
+	wg: Row[];
+	wgIp: Row[];
+	filter: Row[];
+	host: Row[];
+	lease: Row[];
+	arp: Row[];
+	nextId: number;
+} = {
 	scheduler: [],
 	wg: [],
 	wgIp: [],
+	filter: [],
+	host: [],
+	lease: [],
+	arp: [],
 	nextId: 1
 };
 function resetRouterTable() {
 	routerTable.scheduler = [];
 	routerTable.wg = [];
 	routerTable.wgIp = [];
+	routerTable.filter = [];
+	routerTable.host = [];
+	routerTable.lease = [];
+	routerTable.arp = [];
 	routerTable.nextId = 1;
 }
 function parseAdd(params: string[]): Row {
@@ -87,6 +109,17 @@ vi.mock('node-routeros', () => {
 				case '/ip/hotspot/walled-garden/ip/remove':
 					removeById(routerTable.wgIp, params);
 					return [];
+				case '/ip/firewall/filter/print':
+					return filterByQuery(routerTable.filter, params);
+				case '/ip/firewall/filter/add':
+					routerTable.filter.push(parseAdd(params));
+					return [];
+				case '/ip/hotspot/host/print':
+					return filterByQuery(routerTable.host, params);
+				case '/ip/dhcp-server/lease/print':
+					return filterByQuery(routerTable.lease, params);
+				case '/ip/arp/print':
+					return filterByQuery(routerTable.arp, params);
 			}
 			if (menu !== '/ping') return [];
 			const address = (params.find((p) => p.startsWith('=address=')) ?? '').slice(
@@ -111,16 +144,21 @@ vi.mock('node-routeros', () => {
 
 const mikrotikConfig = { host: '127.0.0.1', user: 'x', password: '' };
 
-// The gcash-resolve on-event body, copied VERBATIM (independently of the source constant) from
-// `payment-walled-garden-v6_REPORT_29-07-26.md` §What Was Done bullet 1, so a transcription drift in
-// the shipped constant makes item-18b's string-equality assertion FAIL.
+// The gcash-resolve on-event body, typed out independently of the source constant, so a
+// transcription drift in the shipped constant makes item-18b's string-equality assertion FAIL.
 const EXPECTED_GCASH_ON_EVENT = `
-  :local ip [:resolve payments.gcash.com];
-  :if ([:len [/ip hotspot walled-garden ip find comment="gcash-auto"]] = 0) do={
-    /ip hotspot walled-garden ip add dst-address=$ip comment="gcash-auto"
-  } else={
-    /ip hotspot walled-garden ip set [find comment="gcash-auto"] dst-address=$ip
-  }
+  :do {
+    :local ip [:resolve payments.gcash.com];
+    :local seen false;
+    :foreach r in=[/ip hotspot walled-garden ip find comment="gcash-auto"] do={
+      :if ([:tostr [/ip hotspot walled-garden ip get $r dst-address]] = [:tostr $ip]) do={ :set seen true }
+    }
+    :if (!$seen) do={
+      /ip hotspot walled-garden ip add dst-address=$ip comment="gcash-auto"
+      :local rows [/ip hotspot walled-garden ip find comment="gcash-auto"];
+      :if ([:len $rows] > 4) do={ /ip hotspot walled-garden ip remove [:pick $rows 0] }
+    }
+  } on-error={}
 `;
 
 const controllerForPing = () =>
@@ -231,6 +269,310 @@ describe('provisionGcashResolveScheduler (item 18 — gcash CNAME resolve-script
 		resetRouterTable();
 		await provisionGcashResolveScheduler(mikrotikConfig);
 		expect(routerTable.scheduler[0]['on-event']).toBe(EXPECTED_GCASH_ON_EVENT);
+	});
+});
+
+const EXPECTED_GOTYME_ON_EVENT = `
+  :do {
+    :local ip [:resolve aws-gate.licelus.com];
+    :local seen false;
+    :foreach r in=[/ip hotspot walled-garden ip find comment="gotyme-auto"] do={
+      :if ([:tostr [/ip hotspot walled-garden ip get $r dst-address]] = [:tostr $ip]) do={ :set seen true }
+    }
+    :if (!$seen) do={
+      /ip hotspot walled-garden ip add dst-address=$ip comment="gotyme-auto"
+      :local rows [/ip hotspot walled-garden ip find comment="gotyme-auto"];
+      :if ([:len $rows] > 4) do={ /ip hotspot walled-garden ip remove [:pick $rows 0] }
+    }
+  } on-error={}
+`;
+
+describe('provisionGotymeResolveScheduler (GoTyme Licel attestation CNAME resolve-script)', () => {
+	it('adds the gotyme-resolve scheduler once; a 2nd call is a full no-op (matched by name)', async () => {
+		resetRouterTable();
+		const first = await provisionGotymeResolveScheduler(mikrotikConfig);
+		expect(first.scheduler).toEqual({ value: 'gotyme-resolve', created: true });
+		expect(routerTable.scheduler).toHaveLength(1);
+		expect(routerTable.scheduler[0].name).toBe('gotyme-resolve');
+		expect(routerTable.scheduler[0].interval).toBe('5m');
+
+		const second = await provisionGotymeResolveScheduler(mikrotikConfig);
+		expect(second.scheduler).toEqual({ value: 'gotyme-resolve', created: false });
+		expect(routerTable.scheduler).toHaveLength(1);
+	});
+
+	it('sends the on-event body verbatim', async () => {
+		resetRouterTable();
+		await provisionGotymeResolveScheduler(mikrotikConfig);
+		expect(routerTable.scheduler[0]['on-event']).toBe(EXPECTED_GOTYME_ON_EVENT);
+	});
+
+	it('coexists with gcash-resolve without matching it as already present', async () => {
+		resetRouterTable();
+		await provisionGcashResolveScheduler(mikrotikConfig);
+		const res = await provisionGotymeResolveScheduler(mikrotikConfig);
+		expect(res.scheduler.created).toBe(true);
+		expect(routerTable.scheduler.map((s) => s.name)).toEqual(['gcash-resolve', 'gotyme-resolve']);
+	});
+});
+
+const EXPECTED_SEABANK_ON_EVENT = `
+  :do {
+    :local ip [:resolve httpdns.seabank.ph];
+    :local seen false;
+    :foreach r in=[/ip hotspot walled-garden ip find comment="seabank-auto"] do={
+      :if ([:tostr [/ip hotspot walled-garden ip get $r dst-address]] = [:tostr $ip]) do={ :set seen true }
+    }
+    :if (!$seen) do={
+      /ip hotspot walled-garden ip add dst-address=$ip comment="seabank-auto"
+      :local rows [/ip hotspot walled-garden ip find comment="seabank-auto"];
+      :if ([:len $rows] > 4) do={ /ip hotspot walled-garden ip remove [:pick $rows 0] }
+    }
+  } on-error={}
+`;
+
+describe('provisionSeabankResolveScheduler (SeaBank HTTPDNS CNAME resolve-script)', () => {
+	it('adds the seabank-resolve scheduler once; a 2nd call is a full no-op (matched by name)', async () => {
+		resetRouterTable();
+		const first = await provisionSeabankResolveScheduler(mikrotikConfig);
+		expect(first.scheduler).toEqual({ value: 'seabank-resolve', created: true });
+		expect(routerTable.scheduler).toHaveLength(1);
+		expect(routerTable.scheduler[0].name).toBe('seabank-resolve');
+		expect(routerTable.scheduler[0].interval).toBe('5m');
+
+		const second = await provisionSeabankResolveScheduler(mikrotikConfig);
+		expect(second.scheduler).toEqual({ value: 'seabank-resolve', created: false });
+		expect(routerTable.scheduler).toHaveLength(1);
+	});
+
+	it('sends the on-event body verbatim', async () => {
+		resetRouterTable();
+		await provisionSeabankResolveScheduler(mikrotikConfig);
+		expect(routerTable.scheduler[0]['on-event']).toBe(EXPECTED_SEABANK_ON_EVENT);
+	});
+
+	it('coexists with gcash-resolve without matching it as already present', async () => {
+		resetRouterTable();
+		await provisionGcashResolveScheduler(mikrotikConfig);
+		const res = await provisionSeabankResolveScheduler(mikrotikConfig);
+		expect(res.scheduler.created).toBe(true);
+		expect(routerTable.scheduler.map((s) => s.name)).toEqual(['gcash-resolve', 'seabank-resolve']);
+	});
+});
+
+const EXPECTED_GCASH_APP_ON_EVENT = `
+  :do {
+    :local ip [:resolve login.mynt.xyz];
+    :local seen false;
+    :foreach r in=[/ip hotspot walled-garden ip find comment="gcash-app-login-auto"] do={
+      :if ([:tostr [/ip hotspot walled-garden ip get $r dst-address]] = [:tostr $ip]) do={ :set seen true }
+    }
+    :if (!$seen) do={
+      /ip hotspot walled-garden ip add dst-address=$ip comment="gcash-app-login-auto"
+      :local rows [/ip hotspot walled-garden ip find comment="gcash-app-login-auto"];
+      :if ([:len $rows] > 4) do={ /ip hotspot walled-garden ip remove [:pick $rows 0] }
+    }
+  } on-error={}
+  :do {
+    :local ip [:resolve api.mynt.xyz];
+    :local seen false;
+    :foreach r in=[/ip hotspot walled-garden ip find comment="gcash-app-api-auto"] do={
+      :if ([:tostr [/ip hotspot walled-garden ip get $r dst-address]] = [:tostr $ip]) do={ :set seen true }
+    }
+    :if (!$seen) do={
+      /ip hotspot walled-garden ip add dst-address=$ip comment="gcash-app-api-auto"
+      :local rows [/ip hotspot walled-garden ip find comment="gcash-app-api-auto"];
+      :if ([:len $rows] > 4) do={ /ip hotspot walled-garden ip remove [:pick $rows 0] }
+    }
+  } on-error={}
+  :do {
+    :local ip [:resolve mdap.paas.mynt.xyz];
+    :local seen false;
+    :foreach r in=[/ip hotspot walled-garden ip find comment="gcash-app-mdap-auto"] do={
+      :if ([:tostr [/ip hotspot walled-garden ip get $r dst-address]] = [:tostr $ip]) do={ :set seen true }
+    }
+    :if (!$seen) do={
+      /ip hotspot walled-garden ip add dst-address=$ip comment="gcash-app-mdap-auto"
+      :local rows [/ip hotspot walled-garden ip find comment="gcash-app-mdap-auto"];
+      :if ([:len $rows] > 4) do={ /ip hotspot walled-garden ip remove [:pick $rows 0] }
+    }
+  } on-error={}
+  :do {
+    :local ip [:resolve acm.mynt.xyz];
+    :local seen false;
+    :foreach r in=[/ip hotspot walled-garden ip find comment="gcash-app-acm-auto"] do={
+      :if ([:tostr [/ip hotspot walled-garden ip get $r dst-address]] = [:tostr $ip]) do={ :set seen true }
+    }
+    :if (!$seen) do={
+      /ip hotspot walled-garden ip add dst-address=$ip comment="gcash-app-acm-auto"
+      :local rows [/ip hotspot walled-garden ip find comment="gcash-app-acm-auto"];
+      :if ([:len $rows] > 4) do={ /ip hotspot walled-garden ip remove [:pick $rows 0] }
+    }
+  } on-error={}
+  :do {
+    :local ip [:resolve customer-segment.mynt.xyz];
+    :local seen false;
+    :foreach r in=[/ip hotspot walled-garden ip find comment="gcash-app-segment-auto"] do={
+      :if ([:tostr [/ip hotspot walled-garden ip get $r dst-address]] = [:tostr $ip]) do={ :set seen true }
+    }
+    :if (!$seen) do={
+      /ip hotspot walled-garden ip add dst-address=$ip comment="gcash-app-segment-auto"
+      :local rows [/ip hotspot walled-garden ip find comment="gcash-app-segment-auto"];
+      :if ([:len $rows] > 4) do={ /ip hotspot walled-garden ip remove [:pick $rows 0] }
+    }
+  } on-error={}
+`;
+
+describe('provisionGcashAppResolveScheduler (GCash app mynt.xyz CNAME resolve-script)', () => {
+	it('adds the gcash-app-resolve scheduler once; a 2nd call is a full no-op (matched by name)', async () => {
+		resetRouterTable();
+		const first = await provisionGcashAppResolveScheduler(mikrotikConfig);
+		expect(first.scheduler).toEqual({ value: 'gcash-app-resolve', created: true });
+		expect(routerTable.scheduler).toHaveLength(1);
+		expect(routerTable.scheduler[0].name).toBe('gcash-app-resolve');
+		expect(routerTable.scheduler[0].interval).toBe('5m');
+
+		const second = await provisionGcashAppResolveScheduler(mikrotikConfig);
+		expect(second.scheduler).toEqual({ value: 'gcash-app-resolve', created: false });
+		expect(routerTable.scheduler).toHaveLength(1);
+	});
+
+	it('sends the on-event body verbatim', async () => {
+		resetRouterTable();
+		await provisionGcashAppResolveScheduler(mikrotikConfig);
+		expect(routerTable.scheduler[0]['on-event']).toBe(EXPECTED_GCASH_APP_ON_EVENT);
+	});
+
+	it('coexists with gcash-resolve without matching it as already present', async () => {
+		resetRouterTable();
+		await provisionGcashResolveScheduler(mikrotikConfig);
+		const res = await provisionGcashAppResolveScheduler(mikrotikConfig);
+		expect(res.scheduler.created).toBe(true);
+		expect(routerTable.scheduler.map((s) => s.name)).toEqual([
+			'gcash-resolve',
+			'gcash-app-resolve'
+		]);
+	});
+});
+
+describe('provisionWanDnsBlock (block open DNS from WAN)', () => {
+	const expectedRule = (protocol: string, iface = 'vlan75') => ({
+		chain: 'input',
+		'in-interface': iface,
+		protocol,
+		'dst-port': '53',
+		action: 'drop',
+		comment: 'block open DNS from WAN'
+	});
+
+	it('adds the udp and tcp drop rules on the first run', async () => {
+		resetRouterTable();
+		const res = await provisionWanDnsBlock(mikrotikConfig, 'vlan75');
+		expect(res.rules).toEqual([
+			{ value: 'udp', created: true },
+			{ value: 'tcp', created: true }
+		]);
+		expect(routerTable.filter).toHaveLength(2);
+		expect(routerTable.filter[0]).toMatchObject(expectedRule('udp'));
+		expect(routerTable.filter[1]).toMatchObject(expectedRule('tcp'));
+	});
+
+	it('a 2nd run is a full no-op', async () => {
+		resetRouterTable();
+		await provisionWanDnsBlock(mikrotikConfig, 'vlan75');
+		const second = await provisionWanDnsBlock(mikrotikConfig, 'vlan75');
+		expect(second.rules).toEqual([
+			{ value: 'udp', created: false },
+			{ value: 'tcp', created: false }
+		]);
+		expect(routerTable.filter).toHaveLength(2);
+	});
+
+	it('a same-comment rule on a different interface does not count', async () => {
+		resetRouterTable();
+		await provisionWanDnsBlock(mikrotikConfig, 'ether1');
+		const res = await provisionWanDnsBlock(mikrotikConfig, 'vlan75');
+		expect(res.rules).toEqual([
+			{ value: 'udp', created: true },
+			{ value: 'tcp', created: true }
+		]);
+		expect(routerTable.filter).toHaveLength(4);
+		expect(routerTable.filter[2]).toMatchObject(expectedRule('udp'));
+		expect(routerTable.filter[3]).toMatchObject(expectedRule('tcp'));
+	});
+
+	it('adds only the missing protocol when one rule already exists', async () => {
+		resetRouterTable();
+		routerTable.filter.push({ '.id': '*99', ...expectedRule('udp') });
+		const res = await provisionWanDnsBlock(mikrotikConfig, 'vlan75');
+		expect(res.rules).toEqual([
+			{ value: 'udp', created: false },
+			{ value: 'tcp', created: true }
+		]);
+		expect(routerTable.filter).toHaveLength(2);
+		expect(routerTable.filter[1]).toMatchObject(expectedRule('tcp'));
+	});
+
+	it('rejects an invalid interface name and writes nothing', async () => {
+		resetRouterTable();
+		await expect(provisionWanDnsBlock(mikrotikConfig, 'vlan75 =x')).rejects.toThrow();
+		expect(routerTable.filter).toHaveLength(0);
+	});
+});
+
+describe('findDisabledOwnedRows', () => {
+	it('returns disabled code-owned rows from all 4 menus with menu + label', async () => {
+		resetRouterTable();
+		routerTable.wg.push(
+			{ '.id': '*1', comment: 'veent-admin:payment', 'dst-host': '*.maya.ph', disabled: 'true' },
+			{ '.id': '*2', comment: 'veent-admin:portal', 'dst-host': 'ok.lan', disabled: 'false' }
+		);
+		routerTable.wgIp.push({
+			'.id': '*3',
+			comment: 'gcash-auto',
+			'dst-address': '1.2.3.4',
+			disabled: 'true'
+		});
+		routerTable.scheduler.push(
+			{ '.id': '*4', name: 'gotyme-resolve', disabled: 'true' },
+			{ '.id': '*5', name: 'gcash-resolve', disabled: 'false' }
+		);
+		routerTable.filter.push({
+			'.id': '*6',
+			comment: 'block open DNS from WAN',
+			protocol: 'udp',
+			disabled: 'true'
+		});
+		expect(await findDisabledOwnedRows(mikrotikConfig)).toEqual([
+			{ menu: '/ip hotspot walled-garden', label: 'veent-admin:payment *.maya.ph' },
+			{ menu: '/ip hotspot walled-garden ip', label: 'gcash-auto 1.2.3.4' },
+			{ menu: '/system scheduler', label: 'gotyme-resolve' },
+			{ menu: '/ip firewall filter', label: 'block open DNS from WAN udp' }
+		]);
+	});
+
+	it('ignores disabled rows the code does not own', async () => {
+		resetRouterTable();
+		routerTable.wg.push({
+			'.id': '*1',
+			comment: 'place hotspot rules here',
+			'dst-host': 'x',
+			disabled: 'true'
+		});
+		routerTable.scheduler.push({ '.id': '*2', name: 'other', disabled: 'true' });
+		expect(await findDisabledOwnedRows(mikrotikConfig)).toEqual([]);
+	});
+
+	it('ignores disabled dynamic rows', async () => {
+		resetRouterTable();
+		routerTable.wg.push({
+			'.id': '*1',
+			comment: 'veent-admin:payment',
+			'dst-host': '*.maya.ph',
+			disabled: 'true',
+			dynamic: 'true'
+		});
+		expect(await findDisabledOwnedRows(mikrotikConfig)).toEqual([]);
 	});
 });
 
@@ -450,4 +792,46 @@ describe('wipeWalledGarden (walled-garden-wipe — scripted hard-reset teardown)
 		expect(routerTable.wg).toHaveLength(5); // nothing actually deleted on either menu
 		expect(routerTable.wgIp).toHaveLength(1);
 	});
+});
+
+describe('relay MAC guard (router tables)', () => {
+	const relay = 'F4:B7:8D:A6:80:88';
+	const relayedLease = {
+		address: '10.210.44.159',
+		'mac-address': '2E:47:8F:2D:35:8F',
+		'src-mac-address': relay,
+		'agent-circuit-id': 'OLT-9 xpon 0/1/0/4:16.3.70'
+	};
+
+	it('listDhcpLeases maps src-mac-address UPPERCASED, empty or absent to null', async () => {
+		resetRouterTable();
+		routerTable.lease = [
+			{
+				address: '10.0.0.1',
+				'mac-address': 'AA:AA:AA:AA:AA:01',
+				'src-mac-address': 'f4:b7:8d:a6:80:88'
+			},
+			{ address: '10.0.0.2', 'mac-address': 'AA:AA:AA:AA:AA:02', 'src-mac-address': '' },
+			{ address: '10.0.0.3', 'mac-address': 'AA:AA:AA:AA:AA:03' }
+		];
+		const leases = await controllerForPing().listDhcpLeases!();
+		expect(leases.map((l) => l.srcMac)).toEqual([relay, null, null]);
+	});
+
+	it.each([
+		['host', '10.99.1.1'],
+		['lease', '10.99.1.2'],
+		['arp', '10.99.1.3']
+	] as const)(
+		'resolveDeviceMac returns null for a relay MAC from the %s table',
+		async (table, ip) => {
+			vi.resetModules();
+			const { resolveDeviceMac } = await import('../../services/adminAccess');
+			resetRouterTable();
+			routerTable.lease = [relayedLease];
+			if (table === 'lease') routerTable.lease.push({ address: ip, 'mac-address': relay });
+			else routerTable[table] = [{ address: ip, 'mac-address': relay }];
+			expect(await resolveDeviceMac(controllerForPing(), ip)).toBeNull();
+		}
+	);
 });

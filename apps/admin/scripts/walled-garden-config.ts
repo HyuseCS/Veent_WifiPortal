@@ -67,7 +67,9 @@ export const PAYMENT_HOSTS = [
 	// KEEP `*.googleapis.com` — proven needed by live traffic (98 hits). Abuse residual: it is a broad
 	// surface, but dropping a 98-hit rule risks breaking checkout. Tightening to exact subpaths needs a
 	// live capture of which paths checkout uses (out of scope — backlog candidate). Do NOT silently drop.
-	'*.googleapis.com'
+	'*.googleapis.com',
+	// GoTyme e-wallet — QRPH checkout
+	'*.gotyme.com.ph'
 ];
 
 /**

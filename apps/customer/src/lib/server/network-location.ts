@@ -8,24 +8,16 @@ import {
 	resolveDeviceMac,
 	resolveNetworkIdByApName,
 	resolveCircuitIdForMac,
-	captureHandled
+	captureHandled,
+	dropRelayMac,
+	maskIp,
+	maskMac
 } from '@veent/core';
 import { db } from '$lib/server/db';
 import { network } from '$lib/server/network';
 import { getDeviceMac, getPortalContext, persistResolvedMac } from '$lib/server/portal';
 
-// Device MAC and client IP are PII. observability.ts scrubs them from Sentry events, but that hook
-// doesn't touch console.* — so mask them here before they reach stdout/log files (L-8). Keep enough
-// tail/head to correlate a session without persisting the full identifier.
-export function maskMac(mac: string | null | undefined): string | null {
-	if (!mac) return mac ?? null;
-	return mac.replace(/^(?:[0-9A-Fa-f]{2}:){4}/, '**:**:**:**:'); // keep the last two octets
-}
-function maskIp(ip: string | null | undefined): string | null {
-	if (!ip) return ip ?? null;
-	const v4 = ip.match(/^(\d{1,3})\.(\d{1,3})\.\d{1,3}\.\d{1,3}$/);
-	return v4 ? `${v4[1]}.${v4[2]}.*.*` : ip.replace(/[^:]+(?=:[^:]*$)/, '*'); // v4: keep /16; else mask tail
-}
+export { maskMac };
 
 /**
  * Resolve the device MAC. The captive-portal redirect (`?mac=`) is preferred, but the OS
@@ -36,7 +28,7 @@ function maskIp(ip: string | null | undefined): string | null {
  * checkout location resolver below.
  */
 export async function resolveMac(event: RequestEvent): Promise<string | null> {
-	const fromPortal = getPortalContext(event)?.mac;
+	const fromPortal = await dropRelayMac(network, getPortalContext(event)?.mac);
 	if (fromPortal) return fromPortal;
 	// The dev placeholder is ONLY safe with the stub controller, whose grant() just logs.
 	// When a real router is configured (NETWORK_CONTROLLER=mikrotik) — e.g. dev-testing
@@ -148,14 +140,16 @@ export async function resolveMacForUser(
 	// are empty (docs/problems/second-account-mac-not-captured.md). Seed it onto the new account so
 	// subsequent cross-browser hops (e.g. the Maya return) have the durable per-user signal too —
 	// but only when the account has NO durable MAC yet (a fallback must not entrench over live truth).
-	const device = getDeviceMac(event);
+	const device = await dropRelayMac(network, getDeviceMac(event));
 	if (device) {
 		await seedAccountMac(userId, device);
 		return { mac: device, live: false };
 	}
 	// Last resort: the durable account MAC — covers a buyer seen earlier but with no session row yet
 	// (e.g. topped up before ever binding a device) — then the most-recent session's MAC.
-	return { mac: (await accountMac(userId)) ?? (await lastKnownMac(userId)), live: false };
+	const account = await dropRelayMac(network, await accountMac(userId));
+	if (account) return { mac: account, live: false };
+	return { mac: await dropRelayMac(network, await lastKnownMac(userId)), live: false };
 }
 
 /** Read the durable per-account MAC (`customer_profile.last_known_mac`). */
@@ -231,7 +225,7 @@ function logResolved(via: string, detail: Record<string, unknown>, networkId: nu
  *   1. the AP name the captive portal handed us (router-supplied `ap` param). MikroTik's
  *      hotspot does NOT send this by default — to use this most-reliable path, customize the
  *      hotspot login redirect to append `?ap=$(interface-name)`.
- *   2. the device MAC (portal cookie or IP→MAC) → its current AP via the controller,
+ *   2. the device MAC (`resolveMacForUser`) → its circuit-id AP, else its current AP via the controller,
  *   3. the buyer's most recent active session's AP,
  *   4. the AP the account was last granted on (customer_profile.last_network_id),
  *   5. (dev only) the first seeded network_health row, so the Finance-by-location flow is
@@ -321,7 +315,7 @@ export async function resolveCheckoutLocation(
 	apNameSnapshot: string | null;
 }> {
 	const ctx = getPortalContext(event);
-	const mac = await resolveMac(event);
+	const { mac } = await resolveMacForUser(event, userId);
 
 	// Highest priority: the device's own Option 82 circuit-id → the PHYSICAL AP row. This is the same
 	// durable signal the grant path trusts (`resolveCircuitIdForMac`). On a shared hotspot bridge that

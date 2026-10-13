@@ -848,7 +848,8 @@ export function createMikrotikController(config: MikrotikConfig): NetworkControl
 						address: r.address ?? '',
 						hostname,
 						agentCircuitId,
-						status: r.status ?? ''
+						status: r.status ?? '',
+						srcMac: r['src-mac-address'] ? r['src-mac-address'].toUpperCase() : null
 					};
 				});
 			});
@@ -1114,24 +1115,30 @@ export async function provisionWalledGarden(
 }
 
 /**
- * The `gcash-resolve` scheduler's on-event script body — copied VERBATIM from the 29-07-26 live
- * diagnostic session (`payment-walled-garden-v6_REPORT_29-07-26.md`, §What Was Done bullet 1), which
- * proved it working live on the staging router. `payments.gcash.com` CNAMEs to an Akamai edge whose
- * IP rotates, and RouterOS v6 `dst-host` walled-garden matching cannot follow a CNAME chain — so this
- * self-healing script `:resolve`s the host every 5 minutes and upserts a single `walled-garden ip`
- * row (`comment="gcash-auto"`) with the fresh IP.
+ * The `gcash-resolve` scheduler's on-event script body — derived from the 29-07-26 live diagnostic
+ * session (`payment-walled-garden-v6_REPORT_29-07-26.md`, §What Was Done bullet 1), which proved the
+ * resolve approach working live on the staging router. `payments.gcash.com` CNAMEs to an Akamai edge
+ * whose IP rotates, and RouterOS v6 `dst-host` walled-garden matching cannot follow a CNAME chain — so
+ * this self-healing script `:resolve`s the host every 5 minutes and keeps the last 4 distinct resolved
+ * IPs as `walled-garden ip` rows (`comment="gcash-auto"`), removing the oldest when a 5th is added.
  *
  * SECURITY: this MUST stay a hardcoded, static string. Never templatize it from data structures (e.g.
  * looping over hosts) without a RouterOS-script-injection review first — no application data may ever
  * flow into a router-resident scheduled script. (validate-contract item-18 supplement, instruction E3.)
  */
 const GCASH_RESOLVE_ON_EVENT = `
-  :local ip [:resolve payments.gcash.com];
-  :if ([:len [/ip hotspot walled-garden ip find comment="gcash-auto"]] = 0) do={
-    /ip hotspot walled-garden ip add dst-address=$ip comment="gcash-auto"
-  } else={
-    /ip hotspot walled-garden ip set [find comment="gcash-auto"] dst-address=$ip
-  }
+  :do {
+    :local ip [:resolve payments.gcash.com];
+    :local seen false;
+    :foreach r in=[/ip hotspot walled-garden ip find comment="gcash-auto"] do={
+      :if ([:tostr [/ip hotspot walled-garden ip get $r dst-address]] = [:tostr $ip]) do={ :set seen true }
+    }
+    :if (!$seen) do={
+      /ip hotspot walled-garden ip add dst-address=$ip comment="gcash-auto"
+      :local rows [/ip hotspot walled-garden ip find comment="gcash-auto"];
+      :if ([:len $rows] > 4) do={ /ip hotspot walled-garden ip remove [:pick $rows 0] }
+    }
+  } on-error={}
 `;
 
 export interface GcashResolveSchedulerResult {
@@ -1141,8 +1148,8 @@ export interface GcashResolveSchedulerResult {
 /**
  * Idempotently provisions the `gcash-resolve` `/system scheduler` item (see GCASH_RESOLVE_ON_EVENT).
  * Matched by `name=gcash-resolve` (the scheduler-item idempotency key) — a re-run is a full no-op.
- * This is DISTINCT from the on-event body's own inner upsert key (`comment="gcash-auto"` on the
- * `walled-garden ip` row), which is unchanged from the live-proven script. Additive; does not touch
+ * This is DISTINCT from the on-event body's own inner row key (`comment="gcash-auto"` on the
+ * `walled-garden ip` rows, last 4 distinct IPs kept). Additive; does not touch
  * `provisionWalledGarden`.
  */
 export async function provisionGcashResolveScheduler(
@@ -1160,6 +1167,286 @@ export async function provisionGcashResolveScheduler(
 			`=on-event=${GCASH_RESOLVE_ON_EVENT}`
 		]);
 		return { scheduler: { value: 'gcash-resolve', created: true } };
+	} finally {
+		conn.close();
+	}
+}
+
+/**
+ * SECURITY: this MUST stay a hardcoded, static string. Never templatize it from data structures (e.g.
+ * looping over hosts) without a RouterOS-script-injection review first — no application data may ever
+ * flow into a router-resident scheduled script. (validate-contract item-18 supplement, instruction E3.)
+ */
+const GOTYME_RESOLVE_ON_EVENT = `
+  :do {
+    :local ip [:resolve aws-gate.licelus.com];
+    :local seen false;
+    :foreach r in=[/ip hotspot walled-garden ip find comment="gotyme-auto"] do={
+      :if ([:tostr [/ip hotspot walled-garden ip get $r dst-address]] = [:tostr $ip]) do={ :set seen true }
+    }
+    :if (!$seen) do={
+      /ip hotspot walled-garden ip add dst-address=$ip comment="gotyme-auto"
+      :local rows [/ip hotspot walled-garden ip find comment="gotyme-auto"];
+      :if ([:len $rows] > 4) do={ /ip hotspot walled-garden ip remove [:pick $rows 0] }
+    }
+  } on-error={}
+`;
+
+export interface GotymeResolveSchedulerResult {
+	scheduler: { value: string; created: boolean };
+}
+
+export async function provisionGotymeResolveScheduler(
+	config: MikrotikConfig
+): Promise<GotymeResolveSchedulerResult> {
+	const conn = await openConn(config);
+	try {
+		const existing = await conn.write('/system/scheduler/print', ['?name=gotyme-resolve']);
+		if (existing.length > 0) {
+			return { scheduler: { value: 'gotyme-resolve', created: false } };
+		}
+		await conn.write('/system/scheduler/add', [
+			'=name=gotyme-resolve',
+			'=interval=5m',
+			`=on-event=${GOTYME_RESOLVE_ON_EVENT}`
+		]);
+		return { scheduler: { value: 'gotyme-resolve', created: true } };
+	} finally {
+		conn.close();
+	}
+}
+
+/**
+ * SECURITY: this MUST stay a hardcoded, static string. Never templatize it from data structures (e.g.
+ * looping over hosts) without a RouterOS-script-injection review first — no application data may ever
+ * flow into a router-resident scheduled script. (validate-contract item-18 supplement, instruction E3.)
+ */
+const SEABANK_RESOLVE_ON_EVENT = `
+  :do {
+    :local ip [:resolve httpdns.seabank.ph];
+    :local seen false;
+    :foreach r in=[/ip hotspot walled-garden ip find comment="seabank-auto"] do={
+      :if ([:tostr [/ip hotspot walled-garden ip get $r dst-address]] = [:tostr $ip]) do={ :set seen true }
+    }
+    :if (!$seen) do={
+      /ip hotspot walled-garden ip add dst-address=$ip comment="seabank-auto"
+      :local rows [/ip hotspot walled-garden ip find comment="seabank-auto"];
+      :if ([:len $rows] > 4) do={ /ip hotspot walled-garden ip remove [:pick $rows 0] }
+    }
+  } on-error={}
+`;
+
+export interface SeabankResolveSchedulerResult {
+	scheduler: { value: string; created: boolean };
+}
+
+export async function provisionSeabankResolveScheduler(
+	config: MikrotikConfig
+): Promise<SeabankResolveSchedulerResult> {
+	const conn = await openConn(config);
+	try {
+		const existing = await conn.write('/system/scheduler/print', ['?name=seabank-resolve']);
+		if (existing.length > 0) {
+			return { scheduler: { value: 'seabank-resolve', created: false } };
+		}
+		await conn.write('/system/scheduler/add', [
+			'=name=seabank-resolve',
+			'=interval=5m',
+			`=on-event=${SEABANK_RESOLVE_ON_EVENT}`
+		]);
+		return { scheduler: { value: 'seabank-resolve', created: true } };
+	} finally {
+		conn.close();
+	}
+}
+
+/**
+ * SECURITY: this MUST stay a hardcoded, static string. Never templatize it from data structures (e.g.
+ * looping over hosts) without a RouterOS-script-injection review first — no application data may ever
+ * flow into a router-resident scheduled script. (validate-contract item-18 supplement, instruction E3.)
+ */
+const GCASH_APP_RESOLVE_ON_EVENT = `
+  :do {
+    :local ip [:resolve login.mynt.xyz];
+    :local seen false;
+    :foreach r in=[/ip hotspot walled-garden ip find comment="gcash-app-login-auto"] do={
+      :if ([:tostr [/ip hotspot walled-garden ip get $r dst-address]] = [:tostr $ip]) do={ :set seen true }
+    }
+    :if (!$seen) do={
+      /ip hotspot walled-garden ip add dst-address=$ip comment="gcash-app-login-auto"
+      :local rows [/ip hotspot walled-garden ip find comment="gcash-app-login-auto"];
+      :if ([:len $rows] > 4) do={ /ip hotspot walled-garden ip remove [:pick $rows 0] }
+    }
+  } on-error={}
+  :do {
+    :local ip [:resolve api.mynt.xyz];
+    :local seen false;
+    :foreach r in=[/ip hotspot walled-garden ip find comment="gcash-app-api-auto"] do={
+      :if ([:tostr [/ip hotspot walled-garden ip get $r dst-address]] = [:tostr $ip]) do={ :set seen true }
+    }
+    :if (!$seen) do={
+      /ip hotspot walled-garden ip add dst-address=$ip comment="gcash-app-api-auto"
+      :local rows [/ip hotspot walled-garden ip find comment="gcash-app-api-auto"];
+      :if ([:len $rows] > 4) do={ /ip hotspot walled-garden ip remove [:pick $rows 0] }
+    }
+  } on-error={}
+  :do {
+    :local ip [:resolve mdap.paas.mynt.xyz];
+    :local seen false;
+    :foreach r in=[/ip hotspot walled-garden ip find comment="gcash-app-mdap-auto"] do={
+      :if ([:tostr [/ip hotspot walled-garden ip get $r dst-address]] = [:tostr $ip]) do={ :set seen true }
+    }
+    :if (!$seen) do={
+      /ip hotspot walled-garden ip add dst-address=$ip comment="gcash-app-mdap-auto"
+      :local rows [/ip hotspot walled-garden ip find comment="gcash-app-mdap-auto"];
+      :if ([:len $rows] > 4) do={ /ip hotspot walled-garden ip remove [:pick $rows 0] }
+    }
+  } on-error={}
+  :do {
+    :local ip [:resolve acm.mynt.xyz];
+    :local seen false;
+    :foreach r in=[/ip hotspot walled-garden ip find comment="gcash-app-acm-auto"] do={
+      :if ([:tostr [/ip hotspot walled-garden ip get $r dst-address]] = [:tostr $ip]) do={ :set seen true }
+    }
+    :if (!$seen) do={
+      /ip hotspot walled-garden ip add dst-address=$ip comment="gcash-app-acm-auto"
+      :local rows [/ip hotspot walled-garden ip find comment="gcash-app-acm-auto"];
+      :if ([:len $rows] > 4) do={ /ip hotspot walled-garden ip remove [:pick $rows 0] }
+    }
+  } on-error={}
+  :do {
+    :local ip [:resolve customer-segment.mynt.xyz];
+    :local seen false;
+    :foreach r in=[/ip hotspot walled-garden ip find comment="gcash-app-segment-auto"] do={
+      :if ([:tostr [/ip hotspot walled-garden ip get $r dst-address]] = [:tostr $ip]) do={ :set seen true }
+    }
+    :if (!$seen) do={
+      /ip hotspot walled-garden ip add dst-address=$ip comment="gcash-app-segment-auto"
+      :local rows [/ip hotspot walled-garden ip find comment="gcash-app-segment-auto"];
+      :if ([:len $rows] > 4) do={ /ip hotspot walled-garden ip remove [:pick $rows 0] }
+    }
+  } on-error={}
+`;
+
+export interface GcashAppResolveSchedulerResult {
+	scheduler: { value: string; created: boolean };
+}
+
+export async function provisionGcashAppResolveScheduler(
+	config: MikrotikConfig
+): Promise<GcashAppResolveSchedulerResult> {
+	const conn = await openConn(config);
+	try {
+		const existing = await conn.write('/system/scheduler/print', ['?name=gcash-app-resolve']);
+		if (existing.length > 0) {
+			return { scheduler: { value: 'gcash-app-resolve', created: false } };
+		}
+		await conn.write('/system/scheduler/add', [
+			'=name=gcash-app-resolve',
+			'=interval=5m',
+			`=on-event=${GCASH_APP_RESOLVE_ON_EVENT}`
+		]);
+		return { scheduler: { value: 'gcash-app-resolve', created: true } };
+	} finally {
+		conn.close();
+	}
+}
+
+export interface WanDnsBlockResult {
+	rules: Array<{ value: string; created: boolean }>;
+}
+
+const WAN_DNS_BLOCK_COMMENT = 'block open DNS from WAN';
+
+export async function provisionWanDnsBlock(
+	config: MikrotikConfig,
+	wanInterface: string
+): Promise<WanDnsBlockResult> {
+	if (!/^[A-Za-z0-9._-]+$/.test(wanInterface)) {
+		throw new Error(`Invalid WAN interface name: ${JSON.stringify(wanInterface)}`);
+	}
+	const conn = await openConn(config);
+	try {
+		const existing = await conn.write('/ip/firewall/filter/print', [
+			`?comment=${WAN_DNS_BLOCK_COMMENT}`
+		]);
+		const rules: WanDnsBlockResult['rules'] = [];
+		for (const p of ['udp', 'tcp']) {
+			if (existing.some((r) => r.protocol === p && r['in-interface'] === wanInterface)) {
+				rules.push({ value: p, created: false });
+				continue;
+			}
+			await conn.write('/ip/firewall/filter/add', [
+				'=chain=input',
+				`=in-interface=${wanInterface}`,
+				`=protocol=${p}`,
+				'=dst-port=53',
+				'=action=drop',
+				`=comment=${WAN_DNS_BLOCK_COMMENT}`
+			]);
+			rules.push({ value: p, created: true });
+		}
+		return { rules };
+	} finally {
+		conn.close();
+	}
+}
+
+const RESOLVE_SCHEDULER_NAMES = [
+	'gcash-resolve',
+	'gotyme-resolve',
+	'seabank-resolve',
+	'gcash-app-resolve'
+];
+
+export async function findDisabledOwnedRows(
+	config: MikrotikConfig
+): Promise<Array<{ menu: string; label: string }>> {
+	const ownedWg = (r: Record<string, string>) =>
+		(r.comment ?? '').startsWith(ADMIN_BYPASS_TAG) || (r.comment ?? '').endsWith('-auto');
+	const menus: Array<{
+		path: string;
+		menu: string;
+		owned: (r: Record<string, string>) => boolean;
+		label: (r: Record<string, string>) => string;
+	}> = [
+		{
+			path: '/ip/hotspot/walled-garden',
+			menu: '/ip hotspot walled-garden',
+			owned: ownedWg,
+			label: (r) => `${r.comment} ${r['dst-host'] ?? r['dst-address']}`
+		},
+		{
+			path: '/ip/hotspot/walled-garden/ip',
+			menu: '/ip hotspot walled-garden ip',
+			owned: ownedWg,
+			label: (r) => `${r.comment} ${r['dst-host'] ?? r['dst-address']}`
+		},
+		{
+			path: '/system/scheduler',
+			menu: '/system scheduler',
+			owned: (r) => RESOLVE_SCHEDULER_NAMES.includes(r.name),
+			label: (r) => r.name
+		},
+		{
+			path: '/ip/firewall/filter',
+			menu: '/ip firewall filter',
+			owned: (r) => r.comment === WAN_DNS_BLOCK_COMMENT,
+			label: (r) => `${r.comment} ${r.protocol}`
+		}
+	];
+	const conn = await openConn(config);
+	try {
+		const found: Array<{ menu: string; label: string }> = [];
+		for (const m of menus) {
+			const rows = await conn.write(`${m.path}/print`);
+			for (const r of rows) {
+				if (r.disabled === 'true' && r.dynamic !== 'true' && m.owned(r)) {
+					found.push({ menu: m.menu, label: m.label(r) });
+				}
+			}
+		}
+		return found;
 	} finally {
 		conn.close();
 	}

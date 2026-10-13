@@ -98,6 +98,8 @@ export interface DhcpLeaseEntry {
 	agentCircuitId: string | null;
 	/** Raw lease status as the router prints it (e.g. `bound`, `waiting`, `offered`). */
 	status: string;
+	/** RouterOS `src-mac-address`, UPPERCASED, empty → null. */
+	srcMac?: string | null;
 }
 
 /**

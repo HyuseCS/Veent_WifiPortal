@@ -12,6 +12,8 @@ import { sendOtp } from '$lib/server/otp';
 import { enforceOtpSendLimit } from '$lib/server/otpRateLimit';
 import { clientIp } from '$lib/server/rateLimit';
 import { getPortalContext } from '$lib/server/portal';
+import { network } from '$lib/server/network';
+import { dropRelayMac } from '@veent/core';
 
 // Issue 2b/C1: pin cookie `Secure` to the ORIGIN protocol (NOT NODE_ENV). With the TLS portal
 // (ORIGIN=https://…) every portal session cookie is Secure, so it can't be sidejacked off the
@@ -94,7 +96,11 @@ export const auth = betterAuth({
 				// On a direct call there's no portal context, so this falls back to a phone-only cap.
 				const ev = getRequestEvent();
 				if (!ev.locals.otpLimitEnforced) {
-					await enforceOtpSendLimit(phone, getPortalContext(ev)?.mac, clientIp(ev));
+					await enforceOtpSendLimit(
+						phone,
+						(await dropRelayMac(network, getPortalContext(ev)?.mac)) ?? undefined,
+						clientIp(ev)
+					);
 				}
 				await sendOtp(phone, code);
 			}
