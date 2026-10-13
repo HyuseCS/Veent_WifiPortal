@@ -181,3 +181,5 @@ adapter-node 5.5.6, playwright-core 1.61.0).
   session (pan, then zoom from street level to zoom 3 and back, quickstart section 5 step 5) and the
   peak requests in any 10 s. The limit is that peak, times the expected number of guests on the
   map at once, times 2 as margin. The number is written here after T019.
+- D13 (2026-10-13): the user dropped the rate limit. There is no `MAP_LIMIT` and no rate-limit
+  code. T019 measured one guest at a peak of 147 `/map/` requests in 10 s, kept for later.

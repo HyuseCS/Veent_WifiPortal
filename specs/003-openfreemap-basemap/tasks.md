@@ -13,7 +13,7 @@ task. Run unit tests with `bunx vitest run <file>` from the app dir, never `bun 
 **Security**: Tasks marked `SEC` touch a public endpoint, an external service or guest data. See the
 plan's security note.
 
-**D12 = B** (user): in-memory fixed-window counter in `mapProxy.ts`, key client IP, 429 when over (research R14; tasks T026, T027). The live router check for the key is T028, before merge. D11 = A: `MapPicker.svelte` (no importer) gets the same swap, verified by check and build only.
+**D12 = B** (user): in-memory fixed-window counter in `mapProxy.ts`, key client IP, 429 when over (research R14; tasks T026, T027). The live router check for the key is T028, before merge. D13 (2026-10-13) dropped it: T026 to T028 skipped. D11 = A: `MapPicker.svelte` (no importer) gets the same swap, verified by check and build only.
 
 ## FR to test map
 
@@ -144,7 +144,7 @@ the locator's own address.
 - T001 blocks everything.
 - US1: T002 and T003 in parallel, then T004 (same file as T003). T005 needs T001 and T002 to T004. T006 and T007 in parallel after T005. T008 after T005. T009 after T002 to T008. T010 after T009.
 - US2: T011 and T012 in parallel. T013 after T011 and T012. T014 after T013. T015 after T011 and T012, in parallel with T013. T016 after T015. T017 any time after T001. T018 after T011 to T017. T019 after T018. T026 after T019. T027 after T026.
-- US3: T020 before T021. T021 after T027. T022 after T021.
+- US3: T020 before T021. T022 after T021.
 - Polish: T023 and T024 after US1 and US2. T025 after T010 and T019. T028 any time before merge; it does not block the build.
 - US1 and US2 share no file, so they can run in parallel after T001.
 

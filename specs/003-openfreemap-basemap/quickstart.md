@@ -120,8 +120,7 @@ After the session:
 - Admin: zero requests whose URL contains `cartocdn`. Style requests go to
   `https://tiles.openfreemap.org/styles/positron` and `/styles/dark`.
 - Locator: zero requests to any host other than `localhost:5172` for map parts (style, `planet`,
-  tiles, `natural_earth`, fonts, sprites). Zero to `tiles.openfreemap.org` or `cartocdn`. Relief
-  requests (`/map/natural_earth/...`) appear at zoom 3 or lower and return 200.
+  tiles, `natural_earth`, fonts, sprites). Zero to `tiles.openfreemap.org` or `cartocdn`.
 - Locator request count (research R14, input for D12): from the step 5 pan and zoom in one
   session, record the total `/map/` requests and the highest count in any 10 s.
 - Locator repeat open: reload the page. Tile, font and sprite requests are served from the browser
@@ -170,7 +169,7 @@ The user runs this on the real hotspot. Constitution V.
    that is blocked before login (not a map request, out of scope for this feature).
 5. Reload the page with the stopwatch. Pass: basemap shows in under 3 s.
 6. Tap the theme toggle. Pass: the other style shows in under 2 s, the pins stay.
-7. Pinch out to the whole Philippines and further. Pass: land and relief still show.
+7. Pinch out to the whole Philippines and further. Pass: land still shows (neither style draws relief).
 8. On the router, find the phone's IP with `/ip hotspot host print` (the phone MAC can change on
    rejoin, so use the row that matches the phone now). Check it is not logged in:
    `/ip hotspot active print` has no row for that IP.

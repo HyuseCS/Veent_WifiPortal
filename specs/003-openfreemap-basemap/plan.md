@@ -177,9 +177,8 @@ Tasks that touch an external service, a public endpoint or guest data: T012, T01
    Shared caches key on host, and the style path has no file extension, which Cloudflare does not
    cache by default.
 5. Availability: no server store (D8). Each request holds at most one tile body (largest vector tile
-   is well under 1 MB) for at most 8 s. The user asked for a rate limit on `/map/*` (Validate F9).
-   D12 = B: an in-memory fixed-window counter in `mapProxy.ts`, 429 when over (research R14). The VM already serves the
-   locator publicly; this adds no new amplification beyond one upstream fetch per guest request.
+   is well under 1 MB) for at most 8 s. No rate limit: D13 dropped the D12 counter, and no
+   rate-limit code was written (research R14). The VM already serves the locator publicly; this adds no new amplification beyond one upstream fetch per guest request.
 6. Logging: map paths reveal where a guest looks. They are kept out of Sentry traces (server and
    browser) and are not logged (D10).
 7. Admin: operator browsers contact `tiles.openfreemap.org` directly (D7, accepted exposure). No CSP
