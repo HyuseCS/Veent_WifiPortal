@@ -1,6 +1,6 @@
 # 001 issues-board-pagination
 
-What: The manager board (`/issues`) loads every incident. Load 25 per page with search done in SQL. Page and search live in the URL (`?page=N&q=text`). GitHub #99 (backlog note `process/features/incident-management/backlog/manager-board-pagination_NOTE_10-07-26.md`, Option 2 already shipped).
+What: The manager board (`/issues`) loads every incident. Load 25 per page with search done in SQL. Page and search live in the URL (`?page=N&q=text`). GitHub #99 (backlog note `process/features/incident-management/backlog/manager-board-pagination_NOTE_10-07-26.md`, Option 2 already shipped). Built in commit 7b62fe2.
 FRs: none (no spec.md for this feature; Fast lane chosen by the user)
 Impact area: core runtime + screens (one board; not privacy or access: the manager gate in the load is unchanged)
 
@@ -17,9 +17,9 @@ Impact area: core runtime + screens (one board; not privacy or access: the manag
 ## Files
 
 - apps/admin/src/lib/server/issues.ts:204 - replace `listIssues` with `listIssuesPage(db, { page, q })` returning `{ issues, total, page, pageCount }`. Add `ISSUES_PAGE_SIZE = 25`. Build one `where` (D2), `count(*)`, clamp (D3), then `select ... orderBy(rank CASEs, createdAt desc, id desc).limit().offset()`, then the existing `hydrate` (its JS sort is a no-op on already-ordered rows). Add `asc`, `sql`, `or`, `ilike`, `exists`, `count` to the drizzle imports as needed.
-- apps/admin/src/routes/(app)/issues/+page.server.ts:46 - manager branch reads `event.url.searchParams` `page` and `q`, calls `listIssuesPage`, returns `issues`, `total`, `page`, `pageCount`, `q`. Non-manager return is unchanged (its type gets the same keys only if svelte-check requires it; prefer reading them in the manager branch of the page).
+- apps/admin/src/routes/(app)/issues/+page.server.ts:46 - manager branch reads `event.url.searchParams` `page` and `q`, calls `listIssuesPage`, returns `issues`, `total`, `page`, `pageCount`, `q`. The non-manager branch also returns `total`, `page: 1`, `pageCount: 1`, `q: ''`, because svelte-check needs the same keys on both branches.
 - apps/admin/src/routes/(app)/issues/+page.svelte:26 - pass `total`, `page`, `pageCount`, `q` to `IssuesTable`.
-- apps/admin/src/lib/components/feature/IssuesTable.svelte - drop `filtered` ($derived, lines 89-99). Props add `total`, `page`, `pageCount`, `q`. `query` starts from `q`. A `$effect` with a 300 ms timeout does the `goto` (D4) when `query` differs from `q`. Rows iterate `issues`. Footer shows the range and Previous/Next links (disabled look on the ends).
+- apps/admin/src/lib/components/feature/IssuesTable.svelte - drop `filtered` ($derived, lines 89-99). Props add `total`, `page`, `pageCount`, `q`. `query` starts from `q`. A `$effect` with a 300 ms timeout does the `goto` (D4) when `query` differs from `q`. `afterNavigate` resets `query = q` on every navigation that is not a `goto` (sidebar click, Back); without it the old search is re-applied after 300 ms. Clearing the search goes to `/issues` with no trailing `?`. The search `goto` carries `// eslint-disable-next-line svelte/no-navigation-without-resolve` (the rule rejects `${resolve()}?...`; the same directive is in 7 other files). Page size 25 is written in the component with a `// ponytail:` marker, because the client cannot import `ISSUES_PAGE_SIZE` from `$lib/server`. Rows iterate `issues`. Footer shows the range and Previous/Next links (disabled look on the ends).
 
 ## Tests (written first, must fail before the build)
 
@@ -30,10 +30,19 @@ Impact area: core runtime + screens (one board; not privacy or access: the manag
   4. `q` of `%` and `_` matches only literal text (no match-all).
   5. Clamp: page 99, 0, -3, `NaN` give the last page / page 1, never an error or empty page when rows exist.
   6. Each returned row still has its assignees (hydrate on the sliced rows only).
+  7. `ISSUES_PAGE_SIZE` is 25.
   Fails now: `listIssuesPage` does not exist. - `cd apps/admin && bunx vitest run src/lib/server/issues.spec.ts`
-- apps/admin/e2e/incident-board-pagination.e2e.ts (new, follows the other `incident-*.e2e.ts` specs) - with 26+ seeded incidents: board shows 25 rows and "Showing 1-25 of 26"; Next goes to `?page=2` with 1 row; typing in search sets `?q=` and drops `page`; reload keeps both. Fails now: no pager. - `cd apps/admin && bun run test:e2e -- incident-board-pagination`
+- apps/admin/e2e/incident-board-pagination.e2e.ts (new, follows the other `incident-*.e2e.ts` specs) - with 26+ seeded incidents: board shows 25 rows and "Showing 1-25 of 26"; Next goes to `?page=2` with 1 row; typing in search sets `?q=` and drops `page`; reload keeps both. The search case expects 10 rows. An `afterAll` deletes the "Pager probe %" rows. Fails now: no pager. - `cd apps/admin && bun run test:e2e -- incident-board-pagination`
 
 Gates after the build: `bun run check`, `bunx prettier --check .`, `bunx eslint .`, `bun run test`, `bun run build`. Existing `incident-*.e2e.ts` specs must still pass (they may assume all rows on one page).
+
+## Behavior change
+
+Search now matches the text within one field (title, description, AP name, or one assignee name). The old client filter matched across the fields joined together.
+
+## Verified
+
+vitest 181/181, svelte-check 0 errors 0 warnings, full admin e2e 27/27. R1 did not occur.
 
 ## Risks
 
