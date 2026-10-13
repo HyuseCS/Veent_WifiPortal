@@ -122,7 +122,8 @@ the locator's own address.
 
 **Independent test**: quickstart section 7.
 
-- [ ] T020 [US3] User, before deploy: record the walled-garden counts (`specs/003-openfreemap-basemap/quickstart.md` section 7 step 1). Record them here.
+- [x] T020 [US3] User, before deploy: record the walled-garden counts (`specs/003-openfreemap-basemap/quickstart.md` section 7 step 1). Record them here.
+  - Result (2026-10-13, router terminal, before deploy): `/ip hotspot walled-garden print count-only` = 46, `/ip hotspot walled-garden ip print count-only` = 19.
 - [ ] T021 [US3] User: deploy this branch's locator to VM `10.210.54.133` with the current manual docker deploy (`specs/003-openfreemap-basemap/quickstart.md` section 7 step 2).
 - [ ] T022 [US3] User with agent guidance: live phone test, `specs/003-openfreemap-basemap/quickstart.md` section 7 steps 3 to 11 (FR-014, SC-004, SC-006). Record the times and pass or fail here.
 
