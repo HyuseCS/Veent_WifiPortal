@@ -124,7 +124,8 @@ the locator's own address.
 
 - [x] T020 [US3] User, before deploy: record the walled-garden counts (`specs/003-openfreemap-basemap/quickstart.md` section 7 step 1). Record them here.
   - Result (2026-10-13, router terminal, before deploy): `/ip hotspot walled-garden print count-only` = 46, `/ip hotspot walled-garden ip print count-only` = 19.
-- [ ] T021 [US3] User: deploy this branch's locator to VM `10.210.54.133` with the current manual docker deploy (`specs/003-openfreemap-basemap/quickstart.md` section 7 step 2).
+- [x] T021 [US3] User: deploy this branch's locator to VM `10.210.54.133` with the current manual docker deploy (`specs/003-openfreemap-basemap/quickstart.md` section 7 step 2).
+  - Result (2026-10-13): PR #121 merged to `staging` (`4d83f75`). The VM could not reach GitHub (`git fetch`: connection reset by peer), so the commits went over as a git bundle (`54c0e7e..origin/staging`) and were fast-forwarded on the VM. `build locator` and `up -d locator` OK. `curl http://10.210.54.133:3003/map/styles/positron` gives `"sprite":"http://10.210.54.133:3003/map/sprites/ofm_f384/ofm"`, so the VM reaches `tiles.openfreemap.org`.
 - [ ] T022 [US3] User with agent guidance: live phone test, `specs/003-openfreemap-basemap/quickstart.md` section 7 steps 3 to 11 (FR-014, SC-004, SC-006). Record the times and pass or fail here.
 
 ---

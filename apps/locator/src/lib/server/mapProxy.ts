@@ -1,4 +1,8 @@
+import { Agent } from 'undici';
+
 const UPSTREAM = 'https://tiles.openfreemap.org/';
+// ponytail: hides a 4.4 s TLS stall to the provider on the venue ISP path; only fixed upstream
+const KEEP_ALIVE = new Agent({ keepAliveTimeout: 60_000 });
 const DAY = 'public, max-age=86400';
 const LONG = 'public, max-age=31536000, immutable';
 const JSON_TYPE = 'application/json';
@@ -97,8 +101,9 @@ export async function proxyMap(url: URL, request: Request): Promise<Response> {
 		const res = await fetch(UPSTREAM + path, {
 			headers: { accept: '*/*' },
 			redirect: 'error',
-			signal: AbortSignal.timeout(8000)
-		});
+			signal: AbortSignal.timeout(8000),
+			dispatcher: KEEP_ALIVE
+		} as RequestInit);
 		if (res.status === 404) return fail(404);
 		if (!res.ok) return fail(502);
 		// ponytail: buffered, uncompressed body (research R7); stream upstream bytes with their encoding if SC-004 misses
