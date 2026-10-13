@@ -159,8 +159,10 @@ The user runs this on the real hotspot. Constitution V.
 1. Baseline the walled garden in the router terminal, before deploying:
    `/ip hotspot walled-garden print count-only` and
    `/ip hotspot walled-garden ip print count-only`. Write both numbers down.
-2. Deploy this branch's locator to the VM `10.210.54.133` with the current manual docker deploy
-   (the user owns deploys). The locator must answer on `http://10.210.54.133:3003/`.
+2. Merge to staging first (PR #121). The VM cannot reach GitHub, so move the commits as a git
+   bundle (lessons L3). Rebuild both apps: `sudo docker compose -f compose.prod.yaml build admin locator`,
+   then `up -d admin locator`. The admin keeps CARTO until its own rebuild. The user owns deploys.
+   The locator must answer on `http://10.210.54.133:3003/`.
 3. On the phone: forget the hotspot network, join it again, do not sign in. Close the captive
    sheet if it opens.
 4. In the phone's browser, type `http://10.210.54.133:3003/` and start a stopwatch. Stop it when

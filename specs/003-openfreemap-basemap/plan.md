@@ -23,7 +23,8 @@ Prod runtime is Node 22 (`Dockerfile` runtime stage runs `node build`).
 
 **Primary Dependencies**: `leaflet` 1.9.4 (installed). New, pinned exact in both apps (D10):
 `maplibre-gl` 6.7.0, `@maplibre/maplibre-gl-leaflet` 0.1.4 (peer range accepts maplibre ^6 and
-leaflet ^1.9.3). Admin also keeps `leaflet.markercluster`.
+leaflet ^1.9.3). Admin also keeps `leaflet.markercluster`. The locator also pins `undici` 6.29.0
+exact, for one shared keep-alive agent on the upstream fetch (research R15).
 
 **Storage**: N/A. No server store (D8).
 
@@ -128,6 +129,8 @@ Post-design re-check: no change. Complexity Tracking is empty.
      `redirect: 'error'` (a redirect cannot move the request to another host).
      `signal: AbortSignal.timeout(8000)` covers the fetch and the body read, so a slow provider
      gets an answer before 10 s (FR-013).
+     `dispatcher`: one shared `undici` `Agent` with `keepAliveTimeout: 60_000`, so the TLS
+     connection to the provider is reused (research R15).
    - Response: the body is read with `arrayBuffer()` (Node fetch has already decoded gzip). New
      headers only: `content-type` from the rule (never copied from upstream), `cache-control` from
      the rule. No upstream header is forwarded (no `content-encoding`, `content-length`,

@@ -21,6 +21,7 @@ the public origin, `http://localhost:5172` in dev).
 - `redirect: 'error'`.
 - `signal: AbortSignal.timeout(8000)` for fetch and body.
 - Global `fetch`, not SvelteKit `event.fetch`.
+- `dispatcher`: one shared `undici` `Agent` with `keepAliveTimeout: 60_000` (research R15).
 
 ## Responses
 

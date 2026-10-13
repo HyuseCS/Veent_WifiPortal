@@ -13,6 +13,8 @@ One entry per allowed path family. Fields:
 | `cache`   | `DAY` or `LONG`                               | `DAY` = `public, max-age=86400`. `LONG` = `public, max-age=31536000, immutable`.         |
 | `rewrite` | boolean                                       | True only for the style and the TileJSON.                                                |
 
+The `relief` path works (200) but neither style draws it, so it is not requested today.
+
 Patterns (copy these, not a markdown table cell, so no `|` gets escaped):
 
 ```text

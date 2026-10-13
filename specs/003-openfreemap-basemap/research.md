@@ -18,6 +18,8 @@ adapter-node 5.5.6, playwright-core 1.61.0).
   | Fonts                      | `/fonts/Noto%20Sans%20Regular/0-255.pbf`                             | `public, max-age=604800`                                         |
   | Sprites                    | `/sprites/ofm_f384/ofm.json`, `ofm.png`, `ofm@2x.json`, `ofm@2x.png` | `public, max-age=315360000`                                      |
 
+- Neither `positron` nor `dark` draws the `ne2_shaded` source, so no `/map/natural_earth/` request
+  happens in practice. The path works (200) and stays in the allow-list.
 - Both styles reference only `tiles.openfreemap.org`. Fonts used: `Noto Sans Regular`, `Bold`,
   `Italic`, one font per stack.
 - The TileJSON `attribution` and `description` fields contain links to `openfreemap.org`,
@@ -183,3 +185,17 @@ adapter-node 5.5.6, playwright-core 1.61.0).
   map at once, times 2 as margin. The number is written here after T019.
 - D13 (2026-10-13): the user dropped the rate limit. There is no `MAP_LIMIT` and no rate-limit
   code. T019 measured one guest at a peak of 147 `/map/` requests in 10 s, kept for later.
+
+## R15. Upstream keep-alive (issue #123, PR #122)
+
+- Fact: on the venue ISP path, every new TLS handshake from the VM to the provider's Cloudflare
+  addresses (104.26.\*, 172.67.\*) takes about 4.4 s. DNS 0.05 s, connect 0.12 s, TLS 4.46 s. The
+  same IP with another SNI is also slow. MTU is fine. 104.16.\* and Google are fast. The router
+  has no rule on those addresses.
+- Cause of the miss: Node `fetch` drops idle connections after 4 s. The first theme flip after a
+  pause paid a new handshake and took about 4.6 s (SC-007 miss).
+- Decision: pass one shared `undici` `Agent` (`keepAliveTimeout: 60_000`, `undici` 6.29.0 pinned
+  exact) as `dispatcher` to the upstream fetch in `mapProxy.ts`. A `ponytail:` note marks it as a
+  workaround for the ISP stall.
+- Measured: two requests 10 s apart made 2 connects without the Agent and 1 with it, on Node 22.22.3
+  and 24.14.1. The connection was still reused after a 50 s gap.

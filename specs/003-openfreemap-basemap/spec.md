@@ -4,7 +4,7 @@
 
 **Created**: 2026-10-12
 
-**Status**: Draft
+**Status**: Done
 
 **Input**: User description: "GitHub issue #118. Replace the CARTO basemap tiles (CARTO now needs an API key) in the admin app and the locator app with OpenFreeMap."
 
@@ -116,8 +116,8 @@ entry was added for this feature.
   portal browser): the pins and list still show; the basemap area may stay blank.
 - **Provider publishes a new map data version**: a device that cached the old map description
   picks up the new version within one day and does not keep asking for removed map data.
-- **Country-scale zoom**: the low-zoom shaded relief layer that the style uses also comes through
-  the locator, so a guest zoomed far out before login still sees a basemap.
+- **Country-scale zoom**: a guest zoomed far out before login still sees a basemap from the
+  locator. The low-zoom relief path is allowed, but neither style draws it today.
 - **Guest cookies or identity**: requests the locator sends to the provider carry no guest
   cookies, referrer or forwarded client address.
 
